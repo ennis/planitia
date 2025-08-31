@@ -1,0 +1,13 @@
+[package]
+name = "shader-bridge"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+quote = "1.0"
+syn = { version = "2.0", features = ["full"] }
+proc-macro2 = { version = "1.0", features = ["span-locations"] }
+heck = "0.5"
+slang = { git = "https://github.com/ennis/slang-rs.git" }
+logos = "0.12"
+gpu = { workspace = true }

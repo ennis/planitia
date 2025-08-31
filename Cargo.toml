@@ -1,0 +1,19 @@
+[workspace]
+members = [
+    "crates/gpu",
+    "crates/gpu-macros",
+    "crates/game",
+    "crates/math",
+    "crates/shader-bridge"]
+resolver = "2"
+
+[workspace.dependencies]
+gpu = { path = "crates/gpu" }
+gpu-macros = { path = "crates/gpu-macros" }
+shader-bridge = { path = "crates/shader-bridge" }
+game = { path = "crates/game" }
+math = { path = "crates/math" }
+
+[profile.release]
+debug = true
+

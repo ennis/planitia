@@ -1,0 +1,39 @@
+[package]
+name = "gpu"
+version = "0.1.0"
+authors = ["Alexandre Bléron <alex.bleron@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+ash = "0.37"
+bitflags = "2.4.1"
+gpu-allocator = "0.24.0"
+raw-window-handle = "0.6.0"
+slotmap = "1.0.2"
+tracing = "0.1.40"
+thiserror = "1.0.30"
+ordered-float = "4.1.1"
+gpu-macros = { workspace = true }
+fxhash = "0.2.1"
+math = { workspace = true }
+
+[dependencies.winapi]
+version = "0.3.9"
+optional = true
+features = [
+    "dcommon",
+    "d3d11",
+    "dxgi",
+    "dxgi1_2",
+    "dxgi1_3",
+    "dxgiformat",
+    "dxgitype",
+    "wtypesbase"]
+
+[dev-dependencies]
+winit = "0.30"
+image = "0.25.6"
+tracing-subscriber = { version = "0.3.18", features = ["fmt", "env-filter"] }
+
+[features]
+graal-windows = ["winapi"]
