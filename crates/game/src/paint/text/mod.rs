@@ -247,6 +247,8 @@ pub struct GlyphCluster<'a> {
     pub possible_line_break: bool,
     /// Indicates whether this cluster is a mandatory line break point.
     pub mandatory_line_break: bool,
+    /// Indicates that this cluster is white space.
+    pub whitespace: bool,
 }
 
 ///
@@ -292,7 +294,9 @@ pub fn shape_text(
 
         // determine boundary type
         // TODO: more sophisticated boundary detection
-        let possible_line_break = ch.is_whitespace() || ch == '-';
+
+        let whitespace = ch.is_whitespace();
+        let possible_line_break = whitespace || ch == '-';
         let mandatory_line_break = ch == '\n' || ch == '\r';
 
         callback(&GlyphCluster {
@@ -302,6 +306,7 @@ pub fn shape_text(
             bounds: Default::default(),
             possible_line_break,
             mandatory_line_break,
+            whitespace,
         });
         prev_glyph_id = Some(glyph_id);
     }

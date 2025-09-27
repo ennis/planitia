@@ -170,6 +170,9 @@ impl TextLayout {
                     if cluster.mandatory_line_break {
                         info.set_mandatory_break_after();
                     }
+                    if cluster.whitespace {
+                        info.set_whitespace();
+                    }
                     info
                 };
 
@@ -378,7 +381,7 @@ mod tests {
     fn test_text_layout() {
         // Example test case for text layout
         let format = TextFormat::default();
-        let text = "This is a sample text to be laid out.";
+        let text = "This is a sample                          text to be laid out.";
         let mut layout = TextLayout::new(&format, text);
 
         let available_width = 100.0;
