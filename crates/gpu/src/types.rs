@@ -1011,6 +1011,10 @@ impl_vertex_attr!(math::Vec2, R32G32_SFLOAT);
 impl_vertex_attr!(math::Vec3, R32G32B32_SFLOAT);
 impl_vertex_attr!(math::Vec4, R32G32B32A32_SFLOAT);
 
+impl_vertex_attr!(math::U16Vec2, R16G16_UINT);
+impl_vertex_attr!(math::U16Vec3, R16G16B16_UINT);
+impl_vertex_attr!(math::U16Vec4, R16G16B16A16_UINT);
+
 
 // Index data types --------------------------------------------------------------------------------
 macro_rules! impl_index_data {

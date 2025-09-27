@@ -33,7 +33,6 @@ type float4x4 = [[f32; 4]; 4];
 #[derive(Copy, Clone)]
 pub struct Texture2D_Handle<T> {
     handle: gpu::ImageHandle,
-    _unused: u32,
     _phantom: PhantomData<fn() -> T>,
 }
 
@@ -41,7 +40,6 @@ impl<T> From<gpu::ImageHandle> for Texture2D_Handle<T> {
     fn from(handle: gpu::ImageHandle) -> Self {
         Texture2D_Handle {
             handle,
-            _unused: 0,
             _phantom: PhantomData,
         }
     }
@@ -51,7 +49,6 @@ impl<T> From<gpu::ImageHandle> for Texture2D_Handle<T> {
 #[derive(Copy, Clone)]
 pub struct RWTexture2D_Handle<T> {
     handle: gpu::ImageHandle,
-    _unused: u32,
     _phantom: PhantomData<fn() -> T>,
 }
 
@@ -59,7 +56,6 @@ impl<T> From<gpu::ImageHandle> for RWTexture2D_Handle<T> {
     fn from(handle: gpu::ImageHandle) -> Self {
         RWTexture2D_Handle {
             handle,
-            _unused: 0,
             _phantom: PhantomData,
         }
     }
@@ -69,12 +65,11 @@ impl<T> From<gpu::ImageHandle> for RWTexture2D_Handle<T> {
 #[derive(Copy, Clone)]
 pub struct SamplerState_Handle {
     handle: gpu::SamplerHandle,
-    _unused: u32,
 }
 
 impl From<gpu::SamplerHandle> for SamplerState_Handle {
     fn from(handle: gpu::SamplerHandle) -> Self {
-        SamplerState_Handle { handle, _unused: 0 }
+        SamplerState_Handle { handle }
     }
 }
 

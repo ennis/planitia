@@ -1,8 +1,10 @@
+import bindless;
+
 // ---------------------------------------------------------------
-struct FeatherVertex
+struct GlyphVertex
 {
     float2 position;
-    float feather;
+    float2 tex_coord;
     float4 color;
 };
 
@@ -11,41 +13,34 @@ struct FeatherVertex
 struct VertexOutput
 {
     float4 pos: SV_Position;
-    float4 color;
-    float feather;
-};
-
-struct FragmentOutput
-{
+    float2 tex_coord;
     float4 color;
 };
 
 struct PushConstants
 {
-    float4x4 matrix;
     float2 screen_size;
-    float line_width;
-    uint texture_index;
+    Texture2D<float4>.Handle* glyph_atlas;
+    SamplerState.Handle glyph_sampler;
 };
 
 // ---------------------------------------------------------------
 
+
 [shader("vertex")]
-VertexOutput paint_vertex_main(FeatherVertex v, uniform PushConstants u)
+VertexOutput glyph_vertex_main(GlyphVertex v, uniform PushConstants u)
 {
     VertexOutput o;
     o.pos = float4(v.position.xy / u.screen_size * 2.0 - 1.0, 0.0, 1.0);
     o.color = v.color;
-    o.feather = v.feather;
+    o.tex_coord = v.tex_coord;
     return o;
 }
 
 [shader("fragment")]
-FragmentOutput paint_fragment_main(VertexOutput v, uniform PushConstants u)
+float4 glyph_fragment_main(
+            VertexOutput v,
+            uniform PushConstants u)
 {
-    float alpha = (1.0 - abs(v.feather)) * min(u.line_width, 1.0);
-    FragmentOutput o;
-    o.color = v.color;
-    o.color.a *= alpha;
-    return o;
+    return v.color * u.glyph_atlas.Sample(u.glyph_sampler, v.tex_coord);
 }

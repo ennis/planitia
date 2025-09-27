@@ -95,11 +95,18 @@ impl<T: ?Sized + 'static> Copy for DeviceAddress<T> {}
 
 /// Bindless handle to an image.
 #[derive(Copy, Clone, Debug)]
-#[repr(transparent)]
+#[repr(C)]
 pub struct ImageHandle {
     /// Index of the image in the image descriptor array.
     pub index: u32,
+    /// For compatibility with slang.
+    pub _unused: u32,
 }
+
+/// Bindless handle to a 2D texture.
+#[derive(Copy, Clone, Debug)]
+#[repr(transparent)]
+pub struct Texture2DHandle(pub ImageHandle);
 
 /// Represents a range of bindless handles to 2D sampled images.
 #[derive(Copy, Clone, Debug, Default)]
@@ -111,10 +118,12 @@ pub struct Texture2DHandleRange {
 
 /// Bindless handle to a sampler.
 #[derive(Copy, Clone, Debug)]
-#[repr(transparent)]
+#[repr(C)]
 pub struct SamplerHandle {
     /// Index of the image in the sampler descriptor array.
     pub index: u32,
+    /// For compatibility with slang.
+    pub _unused: u32,
 }
 
 #[derive(Debug)]
@@ -229,7 +238,7 @@ impl Sampler {
     }
 
     pub fn device_handle(&self) -> SamplerHandle {
-        SamplerHandle { index: self.id.index() }
+        SamplerHandle { index: self.id.index(), _unused: 0 }
     }
 }
 
@@ -697,10 +706,13 @@ impl ImageView {
     pub fn device_image_handle(&self) -> ImageHandle {
         ImageHandle {
             index: self.id().index(),
+            _unused: 0,
         }
     }
 
-    //pub fn device_handle(&self) ->
+    pub fn as_device_texture_2d_handle(&self) -> Texture2DHandle {
+        Texture2DHandle(self.device_image_handle())
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

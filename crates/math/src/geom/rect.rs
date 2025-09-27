@@ -73,6 +73,13 @@ impl Rect {
             && self.max.x == f32::INFINITY
             && self.max.y == f32::INFINITY
     }
+
+    pub const fn translate(&self, offset: Vec2) -> Self {
+        Self {
+            min: vec2(self.min.x + offset.x, self.min.y + offset.y),
+            max: vec2(self.max.x + offset.x, self.max.y + offset.y),
+        }
+    }
 }
 
 pub const fn rect_xywh(x: f32, y: f32, w: f32, h: f32) -> Rect {
@@ -143,6 +150,13 @@ impl IRect {
 
     pub const fn height(&self) -> i32 {
         self.max.y - self.min.y
+    }
+
+    pub const fn to_rect(&self) -> Rect {
+        Rect {
+            min: Vec2::new(self.min.x as f32, self.min.y as f32),
+            max: Vec2::new(self.max.x as f32, self.max.y as f32),
+        }
     }
 }
 pub const fn irect_xywh(x: i32, y: i32, w: i32, h: i32) -> IRect {

@@ -56,12 +56,12 @@ pub struct Srgba32 {
 }
 
 impl Srgba32 {
-    pub const TRANSPARENT: Self = Self {
-        r: 0,
-        g: 0,
-        b: 0,
-        a: 0,
-    };
+    /// Transparent color (rgb = 0).
+    pub const TRANSPARENT: Self = srgba32(0, 0, 0, 0);
+    /// Opaque black color.
+    pub const BLACK: Self = srgba32(0, 0, 0, 255);
+    /// Opaque white color.
+    pub const WHITE: Self = srgba32(255, 255, 255, 255);
 
     pub fn to_rgba(self) -> Rgba {
         Rgba {
