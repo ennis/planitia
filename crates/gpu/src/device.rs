@@ -20,13 +20,13 @@ use crate::device::bindless::BindlessDescriptorTable;
 use crate::platform::PlatformExtensions;
 use ash::vk;
 use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
+use log::debug;
 use slotmap::{SecondaryMap, SlotMap};
 use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::mem;
 use std::sync::atomic::AtomicU64;
 use std::time::Duration;
-use tracing::{debug, error};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -192,17 +192,17 @@ impl SamplerId {
 }
 
 /// Describes how a resource got its memory.
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub enum ResourceAllocation {
+    /// We don't own the memory for this resource.
+    #[default]
+    External,
     /// We allocated a block of memory exclusively for this resource.
     Allocation {
         allocation: gpu_allocator::vulkan::Allocation,
     },
     /// The memory for this resource was imported or exported from/to an external handle.
     DeviceMemory { device_memory: vk::DeviceMemory },
-
-    /// We don't own the memory for this resource.
-    External,
 }
 
 /// Chooses a swap chain surface format among a list of supported formats.
@@ -866,16 +866,13 @@ impl Device {
 
         let id = self.buffer_ids.lock().unwrap().insert(());
         BufferUntyped {
-            inner: Some(Arc::new(BufferInner {
-                device: self.clone(),
-                id,
-                last_submission_index: AtomicU64::new(0),
-                allocation,
-                handle,
-                memory_location,
-                device_address,
-            })),
+            device: self.clone(),
+            id,
+            last_submission_index: AtomicU64::new(0),
+            allocation,
             handle,
+            memory_location,
+            device_address,
             size: byte_size,
             usage,
             mapped_ptr,
@@ -920,17 +917,14 @@ impl Device {
         let id = self.image_ids.lock().unwrap().insert(());
         let (bindless_handle, default_view) = self.create_bindless_image_view(handle, ImageType::Image2D, format, 1, 1);
         Image {
-            inner: Some(Arc::new(ImageInner {
-                device: self.clone(),
-                id,
-                last_submission_index: AtomicU64::new(0),
-                allocation: ResourceAllocation::External,
-                handle,
-                swapchain_image: true,
-                default_view,
-                bindless_handle,
-            })),
+            device: self.clone(),
+            id,
+            last_submission_index: AtomicU64::new(0),
+            allocation: ResourceAllocation::External,
             handle,
+            swapchain_image: true,
+            default_view,
+            bindless_handle,
             usage: ImageUsage::TRANSFER_DST | ImageUsage::COLOR_ATTACHMENT,
             type_: ImageType::Image2D,
             format,
@@ -1080,16 +1074,13 @@ impl Device {
 
         Image {
             handle,
-            inner: Some(Arc::new(ImageInner {
-                device: self.clone(),
-                id,
-                last_submission_index: AtomicU64::new(0),
-                allocation: ResourceAllocation::Allocation { allocation },
-                handle,
-                swapchain_image: false,
-                default_view,
-                bindless_handle,
-            })),
+            device: self.clone(),
+            id,
+            last_submission_index: AtomicU64::new(0),
+            allocation: ResourceAllocation::Allocation { allocation },
+            swapchain_image: false,
+            default_view,
+            bindless_handle,
             usage: image_info.usage,
             type_: image_info.type_,
             format: image_info.format,
@@ -1237,6 +1228,7 @@ impl Device {
         let mut image_view_ids = self.inner.image_view_ids.lock().unwrap();*/
         let mut dropped_resources = self.dropped_resources.lock().unwrap();
 
+        // *** This invokes all delayed destructors for resources which are no longer in use by the GPU.
         dropped_resources.retain(|(submission, _object)| *submission > last_completed_submission_index);
 
         // process all completed submissions, oldest to newest
@@ -1250,7 +1242,6 @@ impl Device {
             if submission.index > last_completed_submission_index {
                 break;
             }
-            debug!("cleaning up submission {}", submission.index);
             let submission = tracker.active_submissions.pop_front().unwrap();
             for mut command_pool in submission.command_pools {
                 // SAFETY: command buffers are not in use anymore

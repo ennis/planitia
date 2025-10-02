@@ -5,7 +5,7 @@ use ash::vk;
 use ash::vk::DescriptorType;
 use std::ffi::c_void;
 use std::ptr;
-use tracing::trace;
+use log::trace;
 
 type DT = vk::DescriptorType;
 

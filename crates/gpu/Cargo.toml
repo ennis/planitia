@@ -10,7 +10,7 @@ bitflags = "2.4.1"
 gpu-allocator = "0.24.0"
 raw-window-handle = "0.6.0"
 slotmap = "1.0.2"
-tracing = "0.1.40"
+log = "0.4.27"
 thiserror = "1.0.30"
 ordered-float = "4.1.1"
 gpu-macros = { workspace = true }

@@ -3,6 +3,7 @@ use core::ptr;
 use std::ffi::{c_void, CStr, CString};
 use std::os::raw::c_char;
 use std::sync::LazyLock;
+use log::log;
 
 /// Returns the global `ash::Entry` object.
 pub fn get_vulkan_entry() -> &'static ash::Entry {
@@ -136,16 +137,16 @@ unsafe extern "system" fn debug_utils_message_callback(
     // translate message severity into tracing's log level
     match message_severity {
         vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => {
-            tracing::event!(tracing::Level::TRACE, "{}", message);
+            log!(log::Level::Trace, "{}", message);
         }
         vk::DebugUtilsMessageSeverityFlagsEXT::INFO => {
-            tracing::event!(tracing::Level::INFO, "{}", message);
+            log!(log::Level::Info, "{}", message);
         }
         vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => {
-            tracing::event!(tracing::Level::WARN, "{}", message);
+            log!(log::Level::Warn, "{}", message);
         }
         vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => {
-            tracing::event!(tracing::Level::ERROR, "{}", message);
+            log!(log::Level::Error, "{}", message);
         }
         _ => {
             panic!("unexpected message severity flags")

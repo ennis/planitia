@@ -107,7 +107,7 @@ impl AppHandler for Handler {
     fn imgui(&mut self, ctx: &egui::Context) {
         egui::Window::new("imgui").show(ctx, |ui| {
             ui.color_edit_button_srgba(&mut self.color);
-            dbg!(self.color);
+            //dbg!(self.color);
             self.demo.ui(ui);
         });
     }

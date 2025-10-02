@@ -22,6 +22,7 @@ use std::{mem, ptr};
 // TODO: make it optional
 pub use ash::{self, vk};
 pub use gpu_allocator::MemoryLocation;
+use log::debug;
 pub use ordered_float;
 
 pub use command::*;
@@ -327,35 +328,33 @@ pub trait GpuResource {
 }
 
 #[derive(Debug)]
-struct BufferInner {
-    device: RcDevice,
-    id: BufferId,
-    memory_location: MemoryLocation,
-    last_submission_index: AtomicU64,
-    allocation: ResourceAllocation,
-    handle: vk::Buffer,
-    device_address: vk::DeviceAddress,
-}
+struct BufferInner {}
 
-impl Drop for BufferInner {
+impl<T: ?Sized> Drop for Buffer<T> {
     fn drop(&mut self) {
-        // SAFETY: The device resource tracker holds strong references to resources as long as they are in use by the GPU.
-        // This prevents `drop` from being called while the resource is still in use, and thus it's safe to delete the
-        // resource here.
-        unsafe {
+        let last_submission_index = self.last_submission_index.load(Ordering::Relaxed);
+        let device = self.device.clone();
+        let mut allocation = mem::take(&mut self.allocation);
+        let handle = self.handle;
+        let id = self.id;
+        self.device.clone().call_later(last_submission_index, move || unsafe {
             // retire the ID
-            self.device.buffer_ids.lock().unwrap().remove(self.id);
-            self.device.free_memory(&mut self.allocation);
-            self.device.raw.destroy_buffer(self.handle, None);
-        }
+            device.buffer_ids.lock().unwrap().remove(id);
+            device.free_memory(&mut allocation);
+            device.raw.destroy_buffer(handle, None);
+        });
     }
 }
 
 /// A buffer of GPU-visible memory, optionally mapped in host memory, without any associated type.
-///
-/// TODO: maybe this could be `Buffer<[u8]>` instead of a separate type?
 pub struct Buffer<T: ?Sized> {
-    inner: Option<Arc<BufferInner>>,
+    device: RcDevice,
+    /// Tracking ID
+    id: BufferId,
+    memory_location: MemoryLocation,
+    last_submission_index: AtomicU64,
+    allocation: ResourceAllocation,
+    device_address: vk::DeviceAddress,
     handle: vk::Buffer,
     size: u64,
     usage: BufferUsage,
@@ -367,19 +366,19 @@ impl<T: ?Sized> Buffer<T> {
     pub fn set_name(&self, name: &str) {
         // SAFETY: the handle is valid
         unsafe {
-            self.inner.as_ref().unwrap().device.set_object_name(self.handle, name);
+            self.device.set_object_name(self.handle, name);
         }
     }
 
     pub fn device_address(&self) -> DeviceAddress<T> {
         DeviceAddress {
-            address: self.inner.as_ref().unwrap().device_address,
+            address: self.device_address,
             _phantom: PhantomData,
         }
     }
 
     pub(crate) fn id(&self) -> BufferId {
-        self.inner.as_ref().unwrap().id
+        self.id
     }
 
     /// Returns the size of the buffer in bytes.
@@ -394,7 +393,7 @@ impl<T: ?Sized> Buffer<T> {
 
     /// Returns the buffer's memory location.
     pub fn memory_location(&self) -> MemoryLocation {
-        self.inner.as_ref().unwrap().memory_location
+        self.memory_location
     }
 
     /// Returns the Vulkan buffer handle.
@@ -404,7 +403,7 @@ impl<T: ?Sized> Buffer<T> {
 
     /// Returns the device on which the buffer was created.
     pub fn device(&self) -> &RcDevice {
-        &self.inner.as_ref().unwrap().device
+        &self.device
     }
 
     /// Returns whether the buffer is host-visible, and mapped in host memory.
@@ -600,22 +599,8 @@ impl<T: ?Sized> std::fmt::Debug for Buffer<T> {
 
 impl<T: ?Sized> GpuResource for Buffer<T> {
     fn set_last_submission_index(&self, submission_index: u64) {
-        self.inner
-            .as_ref()
-            .unwrap()
-            .last_submission_index
+        self.last_submission_index
             .fetch_max(submission_index, Ordering::Release);
-    }
-}
-
-impl<T: ?Sized> Drop for Buffer<T> {
-    fn drop(&mut self) {
-        // If this is the last reference to the buffer, schedule it for deletion once the last
-        // submission that used this buffer has completed.
-        if let Some(inner) = Arc::into_inner(self.inner.take().unwrap()) {
-            let last_submission_index = inner.last_submission_index.load(Ordering::Relaxed);
-            inner.device.clone().delete_later(last_submission_index, inner);
-        }
     }
 }
 
@@ -673,7 +658,15 @@ pub struct ImageBuffer {
 /// Wrapper around a Vulkan image.
 #[derive(Debug)]
 pub struct Image {
-    inner: Option<Arc<ImageInner>>,
+    device: RcDevice,
+    id: ImageId,
+    last_submission_index: AtomicU64,
+    allocation: ResourceAllocation,
+    swapchain_image: bool,
+    /// Default image view handle.
+    default_view: vk::ImageView,
+    /// Bindless index (of the default view).
+    bindless_handle: ImageViewId,
     handle: vk::Image,
     usage: ImageUsage,
     type_: ImageType,
@@ -683,19 +676,29 @@ pub struct Image {
 
 impl Drop for Image {
     fn drop(&mut self) {
-        if let Some(inner) = Arc::into_inner(self.inner.take().unwrap()) {
-            let last_submission_index = inner.last_submission_index.load(Ordering::Relaxed);
-            inner.device.clone().delete_later(last_submission_index, inner);
+        if !self.swapchain_image {
+            let last_submission_index = self.last_submission_index.load(Ordering::Relaxed);
+            let device = self.device.clone();
+            let mut allocation = mem::take(&mut self.allocation);
+            let handle = self.handle;
+            let id = self.id;
+            let default_view = self.default_view;
+            let bindless_handle = self.bindless_handle;
+            self.device.call_later(last_submission_index, move || unsafe {
+                debug!("dropping image {:?} (handle: {:?})", id, handle);
+                device.image_ids.lock().unwrap().remove(id);
+                device.image_view_ids.lock().unwrap().remove(bindless_handle);
+                device.free_memory(&mut allocation);
+                device.raw.destroy_image_view(default_view, None);
+                device.raw.destroy_image(handle, None);
+            });
         }
     }
 }
 
 impl GpuResource for Image {
     fn set_last_submission_index(&self, submission_index: u64) {
-        self.inner
-            .as_ref()
-            .unwrap()
-            .last_submission_index
+        self.last_submission_index
             .fetch_max(submission_index, Ordering::Release);
     }
 }
@@ -703,7 +706,7 @@ impl GpuResource for Image {
 impl Image {
     pub fn set_name(&self, label: &str) {
         unsafe {
-            self.inner.as_ref().unwrap().device.set_object_name(self.handle, label);
+            self.device.set_object_name(self.handle, label);
         }
     }
 
@@ -748,7 +751,7 @@ impl Image {
 
     /// Returns the internal tracking ID of the image.
     pub(crate) fn id(&self) -> ImageId {
-        self.inner.as_ref().unwrap().id
+        self.id
     }
 
     /// Returns the image handle.
@@ -758,11 +761,11 @@ impl Image {
 
     /// Returns the handle of the default image view.
     pub fn view_handle(&self) -> vk::ImageView {
-        self.inner.as_ref().unwrap().default_view
+        self.default_view
     }
 
     pub fn device(&self) -> &RcDevice {
-        &self.inner.as_ref().unwrap().device
+        &self.device
     }
 
     /// Returns a descriptor for sampling this image in a shader.
@@ -778,7 +781,7 @@ impl Image {
     /// Returns the bindless texture handle of this image view.
     pub fn device_image_handle(&self) -> ImageHandle {
         ImageHandle {
-            index: self.inner.as_ref().unwrap().bindless_handle.index(),
+            index: self.bindless_handle.index(),
             _unused: 0,
         }
     }
