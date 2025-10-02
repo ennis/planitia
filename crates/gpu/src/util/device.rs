@@ -1,6 +1,6 @@
 use crate::{Buffer, BufferUsage, Device, MemoryLocation};
 use std::rc::Rc;
-use std::{mem, ptr, slice};
+use std::{ptr, slice};
 
 // TODO: move this directly into DeviceInner, there's no reason to have it in an extension trait
 //       since this is defined in the same crate

@@ -10,8 +10,8 @@ pub use render::{RenderEncoder, RenderPassInfo};
 
 use crate::device::ActiveSubmission;
 use crate::{
-    aspects_for_format, vk, vk_ext_debug_utils, CommandPool, Descriptor, GpuResource,
-    Image, ImageId, MemoryAccess, RcDevice, SwapchainImage,
+    aspects_for_format, vk, vk_ext_debug_utils, CommandPool, Descriptor, GpuResource, Image, ImageId, MemoryAccess,
+    RcDevice, SwapchainImage,
 };
 
 mod blit;
@@ -280,12 +280,12 @@ impl CommandStream {
 
         for (binding, descriptor) in bindings {
             match *descriptor {
-                Descriptor::SampledImage { ref image_view, layout } => {
+                Descriptor::SampledImage { image: image_view, layout } => {
                     self.reference_resource(image_view);
                     descriptors.push(DescriptorBufferOrImage {
                         image: vk::DescriptorImageInfo {
                             sampler: Default::default(),
-                            image_view: image_view.handle(),
+                            image_view: image_view.view_handle(), // TODO
                             image_layout: layout,
                         },
                     });
@@ -298,12 +298,12 @@ impl CommandStream {
                         ..Default::default()
                     });
                 }
-                Descriptor::StorageImage { ref image_view, layout } => {
+                Descriptor::StorageImage { image: image_view, layout } => {
                     self.reference_resource(image_view);
                     descriptors.push(DescriptorBufferOrImage {
                         image: vk::DescriptorImageInfo {
                             sampler: Default::default(),
-                            image_view: image_view.handle(),
+                            image_view: image_view.view_handle(),
                             image_layout: layout,
                         },
                     });
@@ -316,11 +316,7 @@ impl CommandStream {
                         ..Default::default()
                     });
                 }
-                Descriptor::UniformBuffer {
-                    buffer,
-                    offset,
-                    size,
-                } => {
+                Descriptor::UniformBuffer { buffer, offset, size } => {
                     self.reference_resource(buffer);
                     descriptors.push(DescriptorBufferOrImage {
                         buffer: vk::DescriptorBufferInfo {
@@ -338,11 +334,7 @@ impl CommandStream {
                         ..Default::default()
                     });
                 }
-                Descriptor::StorageBuffer {
-                    buffer,
-                    offset,
-                    size,
-                } => {
+                Descriptor::StorageBuffer { buffer, offset, size } => {
                     self.reference_resource(buffer);
                     descriptors.push(DescriptorBufferOrImage {
                         buffer: vk::DescriptorBufferInfo {
@@ -429,11 +421,11 @@ impl CommandStream {
         }
     }
 
-    /// Tells the command stream that an operation has made writes that are not available to
+    /*/// Tells the command stream that an operation has made writes that are not available to
     /// subsequent operations.
     pub fn invalidate(&mut self, scope: MemoryAccess) {
         self.tracked_writes |= scope;
-    }
+    }*/
 
     /// Emits a pipeline barrier (if necessary) that ensures that all previous writes are
     /// visible to subsequent operations for the given memory access type.

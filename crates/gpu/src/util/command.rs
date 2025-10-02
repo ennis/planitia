@@ -1,6 +1,8 @@
-use gpu_allocator::MemoryLocation;
 use crate::util::DeviceExt;
-use crate::{aspects_for_format, format_pixel_byte_size, vk, BufferUsage, CommandStream, DeviceAddress, Image, ImageBuffer, ImageCopyBuffer, ImageCopyView, ImageCreateInfo, ImageDataLayout, ImageSubresourceLayers, ImageUsage, Point3D, Rect3D, Size3D};
+use crate::{
+    aspects_for_format, vk, BufferUsage, CommandStream, DeviceAddress, Image, ImageCopyBuffer, ImageCopyView,
+    ImageCreateInfo, ImageDataLayout, ImageSubresourceLayers, ImageUsage, Point3D, Rect3D, Size3D,
+};
 
 pub trait CommandStreamExt {
     /// Copies the data to a region of an image.
@@ -117,6 +119,4 @@ impl CommandStreamExt for CommandStream {
         self.reference_resource(&buffer);
         buffer.device_address()
     }
-
-
 }

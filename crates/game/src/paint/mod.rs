@@ -31,17 +31,19 @@ struct LineVertex {
 pub struct FeatherVertex {
     /// Position
     pub p: Vec2,
+    /// Texture coordinates
+    pub uv: U16Vec2,
+    /// Color
+    pub color: Srgba32,
     /// Feather factor
     pub feather: f32,
-    // Color
-    pub color: Srgba32,
 }
 
 impl FeatherVertex {
     const SIZE_CHECK: () = assert!(size_of::<Self>() == 16);
 
     pub const fn new(p: Vec2, feather: f32, color: Srgba32) -> Self {
-        Self { p, feather, color }
+        Self { p, feather, color, uv: U16Vec2::new(0, 0) }
     }
 }
 
@@ -82,7 +84,6 @@ struct GlyphPushConstants {
 /// GPU pipelines for drawing.
 struct Pipelines {
     paint: gpu::GraphicsPipeline,
-    glyphs: gpu::GraphicsPipeline,
 }
 
 impl Pipelines {
@@ -94,9 +95,9 @@ impl Pipelines {
         let shader = ShaderLibrary::new("crates/game/shaders/paint.slang").unwrap();
         let vertex = shader.get_compiled_entry_point("paint_vertex_main").unwrap();
         let fragment = shader.get_compiled_entry_point("paint_fragment_main").unwrap();
-        let glyph_shader = ShaderLibrary::new("crates/game/shaders/paint_glyphs.slang").unwrap();
-        let glyph_vertex = glyph_shader.get_compiled_entry_point("glyph_vertex_main").unwrap();
-        let glyph_fragment = glyph_shader.get_compiled_entry_point("glyph_fragment_main").unwrap();
+        //let glyph_shader = ShaderLibrary::new("crates/game/shaders/paint_glyphs.slang").unwrap();
+        //let glyph_vertex = glyph_shader.get_compiled_entry_point("glyph_vertex_main").unwrap();
+        //let glyph_fragment = glyph_shader.get_compiled_entry_point("glyph_fragment_main").unwrap();
 
         let rasterization_state = gpu::RasterizationState {
             polygon_mode: vk::PolygonMode::FILL,
@@ -141,7 +142,7 @@ impl Pipelines {
             .create_graphics_pipeline(create_info)
             .expect("failed to create pipeline");
 
-        // Glyph pipeline
+        /*// Glyph pipeline
         let create_info = gpu::GraphicsPipelineCreateInfo {
             set_layouts: &[],
             push_constants_size: size_of::<PushConstants>(),
@@ -161,18 +162,18 @@ impl Pipelines {
 
         let glyph_pipeline = device
             .create_graphics_pipeline(create_info)
-            .expect("failed to create glyph pipeline");
+            .expect("failed to create glyph pipeline");*/
 
-        Pipelines { paint: paint_pipeline, glyphs: glyph_pipeline }
+        Pipelines { paint: paint_pipeline }
     }
 }
 
 //----------------------------------------------------------------
 
-pub struct PaintRenderParams {
+pub struct PaintRenderParams<'a> {
     pub camera: Camera,
-    pub color_target: gpu::ImageView,
-    pub depth_target: Option<gpu::ImageView>,
+    pub color_target: &'a gpu::Image,
+    pub depth_target: Option<&'a gpu::Image>,
 }
 
 pub struct Painter {
@@ -225,10 +226,6 @@ pub struct Primitive {
 
 enum PrimKind {
     Geometry(Mesh),
-    // TODO: remove, replace with generic textured mesh
-    GlyphRun {
-        mesh: Vec<GlyphVertex>,
-    }
 }
 
 /// Options passed to `PaintScene::draw_glyph_run`.
@@ -253,14 +250,14 @@ fn textured_quad(
     uv0: U16Vec2,
     uv1: U16Vec2,
     color: Srgba32,
-) -> [GlyphVertex; 6] {
+) -> [FeatherVertex; 6] {
     [
-        GlyphVertex::new(Vec2::new(p0.x, p0.y), U16Vec2::new(uv0.x, uv0.y), color),
-        GlyphVertex::new(Vec2::new(p1.x, p0.y), U16Vec2::new(uv1.x, uv0.y), color),
-        GlyphVertex::new(Vec2::new(p1.x, p1.y), U16Vec2::new(uv1.x, uv1.y), color),
-        GlyphVertex::new(Vec2::new(p0.x, p0.y), U16Vec2::new(uv0.x, uv0.y), color),
-        GlyphVertex::new(Vec2::new(p1.x, p1.y), U16Vec2::new(uv1.x, uv1.y), color),
-        GlyphVertex::new(Vec2::new(p0.x, p1.y), U16Vec2::new(uv0.x, uv1.y), color),
+        FeatherVertex {p: Vec2::new(p0.x, p0.y), uv: U16Vec2::new(uv0.x, uv0.y), color, feather: 0.0},
+        FeatherVertex {p: Vec2::new(p1.x, p0.y), uv: U16Vec2::new(uv1.x, uv0.y), color, feather: 0.0},
+        FeatherVertex {p: Vec2::new(p1.x, p1.y), uv: U16Vec2::new(uv1.x, uv1.y), color, feather: 0.0},
+        FeatherVertex {p: Vec2::new(p0.x, p0.y), uv: U16Vec2::new(uv0.x, uv0.y), color, feather: 0.0},
+        FeatherVertex {p: Vec2::new(p1.x, p1.y), uv: U16Vec2::new(uv1.x, uv1.y), color, feather: 0.0},
+        FeatherVertex {p: Vec2::new(p0.x, p1.y), uv: U16Vec2::new(uv0.x, uv1.y), color, feather: 0.0},
     ]
 }
 
@@ -341,10 +338,10 @@ impl<'a> PaintScene<'a> {
             ));
         }
 
-        self.prims.push(Primitive {
+        /*self.prims.push(Primitive {
             kind: PrimKind::GlyphRun { mesh: vertices },
             clip: self.clip_rect(),
-        });
+        });*/
     }
 
     pub fn finish(mut self, cmd: &mut CommandStream, params: &PaintRenderParams) {
@@ -367,11 +364,11 @@ impl<'a> PaintScene<'a> {
         // setup encoder
         let mut encoder = cmd.begin_rendering(RenderPassInfo {
             color_attachments: &[gpu::ColorAttachment {
-                image_view: &params.color_target,
+                image: &params.color_target,
                 clear_value: None,
             }],
             depth_stencil_attachment: params.depth_target.as_ref().map(|d| gpu::DepthStencilAttachment {
-                image_view: d,
+                image: d,
                 depth_clear_value: None,
                 stencil_clear_value: None,
             }),
@@ -399,9 +396,6 @@ impl<'a> PaintScene<'a> {
                     });
                     draw_mesh(&mut encoder, params, mesh, prim.clip);
                 }
-                PrimKind::GlyphRun { mesh } => {
-                    draw_glyph_run(&mut encoder, params, mesh, prim.clip);
-                }
             }
 
         }
@@ -422,7 +416,7 @@ fn set_scissor(encoder: &mut gpu::RenderEncoder, params: &PaintRenderParams, cli
 
     encoder.set_scissor(clip_min_x, clip_min_y, clip_max_x as u32, clip_max_y as u32);
 }
-
+/*
 fn draw_glyph_run(
     encoder: &mut gpu::RenderEncoder,
     params: &PaintRenderParams,
@@ -433,7 +427,7 @@ fn draw_glyph_run(
     encoder.bind_vertex_buffer(0, vertex_buffer.as_bytes().into());
     set_scissor(encoder, params, clip);
     encoder.draw(0..vertices.len() as u32, 0..1);
-}
+}*/
 
 fn draw_mesh(encoder: &mut gpu::RenderEncoder, params: &PaintRenderParams, mesh: &Mesh, clip: Rect) {
     let vertex_buffer = encoder.device().upload_slice(gpu::BufferUsage::VERTEX, &mesh.vertices);

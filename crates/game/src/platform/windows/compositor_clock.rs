@@ -18,16 +18,6 @@ pub(super) struct CompositorClock {
 impl CompositorClock {
     pub(super) fn new() -> CompositorClock {
         // create an event that can be used to abort the clock thread
-        // Some HANDLEs aren't thread safe, but some are meant to be used across threads, like events.
-        // Annoyingly windows-rs sided with making all HANDLEs !Send,
-        // which means that we need some ugliness to get around that.
-        //
-        // See https://github.com/microsoft/windows-rs/issues/3169 for some discussion.
-        //
-        // I don't think that's a good choice: first, HANDLEs are not necessarily
-        // pointers, and most importantly all functions taking HANDLEs are FFI-unsafe, so
-        // thread-safety requirements can be added to the safety contracts of the APIs
-        // that use HANDLEs, instead of being on the HANDLE type itself.
         let abort_event = unsafe { CreateEventW(None, false, false, None).unwrap() };
         let abort_event = unsafe { Owned::new(abort_event) };
         CompositorClock { abort_event, active: Default::default() }
@@ -40,6 +30,16 @@ impl CompositorClock {
 
     /// Starts the compositor clock thread.
     pub(super) fn start(&self) {
+        // Some HANDLEs aren't thread safe, but some are meant to be used across threads, like events.
+        // Annoyingly windows-rs sided with making all HANDLEs !Send,
+        // which means that we need some ugliness to get around that.
+        //
+        // See https://github.com/microsoft/windows-rs/issues/3169 for some discussion.
+        //
+        // I don't think that's a good choice: first, HANDLEs are not necessarily
+        // pointers, and most importantly all functions taking HANDLEs are FFI-unsafe, so
+        // thread-safety requirements can be added to the safety contracts of the APIs
+        // that use HANDLEs, instead of being on the HANDLE type itself.
         let abort_raw = self.abort_event.0 as isize;
         let active = self.active.clone();
         std::thread::spawn(move || {

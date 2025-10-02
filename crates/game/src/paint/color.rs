@@ -1,5 +1,3 @@
-
-
 pub fn linear_to_srgb(c: f32) -> f32 {
     if c <= 0.0031308 {
         c * 12.92

@@ -117,6 +117,10 @@ impl GlyphCache {
         self.entries.insert(key, entry);
         entry
     }
+
+    /*pub fn texture_handle(&self) -> gpu::ImageHandle {
+        self.atlas.te
+    }*/
 }
 
 /// An identifier for a font.

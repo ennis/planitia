@@ -1,7 +1,7 @@
 //! Render command encoders
 use std::mem::MaybeUninit;
 use std::ops::Range;
-use std::{mem, ptr, slice};
+use std::{ptr, slice};
 
 use ash::vk;
 
@@ -390,9 +390,9 @@ impl CommandStream {
             // FIXME validate that all images are 2D
             let extent;
             if let Some(color) = desc.color_attachments.first() {
-                extent = color.image_view.size();
+                extent = color.image.size();
             } else if let Some(ref depth) = desc.depth_stencil_attachment {
-                extent = depth.image_view.size();
+                extent = depth.image.size();
             } else {
                 panic!("render_area must be specified if no attachments are specified");
             }
@@ -412,7 +412,7 @@ impl CommandStream {
             .iter()
             .map(|a| {
                 vk::RenderingAttachmentInfo {
-                    image_view: a.image_view.handle,
+                    image_view: a.image.view_handle(),
                     image_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
                     resolve_mode: vk::ResolveModeFlags::NONE,
                     load_op: if a.clear_value.is_some() {
@@ -436,7 +436,7 @@ impl CommandStream {
         let p_stencil_attachment;
         if let Some(ref depth) = desc.depth_stencil_attachment {
             depth_attachment = vk::RenderingAttachmentInfo {
-                image_view: depth.image_view.handle,
+                image_view: depth.image.view_handle(),
                 // TODO different layouts
                 image_layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                 resolve_mode: vk::ResolveModeFlags::NONE,
@@ -454,9 +454,9 @@ impl CommandStream {
             };
             p_depth_attachment = &depth_attachment as *const _;
 
-            if is_depth_and_stencil_format(depth.image_view.format) {
+            if is_depth_and_stencil_format(depth.image.format) {
                 stencil_attachment = vk::RenderingAttachmentInfo {
-                    image_view: depth.image_view.handle,
+                    image_view: depth.image.view_handle(),
                     // TODO different layouts
                     image_layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                     resolve_mode: vk::ResolveModeFlags::NONE,
@@ -486,13 +486,13 @@ impl CommandStream {
         // It doesn't matter much except we can report usage conflicts earlier.
         let mut barrier = Barrier::new();
         for color in desc.color_attachments.iter() {
-            self.reference_resource(color.image_view);
-            barrier = barrier.color_attachment_write(&color.image_view.image());
+            self.reference_resource(color.image);
+            barrier = barrier.color_attachment_write(color.image);
         }
         if let Some(ref depth) = desc.depth_stencil_attachment {
             // TODO we don't know whether the depth attachment will be written to
-            self.reference_resource(depth.image_view);
-            barrier = barrier.depth_stencil_attachment_write(&depth.image_view.image());
+            self.reference_resource(depth.image);
+            barrier = barrier.depth_stencil_attachment_write(depth.image);
         }
 
         self.barrier(barrier);

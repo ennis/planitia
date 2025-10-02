@@ -1,7 +1,12 @@
+use std::cell::RefCell;
 use std::ops::{Index, IndexMut};
+use std::slice;
 use crate::paint::Srgba32;
 use log::debug;
+use gpu::{vk, Barrier, ImageCopyView, ImageCreateInfo, MemoryLocation, Size3D};
+use gpu::util::CommandStreamExt;
 use math::geom::{IRect, irect_xywh};
+use crate::context::get_gpu_device;
 
 pub struct Atlas {
     pub width: u32,
@@ -90,6 +95,50 @@ impl Atlas {
         self.data
             .resize(new_height as usize * self.width as usize, Srgba32::default());
     }
+
+    /*///
+    fn upload_to_gpu(&self, cmd: &mut gpu::CommandStream) {
+
+        unsafe fn slice_to_u8<T: Copy>(slice: &[T]) -> &[u8] {
+            use std::mem::size_of;
+            let len = size_of::<Srgba32>() * slice.len();
+            slice::from_raw_parts_mut(slice.as_ptr() as *mut u8, len)
+        }
+
+        let gpu = get_gpu_device();
+        if self.texture.borrow().is_none() {
+
+            let image = cmd.create_image_with_data(&ImageCreateInfo {
+                memory_location: MemoryLocation::GpuOnly,
+                width: self.width,
+                height: self.height,
+                format: gpu::Format::R8G8B8A8_UNORM,
+                usage: gpu::ImageUsage::SAMPLED | gpu::ImageUsage::TRANSFER_DST,
+                mip_levels: 1,
+                array_layers: 1,
+                samples: 1,
+                type_: gpu::ImageType::Image2D,
+                depth: 0,
+            },
+                                unsafe {
+                                    slice_to_u8(&self.data)
+                                }
+            );
+
+            self.texture.replace(Some(image));
+        }
+        self.texture.as_ref().unwrap()
+    }
+
+    /// Returns the GPU image handle for the atlas, uploading it if necessary.
+    ///
+    /// The image is prepared for shader read access.
+    pub(crate) fn texture_handle(&self, cmd: &mut gpu::CommandStream) -> gpu::ImageHandle {
+        self.upload_to_gpu(cmd);
+        let tex = self.texture.borrow().as_ref().unwrap();
+        cmd.barrier(Barrier::new().sample_read_image(tex));
+        tex.handle()
+    }*/
 }
 
 pub struct AtlasSliceMut<'a> {

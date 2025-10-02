@@ -28,7 +28,6 @@ const _: () = assert!(align_of::<EguiVertex>() == align_of::<egui::epaint::Verte
 
 struct Texture {
     image: Image,
-    view: ImageView,
     sampler: Sampler,
 }
 
@@ -95,9 +94,6 @@ impl Renderer {
                 });
                 image.set_name("egui texture");
 
-                let view = image.create_top_level_view();
-                view.set_name("egui texture view");
-
                 let sampler = cmd.device().create_sampler(&SamplerCreateInfo {
                     mag_filter: convert_filter(tex.options.magnification),
                     min_filter: convert_filter(tex.options.minification),
@@ -108,7 +104,7 @@ impl Renderer {
                     ..Default::default()
                 });
 
-                Texture { image, view, sampler }
+                Texture { image, sampler }
             });
 
             let (x, y) = if let Some([x, y]) = tex.pos {
@@ -143,7 +139,7 @@ impl Renderer {
     pub fn render(
         &mut self,
         cmd: &mut CommandStream,
-        color_target: &ImageView,
+        color_target: &Image,
         ctx: &egui::Context,
         textures_delta: egui::TexturesDelta,
         shapes: Vec<egui::epaint::ClippedShape>,
@@ -180,7 +176,7 @@ impl Renderer {
         // encode draw commands
         let mut enc = cmd.begin_rendering(RenderPassInfo {
             color_attachments: &[ColorAttachment {
-                image_view: color_target,
+                image: color_target,
                 clear_value: None,
             }],
             depth_stencil_attachment: None,
@@ -225,8 +221,7 @@ impl Renderer {
                 &[
                     (
                         0,
-                        texture
-                            .view
+                        texture.image
                             .texture_descriptor(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
                     ),
                     (1, self.sampler.descriptor()),

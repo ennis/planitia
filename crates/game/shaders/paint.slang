@@ -2,8 +2,9 @@
 struct FeatherVertex
 {
     float2 position;
-    float feather;
+    float2 uv;
     float4 color;
+    float feather;
 };
 
 // ---------------------------------------------------------------
@@ -11,6 +12,7 @@ struct FeatherVertex
 struct VertexOutput
 {
     float4 pos: SV_Position;
+    float2 uv;
     float4 color;
     float feather;
 };
@@ -38,6 +40,7 @@ VertexOutput paint_vertex_main(FeatherVertex v, uniform PushConstants u)
     o.pos = float4(v.position.xy / u.screen_size * 2.0 - 1.0, 0.0, 1.0);
     o.color = v.color;
     o.feather = v.feather;
+    o.uv = v.uv;
     return o;
 }
 
@@ -45,8 +48,9 @@ VertexOutput paint_vertex_main(FeatherVertex v, uniform PushConstants u)
 FragmentOutput paint_fragment_main(VertexOutput v, uniform PushConstants u)
 {
     float alpha = (1.0 - abs(v.feather)) * min(u.line_width, 1.0);
+    float4 tex_color = u.texture.Sample(u.sampler, v.uv);
     FragmentOutput o;
-    o.color = v.color;
+    o.color = v.color; //* tex_color;
     o.color.a *= alpha;
     return o;
 }

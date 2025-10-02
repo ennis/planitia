@@ -1,5 +1,5 @@
 use crate::device::{get_vk_sample_count, ResourceAllocation};
-use crate::{vk, Device, Image, ImageCreateInfo, ImageInner, RcDevice, Size3D};
+use crate::{vk, Device, Image, ImageCreateInfo, ImageInner, ImageType, RcDevice, Size3D};
 use ash::vk::{HANDLE, SECURITY_ATTRIBUTES};
 use gpu_allocator::MemoryLocation;
 use std::ffi::{c_void, OsStr};
@@ -208,7 +208,9 @@ impl DeviceExtWindows for Device {
             Some(DedicatedAllocation::Image(handle)),
         );
         self.raw.bind_image_memory(handle, device_memory, 0).unwrap();
+
         let id = self.image_ids.lock().unwrap().insert(());
+        let (bindless_handle, default_view) = self.create_bindless_image_view(handle, image_info.type_, image_info.format, image_info.mip_levels, image_info.array_layers);
 
         Image {
             handle,
@@ -219,6 +221,8 @@ impl DeviceExtWindows for Device {
                 allocation: ResourceAllocation::DeviceMemory { device_memory },
                 handle,
                 swapchain_image: false,
+                default_view,
+                bindless_handle,
             })),
             usage: image_info.usage,
             type_: image_info.type_,
@@ -340,6 +344,8 @@ impl DeviceExtWindows for Device {
         self.raw.bind_image_memory(handle, device_memory, 0).unwrap();
 
         let id = self.image_ids.lock().unwrap().insert(());
+        let (bindless_handle, default_view) = self.create_bindless_image_view(handle, image_info.type_, image_info.format, image_info.mip_levels, image_info.array_layers);
+
         let image = Image {
             handle,
             inner: Some(Arc::new(ImageInner {
@@ -349,6 +355,8 @@ impl DeviceExtWindows for Device {
                 allocation: ResourceAllocation::DeviceMemory { device_memory },
                 handle,
                 swapchain_image: false,
+                default_view,
+                bindless_handle,
             })),
             usage: image_info.usage,
             type_: image_info.type_,

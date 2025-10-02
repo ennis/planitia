@@ -89,7 +89,7 @@ impl ImguiContext {
     pub(crate) fn render(&mut self, cmd: &mut CommandStream, image: &gpu::Image) {
         self.renderer.render(
             cmd,
-            &image.create_top_level_view(),
+            image,
             &self.ctx,
             mem::take(&mut self.output.textures_delta),
             mem::take(&mut self.output.shapes),

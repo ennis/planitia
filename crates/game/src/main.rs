@@ -60,7 +60,7 @@ impl Handler {
         let color = Srgba32 { r, g, b, a };
         scene.fill_rrect(rect_xywh(100.0, 100.0, 200.0, 200.0), 20.0, color);
 
-       /* scene.draw_glyph_run(
+       /*scene.draw_glyph_run(
             vec2(400.0, 200.0),
             "Hello, world! こんにちは",
             48.0,
@@ -70,7 +70,7 @@ impl Handler {
             cmd,
             &PaintRenderParams {
                 camera: Default::default(),
-                color_target: target.create_top_level_view(),
+                color_target: target,
                 depth_target: None,
             },
         );

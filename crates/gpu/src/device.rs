@@ -3,12 +3,11 @@ mod bindless;
 
 use crate::instance::{vk_ext_debug_utils, vk_khr_surface};
 use crate::{
-    get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, BufferInner, BufferUntyped, BufferUsage,
-    CommandPool, CommandStream, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error,
-    GraphicsPipeline, GraphicsPipelineCreateInfo, Image, ImageCreateInfo, ImageInner, ImageType, ImageUsage, ImageView,
-    ImageViewInfo, ImageViewInner, MemoryAccess, MemoryLocation, PreRasterizationShaders, Sampler, SamplerCreateInfo,
-    SignaledSemaphore, Size3D, SwapChain, SwapchainImage, SwapchainImageInner,
-     SUBGROUP_SIZE,
+    aspects_for_format, get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, BufferInner, BufferUntyped,
+    BufferUsage, CommandPool, CommandStream, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error,
+    Format, GraphicsPipeline, GraphicsPipelineCreateInfo, Image, ImageCreateInfo, ImageInner, ImageType, ImageUsage,
+    ImageViewInfo, MemoryAccess, MemoryLocation, PreRasterizationShaders, Sampler, SamplerCreateInfo,
+    SignaledSemaphore, Size3D, SwapChain, SwapchainImage, SwapchainImageInner, SUBGROUP_SIZE,
 };
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
@@ -919,6 +918,7 @@ impl Device {
         height: u32,
     ) -> Image {
         let id = self.image_ids.lock().unwrap().insert(());
+        let (bindless_handle, default_view) = self.create_bindless_image_view(handle, ImageType::Image2D, format, 1, 1);
         Image {
             inner: Some(Arc::new(ImageInner {
                 device: self.clone(),
@@ -927,6 +927,8 @@ impl Device {
                 allocation: ResourceAllocation::External,
                 handle,
                 swapchain_image: true,
+                default_view,
+                bindless_handle,
             })),
             handle,
             usage: ImageUsage::TRANSFER_DST | ImageUsage::COLOR_ATTACHMENT,
@@ -943,6 +945,71 @@ impl Device {
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // IMAGES
     ////////////////////////////////////////////////////////////////////////////////////////////////
+
+    /// Creates the default image view for the image.
+    pub(crate) fn create_bindless_image_view(
+        &self,
+        handle: vk::Image,
+        type_: ImageType,
+        format: Format,
+        mip_levels: u32,
+        array_layers: u32,
+    ) -> (ImageViewId, vk::ImageView) {
+        unsafe {
+            let image_view = self
+                .raw
+                .create_image_view(
+                    &vk::ImageViewCreateInfo {
+                        flags: vk::ImageViewCreateFlags::empty(),
+                        image: handle,
+                        view_type: match type_ {
+                            ImageType::Image1D => {
+                                if array_layers > 1 {
+                                    vk::ImageViewType::TYPE_1D_ARRAY
+                                } else {
+                                    vk::ImageViewType::TYPE_1D
+                                }
+                            }
+                            ImageType::Image2D => {
+                                if array_layers > 1 {
+                                    vk::ImageViewType::TYPE_2D_ARRAY
+                                } else {
+                                    vk::ImageViewType::TYPE_2D
+                                }
+                            }
+                            ImageType::Image3D => vk::ImageViewType::TYPE_3D,
+                        },
+                        format,
+                        components: vk::ComponentMapping {
+                            r: vk::ComponentSwizzle::IDENTITY,
+                            g: vk::ComponentSwizzle::IDENTITY,
+                            b: vk::ComponentSwizzle::IDENTITY,
+                            a: vk::ComponentSwizzle::IDENTITY,
+                        },
+                        subresource_range: vk::ImageSubresourceRange {
+                            aspect_mask: aspects_for_format(format),
+                            base_mip_level: 0,
+                            level_count: mip_levels,
+                            base_array_layer: 0,
+                            layer_count: array_layers,
+                        },
+                        ..Default::default()
+                    },
+                    None,
+                )
+                .expect("failed to create image view");
+
+            let id = self.image_view_ids.lock().unwrap().insert(());
+            // Update the global descriptor table.
+            //if usage.contains(ImageUsage::SAMPLED) {
+            self.write_global_texture_descriptor(id, image_view);
+            //}
+            //if usage.contains(ImageUsage::STORAGE) {
+            self.write_global_storage_image_descriptor(id, image_view);
+            //}
+            (id, image_view)
+        }
+    }
 
     /// Creates a new image resource.
     ///
@@ -1002,6 +1069,15 @@ impl Device {
 
         let id = self.image_ids.lock().unwrap().insert(());
 
+        // create the bindless image view
+        let (bindless_handle, default_view) = self.create_bindless_image_view(
+            handle,
+            image_info.type_,
+            image_info.format,
+            image_info.mip_levels,
+            image_info.array_layers,
+        );
+
         Image {
             handle,
             inner: Some(Arc::new(ImageInner {
@@ -1011,6 +1087,8 @@ impl Device {
                 allocation: ResourceAllocation::Allocation { allocation },
                 handle,
                 swapchain_image: false,
+                default_view,
+                bindless_handle,
             })),
             usage: image_info.usage,
             type_: image_info.type_,
@@ -1023,7 +1101,7 @@ impl Device {
         }
     }
 
-    pub fn create_image_view(&self, image: &Image, info: &ImageViewInfo) -> ImageView {
+    /*pub fn create_image_view(&self, image: &Image, info: &ImageViewInfo) -> ImageView {
         // FIXME: support non-zero base mip level
         if info.subresource_range.base_mip_level != 0 {
             unimplemented!("non-zero base mip level");
@@ -1082,7 +1160,7 @@ impl Device {
             // TODO: size of mip level
             size: image.size,
         }
-    }
+    }*/
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // RESOURCE GROUPS
@@ -1614,7 +1692,7 @@ impl Device {
         };
 
         let input_assembly_state = vk::PipelineInputAssemblyStateCreateInfo {
-            topology: vk::PrimitiveTopology::TRIANGLE_LIST,  // ignored, specified dynamically
+            topology: vk::PrimitiveTopology::TRIANGLE_LIST, // ignored, specified dynamically
             primitive_restart_enable: vk::FALSE,
             ..Default::default()
         };

@@ -37,7 +37,7 @@ pub mod prelude {
     pub use crate::{
         vk, Buffer, BufferUsage, ClearColorValue, ColorBlendEquation, ColorTargetState, CommandStream, ComputeEncoder,
         DepthStencilState, Format, FragmentState, GraphicsPipeline, GraphicsPipelineCreateInfo, Image, ImageCreateInfo,
-        ImageType, ImageUsage, ImageView, MemoryLocation, PipelineBindPoint, PipelineLayoutDescriptor, Point2D,
+        ImageType, ImageUsage, MemoryLocation, PipelineBindPoint, PipelineLayoutDescriptor, Point2D,
         PreRasterizationShaders, RasterizationState, RcDevice, Rect2D, RenderEncoder, Sampler, SamplerCreateInfo,
         ShaderCode, ShaderEntryPoint, ShaderSource, Size2D, StencilState, Vertex, VertexBufferDescriptor,
         VertexBufferLayoutDescription, VertexInputAttributeDescription, VertexInputState,
@@ -252,7 +252,7 @@ impl Sampler {
         self.sampler
     }
 
-    pub fn descriptor(&self) -> Descriptor {
+    pub fn descriptor(&self) -> Descriptor<'_> {
         Descriptor::Sampler { sampler: self.clone() }
     }
 
@@ -434,7 +434,6 @@ impl<T: Copy> Buffer<T> {
     }
 }
 
-
 impl<T: Copy> Buffer<[T]> {
     /// Returns the number of elements in the buffer.
     pub fn len(&self) -> usize {
@@ -467,7 +466,6 @@ impl<T: Copy> Buffer<[T]> {
         unsafe { mem::transmute(self) }
     }
 
-
     /// Re-interprets this buffer as a single value of type `T`. Only valid if `self.len() == 1`.
     ///
     /// # Panics
@@ -478,7 +476,6 @@ impl<T: Copy> Buffer<[T]> {
         // SAFETY: Buffer<[T]> and Buffer<T> have the same layout if the size matches
         unsafe { mem::transmute(self) }
     }
-
 
     /// Casts the buffer to another element type.
     ///
@@ -540,7 +537,7 @@ impl<T: Copy> Buffer<[T]> {
     }
 
     /// Element range.
-    pub fn slice(&self, range: impl RangeBounds<usize>) -> BufferRange<T> {
+    pub fn slice(&self, range: impl RangeBounds<usize>) -> BufferRange<'_, T> {
         let elem_size = size_of::<T>();
         let start = match range.start_bound() {
             Bound::Unbounded => 0,
@@ -636,12 +633,14 @@ impl<'a, T: Copy> From<&'a Buffer<[T]>> for BufferRange<'a, T> {
 struct ImageInner {
     device: RcDevice,
     id: ImageId,
-    // Number of user references to this image (via `gpu::Image`)
-    //user_ref_count: AtomicU32,
     last_submission_index: AtomicU64,
     allocation: ResourceAllocation,
     handle: vk::Image,
     swapchain_image: bool,
+    /// Default image view handle.
+    default_view: vk::ImageView,
+    /// Bindless index (of the default view).
+    bindless_handle: ImageViewId,
 }
 
 impl Drop for ImageInner {
@@ -650,7 +649,9 @@ impl Drop for ImageInner {
             unsafe {
                 //debug!("dropping image {:?} (handle: {:?})", self.id, self.handle);
                 self.device.image_ids.lock().unwrap().remove(self.id);
+                self.device.image_view_ids.lock().unwrap().remove(self.bindless_handle);
                 self.device.free_memory(&mut self.allocation);
+                self.device.raw.destroy_image_view(self.default_view, None);
                 self.device.raw.destroy_image(self.handle, None);
             }
         }
@@ -705,29 +706,36 @@ impl Image {
         }
     }
 
-    /// Returns the `vk::ImageType` of the image.
+    /// Returns the type (dimensionality) of the image.
     pub fn image_type(&self) -> ImageType {
         self.type_
     }
 
-    /// Returns the `vk::Format` of the image.
+    /// Returns the format of the image.
     pub fn format(&self) -> Format {
         self.format
     }
 
-    /// Returns the `vk::Extent3D` of the image.
+    /// Returns the size in pixels of the image.
     pub fn size(&self) -> Size3D {
         self.size
     }
 
+    /// Returns the width of the image.
     pub fn width(&self) -> u32 {
         self.size.width
     }
 
+    /// Returns the height of the image.
+    ///
+    /// This is 1 for 1D images.
     pub fn height(&self) -> u32 {
         self.size.height
     }
 
+    /// Returns the depth of the image.
+    ///
+    /// This is 1 for 1D & 2D images.
     pub fn depth(&self) -> u32 {
         self.size.depth
     }
@@ -737,7 +745,8 @@ impl Image {
         self.usage
     }
 
-    pub fn id(&self) -> ImageId {
+    /// Returns the internal tracking ID of the image.
+    pub(crate) fn id(&self) -> ImageId {
         self.inner.as_ref().unwrap().id
     }
 
@@ -746,11 +755,34 @@ impl Image {
         self.handle
     }
 
+    /// Returns the handle of the default image view.
+    pub fn view_handle(&self) -> vk::ImageView {
+        self.inner.as_ref().unwrap().default_view
+    }
+
     pub fn device(&self) -> &RcDevice {
         &self.inner.as_ref().unwrap().device
     }
 
-    /// Creates an image view for the base mip level of this image,
+    /// Returns a descriptor for sampling this image in a shader.
+    pub fn texture_descriptor(&self, layout: vk::ImageLayout) -> Descriptor<'_> {
+        Descriptor::SampledImage { image: self, layout }
+    }
+
+    /// Returns a descriptor for accessing this image as a storage image in a shader.
+    pub fn storage_image_descriptor(&self, layout: vk::ImageLayout) -> Descriptor<'_> {
+        Descriptor::StorageImage { image: self, layout }
+    }
+
+    /// Returns the bindless texture handle of this image view.
+    pub fn device_image_handle(&self) -> ImageHandle {
+        ImageHandle {
+            index: self.inner.as_ref().unwrap().bindless_handle.index(),
+            _unused: 0,
+        }
+    }
+
+    /*/// Creates an image view for the base mip level of this image,
     /// suitable for use as a rendering attachment.
     pub fn create_top_level_view(&self) -> ImageView {
         self.create_view(&ImageViewInfo {
@@ -773,14 +805,15 @@ impl Image {
                 vk::ComponentSwizzle::IDENTITY,
             ],
         })
-    }
+    }*/
 
-    /// Creates an `ImageView` object.
+    /*/// Creates an `ImageView` object.
     pub(crate) fn create_view(&self, info: &ImageViewInfo) -> ImageView {
         self.inner.as_ref().unwrap().device.create_image_view(self, info)
-    }
+    }*/
 }
 
+/*
 #[derive(Debug)]
 struct ImageViewInner {
     // Don't hold Arc<ImageInner> here
@@ -873,32 +906,10 @@ impl ImageView {
         self.inner.as_ref().unwrap().id
     }
 
-    pub fn texture_descriptor(&self, layout: vk::ImageLayout) -> Descriptor {
-        Descriptor::SampledImage {
-            image_view: self.clone(),
-            layout,
-        }
-    }
-
-    pub fn storage_image_descriptor(&self, layout: vk::ImageLayout) -> Descriptor {
-        Descriptor::StorageImage {
-            image_view: self.clone(),
-            layout,
-        }
-    }
-
-    /// Returns the bindless texture handle of this image view.
-    pub fn device_image_handle(&self) -> ImageHandle {
-        ImageHandle {
-            index: self.id().index(),
-            _unused: 0,
-        }
-    }
-
-    pub fn as_device_texture_2d_handle(&self) -> Texture2DHandle {
+    /*pub fn as_device_texture_2d_handle(&self) -> Texture2DHandle {
         Texture2DHandle(self.device_image_handle())
-    }
-}
+    }*/
+}*/
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -994,11 +1005,11 @@ pub struct ImageCopyView<'a> {
 /// Description of one argument in an argument block.
 pub enum Descriptor<'a> {
     SampledImage {
-        image_view: ImageView,
+        image: &'a Image,
         layout: vk::ImageLayout,
     },
     StorageImage {
-        image_view: ImageView,
+        image: &'a Image,
         layout: vk::ImageLayout,
     },
     UniformBuffer {
@@ -1155,7 +1166,7 @@ pub type BufferRangeUntyped<'a> = BufferRange<'a, u8>;
 /// Describes a color, depth, or stencil attachment.
 #[derive(Clone)]
 pub struct ColorAttachment<'a> {
-    pub image_view: &'a ImageView,
+    pub image: &'a Image,
     pub clear_value: Option<[f64; 4]>,
     /*pub image_view: ImageView,
     pub load_op: vk::AttachmentLoadOp,
@@ -1166,7 +1177,7 @@ pub struct ColorAttachment<'a> {
 impl ColorAttachment<'_> {
     pub(crate) fn get_vk_clear_color_value(&self) -> vk::ClearColorValue {
         if let Some(clear_value) = self.clear_value {
-            match format_numeric_type(self.image_view.format) {
+            match format_numeric_type(self.image.format) {
                 FormatNumericType::UInt => vk::ClearColorValue {
                     uint32: [
                         clear_value[0] as u32,
@@ -1200,7 +1211,7 @@ impl ColorAttachment<'_> {
 
 #[derive(Clone)]
 pub struct DepthStencilAttachment<'a> {
-    pub image_view: &'a ImageView,
+    pub image: &'a Image,
     pub depth_clear_value: Option<f64>,
     pub stencil_clear_value: Option<u32>,
     /*pub depth_load_op: vk::AttachmentLoadOp,
@@ -1236,7 +1247,7 @@ pub trait VertexInput {
     fn attributes(&self) -> Cow<'_, [VertexInputAttributeDescription]>;
 
     /// Returns an iterator over the vertex buffers referenced in this object.
-    fn vertex_buffers(&self) -> impl Iterator<Item = VertexBufferDescriptor>;
+    fn vertex_buffers(&self) -> impl Iterator<Item = VertexBufferDescriptor<'_>>;
 }
 
 #[derive(Copy, Clone, Debug)]
