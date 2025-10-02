@@ -56,7 +56,7 @@ impl Window {
         }
     }
 
-    pub(super) fn get_image(&self) -> RenderTargetImage {
+    pub(super) fn get_swap_chain_image(&self) -> RenderTargetImage<'_> {
         self.swap_chain.get_image()
     }
 

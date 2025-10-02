@@ -1307,11 +1307,11 @@ impl Device {
     /// Acquires the next image in a swapchain.
     ///
     /// Returns the image and the semaphore that will be signaled when the image is available.
-    pub unsafe fn acquire_next_swapchain_image(
+    pub unsafe fn acquire_next_swapchain_image<'a>(
         &self,
-        swapchain: &SwapChain,
+        swapchain: &'a SwapChain,
         timeout: Duration,
-    ) -> Result<(SwapchainImage, SignaledSemaphore), vk::Result> {
+    ) -> Result<(SwapchainImage<'a>, SignaledSemaphore), vk::Result> {
         // We can't use `get_or_create_semaphore` because according to the spec the semaphore
         // passed to `vkAcquireNextImage` must not have any pending operations, whereas
         // `get_or_create_semaphore` only guarantees that a wait operation has been submitted
@@ -1337,7 +1337,7 @@ impl Device {
 
         let img = SwapchainImage {
             swapchain: swapchain.handle,
-            image: swapchain.images[index as usize].image.clone(),
+            image: &swapchain.images[index as usize].image,
             index,
             render_finished: swapchain.images[index as usize].render_finished.clone(),
         };

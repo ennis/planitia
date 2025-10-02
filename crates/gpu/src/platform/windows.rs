@@ -1,5 +1,5 @@
 use crate::device::{get_vk_sample_count, ResourceAllocation};
-use crate::{vk, Device, Image, ImageCreateInfo, ImageInner, ImageType, RcDevice, Size3D};
+use crate::{vk, Device, Image, ImageCreateInfo, ImageInner, RcDevice, Size3D};
 use ash::vk::{HANDLE, SECURITY_ATTRIBUTES};
 use gpu_allocator::MemoryLocation;
 use std::ffi::{c_void, OsStr};

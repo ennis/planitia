@@ -113,7 +113,7 @@ pub trait AppHandler {
     fn vsync(&mut self);
 
     /// Renders the current frame.
-    fn render(&mut self, image: RenderTargetImage) {}
+    fn render(&mut self, image: RenderTargetImage<'_>) {}
 
     fn close_requested(&mut self) {}
     fn imgui(&mut self, ctx: &egui::Context) {}
@@ -172,9 +172,9 @@ where
         }
 
         // render the frame (the application is expected to render the GUI as part of its rendering)
-        let image = ctx.platform.acquire_render_target();
-        self.inner.render(image.clone());
-        ctx.platform.present();
+        ctx.platform.render(&mut |render_target| {
+            self.inner.render(render_target);
+        });
 
         // end frame capture
         if self.rdoc_capture_requested {

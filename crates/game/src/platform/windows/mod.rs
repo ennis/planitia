@@ -116,12 +116,12 @@ impl PlatformHandler for Win32Platform {
         self.vsync_clock.stop();
     }
 
-    fn acquire_render_target(&self) -> RenderTargetImage {
-        self.window.borrow().as_ref().unwrap().get_image()
-    }
-
-    fn present(&self) {
-        self.window.borrow().as_ref().unwrap().present();
+    fn render(&self, render_callback: &mut dyn FnMut(RenderTargetImage)) {
+        let window = self.window.borrow();
+        let window = window.as_ref().unwrap();
+        let render_target = window.get_swap_chain_image();
+        render_callback(render_target);
+        window.present();
     }
 
     fn get_gpu_device(&self) -> &RcDevice {

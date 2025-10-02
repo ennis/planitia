@@ -194,7 +194,7 @@ impl DxgiVulkanInteropSwapChain {
     /// Acquires the next image from the swap chain for rendering.
     ///
     /// This must be followed by a call to `present()`.
-    pub(super) fn get_image(&self) -> RenderTargetImage {
+    pub(super) fn get_image(&self) -> RenderTargetImage<'_> {
         assert!(!self.acquired.get(), "surface already acquired");
 
         let gfx = GraphicsContext::current();
@@ -217,7 +217,7 @@ impl DxgiVulkanInteropSwapChain {
 
         // FIXME: SemaphoreWait is not the correct type because the caller should choose the dst_stage
         RenderTargetImage {
-            image: image.image.clone(),
+            image: &image.image,
             ready: gpu::SemaphoreWait {
                 kind: SemaphoreWaitKind::D3D12Fence {
                     semaphore: self.fence_semaphore,

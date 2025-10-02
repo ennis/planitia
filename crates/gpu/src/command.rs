@@ -28,12 +28,12 @@ union DescriptorBufferOrImage {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Describes a pipeline barrier.
-pub struct Barrier {
+pub struct Barrier<'a> {
     access: MemoryAccess,
-    transitions: Vec<(Image, MemoryAccess)>,
+    transitions: Vec<(&'a Image, MemoryAccess)>,
 }
 
-impl Barrier {
+impl<'a> Barrier<'a> {
     pub fn new() -> Self {
         Barrier {
             access: MemoryAccess::empty(),
@@ -41,16 +41,16 @@ impl Barrier {
         }
     }
 
-    pub fn color_attachment_write(mut self, image: &Image) -> Self {
+    pub fn color_attachment_write(mut self, image: &'a Image) -> Self {
         self.transitions
-            .push((image.clone(), MemoryAccess::COLOR_ATTACHMENT_WRITE));
+            .push((image, MemoryAccess::COLOR_ATTACHMENT_WRITE));
         self.access |= MemoryAccess::COLOR_ATTACHMENT_WRITE;
         self
     }
 
-    pub fn depth_stencil_attachment_write(mut self, image: &Image) -> Self {
+    pub fn depth_stencil_attachment_write(mut self, image: &'a Image) -> Self {
         self.transitions
-            .push((image.clone(), MemoryAccess::DEPTH_STENCIL_ATTACHMENT_WRITE));
+            .push((image, MemoryAccess::DEPTH_STENCIL_ATTACHMENT_WRITE));
         self.access |= MemoryAccess::DEPTH_STENCIL_ATTACHMENT_WRITE;
         self
     }
@@ -65,33 +65,33 @@ impl Barrier {
         self
     }
 
-    pub fn shader_read_image(mut self, image: &Image) -> Self {
+    pub fn shader_read_image(mut self, image: &'a Image) -> Self {
         self.transitions.push((
-            image.clone(),
+            image,
             MemoryAccess::SHADER_STORAGE_READ | MemoryAccess::ALL_STAGES,
         ));
         self.access |= MemoryAccess::SHADER_STORAGE_READ | MemoryAccess::ALL_STAGES;
         self
     }
 
-    pub fn shader_write_image(mut self, image: &Image) -> Self {
+    pub fn shader_write_image(mut self, image: &'a Image) -> Self {
         self.transitions.push((
-            image.clone(),
+            image,
             MemoryAccess::SHADER_STORAGE_WRITE | MemoryAccess::ALL_STAGES,
         ));
         self.access |= MemoryAccess::SHADER_STORAGE_WRITE | MemoryAccess::ALL_STAGES;
         self
     }
 
-    pub fn present(mut self, image: &Image) -> Self {
-        self.transitions.push((image.clone(), MemoryAccess::PRESENT));
+    pub fn present(mut self, image: &'a Image) -> Self {
+        self.transitions.push((image, MemoryAccess::PRESENT));
         self.access |= MemoryAccess::PRESENT;
         self
     }
 
-    pub fn sample_read_image(mut self, image: &Image) -> Self {
+    pub fn sample_read_image(mut self, image: &'a Image) -> Self {
         self.transitions
-            .push((image.clone(), MemoryAccess::SAMPLED_READ | MemoryAccess::ALL_STAGES));
+            .push((image, MemoryAccess::SAMPLED_READ | MemoryAccess::ALL_STAGES));
         self.access |= MemoryAccess::SAMPLED_READ | MemoryAccess::ALL_STAGES;
         self
     }
@@ -106,14 +106,14 @@ impl Barrier {
         self
     }
 
-    pub fn transfer_read_image(mut self, image: &Image) -> Self {
-        self.transitions.push((image.clone(), MemoryAccess::TRANSFER_READ));
+    pub fn transfer_read_image(mut self, image: &'a Image) -> Self {
+        self.transitions.push((image, MemoryAccess::TRANSFER_READ));
         self.access |= MemoryAccess::TRANSFER_READ;
         self
     }
 
-    pub fn transfer_write_image(mut self, image: &Image) -> Self {
-        self.transitions.push((image.clone(), MemoryAccess::TRANSFER_WRITE));
+    pub fn transfer_write_image(mut self, image: &'a Image) -> Self {
+        self.transitions.push((image, MemoryAccess::TRANSFER_WRITE));
         self.access |= MemoryAccess::TRANSFER_WRITE;
         self
     }
@@ -141,7 +141,9 @@ pub struct CommandStream {
 }
 
 pub(crate) struct CommandBufferImageState {
-    pub image: Image,
+    pub image: vk::Image,
+    pub format: vk::Format,
+    pub id: ImageId,
     pub first_access: MemoryAccess,
     pub last_access: MemoryAccess,
 }
@@ -479,7 +481,9 @@ impl CommandStream {
                 self.tracked_images.insert(
                     image.id(),
                     CommandBufferImageState {
-                        image: image.clone(),
+                        image: image.handle(),
+                        format: image.format,
+                        id: image.id(),
                         first_access: access,
                         last_access: access,
                     },
@@ -664,10 +668,10 @@ impl CommandStream {
             for (_, state) in self.tracked_images.drain() {
                 let prev_access = tracker
                     .images
-                    .insert(state.image.id(), state.last_access)
+                    .insert(state.id, state.last_access)
                     .unwrap_or(MemoryAccess::UNINITIALIZED); // if the image was not previously tracked, the contents are undefined
                 if prev_access != state.first_access {
-                    let format = state.image.format;
+                    let format = state.format;
                     image_barriers.push(vk::ImageMemoryBarrier2 {
                         src_stage_mask,
                         src_access_mask,
@@ -675,7 +679,7 @@ impl CommandStream {
                         dst_access_mask,
                         old_layout: prev_access.to_vk_image_layout(format),
                         new_layout: state.first_access.to_vk_image_layout(format),
-                        image: state.image.handle,
+                        image: state.image,
                         subresource_range: vk::ImageSubresourceRange {
                             aspect_mask: aspects_for_format(format),
                             base_mip_level: 0,

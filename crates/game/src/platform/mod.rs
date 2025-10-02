@@ -14,8 +14,8 @@ pub type Platform = windows::Win32Platform;
 
 /// Image returned by `acquire` that can be rendered to.
 #[derive(Clone)]
-pub struct RenderTargetImage {
-    pub image: gpu::Image,
+pub struct RenderTargetImage<'a> {
+    pub image: &'a gpu::Image,
     /// Semaphore that should be waited on before rendering to the image.
     pub ready: gpu::SemaphoreWait,
     /// Should be signaled after rendering to the image.
@@ -90,10 +90,7 @@ pub trait PlatformHandler {
     fn teardown(&self);
 
     /// Acquires a render target image that can be used for rendering.
-    fn acquire_render_target(&self) -> RenderTargetImage;
-
-    /// Presents the render target image that was last acquired with `acquire_render_target`.
-    fn present(&self);
+    fn render(&self, render_callback: &mut dyn FnMut(RenderTargetImage));
 
     /// Returns the Vulkan device instance.
     fn get_gpu_device(&self) -> &gpu::RcDevice;

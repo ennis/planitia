@@ -164,12 +164,12 @@ pub struct SwapChain {
 
 /// Contains information about an image in a swapchain.
 #[derive(Debug)]
-pub struct SwapchainImage {
+pub struct SwapchainImage<'a> {
     /// Handle of the swapchain that owns this image.
     pub swapchain: vk::SwapchainKHR,
     /// Index of the image in the swap chain.
     pub index: u32,
-    pub image: Image,
+    pub image: &'a Image,
     /// Used internally by `present` to synchronize rendering to presentation.
     render_finished: vk::Semaphore,
 }
@@ -575,6 +575,7 @@ impl Buffer<[u8]> {
     }
 }*/
 
+/*
 impl<T: ?Sized> Clone for Buffer<T> {
     fn clone(&self) -> Self {
         Self {
@@ -586,7 +587,7 @@ impl<T: ?Sized> Clone for Buffer<T> {
             _marker: PhantomData,
         }
     }
-}
+}*/
 
 impl<T: ?Sized> std::fmt::Debug for Buffer<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -670,7 +671,7 @@ pub struct ImageBuffer {
 }
 
 /// Wrapper around a Vulkan image.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Image {
     inner: Option<Arc<ImageInner>>,
     handle: vk::Image,
