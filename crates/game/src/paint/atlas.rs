@@ -36,7 +36,7 @@ impl Atlas {
     }
 
     /// Allocates space for an image of the specified size and returns a reference to the allocated rect for writing.
-    pub fn allocate(&mut self, width: u32, height: u32) -> AtlasSliceMut {
+    pub fn allocate(&mut self, width: u32, height: u32) -> AtlasSliceMut<'_> {
         assert!(width <= self.width, "Image width exceeds atlas width");
 
         if self.cursor_x + width > self.width {

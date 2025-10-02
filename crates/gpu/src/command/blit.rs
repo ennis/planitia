@@ -8,7 +8,7 @@ use crate::{
 
 impl CommandStream {
     pub fn fill_buffer(&mut self, buffer: &BufferRangeUntyped, data: u32) {
-        self.reference_resource(&buffer.buffer);
+        self.reference_resource(buffer.buffer);
         self.barrier(Barrier::new().transfer_write());
 
         let cb = self.get_or_create_command_buffer();
@@ -16,7 +16,7 @@ impl CommandStream {
             // SAFETY: FFI call and parameters are valid
             self.device
                 .raw
-                .cmd_fill_buffer(cb, buffer.buffer.handle, buffer.offset, buffer.size, data);
+                .cmd_fill_buffer(cb, buffer.buffer.handle, buffer.byte_offset, buffer.byte_size, data);
         }
     }
 
@@ -164,8 +164,8 @@ impl CommandStream {
 
         let regions = [vk::BufferImageCopy {
             buffer_offset: source.layout.offset,
-            buffer_row_length: source.layout.row_length.unwrap_or(0),
-            buffer_image_height: source.layout.image_height.unwrap_or(0),
+            buffer_row_length: source.layout.texel_row_length.unwrap_or(0),
+            buffer_image_height: source.layout.row_count.unwrap_or(0),
             image_subresource: vk::ImageSubresourceLayers {
                 aspect_mask: destination.aspect,
                 mip_level: destination.mip_level,
@@ -187,6 +187,18 @@ impl CommandStream {
                 &regions,
             );
         }
+    }
+
+
+    /// Copies data from an image to a buffer.
+    pub fn copy_image_to_buffer(
+        &mut self,
+        source: ImageCopyView<'_>,
+        destination: ImageCopyBuffer<'_>,
+        copy_size: vk::Extent3D,
+    ) {
+        self.reference_resource(source.image);
+        self.reference_resource(destination.buffer);
     }
 
     // TODO the call-site verbosity of this method is ridiculous, fix that

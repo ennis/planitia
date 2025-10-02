@@ -119,13 +119,13 @@ impl<'a> RenderEncoder<'a> {
     /// * `buffer_range` vertex buffer range
     /// * `stride` size in bytes between vertices in the buffer
     pub fn bind_vertex_buffer(&mut self, binding: u32, buffer_range: BufferRangeUntyped) {
-        self.reference_resource(&buffer_range.buffer);
+        self.reference_resource(buffer_range.buffer);
         unsafe {
             self.stream.device.raw.cmd_bind_vertex_buffers2(
                 self.command_buffer,
                 binding,
                 &[buffer_range.buffer.handle],
-                &[buffer_range.offset as vk::DeviceSize],
+                &[buffer_range.byte_offset as vk::DeviceSize],
                 None,
                 None,
             );
@@ -138,12 +138,12 @@ impl<'a> RenderEncoder<'a> {
     /// * `index_type` type of indices in the index buffer
     /// * `index_buffer` index buffer range
     pub fn bind_index_buffer(&mut self, index_type: vk::IndexType, index_buffer: BufferRangeUntyped) {
-        self.reference_resource(&index_buffer.buffer);
+        self.reference_resource(index_buffer.buffer);
         unsafe {
             self.stream.device.raw.cmd_bind_index_buffer(
                 self.command_buffer,
                 index_buffer.buffer.handle,
-                index_buffer.offset as vk::DeviceSize,
+                index_buffer.byte_offset as vk::DeviceSize,
                 index_type.into(),
             );
         }
@@ -161,7 +161,7 @@ impl<'a> RenderEncoder<'a> {
                 self.command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout,
-                slice::from_raw_parts(data as *const P as *const MaybeUninit<u8>, mem::size_of_val(data)),
+                slice::from_raw_parts(data as *const P as *const MaybeUninit<u8>, size_of_val(data)),
             );
         }
     }
@@ -175,7 +175,7 @@ impl<'a> RenderEncoder<'a> {
                 self.command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout,
-                slice::from_raw_parts(data.as_ptr() as *const MaybeUninit<u8>, mem::size_of_val(data)),
+                slice::from_raw_parts(data.as_ptr() as *const MaybeUninit<u8>, size_of_val(data)),
             );
         }
     }
@@ -383,7 +383,7 @@ impl CommandStream {
     /// # Arguments
     ///
     /// * `attachments` - The attachments to use for the render pass
-    pub fn begin_rendering(&mut self, desc: RenderPassInfo) -> RenderEncoder {
+    pub fn begin_rendering(&mut self, desc: RenderPassInfo) -> RenderEncoder<'_> {
         // determine render area
         let render_area = {
             // FIXME validate that all attachments have the same size

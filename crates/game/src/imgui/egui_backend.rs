@@ -205,8 +205,8 @@ impl Renderer {
             let clip_max_x = clip_max_x.clamp(clip_min_x, width as i32);
             let clip_max_y = clip_max_y.clamp(clip_min_y, height as i32);
 
-            enc.bind_vertex_buffer(0, vertex_buffer.slice(..).untyped);
-            enc.bind_index_buffer(vk::IndexType::UINT32, index_buffer.slice(..).untyped);
+            enc.bind_vertex_buffer(0, vertex_buffer.slice(..).as_bytes());
+            enc.bind_index_buffer(vk::IndexType::UINT32, index_buffer.slice(..).as_bytes());
 
             enc.push_constants(&EguiPushConstants {
                 screen_size: [width as f32, height as f32],

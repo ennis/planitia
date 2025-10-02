@@ -121,7 +121,7 @@ impl<'a> ComputeEncoder<'a> {
 
 impl CommandStream {
     /// Start a compute pass
-    pub fn begin_compute(&mut self) -> ComputeEncoder {
+    pub fn begin_compute(&mut self) -> ComputeEncoder<'_> {
         let command_buffer = self.get_or_create_command_buffer();
         ComputeEncoder {
             stream: self,

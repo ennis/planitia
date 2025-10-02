@@ -25,7 +25,8 @@ struct PushConstants
     float4x4 matrix;
     float2 screen_size;
     float line_width;
-    uint texture_index;
+    Texture2D<float4>.Handle texture;
+    SamplerState.Handle sampler;
 };
 
 // ---------------------------------------------------------------

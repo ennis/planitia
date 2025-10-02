@@ -69,6 +69,8 @@ struct PushConstants {
     matrix: Mat4,
     screen_size: [f32; 2],
     line_width: f32,
+    texture: gpu::ImageHandle = gpu::ImageHandle::INVALID,
+    sampler: gpu::SamplerHandle = gpu::SamplerHandle::INVALID,
 }
 
 #[repr(C)]
@@ -223,6 +225,7 @@ pub struct Primitive {
 
 enum PrimKind {
     Geometry(Mesh),
+    // TODO: remove, replace with generic textured mesh
     GlyphRun {
         mesh: Vec<GlyphVertex>,
     }
@@ -325,7 +328,7 @@ impl<'a> PaintScene<'a> {
                 continue;
             }
 
-            let pos = position + glyph.pos;
+            let pos = position + glyph.offset;
             let quad = entry.px_bounds.to_rect().translate(pos);
             let tex_rect = entry.texture_rect();
             let uv0 = U16Vec2::new(tex_rect.min.x as u16, tex_rect.min.y as u16);
@@ -392,6 +395,7 @@ impl<'a> PaintScene<'a> {
                         matrix: params.camera.view_projection(),
                         screen_size: [width as f32, height as f32],
                         line_width: 1.0,
+                        ..
                     });
                     draw_mesh(&mut encoder, params, mesh, prim.clip);
                 }
@@ -426,7 +430,7 @@ fn draw_glyph_run(
     clip: Rect,
 ) {
     let vertex_buffer = encoder.device().upload_slice(gpu::BufferUsage::VERTEX, vertices);
-    encoder.bind_vertex_buffer(0, vertex_buffer.slice(..).untyped);
+    encoder.bind_vertex_buffer(0, vertex_buffer.as_bytes().into());
     set_scissor(encoder, params, clip);
     encoder.draw(0..vertices.len() as u32, 0..1);
 }
@@ -434,8 +438,14 @@ fn draw_glyph_run(
 fn draw_mesh(encoder: &mut gpu::RenderEncoder, params: &PaintRenderParams, mesh: &Mesh, clip: Rect) {
     let vertex_buffer = encoder.device().upload_slice(gpu::BufferUsage::VERTEX, &mesh.vertices);
     let index_buffer = encoder.device().upload_slice(gpu::BufferUsage::INDEX, &mesh.indices);
-    encoder.bind_vertex_buffer(0, vertex_buffer.slice(..).untyped);
-    encoder.bind_index_buffer(vk::IndexType::UINT32, index_buffer.slice(..).untyped);
+    encoder.bind_vertex_buffer(0, vertex_buffer.as_bytes().into());
+    encoder.bind_index_buffer(vk::IndexType::UINT32, index_buffer.as_bytes().into());
     set_scissor(encoder, params, clip);
     encoder.draw_indexed(0..mesh.indices.len() as u32, 0, 0..1);
+}
+
+
+#[cfg(test)]
+mod test {
+    
 }

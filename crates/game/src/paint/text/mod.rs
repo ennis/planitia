@@ -222,7 +222,9 @@ impl Ord for Font {
 pub struct Glyph {
     pub id: GlyphId,
     /// Offset (relative to the origin of the cluster).
-    pub pos: Vec2,
+    pub offset: Vec2,
+    /// Advance.
+    pub advance: f32,
 }
 
 /*
@@ -289,7 +291,8 @@ pub fn shape_text(
         let glyph = Glyph {
             id: glyph_id,
             // for simple shaping the offset is always zero
-            pos: vec2(0.0, 0.0),
+            offset: vec2(0.0, 0.0),
+            advance,
         };
 
         // determine boundary type

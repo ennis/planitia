@@ -18,7 +18,7 @@ pub trait DeviceExt {
 impl DeviceExt for Device {
     fn upload<T: Copy>(self: &Rc<Self>, usage: BufferUsage, data: &T) -> Buffer<T> {
         let buffer = self.upload_slice(usage, slice::from_ref(data));
-        Buffer::new(buffer.untyped)
+        buffer.single()
     }
 
     fn create_array_buffer<T: Copy>(
@@ -27,15 +27,18 @@ impl DeviceExt for Device {
         memory_location: MemoryLocation,
         len: usize,
     ) -> Buffer<[T]> {
-        let buffer = self.create_buffer(usage, memory_location, (mem::size_of::<T>() * len) as u64);
-        Buffer::new(buffer)
+        let buffer = self.create_buffer(usage, memory_location, (size_of::<T>() * len) as u64);
+        unsafe {
+            // SAFETY: the buffer is large enough to hold `len` elements of type `T`
+            buffer.cast()
+        }
     }
 
     fn upload_slice<T: Copy>(self: &Rc<Self>, usage: BufferUsage, data: &[T]) -> Buffer<[T]> {
         let buffer = self.create_array_buffer(usage, MemoryLocation::CpuToGpu, data.len());
         unsafe {
             // copy data to mapped buffer
-            ptr::copy_nonoverlapping(data.as_ptr(), buffer.as_mut_ptr(), data.len());
+            ptr::copy_nonoverlapping(data.as_ptr(), buffer.as_mut_ptr() as *mut T, data.len());
         }
         buffer
     }

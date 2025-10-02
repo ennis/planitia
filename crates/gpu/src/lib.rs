@@ -1,3 +1,4 @@
+#![feature(default_field_values)]
 mod command;
 mod device;
 mod instance;
@@ -8,13 +9,13 @@ pub mod util;
 
 use std::borrow::Cow;
 use std::marker::PhantomData;
-use std::mem;
 use std::mem::MaybeUninit;
 use std::ops::{Bound, RangeBounds};
 use std::os::raw::c_void;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::{mem, ptr};
 
 // --- reexports ---
 
@@ -100,13 +101,24 @@ pub struct ImageHandle {
     /// Index of the image in the image descriptor array.
     pub index: u32,
     /// For compatibility with slang.
-    pub _unused: u32,
+    _unused: u32,
+}
+
+impl ImageHandle {
+    pub const INVALID: Self = ImageHandle {
+        index: u32::MAX,
+        _unused: 0,
+    };
 }
 
 /// Bindless handle to a 2D texture.
 #[derive(Copy, Clone, Debug)]
 #[repr(transparent)]
 pub struct Texture2DHandle(pub ImageHandle);
+
+impl Texture2DHandle {
+    pub const INVALID: Self = Texture2DHandle(ImageHandle::INVALID);
+}
 
 /// Represents a range of bindless handles to 2D sampled images.
 #[derive(Copy, Clone, Debug, Default)]
@@ -117,13 +129,20 @@ pub struct Texture2DHandleRange {
 }
 
 /// Bindless handle to a sampler.
-#[derive(Copy, Clone, Debug)]
+#[derive(Default, Copy, Clone, Debug)]
 #[repr(C)]
 pub struct SamplerHandle {
     /// Index of the image in the sampler descriptor array.
     pub index: u32,
     /// For compatibility with slang.
-    pub _unused: u32,
+    _unused: u32,
+}
+
+impl SamplerHandle {
+    pub const INVALID: Self = SamplerHandle {
+        index: u32::MAX,
+        _unused: 0,
+    };
 }
 
 #[derive(Debug)]
@@ -140,7 +159,7 @@ pub struct SwapChain {
     pub format: vk::SurfaceFormatKHR,
     pub width: u32,
     pub height: u32,
-    pub images: Vec<SwapchainImageInner>,
+    images: Vec<SwapchainImageInner>,
 }
 
 /// Contains information about an image in a swapchain.
@@ -238,7 +257,10 @@ impl Sampler {
     }
 
     pub fn device_handle(&self) -> SamplerHandle {
-        SamplerHandle { index: self.id.index(), _unused: 0 }
+        SamplerHandle {
+            index: self.id.index(),
+            _unused: 0,
+        }
     }
 }
 
@@ -332,35 +354,16 @@ impl Drop for BufferInner {
 /// A buffer of GPU-visible memory, optionally mapped in host memory, without any associated type.
 ///
 /// TODO: maybe this could be `Buffer<[u8]>` instead of a separate type?
-#[derive(Clone, Debug)]
-pub struct BufferUntyped {
+pub struct Buffer<T: ?Sized> {
     inner: Option<Arc<BufferInner>>,
     handle: vk::Buffer,
     size: u64,
     usage: BufferUsage,
     mapped_ptr: Option<NonNull<c_void>>,
+    _marker: PhantomData<T>,
 }
 
-impl GpuResource for BufferUntyped {
-    fn set_last_submission_index(&self, submission_index: u64) {
-        self.inner
-            .as_ref()
-            .unwrap()
-            .last_submission_index
-            .fetch_max(submission_index, Ordering::Release);
-    }
-}
-
-impl Drop for BufferUntyped {
-    fn drop(&mut self) {
-        if let Some(inner) = Arc::into_inner(self.inner.take().unwrap()) {
-            let last_submission_index = inner.last_submission_index.load(Ordering::Relaxed);
-            inner.device.clone().delete_later(last_submission_index, inner);
-        }
-    }
-}
-
-impl BufferUntyped {
+impl<T: ?Sized> Buffer<T> {
     pub fn set_name(&self, name: &str) {
         // SAFETY: the handle is valid
         unsafe {
@@ -368,9 +371,10 @@ impl BufferUntyped {
         }
     }
 
-    pub fn device_address(&self) -> DeviceAddressUntyped {
-        DeviceAddressUntyped {
+    pub fn device_address(&self) -> DeviceAddress<T> {
+        DeviceAddress {
             address: self.inner.as_ref().unwrap().device_address,
+            _phantom: PhantomData,
         }
     }
 
@@ -408,50 +412,220 @@ impl BufferUntyped {
         self.mapped_ptr.is_some()
     }
 
-    /// Returns a pointer to the buffer mapped in host memory. Panics if the buffer was not mapped in
-    /// host memory.
-    pub fn as_mut_ptr(&self) -> *mut u8 {
+    /// Returns an untyped reference (`&Buffer<[u8]>`) of the buffer.
+    pub fn as_bytes(&self) -> &BufferUntyped {
+        // SAFETY: Buffer<T> where T:?Sized has the same layout as BufferUntyped (Buffer<[u8]>), and no stricter
+        // alignment constraints for host pointers.
+        unsafe { mem::transmute(self) }
+    }
+
+    pub fn as_mut_ptr_u8(&self) -> *mut u8 {
         self.mapped_ptr
             .expect("buffer was not mapped in host memory (consider using MemoryLocation::CpuToGpu)")
             .as_ptr() as *mut u8
     }
+}
 
-    /// Casts the buffer to a typed buffer.
-    ///
-    /// # Safety
-    ///
-    /// If the buffer is host mapped, the caller must ensure that casting the buffer to `&[T]` is
-    /// valid, that is, either:
-    /// * the buffer actually contains elements of type `T`
-    /// * OR objects of type `T` are valid for any underlying bit pattern of the correct size
-    ///   (see [bytemuck's documentation for AnyBitPattern](https://docs.rs/bytemuck/1.23.2/bytemuck/trait.AnyBitPattern.html) for details)
-    ///
-    /// # Panics
-    ///
-    /// Panics if the buffer size is not a multiple of the element size,
-    /// or if the host pointer is not correctly aligned for the element type.
-    pub unsafe fn cast<T: Copy>(&self) -> &Buffer<[T]> {
+impl<T: Copy> Buffer<T> {
+    /// Returns a pointer to the buffer mapped in host memory. Panics if the buffer was not mapped in
+    /// host memory.
+    pub fn as_mut_ptr(&self) -> *mut T {
+        self.as_mut_ptr_u8() as *mut T
+    }
+}
+
+
+impl<T: Copy> Buffer<[T]> {
+    /// Returns the number of elements in the buffer.
+    pub fn len(&self) -> usize {
+        (self.byte_size() / size_of::<T>() as u64) as usize
+    }
+
+    fn check_valid_cast<U: Copy>(&self) {
         assert!(
-            self.byte_size() % size_of::<T>() as u64 == 0,
+            self.byte_size() % size_of::<U>() as u64 == 0,
             "buffer size is not a multiple of the element size"
         );
 
         // Check that the host pointer is correctly aligned for T.
         if let Some(ptr) = self.mapped_ptr {
             assert!(
-                ptr.addr().get() & (align_of::<T>() - 1) == 0,
+                ptr.addr().get() & (align_of::<U>() - 1) == 0,
                 "mapped buffer pointer is not correctly aligned for the element type"
             );
         }
+    }
 
-        // SAFETY: Buffer<[T]> is a transparent wrapper around BufferUntyped (they have the same layout)
+    /// Re-interprets this buffer as a single value of type `T`. Only valid if `self.len() == 1`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.len() != 1`.
+    pub fn as_single(&self) -> &Buffer<T> {
+        assert!(self.len() == 1, "buffer does not contain exactly one element");
+        // SAFETY: Buffer<[T]> and Buffer<T> have the same layout if the size matches
+        unsafe { mem::transmute(self) }
+    }
+
+
+    /// Re-interprets this buffer as a single value of type `T`. Only valid if `self.len() == 1`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.len() != 1`.
+    pub fn single(self) -> Buffer<T> {
+        assert!(self.len() == 1, "buffer does not contain exactly one element");
+        // SAFETY: Buffer<[T]> and Buffer<T> have the same layout if the size matches
+        unsafe { mem::transmute(self) }
+    }
+
+
+    /// Casts the buffer to another element type.
+    ///
+    /// # Safety
+    ///
+    /// If the buffer is host mapped, the caller must ensure that casting the buffer to `&[U]` is
+    /// valid, that is, either:
+    /// * the buffer actually contains elements of type `U`
+    /// * OR objects of type `U` are valid for any underlying bit pattern of the correct size
+    ///   (see [bytemuck's documentation for AnyBitPattern](https://docs.rs/bytemuck/1.23.2/bytemuck/trait.AnyBitPattern.html) for details)
+    ///
+    /// # Panics
+    ///
+    /// Panics if the buffer size is not a multiple of the element size,
+    /// or if the host pointer is not correctly aligned for the element type.
+    pub unsafe fn as_cast<U: Copy>(&self) -> &Buffer<[U]> {
+        self.check_valid_cast::<U>();
+        // SAFETY: Buffer<[T]> and Buffer<[U]> have the same layout for all T and U
         mem::transmute(self)
+    }
+
+    /// Casts the buffer to another element type.
+    ///
+    /// # Safety
+    ///
+    /// If the buffer is host mapped, the caller must ensure that casting the buffer to `&[U]` is
+    /// valid, that is, either:
+    /// * the buffer actually contains elements of type `U`
+    /// * OR objects of type `U` are valid for any underlying bit pattern of the correct size
+    ///   (see [bytemuck's documentation for AnyBitPattern](https://docs.rs/bytemuck/1.23.2/bytemuck/trait.AnyBitPattern.html) for details)
+    ///
+    /// # Panics
+    ///
+    /// Panics if the buffer size is not a multiple of the element size,
+    /// or if the host pointer is not correctly aligned for the element type.
+    pub unsafe fn cast<U: Copy>(self) -> Buffer<[U]> {
+        self.check_valid_cast::<U>();
+        // SAFETY: Buffer<[T]> and Buffer<[U]> have the same layout for all T and U
+        mem::transmute(self)
+    }
+
+    /// If the buffer is mapped in host memory, returns a pointer to the mapped memory.
+    pub fn as_mut_ptr(&self) -> *mut [T] {
+        ptr::slice_from_raw_parts_mut(self.as_mut_ptr_u8() as *mut T, self.len())
+    }
+
+    /// If the buffer is mapped in host memory, returns an uninitialized slice of the buffer's elements.
+    ///
+    /// # Safety
+    ///
+    /// - All other slices returned by `as_mut_slice` on aliases of this `Buffer` must have been dropped.
+    /// - The caller must ensure that nothing else is writing to the buffer while the slice is being accessed.
+    ///   i.e. all GPU operations on the buffer have completed.
+    ///
+    /// FIXME: the first safety condition is hard to track since `Buffer`s have shared ownership.
+    ///        Maybe `Buffer`s should have unique ownership instead, i.e. don't make them `Clone`.
+    pub unsafe fn as_mut_slice(&mut self) -> &mut [MaybeUninit<T>] {
+        unsafe { std::slice::from_raw_parts_mut(self.as_mut_ptr() as *mut _, self.len()) }
+    }
+
+    /// Element range.
+    pub fn slice(&self, range: impl RangeBounds<usize>) -> BufferRange<T> {
+        let elem_size = size_of::<T>();
+        let start = match range.start_bound() {
+            Bound::Unbounded => 0,
+            Bound::Included(start) => *start,
+            Bound::Excluded(start) => *start + 1,
+        };
+        let end = match range.end_bound() {
+            Bound::Unbounded => self.len(),
+            Bound::Excluded(end) => *end,
+            Bound::Included(end) => *end + 1,
+        };
+        let start = (start * elem_size) as u64;
+        let end = (end * elem_size) as u64;
+        assert!(start <= self.size && end <= self.size);
+
+        BufferRange {
+            buffer: self,
+            byte_offset: start,
+            byte_size: end - start,
+        }
     }
 }
 
-impl<T: ?Sized> From<Buffer<T>> for BufferUntyped {
-    fn from(buffer: Buffer<T>) -> Self {
-        buffer.untyped
+/*
+impl Buffer<[u8]> {
+    /// Re-interprets this buffer as a single value of type `T`.
+    ///
+    /// # Safety
+    ///
+    /// This has the same requirements as `cast<U>()`.
+    pub unsafe fn as_cast_from_bytes<T: Copy>(&self) -> &Buffer<T> {
+        self.check_valid_cast::<T>();
+        // SAFETY: Buffer<[u8]> and Buffer<T> have the same layout if the size matches
+        unsafe { mem::transmute(self) }
+    }
+}*/
+
+impl<T: ?Sized> Clone for Buffer<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            handle: self.handle,
+            size: self.size,
+            usage: self.usage,
+            mapped_ptr: self.mapped_ptr,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<T: ?Sized> std::fmt::Debug for Buffer<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Buffer")
+            .field("handle", &self.handle)
+            .field("size", &self.size)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<T: ?Sized> GpuResource for Buffer<T> {
+    fn set_last_submission_index(&self, submission_index: u64) {
+        self.inner
+            .as_ref()
+            .unwrap()
+            .last_submission_index
+            .fetch_max(submission_index, Ordering::Release);
+    }
+}
+
+impl<T: ?Sized> Drop for Buffer<T> {
+    fn drop(&mut self) {
+        // If this is the last reference to the buffer, schedule it for deletion once the last
+        // submission that used this buffer has completed.
+        if let Some(inner) = Arc::into_inner(self.inner.take().unwrap()) {
+            let last_submission_index = inner.last_submission_index.load(Ordering::Relaxed);
+            inner.device.clone().delete_later(last_submission_index, inner);
+        }
+    }
+}
+
+pub type BufferUntyped = Buffer<[u8]>;
+
+impl<'a, T: Copy> From<&'a Buffer<[T]>> for BufferRange<'a, T> {
+    fn from(buffer: &'a Buffer<[T]>) -> Self {
+        buffer.slice(..)
     }
 }
 
@@ -481,6 +655,17 @@ impl Drop for ImageInner {
             }
         }
     }
+}
+
+/// Image data stored in CPU-visible memory.
+pub struct ImageBuffer {
+    /// Host-mapped buffer containing the image data.
+    data: BufferUntyped,
+    format: Format,
+    pitch: u32,
+    width: u32,
+    height: u32,
+    depth: u32,
 }
 
 /// Wrapper around a Vulkan image.
@@ -788,12 +973,14 @@ pub enum Error {
     Vulkan(#[from] vk::Result),
 }
 
+/// Describes an image buffer that is used as the source or destination of an image transfer operation.
 #[derive(Copy, Clone, Debug)]
 pub struct ImageCopyBuffer<'a> {
     pub buffer: &'a BufferUntyped,
     pub layout: ImageDataLayout,
 }
 
+/// Describes part of an image subresource, for transfer operations.
 #[derive(Copy, Clone, Debug)]
 pub struct ImageCopyView<'a> {
     pub image: &'a Image,
@@ -805,7 +992,7 @@ pub struct ImageCopyView<'a> {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Description of one argument in an argument block.
-pub enum Descriptor {
+pub enum Descriptor<'a> {
     SampledImage {
         image_view: ImageView,
         layout: vk::ImageLayout,
@@ -815,12 +1002,12 @@ pub enum Descriptor {
         layout: vk::ImageLayout,
     },
     UniformBuffer {
-        buffer: BufferUntyped,
+        buffer: &'a BufferUntyped,
         offset: u64,
         size: u64,
     },
     StorageBuffer {
-        buffer: BufferUntyped,
+        buffer: &'a BufferUntyped,
         offset: u64,
         size: u64,
     },
@@ -831,37 +1018,14 @@ pub enum Descriptor {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-impl BufferUntyped {
-    /// Byte range
-    pub fn byte_range(&self, range: impl RangeBounds<u64>) -> BufferRangeUntyped {
-        let byte_size = self.byte_size();
-        let start = match range.start_bound() {
-            Bound::Unbounded => 0,
-            Bound::Included(start) => *start,
-            Bound::Excluded(start) => *start + 1,
-        };
-        let end = match range.end_bound() {
-            Bound::Unbounded => byte_size,
-            Bound::Excluded(end) => *end,
-            Bound::Included(end) => *end + 1,
-        };
-        let size = end - start;
-        assert!(start <= byte_size && end <= byte_size);
-        BufferRangeUntyped {
-            buffer: self.clone(),
-            offset: start,
-            size,
-        }
-    }
-}
-
+/*
 /// Typed buffers.
 #[repr(transparent)]
 pub struct Buffer<T: ?Sized> {
     pub untyped: BufferUntyped,
     _marker: PhantomData<T>,
-}
-
+}*/
+/*
 impl<T: ?Sized> Clone for Buffer<T> {
     fn clone(&self) -> Self {
         Self {
@@ -875,111 +1039,9 @@ impl<T: ?Sized> GpuResource for Buffer<T> {
     fn set_last_submission_index(&self, submission_index: u64) {
         self.untyped.set_last_submission_index(submission_index);
     }
-}
+}*/
 
-impl<T: ?Sized> Buffer<T> {
-    fn new(buffer: BufferUntyped) -> Self {
-        Self {
-            untyped: buffer,
-            _marker: PhantomData,
-        }
-    }
-
-    pub fn set_name(&self, name: &str) {
-        self.untyped.set_name(name);
-    }
-
-    /// Returns the size of the buffer in bytes.
-    pub fn byte_size(&self) -> u64 {
-        self.untyped.byte_size()
-    }
-
-    /// Returns the usage flags of the buffer.
-    pub fn usage(&self) -> BufferUsage {
-        self.untyped.usage()
-    }
-
-    pub fn memory_location(&self) -> MemoryLocation {
-        self.untyped.memory_location()
-    }
-
-    /// Returns the buffer handle.
-    pub fn handle(&self) -> vk::Buffer {
-        self.untyped.handle()
-    }
-
-    pub fn host_visible(&self) -> bool {
-        self.untyped.host_visible()
-    }
-
-    pub fn device_address(&self) -> DeviceAddress<T> {
-        DeviceAddress {
-            address: self.untyped.device_address().address,
-            _phantom: PhantomData,
-        }
-    }
-
-    /// Returns the device on which the buffer was created.
-    pub fn device(&self) -> &RcDevice {
-        self.untyped.device()
-    }
-}
-
-impl<T: Copy + 'static> Buffer<T> {
-    /// If the buffer is mapped in host memory, returns a pointer to the mapped memory.
-    pub fn as_mut_ptr(&self) -> *mut T {
-        self.untyped.as_mut_ptr() as *mut T
-    }
-}
-
-impl<T> Buffer<[T]> {
-    /// Returns the number of elements in the buffer.
-    pub fn len(&self) -> usize {
-        (self.byte_size() / size_of::<T>() as u64) as usize
-    }
-
-    /// If the buffer is mapped in host memory, returns a pointer to the mapped memory.
-    pub fn as_mut_ptr(&self) -> *mut T {
-        self.untyped.as_mut_ptr() as *mut T
-    }
-
-    /// If the buffer is mapped in host memory, returns an uninitialized slice of the buffer's elements.
-    ///
-    /// # Safety
-    ///
-    /// - All other slices returned by `as_mut_slice` on aliases of this `Buffer` must have been dropped.
-    /// - The caller must ensure that nothing else is writing to the buffer while the slice is being accessed.
-    ///   i.e. all GPU operations on the buffer have completed.
-    ///
-    /// FIXME: the first safety condition is hard to track since `Buffer`s have shared ownership.
-    ///        Maybe `Buffer`s should have unique ownership instead, i.e. don't make them `Clone`.
-    pub unsafe fn as_mut_slice(&mut self) -> &mut [MaybeUninit<T>] {
-        unsafe { std::slice::from_raw_parts_mut(self.as_mut_ptr() as *mut _, self.len()) }
-    }
-
-    /// Element range.
-    pub fn slice(&self, range: impl RangeBounds<usize>) -> BufferRange<[T]> {
-        let elem_size = size_of::<T>();
-        let start = match range.start_bound() {
-            Bound::Unbounded => 0,
-            Bound::Included(start) => *start,
-            Bound::Excluded(start) => *start + 1,
-        };
-        let end = match range.end_bound() {
-            Bound::Unbounded => self.len(),
-            Bound::Excluded(end) => *end,
-            Bound::Included(end) => *end + 1,
-        };
-        let start = (start * elem_size) as u64;
-        let end = (end * elem_size) as u64;
-
-        BufferRange {
-            untyped: self.untyped.byte_range(start..end),
-            _phantom: PhantomData,
-        }
-    }
-}
-
+/*
 #[derive(Clone, Debug)]
 pub struct BufferRangeUntyped {
     pub buffer: BufferUntyped,
@@ -1000,49 +1062,64 @@ impl BufferRangeUntyped {
         self.size
     }
 
-    pub fn storage_descriptor(&self) -> Descriptor {
-        Descriptor::StorageBuffer {
-            buffer: self.buffer.clone(),
-            offset: self.offset,
-            size: self.size,
-        }
-    }
+}*/
 
-    pub fn uniform_descriptor(&self) -> Descriptor {
-        Descriptor::UniformBuffer {
-            buffer: self.buffer.clone(),
-            offset: self.offset,
-            size: self.size,
-        }
-    }
-}
-
-pub struct BufferRange<T: ?Sized> {
-    pub untyped: BufferRangeUntyped,
-    _phantom: PhantomData<T>,
+pub struct BufferRange<'a, T> {
+    pub buffer: &'a Buffer<[T]>,
+    /// Offset into the buffer in bytes. Should be a multiple of `size_of::<T>()`.
+    pub byte_offset: u64,
+    /// Size of the slice in bytes. Should be a multiple of `size_of::<T>()`.
+    pub byte_size: u64,
 }
 
 // #26925 clone impl
-impl<T: ?Sized> Clone for BufferRange<T> {
+impl<T> Clone for BufferRange<'_, T> {
     fn clone(&self) -> Self {
         Self {
-            untyped: self.untyped.clone(),
-            _phantom: PhantomData,
+            buffer: self.buffer,
+            byte_offset: self.byte_offset,
+            byte_size: self.byte_size,
         }
     }
 }
 
-impl<T> BufferRange<[T]> {
+impl<'a, T> std::fmt::Debug for BufferRange<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BufferRange")
+            .field("buffer", &self.buffer)
+            .field("byte_offset", &self.byte_offset)
+            .field("byte_size", &self.byte_size)
+            .finish()
+    }
+}
+
+impl<'a, T: Copy + 'static> BufferRange<'a, T> {
     pub fn len(&self) -> usize {
-        (self.untyped.size / size_of::<T>() as u64) as usize
+        (self.byte_size / size_of::<T>() as u64) as usize
     }
 
-    pub fn storage_descriptor(&self) -> Descriptor {
-        self.untyped.storage_descriptor()
+    pub fn storage_descriptor(&self) -> Descriptor<'_> {
+        Descriptor::StorageBuffer {
+            buffer: self.buffer.as_bytes(),
+            offset: self.byte_offset,
+            size: self.byte_size,
+        }
     }
 
-    pub fn uniform_descriptor(&self) -> Descriptor {
-        self.untyped.uniform_descriptor()
+    pub fn uniform_descriptor(&self) -> Descriptor<'_> {
+        Descriptor::UniformBuffer {
+            buffer: self.buffer.as_bytes(),
+            offset: self.byte_offset,
+            size: self.byte_size,
+        }
+    }
+
+    pub fn as_bytes(&self) -> BufferRange<'a, u8> {
+        BufferRange {
+            buffer: unsafe { self.buffer.as_cast::<u8>() },
+            byte_offset: self.byte_offset,
+            byte_size: self.byte_size,
+        }
     }
 
     /*pub fn slice(&self, range: impl RangeBounds<usize>) -> BufferRange<'a, [T]> {
@@ -1070,6 +1147,8 @@ impl<T> BufferRange<[T]> {
         }
     }*/
 }
+
+pub type BufferRangeUntyped<'a> = BufferRange<'a, u8>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1143,18 +1222,18 @@ impl DepthStencilAttachment<'_> {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 #[derive(Clone, Debug)]
-pub struct VertexBufferDescriptor {
+pub struct VertexBufferDescriptor<'a> {
     pub binding: u32,
-    pub buffer_range: BufferRangeUntyped,
+    pub buffer_range: BufferRangeUntyped<'a>,
     pub stride: u32,
 }
 
 pub trait VertexInput {
     /// Vertex buffer bindings
-    fn buffer_layout(&self) -> Cow<[VertexBufferLayoutDescription]>;
+    fn buffer_layout(&self) -> Cow<'_, [VertexBufferLayoutDescription]>;
 
     /// Vertex attributes.
-    fn attributes(&self) -> Cow<[VertexInputAttributeDescription]>;
+    fn attributes(&self) -> Cow<'_, [VertexInputAttributeDescription]>;
 
     /// Returns an iterator over the vertex buffers referenced in this object.
     fn vertex_buffers(&self) -> impl Iterator<Item = VertexBufferDescriptor>;
@@ -1384,6 +1463,86 @@ pub fn format_numeric_type(fmt: vk::Format) -> FormatNumericType {
 
         // TODO
         _ => FormatNumericType::Float,
+    }
+}
+
+/// Returns the byte size of one pixel in the specified format.
+///
+/// # Panics
+///
+/// Panics if the format is a block-compressed format.
+///
+pub fn format_pixel_byte_size(fmt: vk::Format) -> u32 {
+    match fmt {
+        Format::R8_UNORM
+        | Format::R8_SNORM
+        | Format::R8_USCALED
+        | Format::R8_SSCALED
+        | Format::R8_UINT
+        | Format::R8_SINT
+        | Format::R8_SRGB => 1,
+        Format::R8G8_UNORM
+        | Format::R8G8_SNORM
+        | Format::R8G8_USCALED
+        | Format::R8G8_SSCALED
+        | Format::R8G8_UINT
+        | Format::R8G8_SINT
+        | Format::R8G8_SRGB => 2,
+        Format::R5G6B5_UNORM_PACK16
+        | Format::B5G6R5_UNORM_PACK16
+        | Format::R5G5B5A1_UNORM_PACK16
+        | Format::B5G5R5A1_UNORM_PACK16
+        | Format::A1R5G5B5_UNORM_PACK16
+        | Format::R16_UNORM
+        | Format::R16_SNORM
+        | Format::R16_USCALED
+        | Format::R16_SSCALED
+        | Format::R16_UINT
+        | Format::R16_SINT
+        | Format::R16_SFLOAT => 2,
+        Format::R8G8B8_UNORM
+        | Format::R8G8B8_SNORM
+        | Format::R8G8B8_USCALED
+        | Format::R8G8B8_SSCALED
+        | Format::R8G8B8_UINT
+        | Format::R8G8B8_SINT
+        | Format::R8G8B8_SRGB
+        | Format::B8G8R8_UNORM
+        | Format::B8G8R8_SNORM
+        | Format::B8G8R8_USCALED
+        | Format::B8G8R8_SSCALED
+        | Format::B8G8R8_UINT
+        | Format::B8G8R8_SINT
+        | Format::B8G8R8_SRGB => 3,
+        Format::R32_UINT | Format::R32_SINT | Format::R32_SFLOAT | Format::D32_SFLOAT | Format::D24_UNORM_S8_UINT => 4,
+        Format::R8G8B8A8_UNORM
+        | Format::R8G8B8A8_SNORM
+        | Format::R8G8B8A8_USCALED
+        | Format::R8G8B8A8_SSCALED
+        | Format::R8G8B8A8_UINT
+        | Format::R8G8B8A8_SINT
+        | Format::R8G8B8A8_SRGB
+        | Format::B8G8R8A8_UNORM
+        | Format::B8G8R8A8_SNORM
+        | Format::B8G8R8A8_USCALED
+        | Format::B8G8R8A8_SSCALED
+        | Format::B8G8R8A8_UINT
+        | Format::B8G8R8A8_SINT
+        | Format::B8G8R8A8_SRGB
+        | Format::A2B10G10R10_UNORM_PACK32
+        | Format::A2B10G10R10_UINT_PACK32
+        | Format::A2R10G10B10_UNORM_PACK32
+        | Format::A2R10G10B10_UINT_PACK32
+        | Format::R16G16_UNORM
+        | Format::R16G16_SNORM
+        | Format::R16G16_USCALED
+        | Format::R16G16_SSCALED
+        | Format::R16G16_UINT
+        | Format::R16G16_SINT
+        | Format::R16G16_SFLOAT => 4,
+        Format::R32G32_UINT | Format::R32G32_SINT | Format::R32G32_SFLOAT => 8,
+        Format::R32G32B32A32_SFLOAT | Format::R32G32B32A32_UINT | Format::R32G32B32A32_SINT => 16,
+        _ => panic!("unsupported or block-compressed format"),
     }
 }
 

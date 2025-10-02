@@ -30,14 +30,27 @@ pub struct ImageSubresourceRange {
     pub layer_count: u32,
 }
 
+/// Represents the layout of image data in a buffer.
 #[derive(Copy, Clone, Debug)]
 pub struct ImageDataLayout {
+    /// Offset in bytes from the start of the buffer.
     pub offset: u64,
-    /// In texels.
-    // TODO make that bytes
-    pub row_length: Option<u32>,
-    /// In lines.
-    pub image_height: Option<u32>,
+    /// Size of a row, in texels. Equivalently, the number of texels between each row.
+    ///
+    /// If `None`, the row length is considered to be tightly packed to the image width.
+    pub texel_row_length: Option<u32>,
+    /// Height of the image (number of rows).
+    pub row_count: Option<u32>,
+}
+
+impl ImageDataLayout {
+    pub const fn new(width: u32, height: u32) -> Self {
+        Self {
+            offset: 0,
+            texel_row_length: Some(width),
+            row_count: Some(height),
+        }
+    }
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]

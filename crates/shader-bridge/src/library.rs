@@ -30,7 +30,7 @@ pub struct ShaderEntryPointInfo {
 }
 
 impl ShaderEntryPointInfo {
-    pub fn as_gpu_entry_point(&self) -> gpu::ShaderEntryPoint {
+    pub fn as_gpu_entry_point(&self) -> gpu::ShaderEntryPoint<'_> {
         gpu::ShaderEntryPoint {
             stage: self.stage,
             code: &self.spirv,
@@ -47,7 +47,7 @@ impl ShaderEntryPointInfo {
 /// This can be used to retrieve compiled SPIR-V code for entry points defined in the shader library.
 pub struct ShaderLibrary {
     path: Option<String>,
-    options: ShaderLibraryLoadOptions,
+    _options: ShaderLibraryLoadOptions,
     session: slang::Session,
     module: slang::Module,
 }
@@ -75,7 +75,7 @@ impl ShaderLibrary {
 
         Ok(Self {
             path: Some(path),
-            options,
+            _options: options,
             session,
             module,
         })

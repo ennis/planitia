@@ -9,7 +9,6 @@ pub mod windows;
 #[cfg(windows)]
 pub type Platform = windows::Win32Platform;
 
-// TODO: other platforms
 
 //----------------------------------------------------------------------------------
 

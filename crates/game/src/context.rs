@@ -14,10 +14,15 @@ use std::ffi::c_void;
 use std::ptr;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+/// Holds the application's global objects and services.
+///
+/// This is a singleton only accessible on the main thread with `get_context()`.
 pub(crate) struct Context {
+    /// Platform object. As the name suggests, this is platform-specific code and state
+    /// that manage the GPU context, the main window, and the event loop.
     pub(crate) platform: Platform,
     pub(crate) lua: mlua::Lua,
-    imgui: RefCell<imgui::ImguiContext>,
+    imgui: RefCell<ImguiContext>,
     pub(crate) executor: LocalExecutor,
     quit_requested: Cell<bool>,
     rdoc: Option<RefCell<RenderDoc<V141>>>,

@@ -55,18 +55,14 @@ fn load_image(cmd: &mut CommandStream, path: impl AsRef<Path>, usage: ImageUsage
     unsafe {
         ptr::copy_nonoverlapping(
             dyn_image.as_bytes().as_ptr(),
-            staging_buffer.as_mut_ptr(),
+            staging_buffer.as_mut_ptr() as *mut u8,
             byte_size as usize,
         );
 
         cmd.copy_buffer_to_image(
             ImageCopyBuffer {
                 buffer: &staging_buffer,
-                layout: ImageDataLayout {
-                    offset: 0,
-                    row_length: Some(width),
-                    image_height: Some(height),
-                },
+                layout: ImageDataLayout::new(width, height),
             },
             ImageCopyView {
                 image: &image,

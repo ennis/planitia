@@ -10,7 +10,7 @@ pub use render::{RenderEncoder, RenderPassInfo};
 
 use crate::device::ActiveSubmission;
 use crate::{
-    aspects_for_format, vk, vk_ext_debug_utils, BufferUntyped, CommandPool, Descriptor, GpuResource,
+    aspects_for_format, vk, vk_ext_debug_utils, CommandPool, Descriptor, GpuResource,
     Image, ImageId, MemoryAccess, RcDevice, SwapchainImage,
 };
 
@@ -317,7 +317,7 @@ impl CommandStream {
                     });
                 }
                 Descriptor::UniformBuffer {
-                    ref buffer,
+                    buffer,
                     offset,
                     size,
                 } => {
@@ -339,7 +339,7 @@ impl CommandStream {
                     });
                 }
                 Descriptor::StorageBuffer {
-                    ref buffer,
+                    buffer,
                     offset,
                     size,
                 } => {

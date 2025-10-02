@@ -1,4 +1,5 @@
 #![expect(unused, reason = "noisy")]
+#![feature(default_field_values)]
 
 use crate::context::{AppHandler, LoopHandler, get_gpu_device, quit, render_imgui, run};
 use crate::input::InputEvent;

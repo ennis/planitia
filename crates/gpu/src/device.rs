@@ -7,13 +7,12 @@ use crate::{
     CommandPool, CommandStream, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error,
     GraphicsPipeline, GraphicsPipelineCreateInfo, Image, ImageCreateInfo, ImageInner, ImageType, ImageUsage, ImageView,
     ImageViewInfo, ImageViewInner, MemoryAccess, MemoryLocation, PreRasterizationShaders, Sampler, SamplerCreateInfo,
-    SemaphoreWait, SemaphoreWaitKind, SignaledSemaphore, Size3D, SwapChain, SwapchainImage, SwapchainImageInner,
-    UnsignaledSemaphore, SUBGROUP_SIZE,
+    SignaledSemaphore, Size3D, SwapChain, SwapchainImage, SwapchainImageInner,
+     SUBGROUP_SIZE,
 };
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
 use std::ffi::{c_void, CString};
-use std::ops::Deref;
 use std::rc::{Rc, Weak};
 use std::sync::{Arc, Mutex};
 use std::{fmt, ptr};
@@ -24,6 +23,7 @@ use ash::vk;
 use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
 use slotmap::{SecondaryMap, SlotMap};
 use std::ffi::CStr;
+use std::marker::PhantomData;
 use std::mem;
 use std::sync::atomic::AtomicU64;
 use std::time::Duration;
@@ -148,15 +148,6 @@ pub enum DeviceCreateError {
 pub struct QueueFamilyConfig {
     pub family_index: u32,
     pub count: u32,
-}
-
-pub(crate) struct QueueInfo {
-    /// Family index.
-    pub family: u32,
-    //pub index_in_family: u32,
-    //pub index: u32,
-    pub queue: vk::Queue,
-    pub timeline: vk::Semaphore,
 }
 
 pub(crate) fn get_vk_sample_count(count: u32) -> vk::SampleCountFlags {
@@ -795,12 +786,12 @@ impl Device {
             .unwrap();
     }
 
-    /// Increments the submission index.
+    /*/// Increments the submission index.
     pub(crate) fn next_submission_index(&self) -> u64 {
         self.next_submission_index
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
             + 1
-    }
+    }*/
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // COMMAND STREAMS
@@ -889,6 +880,7 @@ impl Device {
             size: byte_size,
             usage,
             mapped_ptr,
+            _marker: PhantomData,
         }
     }
 
@@ -1117,6 +1109,7 @@ impl Device {
         })
     }*/
 
+    // TODO: instead of passing the submission index, get it via a trait method on T (GpuResource)
     pub fn delete_later<T: 'static>(&self, submission_index: u64, object: T) {
         let last_completed_submission_index = unsafe { self.raw.get_semaphore_counter_value(self.timeline).unwrap() };
         if submission_index <= last_completed_submission_index {
