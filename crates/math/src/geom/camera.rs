@@ -1,7 +1,6 @@
-use std::f32::consts::PI;
+use crate::{dvec2, dvec3, vec3, DVec2, DVec3, Mat4, Vec3};
 use glam::{Vec3Swizzles, Vec4Swizzles};
-use crate::Mat4;
-use crate::{DVec2, DVec3, Vec3, dvec2, dvec3, vec3};
+use std::f32::consts::PI;
 
 #[derive(Copy, Clone, Debug, Default)]
 pub struct Frustum {

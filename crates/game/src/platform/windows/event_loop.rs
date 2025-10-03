@@ -8,7 +8,7 @@ use std::sync::OnceLock;
 use std::task::{RawWaker, RawWakerVTable, Waker};
 use std::time::Instant;
 use winit::application::ApplicationHandler;
-use winit::event::{ StartCause, WindowEvent};
+use winit::event::{StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoopProxy};
 use winit::window::WindowId;
 

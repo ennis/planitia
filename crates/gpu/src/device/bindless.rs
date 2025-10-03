@@ -1,11 +1,11 @@
 //! TODO: implement a single table for all descriptors, with VK_EXT_mutable_descriptor_type
 
-use crate::{Device, ImageViewId, SamplerId};
+use crate::{Device, ResourceHeapIndex, SamplerHeapIndex};
 use ash::vk;
 use ash::vk::DescriptorType;
+use log::trace;
 use std::ffi::c_void;
 use std::ptr;
-use log::trace;
 
 type DT = vk::DescriptorType;
 
@@ -93,9 +93,13 @@ impl BindlessDescriptorTable {
 }
 
 impl Device {
-    pub(super) unsafe fn write_global_texture_descriptor(&self, id: ImageViewId, image_view: vk::ImageView) {
+    pub(super) unsafe fn write_global_texture_descriptor(
+        &self,
+        heap_index: ResourceHeapIndex,
+        image_view: vk::ImageView,
+    ) {
         let d = self.texture_descriptors.lock().unwrap();
-        let dst_array_element = id.index();
+        let dst_array_element = heap_index.index();
         assert!(dst_array_element < d.count as u32);
         let write = vk::WriteDescriptorSet {
             dst_set: d.set,
@@ -114,9 +118,13 @@ impl Device {
         self.raw.update_descriptor_sets(&[write], &[]);
     }
 
-    pub(super) unsafe fn write_global_storage_image_descriptor(&self, id: ImageViewId, image_view: vk::ImageView) {
+    pub(super) unsafe fn write_global_storage_image_descriptor(
+        &self,
+        heap_index: ResourceHeapIndex,
+        image_view: vk::ImageView,
+    ) {
         let d = self.image_descriptors.lock().unwrap();
-        let dst_array_element = id.index();
+        let dst_array_element = heap_index.index();
         assert!(dst_array_element < d.count as u32);
         let write = vk::WriteDescriptorSet {
             dst_set: d.set,
@@ -135,7 +143,7 @@ impl Device {
         self.raw.update_descriptor_sets(&[write], &[]);
     }
 
-    pub(super) unsafe fn write_global_sampler_descriptor(&self, id: SamplerId, sampler: vk::Sampler) {
+    pub(super) unsafe fn write_global_sampler_descriptor(&self, id: SamplerHeapIndex, sampler: vk::Sampler) {
         let d = self.sampler_descriptors.lock().unwrap();
         let dst_array_element = id.index();
         assert!(dst_array_element < d.count as u32);

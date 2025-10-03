@@ -1,5 +1,5 @@
-use glam::IVec2;
 use crate::{vec2, Vec2};
+use glam::IVec2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 #[repr(C)]
@@ -88,7 +88,6 @@ pub const fn rect_xywh(x: f32, y: f32, w: f32, h: f32) -> Rect {
         max: Vec2::new(x + w, y + h),
     }
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 #[repr(C)]

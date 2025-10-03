@@ -1,7 +1,7 @@
-use ab_glyph::GlyphId;
 use crate::paint::text::format::TextFormat;
 use crate::paint::text::{Glyph, ShapingParams, shape_text};
-use math::{vec2, Vec2};
+use ab_glyph::GlyphId;
+use math::{Vec2, vec2};
 use std::ops::Range;
 
 #[derive(Default, Copy, Clone, Debug, Eq, PartialEq)]
@@ -196,7 +196,9 @@ impl<'a> Iterator for GlyphRunIter<'a> {
         self.cluster = p;
 
         // next fragment
-        while self.fragment < self.layout.fragments.len() && !self.layout.fragments[self.fragment].cluster_range.contains(&p) {
+        while self.fragment < self.layout.fragments.len()
+            && !self.layout.fragments[self.fragment].cluster_range.contains(&p)
+        {
             self.fragment += 1;
         }
 
@@ -208,7 +210,6 @@ impl<'a> Iterator for GlyphRunIter<'a> {
             x,
             cluster_range: cluster..p,
         })
-
     }
 }
 
@@ -268,7 +269,7 @@ impl<'a> GlyphRun<'a> {
                     // simple cluster
                     let glyph = Glyph {
                         id: GlyphId(cluster.glyph_offset_or_id),
-                        offset: Vec2::ZERO,    // zero for simple clusters
+                        offset: Vec2::ZERO, // zero for simple clusters
                         advance: cluster.advance,
                     };
                     Some(glyph)
@@ -420,7 +421,8 @@ impl TextLayout {
         // the next cluster might be in the next fragment,
         // iterate forward to find the fragment containing it
         // (normally it should be the next fragment, unless there are empty fragments between)
-        while cur.fragment < self.fragments.len() && !self.fragments[cur.fragment].cluster_range.contains(&cur.cluster) {
+        while cur.fragment < self.fragments.len() && !self.fragments[cur.fragment].cluster_range.contains(&cur.cluster)
+        {
             cur.fragment += 1;
         }
 
@@ -434,7 +436,6 @@ impl TextLayout {
     }
 
     pub fn layout_line(&mut self, pos: &mut CursorData, available_width: f32) -> Option<&mut LineData> {
-
         // FIXME: should delete all lines after pos
 
         if pos.cluster >= self.glyph_clusters.len() {
@@ -487,12 +488,12 @@ impl TextLayout {
                         }
                     }
                 }
-                break
+                break;
             }
 
             if pos.cluster >= self.glyph_clusters.len() {
                 // no more text to layout
-                break
+                break;
             }
         }
 
@@ -597,9 +598,14 @@ mod tests {
 
             let x = glyph_run.offset();
             let y = glyph_run.baseline();
-            let mut advance  = 0.0;
+            let mut advance = 0.0;
             for glyph in glyph_run.glyphs() {
-                eprintln!("   glyph id={} advance={} (x={})", glyph.id.0, glyph.advance, x+advance);
+                eprintln!(
+                    "   glyph id={} advance={} (x={})",
+                    glyph.id.0,
+                    glyph.advance,
+                    x + advance
+                );
                 advance += glyph.advance;
             }
         }

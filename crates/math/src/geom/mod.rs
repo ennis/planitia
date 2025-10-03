@@ -1,9 +1,9 @@
 mod bezier;
-mod util;
 mod camera;
 mod rect;
+mod util;
 
 pub use bezier::*;
-pub use util::*;
 pub use camera::*;
 pub use rect::*;
+pub use util::*;

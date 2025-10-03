@@ -146,7 +146,7 @@ impl ApplicationHandler for App {
                 let mut cmd = device.create_command_stream();
                 let image = load_image(
                     &mut cmd,
-                    "crates/graal/examples/yukari.png",
+                    "crates/gpu/examples/yukari.png",
                     ImageUsage::TRANSFER_SRC | ImageUsage::SAMPLED,
                 );
 

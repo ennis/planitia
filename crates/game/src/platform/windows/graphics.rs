@@ -148,7 +148,7 @@ impl GraphicsContext {
                 value: Cell::new(0),
             }
         };
-        
+
         Self {
             adapter,
             vk_device,

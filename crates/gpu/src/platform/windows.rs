@@ -1,12 +1,11 @@
 use crate::device::{get_vk_sample_count, ResourceAllocation};
-use crate::{vk, Device, Image, ImageCreateInfo, ImageInner, RcDevice, Size3D};
+use crate::{vk, Device, Image, ImageCreateInfo, RcDevice, Size3D};
 use ash::vk::{HANDLE, SECURITY_ATTRIBUTES};
 use gpu_allocator::MemoryLocation;
 use std::ffi::{c_void, OsStr};
 use std::ptr;
 use std::rc::Rc;
-use std::sync::atomic::AtomicU64;
-use std::sync::Arc;
+
 /*/// External memory handle types.
 #[derive(Clone, Debug)]
 pub enum Win32ExternalMemoryHandle<'a> {
@@ -209,8 +208,7 @@ impl DeviceExtWindows for Device {
         );
         self.raw.bind_image_memory(handle, device_memory, 0).unwrap();
 
-        let id = self.image_ids.lock().unwrap().insert(());
-        let (bindless_handle, default_view) = self.create_bindless_image_view(
+        let (heap_index, default_view) = self.create_bindless_image_view(
             handle,
             image_info.type_,
             image_info.format,
@@ -221,12 +219,11 @@ impl DeviceExtWindows for Device {
         Image {
             handle,
             device: self.clone(),
-            id,
-            last_submission_index: AtomicU64::new(0),
+            id: self.allocate_resource_id(),
             allocation: ResourceAllocation::DeviceMemory { device_memory },
             swapchain_image: false,
             default_view,
-            bindless_handle,
+            heap_index,
             usage: image_info.usage,
             type_: image_info.type_,
             format: image_info.format,
@@ -346,8 +343,7 @@ impl DeviceExtWindows for Device {
         // bind memory
         self.raw.bind_image_memory(handle, device_memory, 0).unwrap();
 
-        let id = self.image_ids.lock().unwrap().insert(());
-        let (bindless_handle, default_view) = self.create_bindless_image_view(
+        let (heap_index, default_view) = self.create_bindless_image_view(
             handle,
             image_info.type_,
             image_info.format,
@@ -358,12 +354,11 @@ impl DeviceExtWindows for Device {
         let image = Image {
             handle,
             device: self.clone(),
-            id,
-            last_submission_index: AtomicU64::new(0),
+            id: self.allocate_resource_id(),
             allocation: ResourceAllocation::DeviceMemory { device_memory },
             swapchain_image: false,
             default_view,
-            bindless_handle,
+            heap_index,
             usage: image_info.usage,
             type_: image_info.type_,
             format: image_info.format,

@@ -3,7 +3,7 @@ use std::{mem, slice};
 
 use ash::vk;
 
-use crate::{Barrier, CommandStream, ComputePipeline, Descriptor, GpuResource, RcDevice};
+use crate::{Barrier, CommandStream, ComputePipeline, Descriptor, RcDevice, TrackedResource};
 
 /// A context object to submit commands to a command buffer after a pipeline has been bound to it.
 ///
@@ -19,7 +19,7 @@ impl<'a> ComputeEncoder<'a> {
         self.stream.device()
     }
 
-    pub fn reference_resource<R: GpuResource>(&mut self, resource: &R) {
+    pub fn reference_resource<R: TrackedResource>(&mut self, resource: &R) {
         self.stream.reference_resource(resource);
     }
 

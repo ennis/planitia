@@ -1028,7 +1028,6 @@ impl_vertex_attr!(math::U16Vec2, R16G16_UINT);
 impl_vertex_attr!(math::U16Vec3, R16G16B16_UINT);
 impl_vertex_attr!(math::U16Vec4, R16G16B16A16_UINT);
 
-
 // Index data types --------------------------------------------------------------------------------
 macro_rules! impl_index_data {
     ($t:ty, $fmt:ident) => {

@@ -154,17 +154,17 @@ pub(crate) fn key_event_to_key_code(input: &winit::event::KeyEvent) -> (keyboard
                 winit::keyboard::KeyLocation::Left => Code::MetaLeft,
                 winit::keyboard::KeyLocation::Right => Code::MetaRight,
                 _ => Code::MetaLeft,
-            }
+            },
             KeyCode::Hyper => match input.location {
                 winit::keyboard::KeyLocation::Left => Code::MetaLeft,
                 winit::keyboard::KeyLocation::Right => Code::MetaRight,
                 _ => Code::MetaLeft,
-            }
+            },
             KeyCode::Turbo => match input.location {
                 winit::keyboard::KeyLocation::Left => Code::MetaLeft,
                 winit::keyboard::KeyLocation::Right => Code::MetaRight,
                 _ => Code::MetaLeft,
-            }
+            },
             KeyCode::Abort => Code::Abort,
             KeyCode::Resume => Code::Resume,
             KeyCode::Suspend => Code::Suspend,

@@ -1,12 +1,12 @@
+use crate::context::get_gpu_device;
+use crate::paint::Srgba32;
+use gpu::util::CommandStreamExt;
+use gpu::{Barrier, ImageCopyView, ImageCreateInfo, MemoryLocation, Size3D, vk};
+use log::debug;
+use math::geom::{IRect, irect_xywh};
 use std::cell::RefCell;
 use std::ops::{Index, IndexMut};
 use std::slice;
-use crate::paint::Srgba32;
-use log::debug;
-use gpu::{vk, Barrier, ImageCopyView, ImageCreateInfo, MemoryLocation, Size3D};
-use gpu::util::CommandStreamExt;
-use math::geom::{IRect, irect_xywh};
-use crate::context::get_gpu_device;
 
 pub struct Atlas {
     pub width: u32,
@@ -69,8 +69,11 @@ impl Atlas {
 
     /// Writes the specified image in the atlas and returns the rectangle.
     pub fn write(&mut self, width: u32, height: u32, data: &[Srgba32]) -> IRect {
-
-        assert_eq!(data.len(), width as usize * height as usize, "Data size does not match image dimensions");
+        assert_eq!(
+            data.len(),
+            width as usize * height as usize,
+            "Data size does not match image dimensions"
+        );
 
         let mut slice = self.allocate(width, height);
 
@@ -89,7 +92,7 @@ impl Atlas {
 
     /// Reserves additional lines in the atlas, growing its height if necessary.
     fn reserve_lines(&mut self, additional_lines: u32) {
-        self.texture    = None;
+        self.texture = None;
         let new_height = u32::max(self.height + additional_lines, self.height * 2);
         debug!("atlas growing to {}×{}", self.width, new_height);
         self.data

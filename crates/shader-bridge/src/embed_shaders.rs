@@ -1,3 +1,6 @@
+use crate::library::{convert_spirv_u8_to_u32, get_push_constants_size};
+use crate::session::create_session;
+use crate::SHADER_PROFILE;
 use heck::ToShoutySnakeCase;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, TokenStreamExt};
@@ -5,9 +8,6 @@ use slang::Downcast;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
-use crate::library::{convert_spirv_u8_to_u32, get_push_constants_size};
-use crate::session::create_session;
-use crate::SHADER_PROFILE;
 
 /// Loads all slang shader modules in a directory.
 fn load_shader_modules_in_directory(

@@ -189,7 +189,6 @@ impl CommandStream {
         }
     }
 
-
     /// Copies data from an image to a buffer.
     pub fn copy_image_to_buffer(
         &mut self,

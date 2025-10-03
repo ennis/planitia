@@ -3,11 +3,11 @@ mod bindless;
 
 use crate::instance::{vk_ext_debug_utils, vk_khr_surface};
 use crate::{
-    aspects_for_format, get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, BufferInner, BufferUntyped,
-    BufferUsage, CommandPool, CommandStream, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error,
-    Format, GraphicsPipeline, GraphicsPipelineCreateInfo, Image, ImageCreateInfo, ImageInner, ImageType, ImageUsage,
-    ImageViewInfo, MemoryAccess, MemoryLocation, PreRasterizationShaders, Sampler, SamplerCreateInfo,
-    SignaledSemaphore, Size3D, SwapChain, SwapchainImage, SwapchainImageInner, SUBGROUP_SIZE,
+    aspects_for_format, get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, BufferUntyped, BufferUsage,
+    CommandPool, CommandStream, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error, Format,
+    GraphicsPipeline, GraphicsPipelineCreateInfo, Image, ImageCreateInfo, ImageType, ImageUsage, ImageViewInfo,
+    MemoryAccess, MemoryLocation, PreRasterizationShaders, Sampler, SamplerCreateInfo, SignaledSemaphore, Size3D,
+    SwapChain, SwapchainImage, SwapchainImageInner, SUBGROUP_SIZE,
 };
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
@@ -63,10 +63,11 @@ pub struct Device {
     physical_device_properties: vk::PhysicalDeviceProperties2,
 
     // We don't need to hold strong refs here, we just need an ID for them.
-    pub(crate) image_ids: Mutex<SlotMap<ImageId, ()>>,
-    pub(crate) sampler_ids: Mutex<SlotMap<SamplerId, ()>>,
-    pub(crate) buffer_ids: Mutex<SlotMap<BufferId, ()>>,
-    pub(crate) image_view_ids: Mutex<SlotMap<ImageViewId, ()>>,
+    pub(crate) resource_ids: Mutex<SlotMap<ResourceId, ()>>,
+    pub(crate) resource_heap: Mutex<SlotMap<ResourceHeapIndex, ()>>,
+    pub(crate) sampler_heap: Mutex<SlotMap<SamplerHeapIndex, ()>>,
+
+    //pub(crate) image_view_ids: Mutex<SlotMap<ImageViewId, ()>>,
 
     // Command pools per queue and thread.
     free_command_pools: Mutex<Vec<CommandPool>>,
@@ -78,7 +79,7 @@ pub struct Device {
 
     /// Resources that have a zero user reference count and that should be ready for deletion soon,
     /// but we're waiting for the GPU to finish using them.
-    dropped_resources: Mutex<Vec<(u64, Box<dyn DeleteLater>)>>,
+    deletion_queue: Mutex<Vec<DeleteQueueEntry>>,
     pub(crate) tracker: Mutex<DeviceTracker>,
     sampler_cache: Mutex<HashMap<SamplerCreateInfo, Sampler>>,
 
@@ -102,10 +103,22 @@ pub(crate) struct ActiveSubmission {
     pub(crate) command_pools: Vec<CommandPool>,
 }
 
+pub(crate) struct ResourceTrackingInfo {
+    pub(crate) last_submission_index: u64,
+    // Only tracked for images
+    pub(crate) writes: MemoryAccess,
+}
+
+struct DeleteQueueEntry {
+    submission: u64,
+    tracker_id: Option<ResourceId>,
+    object: Box<dyn DeleteLater>,
+}
+
 pub(crate) struct DeviceTracker {
     pub(crate) active_submissions: VecDeque<ActiveSubmission>,
     pub(crate) writes: MemoryAccess,
-    pub(crate) images: SecondaryMap<ImageId, MemoryAccess>,
+    pub(crate) resources: SecondaryMap<ResourceId, ResourceTrackingInfo>,
 }
 
 impl DeviceTracker {
@@ -113,7 +126,7 @@ impl DeviceTracker {
         DeviceTracker {
             active_submissions: VecDeque::new(),
             writes: MemoryAccess::empty(),
-            images: SecondaryMap::new(),
+            resources: SecondaryMap::new(),
         }
     }
 }
@@ -164,28 +177,34 @@ pub(crate) fn get_vk_sample_count(count: u32) -> vk::SampleCountFlags {
 }
 
 slotmap::new_key_type! {
-    /// Identifies a GPU resource.
-    pub struct ImageId;
 
-    /// Identifies a GPU resource.
-    pub struct BufferId;
+    /// Identifies a GPU resource for tracking.
+    pub struct ResourceId;
 
-    /// Identifies a GPU resource.
-    pub struct ImageViewId;
+    pub struct ResourceHeapIndex;
+    pub struct SamplerHeapIndex;
+
+    // Identifies a GPU resource.
+    //pub struct ImageId;
+
+    // Identifies a GPU resource.
+    //pub struct BufferId;
+
+    // Identifies a GPU resource.
+    //pub struct ImageViewId;
 
     /// Identifies a resource group.
     pub struct GroupId;
 
-    pub struct SamplerId;
 }
 
-impl ImageViewId {
+impl ResourceHeapIndex {
     pub(crate) fn index(&self) -> u32 {
         (self.0.as_ffi() & 0xFFFF_FFFF) as u32
     }
 }
 
-impl SamplerId {
+impl SamplerHeapIndex {
     pub(crate) fn index(&self) -> u32 {
         (self.0.as_ffi() & 0xFFFF_FFFF) as u32
     }
@@ -494,21 +513,19 @@ impl Device {
             vk_ext_mesh_shader,
             vk_ext_extended_dynamic_state3,
             //vk_ext_descriptor_buffer,
-            image_ids: Mutex::new(Default::default()),
-            sampler_ids: Mutex::new(Default::default()),
-            buffer_ids: Mutex::new(Default::default()),
+            resource_ids: Mutex::new(Default::default()),
+            resource_heap: Mutex::new(Default::default()),
+            sampler_heap: Mutex::new(Default::default()),
             tracker: Mutex::new(DeviceTracker::new()),
             sampler_cache: Mutex::new(Default::default()),
-            //compiler,
             free_command_pools: Mutex::new(Default::default()),
-            image_view_ids: Mutex::new(Default::default()),
-            dropped_resources: Mutex::new(vec![]),
             next_submission_index: AtomicU64::new(1),
             expected_submission_index: Cell::new(1),
             texture_descriptors: Mutex::new(texture_descriptors),
             image_descriptors: Mutex::new(image_descriptors),
             sampler_descriptors: Mutex::new(sampler_descriptors),
             semaphores: Default::default(),
+            deletion_queue: Mutex::new(vec![]),
         }))
     }
 
@@ -864,11 +881,9 @@ impl Device {
             })
         };
 
-        let id = self.buffer_ids.lock().unwrap().insert(());
         BufferUntyped {
             device: self.clone(),
-            id,
-            last_submission_index: AtomicU64::new(0),
+            id: self.allocate_resource_id(),
             allocation,
             handle,
             memory_location,
@@ -914,17 +929,15 @@ impl Device {
         width: u32,
         height: u32,
     ) -> Image {
-        let id = self.image_ids.lock().unwrap().insert(());
         let (bindless_handle, default_view) = self.create_bindless_image_view(handle, ImageType::Image2D, format, 1, 1);
         Image {
             device: self.clone(),
-            id,
-            last_submission_index: AtomicU64::new(0),
+            id: self.allocate_resource_id(),
             allocation: ResourceAllocation::External,
             handle,
             swapchain_image: true,
             default_view,
-            bindless_handle,
+            heap_index: bindless_handle,
             usage: ImageUsage::TRANSFER_DST | ImageUsage::COLOR_ATTACHMENT,
             type_: ImageType::Image2D,
             format,
@@ -934,6 +947,42 @@ impl Device {
                 depth: 1,
             },
         }
+    }
+
+    /// Allocates a new resource ID for tracking a resource.
+    pub(crate) fn allocate_resource_id(&self) -> ResourceId {
+        let id = self.resource_ids.lock().unwrap().insert(());
+        self.tracker.lock().unwrap().resources.insert(
+            id,
+            ResourceTrackingInfo {
+                last_submission_index: 0,
+                writes: MemoryAccess::UNINITIALIZED,
+            },
+        );
+        id
+    }
+
+    /// Releases a resource ID that is no longer used.
+    pub(crate) fn free_resource_id(&self, resource_id: ResourceId) {
+        self.resource_ids.lock().unwrap().remove(resource_id);
+    }
+
+    /// Releases a resource heap index that is no longer used.
+    pub(crate) fn free_resource_heap_index(&self, index: ResourceHeapIndex) {
+        self.resource_heap.lock().unwrap().remove(index);
+    }
+
+    /// Releases a sampler heap index that is no longer used.
+    pub(crate) fn free_sampler_heap_index(&self, index: SamplerHeapIndex) {
+        self.sampler_heap.lock().unwrap().remove(index);
+    }
+
+    pub(crate) fn last_submission_index(&self, resource_id: ResourceId) -> u64 {
+        self.tracker.lock().unwrap().resources[resource_id].last_submission_index
+    }
+
+    pub(crate) fn set_last_submission_index(&self, resource_id: ResourceId, index: u64) {
+        self.tracker.lock().unwrap().resources[resource_id].last_submission_index = index;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -948,7 +997,7 @@ impl Device {
         format: Format,
         mip_levels: u32,
         array_layers: u32,
-    ) -> (ImageViewId, vk::ImageView) {
+    ) -> (ResourceHeapIndex, vk::ImageView) {
         unsafe {
             let image_view = self
                 .raw
@@ -993,7 +1042,7 @@ impl Device {
                 )
                 .expect("failed to create image view");
 
-            let id = self.image_view_ids.lock().unwrap().insert(());
+            let id = self.resource_heap.lock().unwrap().insert(());
             // Update the global descriptor table.
             //if usage.contains(ImageUsage::SAMPLED) {
             self.write_global_texture_descriptor(id, image_view);
@@ -1061,8 +1110,6 @@ impl Device {
                 .unwrap();
         }
 
-        let id = self.image_ids.lock().unwrap().insert(());
-
         // create the bindless image view
         let (bindless_handle, default_view) = self.create_bindless_image_view(
             handle,
@@ -1075,12 +1122,11 @@ impl Device {
         Image {
             handle,
             device: self.clone(),
-            id,
-            last_submission_index: AtomicU64::new(0),
+            id: self.allocate_resource_id(),
             allocation: ResourceAllocation::Allocation { allocation },
             swapchain_image: false,
             default_view,
-            bindless_handle,
+            heap_index: bindless_handle,
             usage: image_info.usage,
             type_: image_info.type_,
             format: image_info.format,
@@ -1179,22 +1225,38 @@ impl Device {
     }*/
 
     // TODO: instead of passing the submission index, get it via a trait method on T (GpuResource)
-    pub fn delete_later<T: 'static>(&self, submission_index: u64, object: T) {
+    fn delete_later_inner<T: 'static>(&self, submission_index: u64, resource_id: Option<ResourceId>, object: T) {
         let last_completed_submission_index = unsafe { self.raw.get_semaphore_counter_value(self.timeline).unwrap() };
         if submission_index <= last_completed_submission_index {
-            // drop the object immediately if the submission has completed
+            if let Some(resource_id) = resource_id {
+                self.free_resource_id(resource_id);
+            }
             return;
         }
 
         // otherwise move it to the deferred deletion list
-        self.dropped_resources
-            .lock()
-            .unwrap()
-            .push((submission_index, Box::new(object)));
+        self.deletion_queue.lock().unwrap().push(DeleteQueueEntry {
+            submission: submission_index,
+            tracker_id: resource_id,
+            object: Box::new(object),
+        });
     }
 
     pub fn call_later(&self, submission_index: u64, f: impl FnMut() + 'static) {
-        self.delete_later(submission_index, Defer(f))
+        self.delete_later_inner(submission_index, None, Defer(f))
+    }
+
+    pub(crate) fn delete_tracked_resource(
+        self: &Rc<Self>,
+        resource_id: ResourceId,
+        mut f: impl FnMut(&Self) + 'static,
+    ) {
+        let this = self.clone();
+        self.delete_later_inner(
+            self.last_submission_index(resource_id),
+            Some(resource_id),
+            Defer(move || f(&*this)),
+        )
     }
 
     pub(crate) unsafe fn free_memory(&self, allocation: &mut ResourceAllocation) {
@@ -1226,10 +1288,24 @@ impl Device {
         /*let mut image_ids = self.inner.image_ids.lock().unwrap();
         let mut buffer_ids = self.inner.buffer_ids.lock().unwrap();
         let mut image_view_ids = self.inner.image_view_ids.lock().unwrap();*/
-        let mut dropped_resources = self.dropped_resources.lock().unwrap();
+        let mut deletion_queue = self.deletion_queue.lock().unwrap();
 
         // *** This invokes all delayed destructors for resources which are no longer in use by the GPU.
-        dropped_resources.retain(|(submission, _object)| *submission > last_completed_submission_index);
+        deletion_queue.retain(
+            |DeleteQueueEntry {
+                 tracker_id,
+                 object,
+                 submission,
+             }| {
+                if *submission > last_completed_submission_index {
+                    return true;
+                }
+                if let Some(resource_id) = *tracker_id {
+                    self.free_resource_id(resource_id);
+                }
+                false
+            },
+        );
 
         // process all completed submissions, oldest to newest
         //let mut active_submissions = tracker.active_submissions.lock().unwrap();
@@ -1449,13 +1525,14 @@ impl Device {
                 .create_sampler(&create_info, None)
                 .expect("failed to create sampler")
         };
-        let id = self.sampler_ids.lock().unwrap().insert(());
+
+        let id = self.sampler_heap.lock().unwrap().insert(());
         unsafe {
             self.write_global_sampler_descriptor(id, sampler);
         }
         let sampler = Sampler {
             device: Rc::downgrade(self),
-            id,
+            heap_index: id,
             sampler,
         };
         self.sampler_cache.lock().unwrap().insert(info.clone(), sampler.clone());

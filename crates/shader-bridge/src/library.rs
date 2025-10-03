@@ -104,11 +104,7 @@ impl ShaderLibrary {
             stage: slang_stage_to_gpu_stage(ep_refl.stage()),
             work_group_size: {
                 let s = ep_refl.compute_thread_group_size();
-                [
-                    s[0] as u32,
-                    s[1] as u32,
-                    s[2] as u32,
-                ]
+                [s[0] as u32, s[1] as u32, s[2] as u32]
             },
             entry_point_name: entry_point_name.to_string(),
             path: self.path.clone(),

@@ -53,14 +53,12 @@ impl Default for Handler {
 
 impl Handler {
     fn paint_test_scene(&mut self, cmd: &mut gpu::CommandStream, target: &gpu::Image) {
-
-
         let mut scene = self.painter.build_scene();
         let [r, g, b, a] = self.color.to_srgba_unmultiplied();
         let color = Srgba32 { r, g, b, a };
         scene.fill_rrect(rect_xywh(100.0, 100.0, 200.0, 200.0), 20.0, color);
 
-       /*scene.draw_glyph_run(
+        /*scene.draw_glyph_run(
             vec2(400.0, 200.0),
             "Hello, world! こんにちは",
             48.0,

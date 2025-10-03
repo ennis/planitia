@@ -3,7 +3,10 @@ use crate::platform::windows::graphics::GraphicsContext;
 use crate::platform::windows::swap_chain::DxgiVulkanInteropSwapChain;
 use crate::platform::windows::{Error, get_hwnd};
 use windows::Win32::Graphics::DirectComposition::{IDCompositionTarget, IDCompositionVisual2};
-use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_TYPELESS, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_TYPELESS, DXGI_FORMAT_R8G8B8A8_UNORM};
+use windows::Win32::Graphics::Dxgi::Common::{
+    DXGI_FORMAT_B8G8R8A8_TYPELESS, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_TYPELESS,
+    DXGI_FORMAT_R8G8B8A8_UNORM,
+};
 use winit::event_loop::ActiveEventLoop;
 use winit::platform::windows::WindowAttributesExtWindows;
 use winit::raw_window_handle::HasWindowHandle;

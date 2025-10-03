@@ -7,7 +7,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::{Relaxed, SeqCst};
 use windows::Win32::Foundation::{HANDLE, WAIT_OBJECT_0};
 use windows::Win32::Graphics::DirectComposition::DCompositionWaitForCompositorClock;
-use windows::Win32::System::Threading::{CreateEventW, SetEvent, INFINITE};
+use windows::Win32::System::Threading::{CreateEventW, INFINITE, SetEvent};
 use windows::core::Owned;
 
 pub(super) struct CompositorClock {
@@ -20,7 +20,10 @@ impl CompositorClock {
         // create an event that can be used to abort the clock thread
         let abort_event = unsafe { CreateEventW(None, false, false, None).unwrap() };
         let abort_event = unsafe { Owned::new(abort_event) };
-        CompositorClock { abort_event, active: Default::default() }
+        CompositorClock {
+            abort_event,
+            active: Default::default(),
+        }
     }
 
     /// Marks that a VSync event should be sent to the event loop on the next compositor clock tick.

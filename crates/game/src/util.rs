@@ -1,7 +1,7 @@
-use std::env;
-use std::future::pending;
 use arboard::Clipboard;
 use log::error;
+use std::env;
+use std::future::pending;
 
 /// An async future that never completes.
 pub async fn forever() {

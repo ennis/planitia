@@ -9,7 +9,6 @@ pub struct CubicBezierSegment {
     pub p3: Vec3,
 }
 
-
 impl CubicBezierSegment {
     fn subdivide(&self, t: f32) -> (Self, Self) {
         let q0 = self.p0.lerp(self.p1, t);

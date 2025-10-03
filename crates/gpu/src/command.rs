@@ -3,15 +3,15 @@ use std::mem::{ManuallyDrop, MaybeUninit};
 use std::{mem, ptr};
 
 use ash::prelude::VkResult;
-use fxhash::FxHashMap;
-
 pub use compute::ComputeEncoder;
+use fxhash::FxHashMap;
 pub use render::{RenderEncoder, RenderPassInfo};
+use slotmap::secondary::Entry;
 
-use crate::device::ActiveSubmission;
+use crate::device::{ActiveSubmission, ResourceTrackingInfo};
 use crate::{
-    aspects_for_format, vk, vk_ext_debug_utils, CommandPool, Descriptor, GpuResource, Image, ImageId, MemoryAccess,
-    RcDevice, SwapchainImage,
+    aspects_for_format, vk, vk_ext_debug_utils, CommandPool, Descriptor, Image, MemoryAccess, RcDevice, ResourceId,
+    SwapchainImage, TrackedResource,
 };
 
 mod blit;
@@ -42,8 +42,7 @@ impl<'a> Barrier<'a> {
     }
 
     pub fn color_attachment_write(mut self, image: &'a Image) -> Self {
-        self.transitions
-            .push((image, MemoryAccess::COLOR_ATTACHMENT_WRITE));
+        self.transitions.push((image, MemoryAccess::COLOR_ATTACHMENT_WRITE));
         self.access |= MemoryAccess::COLOR_ATTACHMENT_WRITE;
         self
     }
@@ -66,19 +65,15 @@ impl<'a> Barrier<'a> {
     }
 
     pub fn shader_read_image(mut self, image: &'a Image) -> Self {
-        self.transitions.push((
-            image,
-            MemoryAccess::SHADER_STORAGE_READ | MemoryAccess::ALL_STAGES,
-        ));
+        self.transitions
+            .push((image, MemoryAccess::SHADER_STORAGE_READ | MemoryAccess::ALL_STAGES));
         self.access |= MemoryAccess::SHADER_STORAGE_READ | MemoryAccess::ALL_STAGES;
         self
     }
 
     pub fn shader_write_image(mut self, image: &'a Image) -> Self {
-        self.transitions.push((
-            image,
-            MemoryAccess::SHADER_STORAGE_WRITE | MemoryAccess::ALL_STAGES,
-        ));
+        self.transitions
+            .push((image, MemoryAccess::SHADER_STORAGE_WRITE | MemoryAccess::ALL_STAGES));
         self.access |= MemoryAccess::SHADER_STORAGE_WRITE | MemoryAccess::ALL_STAGES;
         self
     }
@@ -132,7 +127,7 @@ pub struct CommandStream {
 
     // Buffer writes that need to be made available
     tracked_writes: MemoryAccess,
-    tracked_images: FxHashMap<ImageId, CommandBufferImageState>,
+    tracked_images: FxHashMap<ResourceId, CommandBufferImageState>,
     //pub(crate) tracked_image_views: FxHashMap<ImageViewId, ImageView>,
     seen_initial_barrier: bool,
     //initial_writes: MemoryAccess,
@@ -143,7 +138,7 @@ pub struct CommandStream {
 pub(crate) struct CommandBufferImageState {
     pub image: vk::Image,
     pub format: vk::Format,
-    pub id: ImageId,
+    pub id: ResourceId,
     pub first_access: MemoryAccess,
     pub last_access: MemoryAccess,
 }
@@ -282,7 +277,10 @@ impl CommandStream {
 
         for (binding, descriptor) in bindings {
             match *descriptor {
-                Descriptor::SampledImage { image: image_view, layout } => {
+                Descriptor::SampledImage {
+                    image: image_view,
+                    layout,
+                } => {
                     self.reference_resource(image_view);
                     descriptors.push(DescriptorBufferOrImage {
                         image: vk::DescriptorImageInfo {
@@ -300,7 +298,10 @@ impl CommandStream {
                         ..Default::default()
                     });
                 }
-                Descriptor::StorageImage { image: image_view, layout } => {
+                Descriptor::StorageImage {
+                    image: image_view,
+                    layout,
+                } => {
                     self.reference_resource(image_view);
                     descriptors.push(DescriptorBufferOrImage {
                         image: vk::DescriptorImageInfo {
@@ -552,8 +553,12 @@ impl CommandStream {
     }
 
     /// Specifies that the resource will be used in the current submission.
-    pub fn reference_resource<R: GpuResource>(&mut self, resource: &R) {
-        resource.set_last_submission_index(self.submission_index);
+    pub fn reference_resource<R: TrackedResource>(&mut self, resource: &R) {
+        // TODO this should be done during submission because it's possible to drop the command stream
+        //      without submitting it
+        //      (well, at least it would if we didn't explicitly panic on unsubmitted command streams)
+        self.device
+            .set_last_submission_index(resource.id(), self.submission_index)
     }
 
     pub(crate) fn create_command_buffer_raw(&mut self) -> vk::CommandBuffer {
@@ -666,10 +671,23 @@ impl CommandStream {
 
             let mut image_barriers = Vec::new();
             for (_, state) in self.tracked_images.drain() {
-                let prev_access = tracker
-                    .images
-                    .insert(state.id, state.last_access)
-                    .unwrap_or(MemoryAccess::UNINITIALIZED); // if the image was not previously tracked, the contents are undefined
+                let prev_access = match tracker.resources.entry(state.id) {
+                    Some(entry) => {
+                        match entry {
+                            Entry::Occupied(res) => mem::replace(&mut res.into_mut().writes, state.last_access),
+                            Entry::Vacant(res) => {
+                                res.insert(ResourceTrackingInfo {
+                                    last_submission_index: self.submission_index,
+                                    writes: state.last_access,
+                                });
+                                // if the image was not previously tracked, the contents are undefined
+                                MemoryAccess::UNINITIALIZED
+                            }
+                        }
+                    }
+                    // if the image was not previously tracked, the contents are undefined
+                    None => MemoryAccess::UNINITIALIZED,
+                };
                 if prev_access != state.first_access {
                     let format = state.format;
                     image_barriers.push(vk::ImageMemoryBarrier2 {

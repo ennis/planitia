@@ -17,7 +17,6 @@ impl PN {
     }
 }
 
-
 #[derive(Default)]
 struct GeomSink {
     vertices: Vec<FeatherVertex>,
@@ -69,8 +68,11 @@ fn tess_feathered_polygon(polygon: &[PN], feather_in: f32, feather_out: f32, out
 
     // tess main polygon
     let base = out.vertices.len() as u32;
-    out.vertices
-        .extend(polygon.iter().map(|v| FeatherVertex::new(v.p - feather_in * v.n, 0.0, v.c)));
+    out.vertices.extend(
+        polygon
+            .iter()
+            .map(|v| FeatherVertex::new(v.p - feather_in * v.n, 0.0, v.c)),
+    );
     for i in 1..(polygon.len() - 1) {
         let i = i as u32;
         out.indices.extend([base, base + i, base + i + 1]);
@@ -80,8 +82,7 @@ fn tess_feathered_polygon(polygon: &[PN], feather_in: f32, feather_out: f32, out
     if feather_in > 0.0 || feather_out > 0.0 {
         let base_feather = out.vertices.len() as u32;
         for v in polygon.iter() {
-            out.vertices
-                .push(FeatherVertex::new(v.p + feather_out * v.n, 1.0, v.c));
+            out.vertices.push(FeatherVertex::new(v.p + feather_out * v.n, 1.0, v.c));
         }
         for i in 0..polygon.len() {
             let i = i as u32;
@@ -176,7 +177,7 @@ impl Tessellator {
     }
 }
 
-#[derive(Default,Debug)]
+#[derive(Default, Debug)]
 pub struct Mesh {
     pub vertices: Vec<FeatherVertex>,
     pub indices: Vec<u32>,

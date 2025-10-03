@@ -1,17 +1,17 @@
-mod text_run;
 mod format;
 mod layout;
+mod text_run;
 
 use crate::paint::atlas::Atlas;
 use crate::paint::color::srgba32;
 use ab_glyph::{Font as FontTrait, FontArc, ScaleFont};
 use math::geom::IRect;
-use math::{ivec2, vec2, IVec2, Vec2};
+use math::{IVec2, Vec2, ivec2, vec2};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ops::Range;
-use std::sync::atomic::AtomicUsize;
 use std::sync::OnceLock;
+use std::sync::atomic::AtomicUsize;
 
 const DEFAULT_SIZE: u32 = 16;
 
@@ -110,7 +110,10 @@ impl GlyphCache {
         let scaled_font = font.data.as_scaled(size as f32);
         let h_advance = scaled_font.h_advance(id);
         let entry = GlyphEntry {
-            px_bounds: IRect { min: ivec2(bounds.min.x as i32, bounds.min.y as i32), max: ivec2(bounds.max.x as i32, bounds.max.y as i32) },
+            px_bounds: IRect {
+                min: ivec2(bounds.min.x as i32, bounds.min.y as i32),
+                max: ivec2(bounds.max.x as i32, bounds.max.y as i32),
+            },
             atlas_pos: rect.top_left(),
             advance: h_advance,
         };
@@ -220,7 +223,6 @@ impl Ord for Font {
     }
 }
 
-
 /// Glyph.
 #[derive(Clone, Copy, Debug)]
 pub struct Glyph {
@@ -263,22 +265,16 @@ pub struct ShapingParams {
     pub size: f32,
 }
 
-
 /// Performs text analysis and shape the given text run into a sequence of glyph clusters.
 ///
 /// NOTE: currently it doesn't do any CTL shaping or ligatures.
-pub fn shape_text(
-    format: &ShapingParams,
-    text: &str,
-    callback: &mut dyn FnMut(&GlyphCluster))
-{
+pub fn shape_text(format: &ShapingParams, text: &str, callback: &mut dyn FnMut(&GlyphCluster)) {
     let font = &format.font;
     let size = format.size;
     let mut pos = 0.0;
     let mut prev_glyph_id: Option<GlyphId> = None;
 
-    for (ch_pos,ch) in text.char_indices() {
-
+    for (ch_pos, ch) in text.char_indices() {
         let ch_len_utf8 = ch.len_utf8();
         let src_range = ch_pos..(ch_pos + ch_len_utf8);
         let glyph_id = font.glyph_id(ch);
@@ -318,7 +314,6 @@ pub fn shape_text(
         prev_glyph_id = Some(glyph_id);
     }
 }
-
 
 /*
 /// A collection of fonts.

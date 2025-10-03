@@ -9,7 +9,6 @@ pub mod windows;
 #[cfg(windows)]
 pub type Platform = windows::Win32Platform;
 
-
 //----------------------------------------------------------------------------------
 
 /// Image returned by `acquire` that can be rendered to.

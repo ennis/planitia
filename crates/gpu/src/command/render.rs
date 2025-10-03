@@ -7,7 +7,7 @@ use ash::vk;
 
 use crate::{
     is_depth_and_stencil_format, Barrier, BufferRangeUntyped, ClearColorValue, ColorAttachment, CommandStream,
-    DepthStencilAttachment, Descriptor, GpuResource, GraphicsPipeline, RcDevice, Rect2D,
+    DepthStencilAttachment, Descriptor, GraphicsPipeline, RcDevice, Rect2D, TrackedResource,
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -31,7 +31,7 @@ impl<'a> RenderEncoder<'a> {
     ///
     /// This will prevent the resource from being destroyed until the current submission is
     /// either complete or cancelled.
-    pub fn reference_resource<R: GpuResource>(&mut self, resource: &R) {
+    pub fn reference_resource<R: TrackedResource>(&mut self, resource: &R) {
         self.stream.reference_resource(resource);
     }
 

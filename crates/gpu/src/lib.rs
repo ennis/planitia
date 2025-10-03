@@ -231,7 +231,7 @@ impl ComputePipeline {
 pub struct Sampler {
     // A weak ref is sufficient, the device already owns samplers in its cache
     device: WeakDevice,
-    id: SamplerId,
+    heap_index: SamplerHeapIndex,
     sampler: vk::Sampler,
 }
 
@@ -245,7 +245,10 @@ impl Sampler {
         }
     }
 
+    /// Returns the Vulkan sampler handle.
     pub fn handle(&self) -> vk::Sampler {
+        // ensure the device is still alive, because it's the device that manages the lifetime of
+        // samplers in its internal cache
         let _device = self
             .device
             .upgrade()
@@ -253,13 +256,15 @@ impl Sampler {
         self.sampler
     }
 
+    /// Returns this sampler as a descriptor.
     pub fn descriptor(&self) -> Descriptor<'_> {
         Descriptor::Sampler { sampler: self.clone() }
     }
 
+    /// Returns the bindless sampler handle.
     pub fn device_handle(&self) -> SamplerHandle {
         SamplerHandle {
-            index: self.id.index(),
+            index: self.heap_index.index(),
             _unused: 0,
         }
     }
@@ -323,23 +328,16 @@ impl CommandPool {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub trait GpuResource {
-    fn set_last_submission_index(&self, submission_index: u64);
+pub trait TrackedResource {
+    /// Returns the internal tracking ID of the image.
+    fn id(&self) -> ResourceId;
 }
-
-#[derive(Debug)]
-struct BufferInner {}
 
 impl<T: ?Sized> Drop for Buffer<T> {
     fn drop(&mut self) {
-        let last_submission_index = self.last_submission_index.load(Ordering::Relaxed);
-        let device = self.device.clone();
         let mut allocation = mem::take(&mut self.allocation);
         let handle = self.handle;
-        let id = self.id;
-        self.device.clone().call_later(last_submission_index, move || unsafe {
-            // retire the ID
-            device.buffer_ids.lock().unwrap().remove(id);
+        self.device.delete_tracked_resource(self.id, move |device| unsafe {
             device.free_memory(&mut allocation);
             device.raw.destroy_buffer(handle, None);
         });
@@ -349,10 +347,8 @@ impl<T: ?Sized> Drop for Buffer<T> {
 /// A buffer of GPU-visible memory, optionally mapped in host memory, without any associated type.
 pub struct Buffer<T: ?Sized> {
     device: RcDevice,
-    /// Tracking ID
-    id: BufferId,
+    id: ResourceId,
     memory_location: MemoryLocation,
-    last_submission_index: AtomicU64,
     allocation: ResourceAllocation,
     device_address: vk::DeviceAddress,
     handle: vk::Buffer,
@@ -375,10 +371,6 @@ impl<T: ?Sized> Buffer<T> {
             address: self.device_address,
             _phantom: PhantomData,
         }
-    }
-
-    pub(crate) fn id(&self) -> BufferId {
-        self.id
     }
 
     /// Returns the size of the buffer in bytes.
@@ -597,10 +589,9 @@ impl<T: ?Sized> std::fmt::Debug for Buffer<T> {
     }
 }
 
-impl<T: ?Sized> GpuResource for Buffer<T> {
-    fn set_last_submission_index(&self, submission_index: u64) {
-        self.last_submission_index
-            .fetch_max(submission_index, Ordering::Release);
+impl<T: ?Sized> TrackedResource for Buffer<T> {
+    fn id(&self) -> ResourceId {
+        self.id
     }
 }
 
@@ -614,35 +605,6 @@ impl<'a, T: Copy> From<&'a Buffer<[T]>> for BufferRange<'a, T> {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Images
-
-#[derive(Debug)]
-struct ImageInner {
-    device: RcDevice,
-    id: ImageId,
-    last_submission_index: AtomicU64,
-    allocation: ResourceAllocation,
-    handle: vk::Image,
-    swapchain_image: bool,
-    /// Default image view handle.
-    default_view: vk::ImageView,
-    /// Bindless index (of the default view).
-    bindless_handle: ImageViewId,
-}
-
-impl Drop for ImageInner {
-    fn drop(&mut self) {
-        if !self.swapchain_image {
-            unsafe {
-                //debug!("dropping image {:?} (handle: {:?})", self.id, self.handle);
-                self.device.image_ids.lock().unwrap().remove(self.id);
-                self.device.image_view_ids.lock().unwrap().remove(self.bindless_handle);
-                self.device.free_memory(&mut self.allocation);
-                self.device.raw.destroy_image_view(self.default_view, None);
-                self.device.raw.destroy_image(self.handle, None);
-            }
-        }
-    }
-}
 
 /// Image data stored in CPU-visible memory.
 pub struct ImageBuffer {
@@ -659,14 +621,13 @@ pub struct ImageBuffer {
 #[derive(Debug)]
 pub struct Image {
     device: RcDevice,
-    id: ImageId,
-    last_submission_index: AtomicU64,
+    id: ResourceId,
     allocation: ResourceAllocation,
     swapchain_image: bool,
     /// Default image view handle.
     default_view: vk::ImageView,
     /// Bindless index (of the default view).
-    bindless_handle: ImageViewId,
+    heap_index: ResourceHeapIndex,
     handle: vk::Image,
     usage: ImageUsage,
     type_: ImageType,
@@ -677,17 +638,13 @@ pub struct Image {
 impl Drop for Image {
     fn drop(&mut self) {
         if !self.swapchain_image {
-            let last_submission_index = self.last_submission_index.load(Ordering::Relaxed);
-            let device = self.device.clone();
             let mut allocation = mem::take(&mut self.allocation);
             let handle = self.handle;
-            let id = self.id;
             let default_view = self.default_view;
-            let bindless_handle = self.bindless_handle;
-            self.device.call_later(last_submission_index, move || unsafe {
-                debug!("dropping image {:?} (handle: {:?})", id, handle);
-                device.image_ids.lock().unwrap().remove(id);
-                device.image_view_ids.lock().unwrap().remove(bindless_handle);
+            let heap_index = self.heap_index;
+            self.device.delete_tracked_resource(self.id, move |device| unsafe {
+                //debug!("dropping image {:?} (handle: {:?})", id, handle);
+                device.free_resource_heap_index(heap_index);
                 device.free_memory(&mut allocation);
                 device.raw.destroy_image_view(default_view, None);
                 device.raw.destroy_image(handle, None);
@@ -696,10 +653,9 @@ impl Drop for Image {
     }
 }
 
-impl GpuResource for Image {
-    fn set_last_submission_index(&self, submission_index: u64) {
-        self.last_submission_index
-            .fetch_max(submission_index, Ordering::Release);
+impl TrackedResource for Image {
+    fn id(&self) -> ResourceId {
+        self.id
     }
 }
 
@@ -749,11 +705,6 @@ impl Image {
         self.usage
     }
 
-    /// Returns the internal tracking ID of the image.
-    pub(crate) fn id(&self) -> ImageId {
-        self.id
-    }
-
     /// Returns the image handle.
     pub fn handle(&self) -> vk::Image {
         self.handle
@@ -781,7 +732,7 @@ impl Image {
     /// Returns the bindless texture handle of this image view.
     pub fn device_image_handle(&self) -> ImageHandle {
         ImageHandle {
-            index: self.bindless_handle.index(),
+            index: self.heap_index.index(),
             _unused: 0,
         }
     }

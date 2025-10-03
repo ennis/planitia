@@ -43,10 +43,14 @@ impl FeatherVertex {
     const SIZE_CHECK: () = assert!(size_of::<Self>() == 16);
 
     pub const fn new(p: Vec2, feather: f32, color: Srgba32) -> Self {
-        Self { p, feather, color, uv: U16Vec2::new(0, 0) }
+        Self {
+            p,
+            feather,
+            color,
+            uv: U16Vec2::new(0, 0),
+        }
     }
 }
-
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, GpuVertex)]
@@ -63,7 +67,6 @@ impl GlyphVertex {
         Self { p, uv, color }
     }
 }
-
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -218,7 +221,6 @@ impl Painter {
     //    that there will ever be multiple painters in practice
 }
 
-
 pub struct Primitive {
     kind: PrimKind,
     clip: Rect,
@@ -244,20 +246,44 @@ pub struct PaintScene<'a> {
     clip_stack: Vec<Rect>,
 }
 
-fn textured_quad(
-    p0: Vec2,
-    p1: Vec2,
-    uv0: U16Vec2,
-    uv1: U16Vec2,
-    color: Srgba32,
-) -> [FeatherVertex; 6] {
+fn textured_quad(p0: Vec2, p1: Vec2, uv0: U16Vec2, uv1: U16Vec2, color: Srgba32) -> [FeatherVertex; 6] {
     [
-        FeatherVertex {p: Vec2::new(p0.x, p0.y), uv: U16Vec2::new(uv0.x, uv0.y), color, feather: 0.0},
-        FeatherVertex {p: Vec2::new(p1.x, p0.y), uv: U16Vec2::new(uv1.x, uv0.y), color, feather: 0.0},
-        FeatherVertex {p: Vec2::new(p1.x, p1.y), uv: U16Vec2::new(uv1.x, uv1.y), color, feather: 0.0},
-        FeatherVertex {p: Vec2::new(p0.x, p0.y), uv: U16Vec2::new(uv0.x, uv0.y), color, feather: 0.0},
-        FeatherVertex {p: Vec2::new(p1.x, p1.y), uv: U16Vec2::new(uv1.x, uv1.y), color, feather: 0.0},
-        FeatherVertex {p: Vec2::new(p0.x, p1.y), uv: U16Vec2::new(uv0.x, uv1.y), color, feather: 0.0},
+        FeatherVertex {
+            p: Vec2::new(p0.x, p0.y),
+            uv: U16Vec2::new(uv0.x, uv0.y),
+            color,
+            feather: 0.0,
+        },
+        FeatherVertex {
+            p: Vec2::new(p1.x, p0.y),
+            uv: U16Vec2::new(uv1.x, uv0.y),
+            color,
+            feather: 0.0,
+        },
+        FeatherVertex {
+            p: Vec2::new(p1.x, p1.y),
+            uv: U16Vec2::new(uv1.x, uv1.y),
+            color,
+            feather: 0.0,
+        },
+        FeatherVertex {
+            p: Vec2::new(p0.x, p0.y),
+            uv: U16Vec2::new(uv0.x, uv0.y),
+            color,
+            feather: 0.0,
+        },
+        FeatherVertex {
+            p: Vec2::new(p1.x, p1.y),
+            uv: U16Vec2::new(uv1.x, uv1.y),
+            color,
+            feather: 0.0,
+        },
+        FeatherVertex {
+            p: Vec2::new(p0.x, p1.y),
+            uv: U16Vec2::new(uv0.x, uv1.y),
+            color,
+            feather: 0.0,
+        },
     ]
 }
 
@@ -311,12 +337,16 @@ impl<'a> PaintScene<'a> {
     }
 
     /// Draws a glyph run.
-    pub fn draw_glyph_run(&mut self, position: Vec2, glyphs: impl Iterator<Item = Glyph>, options: &DrawGlyphRunOptions) {
+    pub fn draw_glyph_run(
+        &mut self,
+        position: Vec2,
+        glyphs: impl Iterator<Item = Glyph>,
+        options: &DrawGlyphRunOptions,
+    ) {
         self.end_prim();
 
         let mut vertices = Vec::new();
         for glyph in glyphs {
-
             let entry = self
                 .painter
                 .glyph_cache
@@ -330,12 +360,7 @@ impl<'a> PaintScene<'a> {
             let tex_rect = entry.texture_rect();
             let uv0 = U16Vec2::new(tex_rect.min.x as u16, tex_rect.min.y as u16);
             let uv1 = U16Vec2::new(tex_rect.max.x as u16, tex_rect.max.y as u16);
-            vertices.extend(textured_quad(
-                quad.min,
-                quad.max,
-                uv0, uv1,
-                options.color,
-            ));
+            vertices.extend(textured_quad(quad.min, quad.max, uv0, uv1, options.color));
         }
 
         /*self.prims.push(Primitive {
@@ -397,7 +422,6 @@ impl<'a> PaintScene<'a> {
                     draw_mesh(&mut encoder, params, mesh, prim.clip);
                 }
             }
-
         }
         encoder.finish();
     }
@@ -438,8 +462,5 @@ fn draw_mesh(encoder: &mut gpu::RenderEncoder, params: &PaintRenderParams, mesh:
     encoder.draw_indexed(0..mesh.indices.len() as u32, 0, 0..1);
 }
 
-
 #[cfg(test)]
-mod test {
-    
-}
+mod test {}

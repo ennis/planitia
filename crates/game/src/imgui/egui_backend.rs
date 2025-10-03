@@ -221,7 +221,8 @@ impl Renderer {
                 &[
                     (
                         0,
-                        texture.image
+                        texture
+                            .image
                             .texture_descriptor(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
                     ),
                     (1, self.sampler.descriptor()),
