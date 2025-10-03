@@ -465,10 +465,10 @@ impl CommandStream {
                         dst_stage_mask,
                         dst_access_mask,
                         image: image.handle(),
-                        old_layout: entry.last_access.to_vk_image_layout(image.format),
-                        new_layout: access.to_vk_image_layout(image.format),
+                        old_layout: entry.last_access.to_vk_image_layout(image.format()),
+                        new_layout: access.to_vk_image_layout(image.format()),
                         subresource_range: vk::ImageSubresourceRange {
-                            aspect_mask: aspects_for_format(image.format),
+                            aspect_mask: aspects_for_format(image.format()),
                             base_mip_level: 0,
                             level_count: vk::REMAINING_MIP_LEVELS,
                             base_array_layer: 0,
@@ -483,7 +483,7 @@ impl CommandStream {
                     image.id(),
                     CommandBufferImageState {
                         image: image.handle(),
-                        format: image.format,
+                        format: image.format(),
                         id: image.id(),
                         first_access: access,
                         last_access: access,

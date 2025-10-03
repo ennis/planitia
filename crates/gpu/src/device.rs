@@ -3,11 +3,10 @@ mod bindless;
 
 use crate::instance::{vk_ext_debug_utils, vk_khr_surface};
 use crate::{
-    aspects_for_format, get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, BufferUntyped, BufferUsage,
-    CommandPool, CommandStream, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error, Format,
-    GraphicsPipeline, GraphicsPipelineCreateInfo, Image, ImageCreateInfo, ImageType, ImageUsage, ImageViewInfo,
-    MemoryAccess, MemoryLocation, PreRasterizationShaders, Sampler, SamplerCreateInfo, SignaledSemaphore, Size3D,
-    SwapChain, SwapchainImage, SwapchainImageInner, SUBGROUP_SIZE,
+    get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format,
+    CommandPool, CommandStream, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error,
+    GraphicsPipeline, GraphicsPipelineCreateInfo,
+    MemoryAccess, PreRasterizationShaders, Sampler, SamplerCreateInfo, SUBGROUP_SIZE,
 };
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
@@ -19,14 +18,12 @@ use std::{fmt, ptr};
 use crate::device::bindless::BindlessDescriptorTable;
 use crate::platform::PlatformExtensions;
 use ash::vk;
-use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
+use gpu_allocator::vulkan::{AllocationCreateDesc};
 use log::debug;
 use slotmap::{SecondaryMap, SlotMap};
 use std::ffi::CStr;
-use std::marker::PhantomData;
 use std::mem;
 use std::sync::atomic::AtomicU64;
-use std::time::Duration;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -38,8 +35,8 @@ pub struct Device {
 
     /// Platform-specific extension functions
     pub(crate) platform_extensions: PlatformExtensions,
-    physical_device: vk::PhysicalDevice,
-    allocator: Mutex<gpu_allocator::vulkan::Allocator>,
+    pub(crate) physical_device: vk::PhysicalDevice,
+    pub(crate) allocator: Mutex<gpu_allocator::vulkan::Allocator>,
 
     // main graphics queue
     pub(crate) queue_family: u32,
@@ -47,14 +44,14 @@ pub struct Device {
     pub(crate) timeline: vk::Semaphore,
 
     // semaphores ready for reuse
-    semaphores: RefCell<Vec<vk::Semaphore>>,
+    pub(crate) semaphores: RefCell<Vec<vk::Semaphore>>,
 
     // --- Extensions ---
-    vk_khr_swapchain: ash::extensions::khr::Swapchain,
-    vk_ext_shader_object: ash::extensions::ext::ShaderObject,
-    vk_khr_push_descriptor: ash::extensions::khr::PushDescriptor,
-    vk_ext_mesh_shader: ash::extensions::ext::MeshShader,
-    vk_ext_extended_dynamic_state3: ash::extensions::ext::ExtendedDynamicState3,
+    pub(crate) vk_khr_swapchain: ash::extensions::khr::Swapchain,
+    pub(crate) vk_ext_shader_object: ash::extensions::ext::ShaderObject,
+    pub(crate) vk_khr_push_descriptor: ash::extensions::khr::PushDescriptor,
+    pub(crate) vk_ext_mesh_shader: ash::extensions::ext::MeshShader,
+    pub(crate) vk_ext_extended_dynamic_state3: ash::extensions::ext::ExtendedDynamicState3,
     //vk_ext_descriptor_buffer: ash::extensions::ext::DescriptorBuffer,
 
     // physical device properties
@@ -81,7 +78,7 @@ pub struct Device {
     /// but we're waiting for the GPU to finish using them.
     deletion_queue: Mutex<Vec<DeleteQueueEntry>>,
     pub(crate) tracker: Mutex<DeviceTracker>,
-    sampler_cache: Mutex<HashMap<SamplerCreateInfo, Sampler>>,
+    pub(crate) sampler_cache: Mutex<HashMap<SamplerCreateInfo, Sampler>>,
 
     pub(crate) texture_descriptors: Mutex<BindlessDescriptorTable>,
     pub(crate) image_descriptors: Mutex<BindlessDescriptorTable>,
@@ -177,34 +174,26 @@ pub(crate) fn get_vk_sample_count(count: u32) -> vk::SampleCountFlags {
 }
 
 slotmap::new_key_type! {
-
     /// Identifies a GPU resource for tracking.
     pub struct ResourceId;
-
+    /// Identifies an image resource (sampled or storage image) in a bindless descriptor heap.
     pub struct ResourceHeapIndex;
+    /// Identifies a sampler in a bindless sampler descriptor heap.
     pub struct SamplerHeapIndex;
-
-    // Identifies a GPU resource.
-    //pub struct ImageId;
-
-    // Identifies a GPU resource.
-    //pub struct BufferId;
-
-    // Identifies a GPU resource.
-    //pub struct ImageViewId;
-
     /// Identifies a resource group.
     pub struct GroupId;
 
 }
 
 impl ResourceHeapIndex {
+    /// Returns the index of this resource in the global resource descriptor heap.
     pub(crate) fn index(&self) -> u32 {
         (self.0.as_ffi() & 0xFFFF_FFFF) as u32
     }
 }
 
 impl SamplerHeapIndex {
+    /// Returns the index of this sampler in the global sampler descriptor heap.
     pub(crate) fn index(&self) -> u32 {
         (self.0.as_ffi() & 0xFFFF_FFFF) as u32
     }
@@ -821,133 +810,7 @@ impl Device {
         CommandStream::new(self.clone())
     }
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    // BUFFERS
-    ////////////////////////////////////////////////////////////////////////////////////////////////
 
-    /// Creates a new buffer resource.
-    pub fn create_buffer(
-        self: &Rc<Self>,
-        usage: BufferUsage,
-        memory_location: MemoryLocation,
-        byte_size: u64,
-    ) -> BufferUntyped {
-        assert!(byte_size > 0, "buffer size must be greater than zero");
-
-        // create the buffer object first
-        let create_info = vk::BufferCreateInfo {
-            flags: Default::default(),
-            size: byte_size,
-            usage: usage.to_vk_buffer_usage_flags() | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
-            sharing_mode: vk::SharingMode::EXCLUSIVE,
-            queue_family_index_count: 0,
-            p_queue_family_indices: ptr::null(),
-            ..Default::default()
-        };
-        let handle = unsafe {
-            self.raw
-                .create_buffer(&create_info, None)
-                .expect("failed to create buffer")
-        };
-
-        // get its memory requirements
-        let mem_req = unsafe { self.raw.get_buffer_memory_requirements(handle) };
-
-        let allocation_create_desc = AllocationCreateDesc {
-            name: "",
-            requirements: mem_req,
-            location: memory_location,
-            linear: true,
-            allocation_scheme: AllocationScheme::GpuAllocatorManaged,
-        };
-        let allocation = self
-            .allocator
-            .lock()
-            .unwrap()
-            .allocate(&allocation_create_desc)
-            .expect("failed to allocate device memory");
-        unsafe {
-            self.raw
-                .bind_buffer_memory(handle, allocation.memory(), allocation.offset())
-                .unwrap();
-        }
-        let mapped_ptr = allocation.mapped_ptr();
-        let allocation = ResourceAllocation::Allocation { allocation };
-
-        let device_address = unsafe {
-            self.raw.get_buffer_device_address(&vk::BufferDeviceAddressInfo {
-                buffer: handle,
-                ..Default::default()
-            })
-        };
-
-        BufferUntyped {
-            device: self.clone(),
-            id: self.allocate_resource_id(),
-            allocation,
-            handle,
-            memory_location,
-            device_address,
-            size: byte_size,
-            usage,
-            mapped_ptr,
-            _marker: PhantomData,
-        }
-    }
-
-    /*/// Registers an existing buffer resource.
-    pub(crate) unsafe fn register_buffer(
-        &self,
-        allocation: ResourceAllocation,
-        handle: vk::Buffer,
-    ) -> Arc<BufferInner> {
-        let device_address = self.get_buffer_device_address(&vk::BufferDeviceAddressInfo {
-            buffer: handle,
-            ..Default::default()
-        });
-
-        let mut buffer_ids = self.inner.buffer_ids.lock().unwrap();
-        let id = buffer_ids.insert_with_key(|id| {
-            Arc::new(BufferInner {
-                device: self.clone(),
-                id,
-                user_ref_count: AtomicU32::new(1),
-                last_submission_index: AtomicU64::new(0),
-                allocation,
-                group: None,
-                handle,
-                device_address,
-            })
-        });
-        buffer_ids.get(id).unwrap().clone()
-    }*/
-
-    pub(crate) fn register_swapchain_image(
-        self: &Rc<Self>,
-        handle: vk::Image,
-        format: vk::Format,
-        width: u32,
-        height: u32,
-    ) -> Image {
-        let (bindless_handle, default_view) = self.create_bindless_image_view(handle, ImageType::Image2D, format, 1, 1);
-        Image {
-            device: self.clone(),
-            id: self.allocate_resource_id(),
-            allocation: ResourceAllocation::External,
-            handle,
-            swapchain_image: true,
-            default_view,
-            heap_index: bindless_handle,
-            usage: ImageUsage::TRANSFER_DST | ImageUsage::COLOR_ATTACHMENT,
-            type_: ImageType::Image2D,
-            format,
-            size: Size3D {
-                width,
-                height,
-                depth: 1,
-            },
-        }
-    }
 
     /// Allocates a new resource ID for tracking a resource.
     pub(crate) fn allocate_resource_id(&self) -> ResourceId {
@@ -972,10 +835,10 @@ impl Device {
         self.resource_heap.lock().unwrap().remove(index);
     }
 
-    /// Releases a sampler heap index that is no longer used.
+    /*/// Releases a sampler heap index that is no longer used.
     pub(crate) fn free_sampler_heap_index(&self, index: SamplerHeapIndex) {
         self.sampler_heap.lock().unwrap().remove(index);
-    }
+    }*/
 
     pub(crate) fn last_submission_index(&self, resource_id: ResourceId) -> u64 {
         self.tracker.lock().unwrap().resources[resource_id].last_submission_index
@@ -985,244 +848,13 @@ impl Device {
         self.tracker.lock().unwrap().resources[resource_id].last_submission_index = index;
     }
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    // IMAGES
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-
-    /// Creates the default image view for the image.
-    pub(crate) fn create_bindless_image_view(
-        &self,
-        handle: vk::Image,
-        type_: ImageType,
-        format: Format,
-        mip_levels: u32,
-        array_layers: u32,
-    ) -> (ResourceHeapIndex, vk::ImageView) {
-        unsafe {
-            let image_view = self
-                .raw
-                .create_image_view(
-                    &vk::ImageViewCreateInfo {
-                        flags: vk::ImageViewCreateFlags::empty(),
-                        image: handle,
-                        view_type: match type_ {
-                            ImageType::Image1D => {
-                                if array_layers > 1 {
-                                    vk::ImageViewType::TYPE_1D_ARRAY
-                                } else {
-                                    vk::ImageViewType::TYPE_1D
-                                }
-                            }
-                            ImageType::Image2D => {
-                                if array_layers > 1 {
-                                    vk::ImageViewType::TYPE_2D_ARRAY
-                                } else {
-                                    vk::ImageViewType::TYPE_2D
-                                }
-                            }
-                            ImageType::Image3D => vk::ImageViewType::TYPE_3D,
-                        },
-                        format,
-                        components: vk::ComponentMapping {
-                            r: vk::ComponentSwizzle::IDENTITY,
-                            g: vk::ComponentSwizzle::IDENTITY,
-                            b: vk::ComponentSwizzle::IDENTITY,
-                            a: vk::ComponentSwizzle::IDENTITY,
-                        },
-                        subresource_range: vk::ImageSubresourceRange {
-                            aspect_mask: aspects_for_format(format),
-                            base_mip_level: 0,
-                            level_count: mip_levels,
-                            base_array_layer: 0,
-                            layer_count: array_layers,
-                        },
-                        ..Default::default()
-                    },
-                    None,
-                )
-                .expect("failed to create image view");
-
-            let id = self.resource_heap.lock().unwrap().insert(());
-            // Update the global descriptor table.
-            //if usage.contains(ImageUsage::SAMPLED) {
-            self.write_global_texture_descriptor(id, image_view);
-            //}
-            //if usage.contains(ImageUsage::STORAGE) {
-            self.write_global_storage_image_descriptor(id, image_view);
-            //}
-            (id, image_view)
-        }
+    /// Allocates memory, or panic trying.
+    ///
+    /// This is used internally for resource creation since we don't expose memory allocation errors to the user.
+    pub(crate) fn allocate_memory_or_panic(&self, create_desc: &AllocationCreateDesc) -> gpu_allocator::vulkan::Allocation {
+        self.allocator.lock().unwrap().allocate(create_desc).expect("failed to allocate device memory")
     }
 
-    /// Creates a new image resource.
-    ///
-    /// Returns an `ImageInfo` struct containing the image resource ID and the vulkan image handle.
-    ///
-    /// # Notes
-    /// The image might not have any device memory attached when this function returns.
-    /// This is because graal may delay the allocation and binding of device memory until the end of the
-    /// current frame (see `Context::end_frame`).
-    ///
-    /// # Examples
-    ///
-    pub fn create_image(self: &Rc<Self>, image_info: &ImageCreateInfo) -> Image {
-        let create_info = vk::ImageCreateInfo {
-            image_type: image_info.type_.into(),
-            format: image_info.format,
-            extent: vk::Extent3D {
-                width: image_info.width,
-                height: image_info.height,
-                depth: image_info.depth,
-            },
-            mip_levels: image_info.mip_levels,
-            array_layers: image_info.array_layers,
-            samples: get_vk_sample_count(image_info.samples),
-            tiling: vk::ImageTiling::OPTIMAL, // LINEAR tiling not used enough to be exposed
-            usage: image_info.usage.into(),
-            sharing_mode: vk::SharingMode::EXCLUSIVE,
-            queue_family_index_count: 0,
-            p_queue_family_indices: ptr::null(),
-            ..Default::default()
-        };
-        let handle = unsafe {
-            self.raw
-                .create_image(&create_info, None)
-                .expect("failed to create image")
-        };
-        let mem_req = unsafe { self.raw.get_image_memory_requirements(handle) };
-
-        let allocation_create_desc = AllocationCreateDesc {
-            name: "",
-            requirements: mem_req,
-            location: image_info.memory_location,
-            linear: true,
-            allocation_scheme: AllocationScheme::GpuAllocatorManaged,
-        };
-        let allocation = self
-            .allocator
-            .lock()
-            .unwrap()
-            .allocate(&allocation_create_desc)
-            .expect("failed to allocate device memory");
-        unsafe {
-            self.raw
-                .bind_image_memory(handle, allocation.memory(), allocation.offset() as u64)
-                .unwrap();
-        }
-
-        // create the bindless image view
-        let (bindless_handle, default_view) = self.create_bindless_image_view(
-            handle,
-            image_info.type_,
-            image_info.format,
-            image_info.mip_levels,
-            image_info.array_layers,
-        );
-
-        Image {
-            handle,
-            device: self.clone(),
-            id: self.allocate_resource_id(),
-            allocation: ResourceAllocation::Allocation { allocation },
-            swapchain_image: false,
-            default_view,
-            heap_index: bindless_handle,
-            usage: image_info.usage,
-            type_: image_info.type_,
-            format: image_info.format,
-            size: Size3D {
-                width: image_info.width,
-                height: image_info.height,
-                depth: image_info.depth,
-            },
-        }
-    }
-
-    /*pub fn create_image_view(&self, image: &Image, info: &ImageViewInfo) -> ImageView {
-        // FIXME: support non-zero base mip level
-        if info.subresource_range.base_mip_level != 0 {
-            unimplemented!("non-zero base mip level");
-        }
-
-        let create_info = vk::ImageViewCreateInfo {
-            flags: vk::ImageViewCreateFlags::empty(),
-            image: image.handle,
-            view_type: info.view_type,
-            format: info.format,
-            components: vk::ComponentMapping {
-                r: info.component_mapping[0],
-                g: info.component_mapping[1],
-                b: info.component_mapping[2],
-                a: info.component_mapping[3],
-            },
-            subresource_range: vk::ImageSubresourceRange {
-                aspect_mask: info.subresource_range.aspect_mask,
-                base_mip_level: info.subresource_range.base_mip_level,
-                level_count: info.subresource_range.level_count,
-                base_array_layer: info.subresource_range.base_array_layer,
-                layer_count: info.subresource_range.layer_count,
-            },
-            ..Default::default()
-        };
-
-        // SAFETY: the device is valid, the create info is valid
-        let handle = unsafe {
-            self.raw
-                .create_image_view(&create_info, None)
-                .expect("failed to create image view")
-        };
-
-        let id = self.image_view_ids.lock().unwrap().insert(());
-
-        // Update the global descriptor table
-        let usage = image.usage();
-        unsafe {
-            if usage.contains(ImageUsage::SAMPLED) {
-                self.write_global_texture_descriptor(id, handle);
-            }
-            if usage.contains(ImageUsage::STORAGE) {
-                self.write_global_storage_image_descriptor(id, handle);
-            }
-        }
-
-        ImageView {
-            inner: Some(Arc::new(ImageViewInner {
-                image: image.clone(),
-                id,
-                handle,
-                last_submission_index: AtomicU64::new(0),
-            })),
-            handle,
-            format: info.format,
-            // TODO: size of mip level
-            size: image.size,
-        }
-    }*/
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    // RESOURCE GROUPS
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-
-    /*/// Creates a resource group.
-    ///
-    /// Resource group hold a set of static resources that can be synchronized with as a group.
-    /// This is useful for large sets of long-lived static resources, like texture maps,
-    /// where it would be impractical to synchronize on each of them individually.
-    pub fn create_resource_group(
-        &self,
-        dst_stage_mask: vk::PipelineStageFlags2,
-        dst_access_mask: vk::AccessFlags2,
-    ) -> GroupId {
-        // resource groups are for read-only resources
-        assert!(!is_write_access(dst_access_mask));
-        self.inner.groups.lock().unwrap().insert(ResourceGroup {
-            //wait: Default::default(),
-            src_stage_mask: Default::default(),
-            dst_stage_mask,
-            src_access_mask: Default::default(),
-            dst_access_mask,
-        })
-    }*/
 
     // TODO: instead of passing the submission index, get it via a trait method on T (GpuResource)
     fn delete_later_inner<T: 'static>(&self, submission_index: u64, resource_id: Option<ResourceId>, object: T) {
@@ -1285,16 +917,13 @@ impl Device {
         };
 
         let mut tracker = self.tracker.lock().unwrap();
-        /*let mut image_ids = self.inner.image_ids.lock().unwrap();
-        let mut buffer_ids = self.inner.buffer_ids.lock().unwrap();
-        let mut image_view_ids = self.inner.image_view_ids.lock().unwrap();*/
         let mut deletion_queue = self.deletion_queue.lock().unwrap();
 
         // *** This invokes all delayed destructors for resources which are no longer in use by the GPU.
         deletion_queue.retain(
             |DeleteQueueEntry {
                  tracker_id,
-                 object,
+                 object: _,
                  submission,
              }| {
                 if *submission > last_completed_submission_index {
@@ -1308,7 +937,6 @@ impl Device {
         );
 
         // process all completed submissions, oldest to newest
-        //let mut active_submissions = tracker.active_submissions.lock().unwrap();
         let mut free_command_pools = self.free_command_pools.lock().unwrap();
 
         loop {
@@ -1327,26 +955,6 @@ impl Device {
                 free_command_pools.push(command_pool);
             }
         }
-    }
-
-    /// Creates a swapchain object.
-    pub unsafe fn create_swapchain(
-        self: &Rc<Self>,
-        surface: vk::SurfaceKHR,
-        format: vk::SurfaceFormatKHR,
-        width: u32,
-        height: u32,
-    ) -> SwapChain {
-        let mut swapchain = SwapChain {
-            handle: Default::default(),
-            surface,
-            images: vec![],
-            format,
-            width,
-            height,
-        };
-        self.resize_swapchain(&mut swapchain, width, height);
-        swapchain
     }
 
     /// Creates a new, or returns an existing, binary semaphore that is in the unsignaled state,
@@ -1371,46 +979,6 @@ impl Device {
         self.semaphores.borrow_mut().push(binary_semaphore);
     }
 
-    /// Acquires the next image in a swapchain.
-    ///
-    /// Returns the image and the semaphore that will be signaled when the image is available.
-    pub unsafe fn acquire_next_swapchain_image<'a>(
-        &self,
-        swapchain: &'a SwapChain,
-        timeout: Duration,
-    ) -> Result<(SwapchainImage<'a>, SignaledSemaphore), vk::Result> {
-        // We can't use `get_or_create_semaphore` because according to the spec the semaphore
-        // passed to `vkAcquireNextImage` must not have any pending operations, whereas
-        // `get_or_create_semaphore` only guarantees that a wait operation has been submitted
-        // on the semaphore (not that the wait has completed).
-        let ready = {
-            let create_info = vk::SemaphoreCreateInfo { ..Default::default() };
-            self.raw.create_semaphore(&create_info, None).unwrap()
-        };
-
-        let (index, _suboptimal) = match self.khr_swapchain().acquire_next_image(
-            swapchain.handle,
-            timeout.as_nanos() as u64,
-            ready,
-            vk::Fence::null(),
-        ) {
-            Ok(result) => result,
-            Err(err) => {
-                // delete the semaphore before returning
-                self.raw.destroy_semaphore(ready, None);
-                return Err(err);
-            }
-        };
-
-        let img = SwapchainImage {
-            swapchain: swapchain.handle,
-            image: &swapchain.images[index as usize].image,
-            index,
-            render_finished: swapchain.images[index as usize].render_finished.clone(),
-        };
-
-        Ok((img, SignaledSemaphore(ready)))
-    }
 
     /// Returns the list of supported swapchain formats for the given surface.
     pub unsafe fn get_surface_formats(&self, surface: vk::SurfaceKHR) -> Vec<vk::SurfaceFormatKHR> {
@@ -1423,77 +991,6 @@ impl Device {
     pub unsafe fn get_preferred_surface_format(&self, surface: vk::SurfaceKHR) -> vk::SurfaceFormatKHR {
         let surface_formats = self.get_surface_formats(surface);
         get_preferred_swapchain_surface_format(&surface_formats)
-    }
-
-    /// Resizes a swapchain.
-    pub unsafe fn resize_swapchain(self: &Rc<Self>, swapchain: &mut SwapChain, width: u32, height: u32) {
-        let phy = self.physical_device;
-        let capabilities = vk_khr_surface()
-            .get_physical_device_surface_capabilities(phy, swapchain.surface)
-            .unwrap();
-        /*let formats = self
-        .vk_khr_surface
-        .get_physical_device_surface_formats(phy, swapchain.surface)
-        .unwrap();*/
-        let present_modes = vk_khr_surface()
-            .get_physical_device_surface_present_modes(phy, swapchain.surface)
-            .unwrap();
-
-        let present_mode = get_preferred_present_mode(&present_modes);
-        let image_extent = get_preferred_swap_extent((width, height), &capabilities);
-        let image_count =
-            if capabilities.max_image_count > 0 && capabilities.min_image_count + 1 > capabilities.max_image_count {
-                capabilities.max_image_count
-            } else {
-                capabilities.min_image_count + 1
-            };
-
-        let create_info = vk::SwapchainCreateInfoKHR {
-            flags: Default::default(),
-            surface: swapchain.surface,
-            min_image_count: image_count,
-            image_format: swapchain.format.format,
-            image_color_space: swapchain.format.color_space,
-            image_extent,
-            image_array_layers: 1,
-            // TODO: this should be a parameter
-            image_usage: vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_DST,
-            image_sharing_mode: vk::SharingMode::EXCLUSIVE,
-            queue_family_index_count: 0,
-            p_queue_family_indices: ptr::null(),
-            pre_transform: vk::SurfaceTransformFlagsKHR::IDENTITY,
-            // TODO: this should be a parameter
-            composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
-            present_mode,
-            clipped: vk::TRUE,
-            old_swapchain: swapchain.handle,
-            ..Default::default()
-        };
-
-        let new_handle = self.vk_khr_swapchain.create_swapchain(&create_info, None).unwrap();
-        if swapchain.handle != vk::SwapchainKHR::null() {
-            // FIXME the images may be in use, we should wait for the device to be idle
-            self.vk_khr_swapchain.destroy_swapchain(swapchain.handle, None);
-        }
-
-        swapchain.handle = new_handle;
-        swapchain.width = width;
-        swapchain.height = height;
-
-        // reset images & semaphores
-        for SwapchainImageInner { render_finished, .. } in swapchain.images.drain(..) {
-            self.recycle_binary_semaphore(render_finished);
-        }
-        swapchain.images = Vec::with_capacity(image_count as usize);
-
-        let images = self.vk_khr_swapchain.get_swapchain_images(swapchain.handle).unwrap();
-        for image in images {
-            let render_finished = self.get_or_create_semaphore();
-            swapchain.images.push(SwapchainImageInner {
-                image: self.register_swapchain_image(image, swapchain.format.format, width, height),
-                render_finished,
-            });
-        }
     }
 
     pub fn create_sampler(self: &Rc<Self>, info: &SamplerCreateInfo) -> Sampler {

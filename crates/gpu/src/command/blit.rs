@@ -7,8 +7,8 @@ use crate::{
 };
 
 impl CommandStream {
-    pub fn fill_buffer(&mut self, buffer: &BufferRangeUntyped, data: u32) {
-        self.reference_resource(buffer.buffer);
+    pub fn fill_buffer(&mut self, range: &BufferRangeUntyped, data: u32) {
+        self.reference_resource(range.buffer);
         self.barrier(Barrier::new().transfer_write());
 
         let cb = self.get_or_create_command_buffer();
@@ -16,7 +16,7 @@ impl CommandStream {
             // SAFETY: FFI call and parameters are valid
             self.device
                 .raw
-                .cmd_fill_buffer(cb, buffer.buffer.handle, buffer.byte_offset, buffer.byte_size, data);
+                .cmd_fill_buffer(cb, range.buffer.handle(), range.byte_offset, range.byte_size, data);
         }
     }
 
@@ -30,7 +30,7 @@ impl CommandStream {
             // SAFETY: FFI call and parameters are valid
             self.device.raw.cmd_clear_color_image(
                 cb,
-                image.handle,
+                image.handle(),
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                 &clear_color_value.into(),
                 &[vk::ImageSubresourceRange {
@@ -53,7 +53,7 @@ impl CommandStream {
             // SAFETY: FFI call and parameters are valid
             self.device.raw.cmd_clear_depth_stencil_image(
                 cb,
-                image.handle,
+                image.handle(),
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                 &vk::ClearDepthStencilValue { depth, stencil: 0 },
                 &[vk::ImageSubresourceRange {
@@ -109,9 +109,9 @@ impl CommandStream {
         unsafe {
             self.device.raw.cmd_copy_image(
                 cb,
-                source.image.handle,
+                source.image.handle(),
                 vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                destination.image.handle,
+                destination.image.handle(),
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                 &regions,
             );
@@ -127,8 +127,8 @@ impl CommandStream {
         dst_offset: u64,
         size: u64,
     ) {
-        assert!(src_offset + size <= source.size);
-        assert!(dst_offset + size <= destination.size);
+        assert!(src_offset + size <= source.byte_size());
+        assert!(dst_offset + size <= destination.byte_size());
 
         self.reference_resource(source);
         self.reference_resource(destination);
@@ -260,9 +260,9 @@ impl CommandStream {
         unsafe {
             self.device.raw.cmd_blit_image(
                 cb,
-                src.handle,
+                src.handle(),
                 vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                dst.handle,
+                dst.handle(),
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                 &blits,
                 filter,

@@ -124,7 +124,7 @@ impl<'a> RenderEncoder<'a> {
             self.stream.device.raw.cmd_bind_vertex_buffers2(
                 self.command_buffer,
                 binding,
-                &[buffer_range.buffer.handle],
+                &[buffer_range.buffer.handle()],
                 &[buffer_range.byte_offset as vk::DeviceSize],
                 None,
                 None,
@@ -142,7 +142,7 @@ impl<'a> RenderEncoder<'a> {
         unsafe {
             self.stream.device.raw.cmd_bind_index_buffer(
                 self.command_buffer,
-                index_buffer.buffer.handle,
+                index_buffer.buffer.handle(),
                 index_buffer.byte_offset as vk::DeviceSize,
                 index_type.into(),
             );
@@ -454,7 +454,7 @@ impl CommandStream {
             };
             p_depth_attachment = &depth_attachment as *const _;
 
-            if is_depth_and_stencil_format(depth.image.format) {
+            if is_depth_and_stencil_format(depth.image.format()) {
                 stencil_attachment = vk::RenderingAttachmentInfo {
                     image_view: depth.image.view_handle(),
                     // TODO different layouts

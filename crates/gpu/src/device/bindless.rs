@@ -93,7 +93,7 @@ impl BindlessDescriptorTable {
 }
 
 impl Device {
-    pub(super) unsafe fn write_global_texture_descriptor(
+    pub(crate) unsafe fn write_global_texture_descriptor(
         &self,
         heap_index: ResourceHeapIndex,
         image_view: vk::ImageView,
@@ -118,7 +118,7 @@ impl Device {
         self.raw.update_descriptor_sets(&[write], &[]);
     }
 
-    pub(super) unsafe fn write_global_storage_image_descriptor(
+    pub(crate) unsafe fn write_global_storage_image_descriptor(
         &self,
         heap_index: ResourceHeapIndex,
         image_view: vk::ImageView,
@@ -143,7 +143,7 @@ impl Device {
         self.raw.update_descriptor_sets(&[write], &[]);
     }
 
-    pub(super) unsafe fn write_global_sampler_descriptor(&self, id: SamplerHeapIndex, sampler: vk::Sampler) {
+    pub(crate) unsafe fn write_global_sampler_descriptor(&self, id: SamplerHeapIndex, sampler: vk::Sampler) {
         let d = self.sampler_descriptors.lock().unwrap();
         let dst_array_element = id.index();
         assert!(dst_array_element < d.count as u32);
