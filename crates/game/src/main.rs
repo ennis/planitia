@@ -3,7 +3,7 @@
 
 use crate::context::{AppHandler, LoopHandler, get_gpu_device, quit, render_imgui, run};
 use crate::input::InputEvent;
-use crate::paint::{PaintRenderParams, PaintScene, Painter, Srgba32};
+use crate::paint::{DrawGlyphRunOptions, PaintRenderParams, PaintScene, Painter, Srgba32, TextFormat, TextLayout};
 use crate::platform::{EventToken, InitOptions, LoopEvent, RenderTargetImage};
 use egui::Color32;
 use egui_demo_lib::{Demo, DemoWindows, View, WidgetGallery};
@@ -57,6 +57,19 @@ impl Handler {
         let [r, g, b, a] = self.color.to_srgba_unmultiplied();
         let color = Srgba32 { r, g, b, a };
         scene.fill_rrect(rect_xywh(100.0, 100.0, 200.0, 200.0), 20.0, color);
+
+        let mut text = TextLayout::new(
+            &TextFormat {
+                size: 100.0,
+                ..Default::default()
+            },
+            "Hello, world! こんにちは",
+        );
+        text.layout(250.0);
+
+        for glyph_run in text.glyph_runs() {
+            scene.draw_glyph_run(vec2(0.0, 0.0), &glyph_run, &DrawGlyphRunOptions::default());
+        }
 
         /*scene.draw_glyph_run(
             vec2(400.0, 200.0),

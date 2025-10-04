@@ -5,13 +5,17 @@ mod text_run;
 use crate::paint::atlas::Atlas;
 use crate::paint::color::srgba32;
 use ab_glyph::{Font as FontTrait, FontArc, ScaleFont};
+pub use format::TextFormat;
+pub use layout::{GlyphRun, TextLayout};
+use log::debug;
 use math::geom::IRect;
-use math::{IVec2, Vec2, ivec2, vec2};
+use math::{IVec2, U16Vec2, Vec2, ivec2, u16vec2, vec2};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::OnceLock;
 use std::sync::atomic::AtomicUsize;
+pub use text_run::TextRun;
 
 const DEFAULT_SIZE: u32 = 16;
 
@@ -30,6 +34,8 @@ pub struct GlyphEntry {
     pub px_bounds: IRect,
     /// Position of the glyph in the atlas texture.
     pub atlas_pos: IVec2,
+    /// Normalized texture coordinates (min/max)
+    pub normalized_texcoords: [U16Vec2; 2],
     pub advance: f32,
 }
 
@@ -38,6 +44,7 @@ impl GlyphEntry {
         Self {
             px_bounds: Default::default(),
             atlas_pos: Default::default(),
+            normalized_texcoords: [U16Vec2::default(); 2],
             advance: 0.0,
         }
     }
@@ -76,6 +83,8 @@ impl GlyphCache {
     ///
     /// TODO: subpixel offsets
     pub fn rasterize_glyph(&mut self, font: &Font, id: GlyphId, size: u32) -> GlyphEntry {
+        //debug!("Rasterizing glyph id {:?} size {} for font id {:?}", id, size, font.id);
+
         let key = GlyphKey {
             glyph_id: id,
             font_id: font.id,
@@ -91,6 +100,7 @@ impl GlyphCache {
         let Some(outline) = font.data.outline_glyph(glyph) else {
             // missing glyph, return placeholder rect
             // TODO: actual placeholder
+            debug!("Missing glyph id {:?} in font id {:?}", id, font.id);
             return GlyphEntry::placeholder();
         };
 
@@ -106,19 +116,43 @@ impl GlyphCache {
             atlas_mut.write(x, y, srgba32(255, 255, 255, alpha));
         });
 
-        let rect = atlas_mut.rect;
+        let atlas_rect = atlas_mut.rect;
         let scaled_font = font.data.as_scaled(size as f32);
         let h_advance = scaled_font.h_advance(id);
+
+        // compute normalized texture coordinates
+        let normalized_texcoords = [
+            u16vec2(
+                ((atlas_rect.min.x as f32) / (self.atlas.width as f32) * 65535.0) as u16,
+                ((atlas_rect.min.y as f32) / (self.atlas.height as f32) * 65535.0) as u16,
+            ),
+            u16vec2(
+                ((atlas_rect.max.x as f32) / (self.atlas.width as f32) * 65535.0) as u16,
+                ((atlas_rect.max.y as f32) / (self.atlas.height as f32) * 65535.0) as u16,
+            ),
+        ];
+
         let entry = GlyphEntry {
             px_bounds: IRect {
                 min: ivec2(bounds.min.x as i32, bounds.min.y as i32),
                 max: ivec2(bounds.max.x as i32, bounds.max.y as i32),
             },
-            atlas_pos: rect.top_left(),
+            atlas_pos: atlas_rect.top_left(),
+            normalized_texcoords,
             advance: h_advance,
         };
+        debug!("glyph id {:?} bounds {:?} atlas_rect={:?}", id, bounds, atlas_rect);
+
         self.entries.insert(key, entry);
         entry
+    }
+
+    pub fn texture_handle(&self) -> gpu::TextureHandle {
+        self.atlas.texture_handle()
+    }
+
+    pub fn use_texture(&mut self, cmd: &mut gpu::CommandStream) -> gpu::TextureHandle {
+        self.atlas.use_texture(cmd)
     }
 
     /*pub fn texture_handle(&self) -> gpu::ImageHandle {

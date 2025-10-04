@@ -5,38 +5,54 @@ use gpu::{Barrier, ImageCopyView, ImageCreateInfo, MemoryLocation, Size3D, vk};
 use log::debug;
 use math::geom::{IRect, irect_xywh};
 use std::cell::RefCell;
-use std::ops::{Index, IndexMut};
+use std::ops::{Index, IndexMut, Range};
 use std::slice;
 
 pub struct Atlas {
     pub width: u32,
     pub height: u32,
     pub data: Vec<Srgba32>,
-    pub texture: Option<gpu::Image>,
+    // TODO allocate more textures if needed
+    pub texture: gpu::Image,
     pub cursor_x: u32,
     pub cursor_y: u32,
     pub row_height: u32,
+    /// Dirty lines to upload to GPU
+    dirty: Range<u32>,
 }
 
 impl Default for Atlas {
     fn default() -> Self {
-        Self::new(1024, 256)
+        Self::new(1024, 1024)
     }
 }
 
 impl Atlas {
     /// Creates a new, empty texture atlas.
     ///
-    /// The width is fixed, but the height will grow as needed.
-    pub fn new(width: u32, init_height: u32) -> Self {
+    /// The width is fixed, but the height will grow as needed (up to max_height).
+    pub fn new(width: u32, height: u32) -> Self {
+        let gpu = get_gpu_device();
         Atlas {
             width,
-            height: init_height,
-            data: vec![Srgba32::TRANSPARENT; width as usize * init_height as usize],
-            texture: None,
+            height,
+            data: vec![Srgba32::TRANSPARENT; width as usize * height as usize],
+            texture: gpu.create_image(&ImageCreateInfo {
+                memory_location: MemoryLocation::GpuOnly,
+                width,
+                height,
+                depth: 1,
+                format: gpu::Format::R8G8B8A8_UNORM,
+                usage: gpu::ImageUsage::SAMPLED | gpu::ImageUsage::TRANSFER_DST,
+                mip_levels: 1,
+                array_layers: 1,
+                samples: 1,
+                type_: gpu::ImageType::Image2D,
+            }),
             cursor_x: 0,
             cursor_y: 0,
             row_height: 0,
+            dirty: 0..0,
         }
     }
 
@@ -51,7 +67,8 @@ impl Atlas {
         }
 
         if self.cursor_y + height > self.height {
-            self.reserve_lines(self.cursor_y + height - self.height);
+            panic!("Atlas is full, cannot allocate more space");
+            //self.reserve_lines(self.cursor_y + height - self.height);
         }
 
         // target rect
@@ -60,6 +77,10 @@ impl Atlas {
         self.row_height = self.row_height.max(height);
 
         let start = rect.min.y as usize * self.width as usize + rect.min.x as usize;
+
+        // mark dirty
+        self.dirty.end = (rect.max.y as u32).max(self.dirty.end);
+
         AtlasSliceMut {
             data: &mut self.data[start..],
             rect,
@@ -83,65 +104,70 @@ impl Atlas {
             slice.row_mut(y).copy_from_slice(&data[src..src + width as usize]);
             src += width as usize;
         }
-        let rect = slice.rect;
-
-        // invalidate texture
-        self.texture = None;
-        rect
+        slice.rect
     }
 
-    /// Reserves additional lines in the atlas, growing its height if necessary.
+    /*/// Reserves additional lines in the atlas, growing its height if necessary.
     fn reserve_lines(&mut self, additional_lines: u32) {
-        self.texture = None;
+        self.texture.replace(None);
         let new_height = u32::max(self.height + additional_lines, self.height * 2);
         debug!("atlas growing to {}×{}", self.width, new_height);
         self.data
             .resize(new_height as usize * self.width as usize, Srgba32::default());
-    }
+    }*/
 
-    /*///
-    fn upload_to_gpu(&self, cmd: &mut gpu::CommandStream) {
-
+    ///
+    fn upload_to_gpu(&mut self, cmd: &mut gpu::CommandStream) {
         unsafe fn slice_to_u8<T: Copy>(slice: &[T]) -> &[u8] {
             use std::mem::size_of;
             let len = size_of::<Srgba32>() * slice.len();
             slice::from_raw_parts_mut(slice.as_ptr() as *mut u8, len)
         }
 
-        let gpu = get_gpu_device();
-        if self.texture.borrow().is_none() {
-
-            let image = cmd.create_image_with_data(&ImageCreateInfo {
-                memory_location: MemoryLocation::GpuOnly,
-                width: self.width,
-                height: self.height,
-                format: gpu::Format::R8G8B8A8_UNORM,
-                usage: gpu::ImageUsage::SAMPLED | gpu::ImageUsage::TRANSFER_DST,
-                mip_levels: 1,
-                array_layers: 1,
-                samples: 1,
-                type_: gpu::ImageType::Image2D,
-                depth: 0,
-            },
-                                unsafe {
-                                    slice_to_u8(&self.data)
-                                }
-            );
-
-            self.texture.replace(Some(image));
+        if self.dirty.is_empty() {
+            return;
         }
-        self.texture.as_ref().unwrap()
+
+        let height = self.dirty.end - self.dirty.start;
+        let range = (self.dirty.start * self.width) as usize..(self.dirty.end * self.width) as usize;
+
+        debug!("Uploading atlas rows {}..{}", self.dirty.start, self.dirty.end);
+
+        cmd.upload_image_data(
+            ImageCopyView {
+                image: &self.texture,
+                mip_level: 0,
+                origin: vk::Offset3D {
+                    x: 0,
+                    y: self.dirty.start as i32,
+                    z: 0,
+                },
+                aspect: vk::ImageAspectFlags::COLOR,
+            },
+            Size3D {
+                width: self.width,
+                height,
+                depth: 1,
+            },
+            unsafe { slice_to_u8(&self.data[range]) },
+        );
+
+        self.dirty.start = self.dirty.end;
     }
 
+    pub(crate) fn texture_handle(&self) -> gpu::TextureHandle {
+        self.texture.texture_descriptor_index()
+    }
+    
     /// Returns the GPU image handle for the atlas, uploading it if necessary.
     ///
     /// The image is prepared for shader read access.
-    pub(crate) fn texture_handle(&self, cmd: &mut gpu::CommandStream) -> gpu::ImageHandle {
+    pub(crate) fn use_texture(&mut self, cmd: &mut gpu::CommandStream) -> gpu::TextureHandle {
         self.upload_to_gpu(cmd);
-        let tex = self.texture.borrow().as_ref().unwrap();
-        cmd.barrier(Barrier::new().sample_read_image(tex));
-        tex.handle()
-    }*/
+        cmd.barrier(Barrier::new().sample_read_image(&self.texture));
+        cmd.reference_resource(&self.texture);
+        self.texture.texture_descriptor_index()
+    }
 }
 
 pub struct AtlasSliceMut<'a> {

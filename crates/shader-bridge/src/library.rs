@@ -93,10 +93,19 @@ impl ShaderLibrary {
             .create_composite_component_type(&[self.module.downcast().clone(), entry_point.downcast().clone()])?;
         let program = program.link()?;
         let blob = program.entry_point_code(0, 0)?;
+
+        // dump spirv for debugging
+        use std::fs::File;
+        use std::io::Write;
+        let mut f = File::create(format!("shader_{entry_point_name}.spv")).unwrap();
+        f.write_all(blob.as_slice()).unwrap();
+
         let blob = convert_spirv_u8_to_u32(blob.as_slice());
 
         let reflection = program.layout(0).expect("failed to get reflection");
         let ep_refl = reflection.entry_point_by_index(0).unwrap();
+
+
 
         Ok(ShaderEntryPointInfo {
             spirv: blob,

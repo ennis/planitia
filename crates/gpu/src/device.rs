@@ -840,7 +840,9 @@ impl Device {
     }
 
     pub(crate) fn set_last_submission_index(&self, resource_id: ResourceId, index: u64) {
-        self.tracker.lock().unwrap().resources[resource_id].last_submission_index = index;
+        let mut tracker = self.tracker.lock().unwrap();
+        let resource = &mut tracker.resources[resource_id];
+        resource.last_submission_index = resource.last_submission_index.max(index);
     }
 
     /// Allocates memory, or panic trying.

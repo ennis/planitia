@@ -132,7 +132,7 @@ impl Image {
     /// Returns the bindless texture handle of this image view.
     pub fn texture_descriptor_index(&self) -> TextureHandle {
         TextureHandle {
-            index: self.descriptors.storage.index(),
+            index: self.descriptors.texture.index(),
             _unused: 0,
         }
     }

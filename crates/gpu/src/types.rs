@@ -953,7 +953,7 @@ pub unsafe trait VertexAttribute {
 #[doc(hidden)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
 #[repr(transparent)]
-pub struct Norm<T>(T);
+pub struct Norm<T>(pub T);
 
 // Vertex attribute types
 macro_rules! impl_vertex_attr {
@@ -1027,6 +1027,10 @@ impl_vertex_attr!(math::Vec4, R32G32B32A32_SFLOAT);
 impl_vertex_attr!(math::U16Vec2, R16G16_UINT);
 impl_vertex_attr!(math::U16Vec3, R16G16B16_UINT);
 impl_vertex_attr!(math::U16Vec4, R16G16B16A16_UINT);
+
+impl_vertex_attr!(Norm<math::U16Vec2>, R16G16_UNORM);
+impl_vertex_attr!(Norm<math::U16Vec3>, R16G16B16_UNORM);
+impl_vertex_attr!(Norm<math::U16Vec4>, R16G16B16A16_UNORM);
 
 // Index data types --------------------------------------------------------------------------------
 macro_rules! impl_index_data {

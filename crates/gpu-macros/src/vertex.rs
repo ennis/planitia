@@ -32,7 +32,7 @@ pub(crate) fn derive_vertex(input: proc_macro::TokenStream) -> syn::Result<Token
         }
 
         let format = if normalized_attr {
-            quote!(<#CRATE::vertex::Norm<#field_ty> as #CRATE::VertexAttribute>::FORMAT)
+            quote!(<#CRATE::Norm<#field_ty> as #CRATE::VertexAttribute>::FORMAT)
         } else {
             quote!(<#field_ty as #CRATE::VertexAttribute>::FORMAT)
         };

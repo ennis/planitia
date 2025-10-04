@@ -213,6 +213,7 @@ impl<'a> Iterator for GlyphRunIter<'a> {
     }
 }
 
+#[derive(Clone)]
 pub struct GlyphRun<'a> {
     layout: &'a TextLayout,
     fragment: &'a FragmentData,

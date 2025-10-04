@@ -9,14 +9,16 @@ mod text;
 use gpu::prelude::DeviceExt;
 use gpu::{CommandStream, RenderPassInfo, Vertex as GpuVertex, vk};
 use math::geom::Camera;
-use math::{Mat4, Rect, U16Vec2, Vec2, Vec3};
+use math::{Mat4, Rect, U16Vec2, Vec2, Vec3, vec2};
 use shader_bridge::ShaderLibrary;
 use std::mem;
 
 use crate::paint::shape::RectShape;
 use crate::paint::tessellation::{Mesh, Tessellator};
 use crate::paint::text::{Font, Glyph, GlyphCache};
+
 pub use color::Srgba32;
+pub use text::{GlyphRun, TextFormat, TextLayout};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -32,6 +34,7 @@ pub struct FeatherVertex {
     /// Position
     pub p: Vec2,
     /// Texture coordinates
+    #[normalized]
     pub uv: U16Vec2,
     /// Color
     pub color: Srgba32,
@@ -76,6 +79,7 @@ struct PushConstants {
     line_width: f32,
     texture: gpu::TextureHandle = gpu::TextureHandle::INVALID,
     sampler: gpu::SamplerHandle = gpu::SamplerHandle::INVALID,
+    use_texture: u32 = 0,
 }
 
 #[repr(C)]
@@ -224,6 +228,7 @@ impl Painter {
 pub struct Primitive {
     kind: PrimKind,
     clip: Rect,
+    texture: Option<gpu::TextureHandle>,
 }
 
 enum PrimKind {
@@ -231,11 +236,10 @@ enum PrimKind {
 }
 
 /// Options passed to `PaintScene::draw_glyph_run`.
-#[derive(Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct DrawGlyphRunOptions {
     pub color: Srgba32,
     pub size: f32,
-    pub font: Font,
 }
 
 /// Draws shapes onto a target image.
@@ -246,46 +250,10 @@ pub struct PaintScene<'a> {
     clip_stack: Vec<Rect>,
 }
 
+/*
 fn textured_quad(p0: Vec2, p1: Vec2, uv0: U16Vec2, uv1: U16Vec2, color: Srgba32) -> [FeatherVertex; 6] {
-    [
-        FeatherVertex {
-            p: Vec2::new(p0.x, p0.y),
-            uv: U16Vec2::new(uv0.x, uv0.y),
-            color,
-            feather: 0.0,
-        },
-        FeatherVertex {
-            p: Vec2::new(p1.x, p0.y),
-            uv: U16Vec2::new(uv1.x, uv0.y),
-            color,
-            feather: 0.0,
-        },
-        FeatherVertex {
-            p: Vec2::new(p1.x, p1.y),
-            uv: U16Vec2::new(uv1.x, uv1.y),
-            color,
-            feather: 0.0,
-        },
-        FeatherVertex {
-            p: Vec2::new(p0.x, p0.y),
-            uv: U16Vec2::new(uv0.x, uv0.y),
-            color,
-            feather: 0.0,
-        },
-        FeatherVertex {
-            p: Vec2::new(p1.x, p1.y),
-            uv: U16Vec2::new(uv1.x, uv1.y),
-            color,
-            feather: 0.0,
-        },
-        FeatherVertex {
-            p: Vec2::new(p0.x, p1.y),
-            uv: U16Vec2::new(uv0.x, uv1.y),
-            color,
-            feather: 0.0,
-        },
-    ]
-}
+
+}*/
 
 impl<'a> PaintScene<'a> {
     pub(super) fn new(painter: &'a mut Painter) -> Self {
@@ -297,12 +265,13 @@ impl<'a> PaintScene<'a> {
         }
     }
 
-    fn end_prim(&mut self) {
+    fn end_prim(&mut self, texture: Option<gpu::TextureHandle>) {
         if !self.tess.is_empty() {
             let mesh = self.tess.finish_and_reset();
             let prim = Primitive {
                 kind: PrimKind::Geometry(mesh),
-                clip: self.clip_stack.pop().unwrap(),
+                clip: self.clip_stack.last().cloned().unwrap(),
+                texture,
             };
             self.prims.push(prim);
         }
@@ -325,52 +294,59 @@ impl<'a> PaintScene<'a> {
 
     /// Pushes a clip rectangle onto the stack. All subsequent drawing operations will be clipped to this rectangle.
     pub fn push_clip(&mut self, rect: Rect) {
-        self.end_prim();
+        self.end_prim(None);
         let clip = self.clip_rect().intersect(&rect).unwrap_or_default();
         self.clip_stack.push(clip);
     }
 
     /// Pops the last clip rectangle from the stack.
     pub fn pop_clip(&mut self) {
-        self.end_prim();
+        self.end_prim(None);
         self.clip_stack.pop();
     }
 
     /// Draws a glyph run.
-    pub fn draw_glyph_run(
-        &mut self,
-        position: Vec2,
-        glyphs: impl Iterator<Item = Glyph>,
-        options: &DrawGlyphRunOptions,
-    ) {
-        self.end_prim();
+    pub fn draw_glyph_run(&mut self, position: Vec2, glyph_run: &GlyphRun<'_>, options: &DrawGlyphRunOptions) {
+        self.end_prim(None);
 
-        let mut vertices = Vec::new();
-        for glyph in glyphs {
+        let format = glyph_run.format();
+        let x = glyph_run.offset();
+        let y = glyph_run.baseline();
+        let mut advance = 0.0;
+        for glyph in glyph_run.glyphs() {
+            //eprintln!(
+            //    "   glyph id={} advance={} (x={})",
+            //    glyph.id.0,
+            //    glyph.advance,
+            //    x + advance
+            //);
+
+            let pos = position + vec2(x + advance, y) + glyph.offset;
+            advance += glyph.advance;
+
             let entry = self
                 .painter
                 .glyph_cache
-                .rasterize_glyph(&options.font, glyph.id, options.size as u32);
+                .rasterize_glyph(&format.font, glyph.id, format.size as u32);
+
             if entry.px_bounds.is_null() {
+                //eprintln!("    skipping empty glyph");
                 continue;
             }
 
-            let pos = position + glyph.offset;
             let quad = entry.px_bounds.to_rect().translate(pos);
-            let tex_rect = entry.texture_rect();
-            let uv0 = U16Vec2::new(tex_rect.min.x as u16, tex_rect.min.y as u16);
-            let uv1 = U16Vec2::new(tex_rect.max.x as u16, tex_rect.max.y as u16);
-            vertices.extend(textured_quad(quad.min, quad.max, uv0, uv1, options.color));
+            let uv0 = entry.normalized_texcoords[0];
+            let uv1 = entry.normalized_texcoords[1];
+            //eprintln!("    glyph {:?} quad={:?} uv0={:?} uv1={:?} tex={:?}", glyph.id, quad, uv0, uv1, self.painter.glyph_cache.texture_handle());
+            self.tess.quad(quad.min, quad.max, uv0, uv1, Srgba32::WHITE);
         }
 
-        /*self.prims.push(Primitive {
-            kind: PrimKind::GlyphRun { mesh: vertices },
-            clip: self.clip_rect(),
-        });*/
+
+        self.end_prim(Some(self.painter.glyph_cache.texture_handle()));
     }
 
     pub fn finish(mut self, cmd: &mut CommandStream, params: &PaintRenderParams) {
-        self.end_prim();
+        self.end_prim(None);
         self.draw_inner(cmd, params);
     }
 
@@ -385,6 +361,9 @@ impl<'a> PaintScene<'a> {
             self.painter.depth_format,
             "mismatched depth target format"
         );
+
+        // prepare glyph cache
+        let _glyph_cache_texture = self.painter.glyph_cache.use_texture(cmd);
 
         // setup encoder
         let mut encoder = cmd.begin_rendering(RenderPassInfo {
@@ -401,14 +380,14 @@ impl<'a> PaintScene<'a> {
 
         let width = params.color_target.width();
         let height = params.color_target.height();
-        encoder.set_viewport(0.0, height as f32, width as f32, -(height as f32), 0.0, 1.0);
+        encoder.set_viewport(0.0, 0.0, width as f32, height as f32, 0.0, 1.0);
         encoder.set_scissor(0, 0, width, height);
         encoder.bind_graphics_pipeline(&self.painter.pipelines.paint);
         encoder.set_primitive_topology(gpu::vk::PrimitiveTopology::TRIANGLE_LIST);
 
         for prim in self.prims.iter() {
             if prim.clip.is_null() {
-                return;
+                continue;
             }
 
             match &prim.kind {
@@ -417,7 +396,16 @@ impl<'a> PaintScene<'a> {
                         matrix: params.camera.view_projection(),
                         screen_size: [width as f32, height as f32],
                         line_width: 1.0,
-                        ..
+                        texture: prim.texture.unwrap_or(gpu::TextureHandle::INVALID),
+                        sampler: encoder
+                            .device()
+                            .create_sampler(&gpu::SamplerCreateInfo {
+                                mag_filter: vk::Filter::NEAREST,
+                                min_filter: vk::Filter::NEAREST,
+                                ..Default::default()
+                            })
+                            .device_handle(),
+                        use_texture: if prim.texture.is_some() { 1 } else { 0 },
                     });
                     draw_mesh(&mut encoder, params, mesh, prim.clip);
                 }
@@ -454,6 +442,9 @@ fn draw_glyph_run(
 }*/
 
 fn draw_mesh(encoder: &mut gpu::RenderEncoder, params: &PaintRenderParams, mesh: &Mesh, clip: Rect) {
+    if mesh.vertices.is_empty() || mesh.indices.is_empty() {
+        return;
+    }
     let vertex_buffer = encoder.device().upload_slice(gpu::BufferUsage::VERTEX, &mesh.vertices);
     let index_buffer = encoder.device().upload_slice(gpu::BufferUsage::INDEX, &mesh.indices);
     encoder.bind_vertex_buffer(0, vertex_buffer.as_bytes().into());

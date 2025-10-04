@@ -1,6 +1,6 @@
 use crate::paint::shape::RectShape;
 use crate::paint::{FeatherVertex, Srgba32};
-use math::{Vec2, vec2};
+use math::{Vec2, vec2, U16Vec2};
 use std::f32::consts::PI;
 
 #[derive(Clone, Copy, Debug)]
@@ -127,16 +127,12 @@ fn flatten_rrect(shape: RectShape, out: &mut Vec<PN>) {
 
 #[derive(Default)]
 pub struct Tessellator {
-    vertices: Vec<FeatherVertex>,
-    indices: Vec<u32>,
     geometry: GeomSink,
 }
 
 impl Tessellator {
     pub fn new() -> Self {
         Self {
-            vertices: Vec::new(),
-            indices: Vec::new(),
             geometry: GeomSink::default(),
         }
     }
@@ -169,10 +165,48 @@ impl Tessellator {
         }
     }
 
+    pub fn quad(&mut self, p0: Vec2, p1: Vec2, uv0: U16Vec2, uv1: U16Vec2, color: Srgba32) {
+        let base = self.geometry.vertices.len() as u32;
+        self.geometry.vertices.extend(
+        [
+            FeatherVertex {
+                p: Vec2::new(p0.x, p0.y),
+                uv: U16Vec2::new(uv0.x, uv0.y),
+                color,
+                feather: 0.0,
+            },
+            FeatherVertex {
+                p: Vec2::new(p1.x, p0.y),
+                uv: U16Vec2::new(uv1.x, uv0.y),
+                color,
+                feather: 0.0,
+            },
+            FeatherVertex {
+                p: Vec2::new(p1.x, p1.y),
+                uv: U16Vec2::new(uv1.x, uv1.y),
+                color,
+                feather: 0.0,
+            },
+            FeatherVertex {
+                p: Vec2::new(p0.x, p1.y),
+                uv: U16Vec2::new(uv0.x, uv1.y),
+                color,
+                feather: 0.0,
+            },
+        ]);
+        self.geometry.indices.extend([base+0, base+1, base+2, base+0, base+2, base+3]);
+    }
+
     pub fn finish_and_reset(&mut self) -> Mesh {
+
+        let vertices = self.geometry.vertices.clone();
+        let indices = self.geometry.indices.clone();
+        self.geometry.vertices.clear();
+        self.geometry.indices.clear();
+
         Mesh {
-            vertices: self.geometry.vertices.clone(),
-            indices: self.geometry.indices.clone(),
+            vertices: vertices,
+            indices: indices,
         }
     }
 }
