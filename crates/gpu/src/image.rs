@@ -195,13 +195,7 @@ impl Device {
                 .expect("failed to create image view");
 
             let id = self.resource_heap.lock().unwrap().insert(());
-            // Update the global descriptor table.
-            //if usage.contains(ImageUsage::SAMPLED) {
-            self.write_global_texture_descriptor(id, image_view);
-            //}
-            //if usage.contains(ImageUsage::STORAGE) {
-            self.write_global_storage_image_descriptor(id, image_view);
-            //}
+            self.write_global_image_descriptor(id, image_view);
             (id, image_view)
         }
     }

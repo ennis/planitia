@@ -28,6 +28,8 @@ union DescriptorBufferOrImage {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Describes a pipeline barrier.
+///
+/// TODO: This should be refactored so that it doesn't need to allocate a vec on each layout transition.
 pub struct Barrier<'a> {
     access: MemoryAccess,
     transitions: Vec<(&'a Image, MemoryAccess)>,
@@ -251,17 +253,10 @@ impl CommandStream {
         bind_point: vk::PipelineBindPoint,
         pipeline_layout: vk::PipelineLayout,
     ) {
-        let texture_set = self.device.texture_descriptors.lock().unwrap().set;
-        let image_set = self.device.image_descriptors.lock().unwrap().set;
-        let sampler_set = self.device.sampler_descriptors.lock().unwrap().set;
-        self.device.raw.cmd_bind_descriptor_sets(
-            command_buffer,
-            bind_point,
-            pipeline_layout,
-            0,
-            &[texture_set, image_set, sampler_set],
-            &[],
-        );
+        let set = self.device.global_descriptors.lock().unwrap().set;
+        self.device
+            .raw
+            .cmd_bind_descriptor_sets(command_buffer, bind_point, pipeline_layout, 0, &[set], &[]);
     }
 
     unsafe fn do_cmd_push_descriptor_set(
@@ -435,6 +430,8 @@ impl CommandStream {
     ///
     /// Note that it's not possible to make only one specific type of write available. All pending
     /// writes are made available unconditionally.
+    ///
+    // TODO split in two parameters: one for global memory barrier, one for image layout transitions
     pub fn barrier(&mut self, barrier: Barrier) {
         let mut global_memory_barrier = None;
         let mut image_barriers = vec![];

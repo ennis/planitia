@@ -9,39 +9,8 @@ use std::ptr;
 
 type DT = vk::DescriptorType;
 
-unsafe fn create_bindless_layout(
-    device: &ash::Device,
-    descriptor_type: vk::DescriptorType,
-    count: usize,
-) -> vk::DescriptorSetLayout {
-    let bindings = [vk::DescriptorSetLayoutBinding {
-        binding: 0,
-        descriptor_type,
-        descriptor_count: count as u32,
-        stage_flags: vk::ShaderStageFlags::ALL,
-        p_immutable_samplers: ptr::null(),
-    }];
-
-    let flags = [vk::DescriptorBindingFlags::PARTIALLY_BOUND | vk::DescriptorBindingFlags::UPDATE_UNUSED_WHILE_PENDING];
-    let dslbfci = vk::DescriptorSetLayoutBindingFlagsCreateInfo {
-        binding_count: flags.len() as u32,
-        p_binding_flags: flags.as_ptr(),
-        ..Default::default()
-    };
-
-    let dslci = vk::DescriptorSetLayoutCreateInfo {
-        p_next: &dslbfci as *const _ as *const c_void,
-        flags: Default::default(),
-        binding_count: bindings.len() as u32,
-        p_bindings: bindings.as_ptr(),
-        ..Default::default()
-    };
-
-    let handle = device
-        .create_descriptor_set_layout(&dslci, None)
-        .expect("failed to create descriptor set layout");
-    handle
-}
+const SAMPLER_TABLE_BINDING: u32 = 0;
+const IMAGE_TABLE_BINDING: u32 = 2;
 
 /// Bindless descriptor table.
 #[derive(Debug)]
@@ -53,25 +22,113 @@ pub(crate) struct BindlessDescriptorTable {
 }
 
 impl BindlessDescriptorTable {
-    pub(crate) fn new(device: &ash::Device, descriptor_type: DescriptorType, count: usize) -> BindlessDescriptorTable {
-        let layout = unsafe { create_bindless_layout(device, descriptor_type, count) };
+    pub(crate) unsafe fn new(device: &ash::Device, count: usize) -> BindlessDescriptorTable {
+        let bindings = [
+            // samplers
+            vk::DescriptorSetLayoutBinding {
+                binding: 0,
+                descriptor_type: vk::DescriptorType::MUTABLE_EXT,
+                descriptor_count: count as u32,
+                stage_flags: vk::ShaderStageFlags::ALL,
+                p_immutable_samplers: ptr::null(),
+            },
+            // combined image samplers (unused)
+            vk::DescriptorSetLayoutBinding {
+                binding: 1,
+                descriptor_type: vk::DescriptorType::MUTABLE_EXT,
+                descriptor_count: 0,
+                stage_flags: vk::ShaderStageFlags::ALL,
+                p_immutable_samplers: ptr::null(),
+            },
+            vk::DescriptorSetLayoutBinding {
+                binding: 2,
+                descriptor_type: vk::DescriptorType::MUTABLE_EXT,
+                descriptor_count: count as u32,
+                stage_flags: vk::ShaderStageFlags::ALL,
+                p_immutable_samplers: ptr::null(),
+            },
+        ];
+
+        let binding_0_types = [vk::DescriptorType::SAMPLER];
+        let binding_1_types = [vk::DescriptorType::COMBINED_IMAGE_SAMPLER];
+        let binding_2_types = [vk::DescriptorType::SAMPLED_IMAGE, vk::DescriptorType::STORAGE_IMAGE];
+
+        let mutable_descriptor_type_list = [
+            vk::MutableDescriptorTypeListEXT {
+                descriptor_type_count: binding_0_types.len() as u32,
+                p_descriptor_types: binding_0_types.as_ptr(),
+            },
+            vk::MutableDescriptorTypeListEXT {
+                descriptor_type_count: binding_1_types.len() as u32,
+                p_descriptor_types: binding_1_types.as_ptr(),
+            },
+            vk::MutableDescriptorTypeListEXT {
+                descriptor_type_count: binding_2_types.len() as u32,
+                p_descriptor_types: binding_2_types.as_ptr(),
+            },
+        ];
+
+        let mutable_desc = vk::MutableDescriptorTypeCreateInfoEXT {
+            mutable_descriptor_type_list_count: mutable_descriptor_type_list.len() as u32,
+            p_mutable_descriptor_type_lists: mutable_descriptor_type_list.as_ptr(),
+            ..Default::default()
+        };
+
+        let flags = [
+            vk::DescriptorBindingFlags::PARTIALLY_BOUND | vk::DescriptorBindingFlags::UPDATE_UNUSED_WHILE_PENDING,
+            vk::DescriptorBindingFlags::PARTIALLY_BOUND | vk::DescriptorBindingFlags::UPDATE_UNUSED_WHILE_PENDING,
+            vk::DescriptorBindingFlags::PARTIALLY_BOUND | vk::DescriptorBindingFlags::UPDATE_UNUSED_WHILE_PENDING,
+        ];
+        let dslbfci = vk::DescriptorSetLayoutBindingFlagsCreateInfo {
+            p_next: &mutable_desc as *const _ as *const c_void,
+            binding_count: flags.len() as u32,
+            p_binding_flags: flags.as_ptr(),
+            ..Default::default()
+        };
+
+        let dslci = vk::DescriptorSetLayoutCreateInfo {
+            p_next: &dslbfci as *const _ as *const c_void,
+            flags: Default::default(),
+            binding_count: bindings.len() as u32,
+            p_bindings: bindings.as_ptr(),
+            ..Default::default()
+        };
+
+        let layout = device
+            .create_descriptor_set_layout(&dslci, None)
+            .expect("failed to create descriptor set layout");
+
+        // pool for all descriptors
+        let pool_sizes = [
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::SAMPLER,
+                descriptor_count: count as u32,
+            },
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::MUTABLE_EXT,
+                descriptor_count: 1,
+            },
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::MUTABLE_EXT,
+                descriptor_count: count as u32,
+            },
+        ];
+
+        let pool_create_info = vk::DescriptorPoolCreateInfo {
+            p_next: &mutable_desc as *const _ as *const c_void,
+            max_sets: 1,
+            pool_size_count: pool_sizes.len() as u32,
+            p_pool_sizes: pool_sizes.as_ptr(),
+            ..Default::default()
+        };
+
         let pool = unsafe {
             device
-                .create_descriptor_pool(
-                    &vk::DescriptorPoolCreateInfo {
-                        max_sets: 1,
-                        pool_size_count: 1,
-                        p_pool_sizes: &vk::DescriptorPoolSize {
-                            ty: descriptor_type,
-                            descriptor_count: count as u32,
-                        },
-                        ..Default::default()
-                    },
-                    None,
-                )
+                .create_descriptor_pool(&pool_create_info, None)
                 .expect("failed to create descriptor pool")
         };
-        // and allocate a new descriptor set from it, copy old descriptors into it
+
+        // and allocate a new descriptor set from it
         let set = unsafe {
             device
                 .allocate_descriptor_sets(&vk::DescriptorSetAllocateInfo {
@@ -93,17 +150,17 @@ impl BindlessDescriptorTable {
 }
 
 impl Device {
-    pub(crate) unsafe fn write_global_texture_descriptor(
+    pub(crate) unsafe fn write_global_image_descriptor(
         &self,
         heap_index: ResourceHeapIndex,
         image_view: vk::ImageView,
     ) {
-        let d = self.texture_descriptors.lock().unwrap();
+        let d = self.global_descriptors.lock().unwrap();
         let dst_array_element = heap_index.index();
         assert!(dst_array_element < d.count as u32);
         let write = vk::WriteDescriptorSet {
             dst_set: d.set,
-            dst_binding: 0,
+            dst_binding: IMAGE_TABLE_BINDING,
             dst_array_element,
             descriptor_count: 1,
             descriptor_type: DT::SAMPLED_IMAGE,
@@ -114,11 +171,31 @@ impl Device {
             },
             ..Default::default()
         };
-        trace!("texture_descriptors[{}] = {:?}", dst_array_element, image_view);
+        trace!("image_descriptors[{}] = {:?}", dst_array_element, image_view);
         self.raw.update_descriptor_sets(&[write], &[]);
     }
 
-    pub(crate) unsafe fn write_global_storage_image_descriptor(
+    pub(crate) unsafe fn write_global_sampler_descriptor(&self, id: SamplerHeapIndex, sampler: vk::Sampler) {
+        let d = self.global_descriptors.lock().unwrap();
+        let dst_array_element = id.index();
+        assert!(dst_array_element < d.count as u32);
+        let write = vk::WriteDescriptorSet {
+            dst_set: d.set,
+            dst_binding: SAMPLER_TABLE_BINDING,
+            dst_array_element,
+            descriptor_count: 1,
+            descriptor_type: DT::SAMPLER,
+            p_image_info: &vk::DescriptorImageInfo {
+                sampler,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        trace!("sampler_descriptors[{}] = {:?}", dst_array_element, sampler);
+        self.raw.update_descriptor_sets(&[write], &[]);
+    }
+
+    /*pub(crate) unsafe fn write_global_storage_image_descriptor(
         &self,
         heap_index: ResourceHeapIndex,
         image_view: vk::ImageView,
@@ -141,25 +218,5 @@ impl Device {
         };
         trace!("image_descriptors[{}] = {:?}", dst_array_element, image_view);
         self.raw.update_descriptor_sets(&[write], &[]);
-    }
-
-    pub(crate) unsafe fn write_global_sampler_descriptor(&self, id: SamplerHeapIndex, sampler: vk::Sampler) {
-        let d = self.sampler_descriptors.lock().unwrap();
-        let dst_array_element = id.index();
-        assert!(dst_array_element < d.count as u32);
-        let write = vk::WriteDescriptorSet {
-            dst_set: d.set,
-            dst_binding: 0,
-            dst_array_element,
-            descriptor_count: 1,
-            descriptor_type: DT::SAMPLER,
-            p_image_info: &vk::DescriptorImageInfo {
-                sampler,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        trace!("sampler_descriptors[{}] = {:?}", dst_array_element, sampler);
-        self.raw.update_descriptor_sets(&[write], &[]);
-    }
+    }*/
 }

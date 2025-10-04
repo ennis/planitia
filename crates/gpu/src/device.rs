@@ -3,10 +3,9 @@ mod bindless;
 
 use crate::instance::{vk_ext_debug_utils, vk_khr_surface};
 use crate::{
-    get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format,
-    CommandPool, CommandStream, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error,
-    GraphicsPipeline, GraphicsPipelineCreateInfo,
-    MemoryAccess, PreRasterizationShaders, Sampler, SamplerCreateInfo, SUBGROUP_SIZE,
+    get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, CommandPool, CommandStream, ComputePipeline,
+    ComputePipelineCreateInfo, DescriptorSetLayout, Error, GraphicsPipeline, GraphicsPipelineCreateInfo, MemoryAccess,
+    PreRasterizationShaders, Sampler, SamplerCreateInfo, SUBGROUP_SIZE,
 };
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
@@ -18,7 +17,7 @@ use std::{fmt, ptr};
 use crate::device::bindless::BindlessDescriptorTable;
 use crate::platform::PlatformExtensions;
 use ash::vk;
-use gpu_allocator::vulkan::{AllocationCreateDesc};
+use gpu_allocator::vulkan::AllocationCreateDesc;
 use log::debug;
 use slotmap::{SecondaryMap, SlotMap};
 use std::ffi::CStr;
@@ -80,9 +79,9 @@ pub struct Device {
     pub(crate) tracker: Mutex<DeviceTracker>,
     pub(crate) sampler_cache: Mutex<HashMap<SamplerCreateInfo, Sampler>>,
 
-    pub(crate) texture_descriptors: Mutex<BindlessDescriptorTable>,
-    pub(crate) image_descriptors: Mutex<BindlessDescriptorTable>,
-    pub(crate) sampler_descriptors: Mutex<BindlessDescriptorTable>,
+    pub(crate) global_descriptors: Mutex<BindlessDescriptorTable>,
+    //pub(crate) image_descriptors: Mutex<BindlessDescriptorTable>,
+    //pub(crate) sampler_descriptors: Mutex<BindlessDescriptorTable>,
     //image_handles: Mutex<SlotMap<I>>
 }
 
@@ -364,6 +363,7 @@ const DEVICE_EXTENSIONS: &[&str] = &[
     "VK_EXT_conservative_rasterization",
     "VK_EXT_fragment_shader_interlock",
     "VK_EXT_shader_image_atomic_int64",
+    "VK_EXT_mutable_descriptor_type"
     //"VK_EXT_descriptor_buffer",
 ];
 
@@ -481,9 +481,7 @@ impl Device {
         instance.get_physical_device_properties2(physical_device, &mut physical_device_properties);
 
         // Create global descriptor tables
-        let texture_descriptors = BindlessDescriptorTable::new(&device, vk::DescriptorType::SAMPLED_IMAGE, 4096);
-        let image_descriptors = BindlessDescriptorTable::new(&device, vk::DescriptorType::STORAGE_IMAGE, 4096);
-        let sampler_descriptors = BindlessDescriptorTable::new(&device, vk::DescriptorType::SAMPLER, 4096);
+        let global_descriptors = BindlessDescriptorTable::new(&device, 4096);
 
         Ok(Rc::new(Device {
             raw: device,
@@ -510,9 +508,7 @@ impl Device {
             free_command_pools: Mutex::new(Default::default()),
             next_submission_index: AtomicU64::new(1),
             expected_submission_index: Cell::new(1),
-            texture_descriptors: Mutex::new(texture_descriptors),
-            image_descriptors: Mutex::new(image_descriptors),
-            sampler_descriptors: Mutex::new(sampler_descriptors),
+            global_descriptors: Mutex::new(global_descriptors),
             semaphores: Default::default(),
             deletion_queue: Mutex::new(vec![]),
         }))
@@ -567,8 +563,14 @@ impl Device {
             ..Default::default()
         };*/
 
-        let mut mesh_shader_features = vk::PhysicalDeviceMeshShaderFeaturesEXT {
+        let mut mutable_descriptor_type_features = vk::PhysicalDeviceMutableDescriptorTypeFeaturesEXT {
             p_next: &mut fragment_shader_interlock_features as *mut _ as *mut c_void,
+            mutable_descriptor_type: vk::TRUE,
+            ..Default::default()
+        };
+
+        let mut mesh_shader_features = vk::PhysicalDeviceMeshShaderFeaturesEXT {
+            p_next: &mut mutable_descriptor_type_features as *mut _ as *mut c_void,
             task_shader: vk::TRUE,
             mesh_shader: vk::TRUE,
             ..Default::default()
@@ -810,8 +812,6 @@ impl Device {
         CommandStream::new(self.clone())
     }
 
-
-
     /// Allocates a new resource ID for tracking a resource.
     pub(crate) fn allocate_resource_id(&self) -> ResourceId {
         let id = self.resource_ids.lock().unwrap().insert(());
@@ -851,10 +851,16 @@ impl Device {
     /// Allocates memory, or panic trying.
     ///
     /// This is used internally for resource creation since we don't expose memory allocation errors to the user.
-    pub(crate) fn allocate_memory_or_panic(&self, create_desc: &AllocationCreateDesc) -> gpu_allocator::vulkan::Allocation {
-        self.allocator.lock().unwrap().allocate(create_desc).expect("failed to allocate device memory")
+    pub(crate) fn allocate_memory_or_panic(
+        &self,
+        create_desc: &AllocationCreateDesc,
+    ) -> gpu_allocator::vulkan::Allocation {
+        self.allocator
+            .lock()
+            .unwrap()
+            .allocate(create_desc)
+            .expect("failed to allocate device memory")
     }
-
 
     // TODO: instead of passing the submission index, get it via a trait method on T (GpuResource)
     fn delete_later_inner<T: 'static>(&self, submission_index: u64, resource_id: Option<ResourceId>, object: T) {
@@ -979,7 +985,6 @@ impl Device {
         self.semaphores.borrow_mut().push(binary_semaphore);
     }
 
-
     /// Returns the list of supported swapchain formats for the given surface.
     pub unsafe fn get_surface_formats(&self, surface: vk::SurfaceKHR) -> Vec<vk::SurfaceFormatKHR> {
         vk_khr_surface()
@@ -1090,9 +1095,7 @@ impl Device {
         let layout_handles: Vec<_> = if descriptor_set_layouts.is_empty() {
             // Empty set layouts means use the universal bindless layouts
             vec![
-                self.texture_descriptors.lock().unwrap().layout,
-                self.image_descriptors.lock().unwrap().layout,
-                self.sampler_descriptors.lock().unwrap().layout,
+                self.global_descriptors.lock().unwrap().layout,
             ]
         } else {
             descriptor_set_layouts.iter().map(|layout| layout.handle).collect()
