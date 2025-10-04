@@ -60,8 +60,9 @@ pub struct Device {
 
     // We don't need to hold strong refs here, we just need an ID for them.
     pub(crate) resource_ids: Mutex<SlotMap<ResourceId, ()>>,
-    pub(crate) resource_heap: Mutex<SlotMap<ResourceHeapIndex, ()>>,
-    pub(crate) sampler_heap: Mutex<SlotMap<SamplerHeapIndex, ()>>,
+    pub(crate) resource_descriptor_indices: Mutex<SlotMap<ResourceDescriptorIndex, ()>>,
+    pub(crate) sampler_descriptor_indices: Mutex<SlotMap<SamplerDescriptorIndex, ()>>,
+    pub(crate) global_descriptors: Mutex<BindlessDescriptorTable>,
 
     //pub(crate) image_view_ids: Mutex<SlotMap<ImageViewId, ()>>,
 
@@ -78,11 +79,6 @@ pub struct Device {
     deletion_queue: Mutex<Vec<DeleteQueueEntry>>,
     pub(crate) tracker: Mutex<DeviceTracker>,
     pub(crate) sampler_cache: Mutex<HashMap<SamplerCreateInfo, Sampler>>,
-
-    pub(crate) global_descriptors: Mutex<BindlessDescriptorTable>,
-    //pub(crate) image_descriptors: Mutex<BindlessDescriptorTable>,
-    //pub(crate) sampler_descriptors: Mutex<BindlessDescriptorTable>,
-    //image_handles: Mutex<SlotMap<I>>
 }
 
 impl fmt::Debug for Device {
@@ -176,22 +172,22 @@ slotmap::new_key_type! {
     /// Identifies a GPU resource for tracking.
     pub struct ResourceId;
     /// Identifies an image resource (sampled or storage image) in a bindless descriptor heap.
-    pub struct ResourceHeapIndex;
+    pub(crate) struct ResourceDescriptorIndex;
     /// Identifies a sampler in a bindless sampler descriptor heap.
-    pub struct SamplerHeapIndex;
+    pub struct SamplerDescriptorIndex;
     /// Identifies a resource group.
     pub struct GroupId;
 
 }
 
-impl ResourceHeapIndex {
+impl ResourceDescriptorIndex {
     /// Returns the index of this resource in the global resource descriptor heap.
     pub(crate) fn index(&self) -> u32 {
         (self.0.as_ffi() & 0xFFFF_FFFF) as u32
     }
 }
 
-impl SamplerHeapIndex {
+impl SamplerDescriptorIndex {
     /// Returns the index of this sampler in the global sampler descriptor heap.
     pub(crate) fn index(&self) -> u32 {
         (self.0.as_ffi() & 0xFFFF_FFFF) as u32
@@ -363,8 +359,7 @@ const DEVICE_EXTENSIONS: &[&str] = &[
     "VK_EXT_conservative_rasterization",
     "VK_EXT_fragment_shader_interlock",
     "VK_EXT_shader_image_atomic_int64",
-    "VK_EXT_mutable_descriptor_type"
-    //"VK_EXT_descriptor_buffer",
+    "VK_EXT_mutable_descriptor_type", //"VK_EXT_descriptor_buffer",
 ];
 
 impl Device {
@@ -501,8 +496,8 @@ impl Device {
             vk_ext_extended_dynamic_state3,
             //vk_ext_descriptor_buffer,
             resource_ids: Mutex::new(Default::default()),
-            resource_heap: Mutex::new(Default::default()),
-            sampler_heap: Mutex::new(Default::default()),
+            resource_descriptor_indices: Mutex::new(Default::default()),
+            sampler_descriptor_indices: Mutex::new(Default::default()),
             tracker: Mutex::new(DeviceTracker::new()),
             sampler_cache: Mutex::new(Default::default()),
             free_command_pools: Mutex::new(Default::default()),
@@ -831,8 +826,8 @@ impl Device {
     }
 
     /// Releases a resource heap index that is no longer used.
-    pub(crate) fn free_resource_heap_index(&self, index: ResourceHeapIndex) {
-        self.resource_heap.lock().unwrap().remove(index);
+    pub(crate) fn free_resource_heap_index(&self, index: ResourceDescriptorIndex) {
+        self.resource_descriptor_indices.lock().unwrap().remove(index);
     }
 
     /*/// Releases a sampler heap index that is no longer used.
@@ -1028,13 +1023,10 @@ impl Device {
                 .expect("failed to create sampler")
         };
 
-        let id = self.sampler_heap.lock().unwrap().insert(());
-        unsafe {
-            self.write_global_sampler_descriptor(id, sampler);
-        }
+        let descriptor_index = unsafe { self.create_global_sampler_descriptor(sampler) };
         let sampler = Sampler {
             device: Rc::downgrade(self),
-            heap_index: id,
+            descriptor_index,
             sampler,
         };
         self.sampler_cache.lock().unwrap().insert(info.clone(), sampler.clone());
@@ -1094,9 +1086,7 @@ impl Device {
     ) -> vk::PipelineLayout {
         let layout_handles: Vec<_> = if descriptor_set_layouts.is_empty() {
             // Empty set layouts means use the universal bindless layouts
-            vec![
-                self.global_descriptors.lock().unwrap().layout,
-            ]
+            vec![self.global_descriptors.lock().unwrap().layout]
         } else {
             descriptor_set_layouts.iter().map(|layout| layout.handle).collect()
         };

@@ -1,6 +1,6 @@
 //! TODO: implement a single table for all descriptors, with VK_EXT_mutable_descriptor_type
 
-use crate::{Device, ResourceHeapIndex, SamplerHeapIndex};
+use crate::{Device, ResourceDescriptorIndex, SamplerDescriptorIndex, SamplerHandle};
 use ash::vk;
 use ash::vk::DescriptorType;
 use log::trace;
@@ -106,10 +106,6 @@ impl BindlessDescriptorTable {
             },
             vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::MUTABLE_EXT,
-                descriptor_count: 1,
-            },
-            vk::DescriptorPoolSize {
-                ty: vk::DescriptorType::MUTABLE_EXT,
                 descriptor_count: count as u32,
             },
         ];
@@ -150,34 +146,40 @@ impl BindlessDescriptorTable {
 }
 
 impl Device {
-    pub(crate) unsafe fn write_global_image_descriptor(
+    pub(crate) unsafe fn create_global_image_descriptor(
         &self,
-        heap_index: ResourceHeapIndex,
         image_view: vk::ImageView,
-    ) {
+        descriptor_type: vk::DescriptorType,
+        image_layout: vk::ImageLayout,
+    ) -> ResourceDescriptorIndex {
         let d = self.global_descriptors.lock().unwrap();
-        let dst_array_element = heap_index.index();
+        let index = self.resource_descriptor_indices.lock().unwrap().insert(());
+        let dst_array_element = index.index();
         assert!(dst_array_element < d.count as u32);
         let write = vk::WriteDescriptorSet {
             dst_set: d.set,
             dst_binding: IMAGE_TABLE_BINDING,
             dst_array_element,
             descriptor_count: 1,
-            descriptor_type: DT::SAMPLED_IMAGE,
+            descriptor_type: descriptor_type,
             p_image_info: &vk::DescriptorImageInfo {
                 image_view,
-                image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                image_layout: image_layout,
                 ..Default::default()
             },
             ..Default::default()
         };
         trace!("image_descriptors[{}] = {:?}", dst_array_element, image_view);
-        self.raw.update_descriptor_sets(&[write], &[]);
+        unsafe {
+            self.raw.update_descriptor_sets(&[write], &[]);
+        }
+        index
     }
 
-    pub(crate) unsafe fn write_global_sampler_descriptor(&self, id: SamplerHeapIndex, sampler: vk::Sampler) {
+    pub(crate) unsafe fn create_global_sampler_descriptor(&self, sampler: vk::Sampler) -> SamplerDescriptorIndex {
         let d = self.global_descriptors.lock().unwrap();
-        let dst_array_element = id.index();
+        let index = self.sampler_descriptor_indices.lock().unwrap().insert(());
+        let dst_array_element = index.index();
         assert!(dst_array_element < d.count as u32);
         let write = vk::WriteDescriptorSet {
             dst_set: d.set,
@@ -192,8 +194,13 @@ impl Device {
             ..Default::default()
         };
         trace!("sampler_descriptors[{}] = {:?}", dst_array_element, sampler);
-        self.raw.update_descriptor_sets(&[write], &[]);
+        unsafe {
+            self.raw.update_descriptor_sets(&[write], &[]);
+        }
+        index
     }
+
+
 
     /*pub(crate) unsafe fn write_global_storage_image_descriptor(
         &self,

@@ -74,14 +74,14 @@ struct PushConstants {
     matrix: Mat4,
     screen_size: [f32; 2],
     line_width: f32,
-    texture: gpu::ImageHandle = gpu::ImageHandle::INVALID,
+    texture: gpu::TextureHandle = gpu::TextureHandle::INVALID,
     sampler: gpu::SamplerHandle = gpu::SamplerHandle::INVALID,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct GlyphPushConstants {
-    atlas: gpu::ImageHandle,
+    atlas: gpu::TextureHandle,
 }
 
 /// GPU pipelines for drawing.

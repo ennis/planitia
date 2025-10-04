@@ -63,16 +63,22 @@ impl Device {
         width: u32,
         height: u32,
     ) -> Image {
-        let (bindless_handle, default_view) = self.create_bindless_image_view(handle, ImageType::Image2D, format, 1, 1);
+        let descriptors = self.create_image_resource_descriptors(
+            handle,
+            ImageType::Image2D,
+            vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_DST,
+            format,
+            1,
+            1,
+        );
         Image {
             device: self.clone(),
             id: self.allocate_resource_id(),
             allocation: ResourceAllocation::External,
             handle,
             swapchain_image: true,
-            default_view,
-            heap_index: bindless_handle,
-            usage: ImageUsage::TRANSFER_DST | ImageUsage::COLOR_ATTACHMENT,
+            descriptors,
+            usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::TRANSFER_DST,
             type_: ImageType::Image2D,
             format,
             size: Size3D {

@@ -6,9 +6,9 @@ mod image;
 mod instance;
 pub mod platform;
 mod surface;
+mod swapchain;
 mod types;
 pub mod util;
-mod swapchain;
 
 use std::borrow::Cow;
 use std::marker::PhantomData;
@@ -27,8 +27,8 @@ pub use device::*;
 pub use image::*;
 pub use instance::*;
 pub use surface::*;
-pub use types::*;
 pub use swapchain::*;
+pub use types::*;
 
 // proc-macros
 pub use gpu_macros::Vertex;
@@ -98,35 +98,35 @@ impl<T: ?Sized + 'static> Copy for DeviceAddress<T> {}
 /// Bindless handle to an image.
 #[derive(Copy, Clone, Debug)]
 #[repr(C)]
-pub struct ImageHandle {
+pub struct TextureHandle {
     /// Index of the image in the image descriptor array.
     pub index: u32,
     /// For compatibility with slang.
     _unused: u32,
 }
 
-impl ImageHandle {
-    pub const INVALID: Self = ImageHandle {
+impl TextureHandle {
+    pub const INVALID: Self = TextureHandle {
         index: u32::MAX,
         _unused: 0,
     };
 }
 
-/// Bindless handle to a 2D texture.
+/// Bindless handle to a storage image.
 #[derive(Copy, Clone, Debug)]
-#[repr(transparent)]
-pub struct Texture2DHandle(pub ImageHandle);
-
-impl Texture2DHandle {
-    pub const INVALID: Self = Texture2DHandle(ImageHandle::INVALID);
+#[repr(C)]
+pub struct StorageImageHandle {
+    /// Index of the image in the image descriptor array.
+    pub index: u32,
+    /// For compatibility with slang.
+    _unused: u32,
 }
 
-/// Represents a range of bindless handles to 2D sampled images.
-#[derive(Copy, Clone, Debug, Default)]
-#[repr(C)]
-pub struct Texture2DHandleRange {
-    pub index: u32,
-    pub count: u32,
+impl StorageImageHandle {
+    pub const INVALID: Self = StorageImageHandle {
+        index: u32::MAX,
+        _unused: 0,
+    };
 }
 
 /// Bindless handle to a sampler.
@@ -145,7 +145,6 @@ impl SamplerHandle {
         _unused: 0,
     };
 }
-
 
 /// Graphics pipelines.
 ///
@@ -203,7 +202,7 @@ impl ComputePipeline {
 pub struct Sampler {
     // A weak ref is sufficient, the device already owns samplers in its cache
     device: WeakDevice,
-    heap_index: SamplerHeapIndex,
+    descriptor_index: SamplerDescriptorIndex,
     sampler: vk::Sampler,
 }
 
@@ -236,7 +235,7 @@ impl Sampler {
     /// Returns the bindless sampler handle.
     pub fn device_handle(&self) -> SamplerHandle {
         SamplerHandle {
-            index: self.heap_index.index(),
+            index: self.descriptor_index.index(),
             _unused: 0,
         }
     }

@@ -1,7 +1,8 @@
 use crate::device::get_vk_sample_count;
 use crate::{
-    aspects_for_format, BufferUntyped, Descriptor, Device, Format, ImageCreateInfo, ImageHandle, ImageType, ImageUsage,
-    RcDevice, ResourceAllocation, ResourceHeapIndex, ResourceId, Size3D, TrackedResource,
+    aspects_for_format, BufferUntyped, Descriptor, Device, Format, ImageCreateInfo, ImageType,
+    ImageUsage, RcDevice, ResourceAllocation, ResourceDescriptorIndex, ResourceId, Size3D, StorageImageHandle,
+    TextureHandle, TrackedResource,
 };
 use ash::vk;
 use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
@@ -26,8 +27,7 @@ pub struct Image {
     pub(crate) id: ResourceId,
     pub(crate) allocation: ResourceAllocation,
     pub(crate) swapchain_image: bool,
-    pub(crate) default_view: vk::ImageView,
-    pub(crate) heap_index: ResourceHeapIndex,
+    pub(crate) descriptors: ImageResourceDescriptors,
     pub(crate) handle: vk::Image,
     pub(crate) usage: ImageUsage,
     pub(crate) type_: ImageType,
@@ -40,14 +40,14 @@ impl Drop for Image {
         if !self.swapchain_image {
             let mut allocation = mem::take(&mut self.allocation);
             let handle = self.handle;
-            let default_view = self.default_view;
-            let heap_index = self.heap_index;
+            let descriptors = self.descriptors;
             self.device.delete_tracked_resource(self.id, move |device| unsafe {
                 //debug!("dropping image {:?} (handle: {:?})", id, handle);
-                device.free_resource_heap_index(heap_index);
-                device.free_memory(&mut allocation);
-                device.raw.destroy_image_view(default_view, None);
+                device.free_resource_heap_index(descriptors.texture);
+                device.free_resource_heap_index(descriptors.storage);
+                device.raw.destroy_image_view(descriptors.image_view, None);
                 device.raw.destroy_image(handle, None);
+                device.free_memory(&mut allocation);
             });
         }
     }
@@ -112,7 +112,7 @@ impl Image {
 
     /// Returns the handle of the default image view.
     pub fn view_handle(&self) -> vk::ImageView {
-        self.default_view
+        self.descriptors.image_view
     }
 
     pub fn device(&self) -> &RcDevice {
@@ -130,26 +130,43 @@ impl Image {
     }
 
     /// Returns the bindless texture handle of this image view.
-    pub fn device_image_handle(&self) -> ImageHandle {
-        ImageHandle {
-            index: self.heap_index.index(),
+    pub fn texture_descriptor_index(&self) -> TextureHandle {
+        TextureHandle {
+            index: self.descriptors.storage.index(),
+            _unused: 0,
+        }
+    }
+
+    /// Returns the bindless storage image handle of this image view.
+    pub fn storage_descriptor_index(&self) -> StorageImageHandle {
+        StorageImageHandle {
+            index: self.descriptors.storage.index(),
             _unused: 0,
         }
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+pub(crate) struct ImageResourceDescriptors {
+    /// Index of the sampled image descriptor in the global descriptor heap.
+    pub(crate) texture: ResourceDescriptorIndex,
+    /// Index of the storage image descriptor in the global descriptor heap.
+    pub(crate) storage: ResourceDescriptorIndex,
+    pub(crate) image_view: vk::ImageView,
+}
+
 /// Image creation
 impl Device {
-
     /// Creates the default image view for the image.
-    pub(crate) fn create_bindless_image_view(
+    pub(crate) fn create_image_resource_descriptors(
         &self,
         handle: vk::Image,
         type_: ImageType,
+        usage: vk::ImageUsageFlags,
         format: Format,
         mip_levels: u32,
         array_layers: u32,
-    ) -> (ResourceHeapIndex, vk::ImageView) {
+    ) -> ImageResourceDescriptors {
         unsafe {
             let image_view = self
                 .raw
@@ -194,11 +211,33 @@ impl Device {
                 )
                 .expect("failed to create image view");
 
-            let id = self.resource_heap.lock().unwrap().insert(());
-            self.write_global_image_descriptor(id, image_view);
-            (id, image_view)
+            let sampled_index = if usage.contains(vk::ImageUsageFlags::SAMPLED) {
+                self.create_global_image_descriptor(
+                    image_view,
+                    vk::DescriptorType::SAMPLED_IMAGE,
+                    vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                )
+            } else {
+                ResourceDescriptorIndex::default()
+            };
+            let storage_index = if usage.contains(vk::ImageUsageFlags::STORAGE) {
+                self.create_global_image_descriptor(
+                    image_view,
+                    vk::DescriptorType::STORAGE_IMAGE,
+                    vk::ImageLayout::GENERAL,
+                )
+            } else {
+                ResourceDescriptorIndex::default()
+            };
+
+            ImageResourceDescriptors {
+                texture: sampled_index,
+                storage: storage_index,
+                image_view,
+            }
         }
     }
+
 
     /// Creates a new image resource.
     pub fn create_image(self: &Rc<Self>, image_info: &ImageCreateInfo) -> Image {
@@ -242,9 +281,10 @@ impl Device {
         }
 
         // create the bindless image view
-        let (bindless_handle, default_view) = self.create_bindless_image_view(
+        let descriptors = self.create_image_resource_descriptors(
             handle,
             image_info.type_,
+            create_info.usage,
             image_info.format,
             image_info.mip_levels,
             image_info.array_layers,
@@ -256,8 +296,7 @@ impl Device {
             id: self.allocate_resource_id(),
             allocation: ResourceAllocation::Allocation { allocation },
             swapchain_image: false,
-            default_view,
-            heap_index: bindless_handle,
+            descriptors,
             usage: image_info.usage,
             type_: image_info.type_,
             format: image_info.format,

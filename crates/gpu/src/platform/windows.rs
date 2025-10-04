@@ -208,9 +208,10 @@ impl DeviceExtWindows for Device {
         );
         self.raw.bind_image_memory(handle, device_memory, 0).unwrap();
 
-        let (heap_index, default_view) = self.create_bindless_image_view(
+        let descriptors = self.create_image_resource_descriptors(
             handle,
             image_info.type_,
+            create_info.usage,
             image_info.format,
             image_info.mip_levels,
             image_info.array_layers,
@@ -222,8 +223,7 @@ impl DeviceExtWindows for Device {
             id: self.allocate_resource_id(),
             allocation: ResourceAllocation::DeviceMemory { device_memory },
             swapchain_image: false,
-            default_view,
-            heap_index,
+            descriptors,
             usage: image_info.usage,
             type_: image_info.type_,
             format: image_info.format,
@@ -343,9 +343,10 @@ impl DeviceExtWindows for Device {
         // bind memory
         self.raw.bind_image_memory(handle, device_memory, 0).unwrap();
 
-        let (heap_index, default_view) = self.create_bindless_image_view(
+        let descriptors = self.create_image_resource_descriptors(
             handle,
             image_info.type_,
+            create_info.usage,
             image_info.format,
             image_info.mip_levels,
             image_info.array_layers,
@@ -357,8 +358,7 @@ impl DeviceExtWindows for Device {
             id: self.allocate_resource_id(),
             allocation: ResourceAllocation::DeviceMemory { device_memory },
             swapchain_image: false,
-            default_view,
-            heap_index,
+            descriptors,
             usage: image_info.usage,
             type_: image_info.type_,
             format: image_info.format,
