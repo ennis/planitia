@@ -6,9 +6,7 @@ use egui::epaint::Primitive;
 use egui::{ClippedPrimitive, ImageData};
 use gpu::prelude::*;
 use gpu::util::CommandStreamExt;
-use gpu::vk::{ImageAspectFlags, Offset3D};
-use gpu::{Barrier, ColorAttachment, ImageCopyView, RenderPassInfo, Size3D, Vertex};
-use log::debug;
+use gpu::{Barrier, ColorAttachment, ImageCopyView, Offset3D, RenderPassInfo, Size3D, Vertex};
 
 #[derive(Copy, Clone, Vertex)]
 #[repr(C)]
@@ -120,6 +118,7 @@ impl Renderer {
             cmd.upload_image_data(
                 ImageCopyView {
                     image: &texture.image,
+                    origin: Offset3D { x, y, z: 0 },
                     ..
                 },
                 Size3D {
