@@ -1,5 +1,5 @@
 use crate::{vec2, Vec2};
-use glam::IVec2;
+use glam::{ivec3, IVec2, IVec3};
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 #[repr(C)]
@@ -162,5 +162,61 @@ pub const fn irect_xywh(x: i32, y: i32, w: i32, h: i32) -> IRect {
     IRect {
         min: IVec2::new(x, y),
         max: IVec2::new(x + w, y + h),
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct IRect3 {
+    pub min: IVec3,
+    pub max: IVec3,
+}
+
+impl IRect3 {
+    pub const fn width(&self) -> u32 {
+        (self.max.x - self.min.x) as u32
+    }
+    pub const fn height(&self) -> u32 {
+        (self.max.y - self.min.y) as u32
+    }
+    pub const fn depth(&self) -> u32 {
+        (self.max.z - self.min.z) as u32
+    }
+
+    pub const fn size(&self) -> IVec3 {
+        ivec3(
+            self.max.x - self.min.x,
+            self.max.y - self.min.y,
+            self.max.z - self.min.z,
+        )
+    }
+
+    pub const fn from_origin_size_2d(origin: IVec2, size: IVec2) -> Self {
+        Self {
+            min: origin.extend(0),
+            max: ivec3(origin.x + size.x, origin.y + size.y, 1),
+        }
+    }
+
+    pub const fn from_min_max_2d(min: IVec2, max: IVec2) -> Self {
+        Self {
+            min: min.extend(0),
+            max: max.extend(1),
+        }
+    }
+
+    pub const fn from_xywh(x: i32, y: i32, width: u32, height: u32) -> Self {
+        Self {
+            min: ivec3(x, y, 0),
+            max: ivec3(x + width as i32, y + height as i32, 1),
+        }
+    }
+
+    pub const fn from_irect(rect: IRect) -> Self {
+        Self {
+            min: ivec3(rect.min.x, rect.min.y, 0),
+            max: ivec3(rect.max.x, rect.max.y, 1),
+        }
     }
 }

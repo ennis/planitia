@@ -32,6 +32,7 @@
     ☐ Use case: load/save vector drawings
     ☐ Use case: sprites
     ☐ Test harness for rendering
+    ✔ Text @done (25-10-04 23:30)
 
 Shaders:
     ☐ [shader-bridge] `struct ShaderLibrary`: represents a loaded/parsed slang source file (in shader-bridge), as a collection of entry points; used to retrieve ShaderEntryPoint objects

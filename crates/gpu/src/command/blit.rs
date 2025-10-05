@@ -76,7 +76,6 @@ impl CommandStream {
         // TODO: this is not required for multi-planar formats
         assert_eq!(source.aspect, destination.aspect);
 
-        // TODO barriers should automatically reference the resources in the command stream
         self.reference_resource(source.image);
         self.reference_resource(destination.image);
 
@@ -88,19 +87,19 @@ impl CommandStream {
 
         let regions = [vk::ImageCopy {
             src_subresource: vk::ImageSubresourceLayers {
-                aspect_mask: source.aspect,
+                aspect_mask: source.aspect.to_aspect(source.image.format),
                 mip_level: source.mip_level,
                 base_array_layer: 0,
                 layer_count: 1,
             },
-            src_offset: source.origin,
+            src_offset: source.origin.into(),
             dst_subresource: vk::ImageSubresourceLayers {
-                aspect_mask: destination.aspect,
-                mip_level: destination.mip_level, // FIXME: should be the same
+                aspect_mask: destination.aspect.to_aspect(destination.image.format),
+                mip_level: destination.mip_level,
                 base_array_layer: 0,
                 layer_count: 1,
             },
-            dst_offset: destination.origin,
+            dst_offset: destination.origin.into(),
             extent: copy_size,
         }];
 
@@ -151,6 +150,8 @@ impl CommandStream {
     }
 
     /// Copies data from a buffer to an image.
+    ///
+    /// TODO copy to layer other than 0
     pub fn copy_buffer_to_image(
         &mut self,
         source: ImageCopyBuffer<'_>,
@@ -167,12 +168,16 @@ impl CommandStream {
             buffer_row_length: source.layout.texel_row_length.unwrap_or(0),
             buffer_image_height: source.layout.row_count.unwrap_or(0),
             image_subresource: vk::ImageSubresourceLayers {
-                aspect_mask: destination.aspect,
+                aspect_mask: destination.aspect.to_aspect(destination.image.format),
                 mip_level: destination.mip_level,
                 base_array_layer: 0,
                 layer_count: 1,
             },
-            image_offset: destination.origin,
+            image_offset: vk::Offset3D {
+                x: destination.origin.x,
+                y: destination.origin.y,
+                z: destination.origin.z,
+            },
             image_extent: copy_size,
         }];
 
@@ -218,7 +223,7 @@ impl CommandStream {
 
         let blits = [vk::ImageBlit {
             src_subresource: vk::ImageSubresourceLayers {
-                aspect_mask: src_subresource.aspect_mask,
+                aspect_mask: src_subresource.aspect.to_aspect(src.format),
                 mip_level: src_subresource.mip_level,
                 base_array_layer: src_subresource.base_array_layer,
                 layer_count: src_subresource.layer_count,
@@ -236,7 +241,7 @@ impl CommandStream {
                 },
             ],
             dst_subresource: vk::ImageSubresourceLayers {
-                aspect_mask: dst_subresource.aspect_mask,
+                aspect_mask: dst_subresource.aspect.to_aspect(src.format),
                 mip_level: dst_subresource.mip_level,
                 base_array_layer: dst_subresource.base_array_layer,
                 layer_count: dst_subresource.layer_count,

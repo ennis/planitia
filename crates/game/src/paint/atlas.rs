@@ -1,7 +1,7 @@
 use crate::context::get_gpu_device;
 use crate::paint::Srgba32;
 use gpu::util::CommandStreamExt;
-use gpu::{Barrier, ImageCopyView, ImageCreateInfo, MemoryLocation, Size3D, vk};
+use gpu::{Barrier, ImageAspect, ImageCopyView, ImageCreateInfo, MemoryLocation, Size3D, vk};
 use log::debug;
 use math::geom::{IRect, irect_xywh};
 use std::cell::RefCell;
@@ -137,12 +137,12 @@ impl Atlas {
             ImageCopyView {
                 image: &self.texture,
                 mip_level: 0,
-                origin: vk::Offset3D {
+                origin: gpu::Offset3D {
                     x: 0,
                     y: self.dirty.start as i32,
                     z: 0,
                 },
-                aspect: vk::ImageAspectFlags::COLOR,
+                aspect: ImageAspect::All,
             },
             Size3D {
                 width: self.width,
@@ -158,7 +158,7 @@ impl Atlas {
     pub(crate) fn texture_handle(&self) -> gpu::TextureHandle {
         self.texture.texture_descriptor_index()
     }
-    
+
     /// Returns the GPU image handle for the atlas, uploading it if necessary.
     ///
     /// The image is prepared for shader read access.

@@ -388,9 +388,9 @@ pub struct ImageCopyBuffer<'a> {
 #[derive(Copy, Clone, Debug)]
 pub struct ImageCopyView<'a> {
     pub image: &'a Image,
-    pub mip_level: u32,
-    pub origin: vk::Offset3D,
-    pub aspect: vk::ImageAspectFlags,
+    pub mip_level: u32 = 0,
+    pub origin: Offset3D = Offset3D::ZERO,
+    pub aspect: ImageAspect = ImageAspect::All,
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

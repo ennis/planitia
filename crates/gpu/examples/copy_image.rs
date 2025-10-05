@@ -3,10 +3,7 @@ use std::path::Path;
 use std::ptr;
 use std::time::Duration;
 
-use gpu::{
-    vk, BufferUsage, CommandStream, Image, ImageCopyBuffer, ImageCopyView, ImageCreateInfo, ImageDataLayout,
-    ImageSubresourceLayers, ImageType, ImageUsage, MemoryLocation, Point3D, Rect3D, SemaphoreWait, SwapChain,
-};
+use gpu::{vk, BufferUsage, CommandStream, Image, ImageAspect, ImageCopyBuffer, ImageCopyView, ImageCreateInfo, ImageDataLayout, ImageSubresourceLayers, ImageType, ImageUsage, MemoryLocation, Offset3D, Rect3D, SemaphoreWait, SwapChain};
 use raw_window_handle::HasWindowHandle;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -67,8 +64,8 @@ fn load_image(cmd: &mut CommandStream, path: impl AsRef<Path>, usage: ImageUsage
             ImageCopyView {
                 image: &image,
                 mip_level: 0,
-                origin: vk::Offset3D { x: 0, y: 0, z: 0 },
-                aspect: vk::ImageAspectFlags::COLOR,
+                origin: Offset3D::ZERO,
+                aspect: ImageAspect::All,
             },
             vk::Extent3D {
                 width,
@@ -153,37 +150,22 @@ impl ApplicationHandler for App {
                 let blit_w = image.size().width.min(window.width);
                 let blit_h = image.size().height.min(window.height);
 
+                let region = Rect3D {
+                    min: Offset3D { x: 0, y: 0, z: 0 },
+                    max: Offset3D {
+                        x: blit_w as i32,
+                        y: blit_h as i32,
+                        z: 1,
+                    },
+                };
+
                 cmd.blit_image(
                     &image,
-                    ImageSubresourceLayers {
-                        aspect_mask: vk::ImageAspectFlags::COLOR,
-                        mip_level: 0,
-                        base_array_layer: 0,
-                        layer_count: 1,
-                    },
-                    Rect3D {
-                        min: Point3D { x: 0, y: 0, z: 0 },
-                        max: Point3D {
-                            x: blit_w as i32,
-                            y: blit_h as i32,
-                            z: 1,
-                        },
-                    },
+                    Default::default(),
+                    region,
                     &swapchain_image.image,
-                    ImageSubresourceLayers {
-                        aspect_mask: vk::ImageAspectFlags::COLOR,
-                        mip_level: 0,
-                        base_array_layer: 0,
-                        layer_count: 1,
-                    },
-                    Rect3D {
-                        min: Point3D { x: 0, y: 0, z: 0 },
-                        max: Point3D {
-                            x: blit_w as i32,
-                            y: blit_h as i32,
-                            z: 1,
-                        },
-                    },
+                    Default::default(),
+                    region,
                     vk::Filter::NEAREST,
                 );
 

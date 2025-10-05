@@ -120,9 +120,7 @@ impl Renderer {
             cmd.upload_image_data(
                 ImageCopyView {
                     image: &texture.image,
-                    mip_level: 0,
-                    origin: Offset3D { x, y, z: 0 },
-                    aspect: ImageAspectFlags::COLOR,
+                    ..
                 },
                 Size3D {
                     width,

@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::path::Path;
 use std::slice;
 // TODO: eventually all vk types should disappear from the public API
-use crate::{aspects_for_format, ShaderEntryPoint};
+use crate::{aspects_for_format, is_depth_and_stencil_format, is_depth_only_format, is_stencil_only_format, ShaderEntryPoint};
 use ash::vk;
 use bitflags::bitflags;
 use gpu_allocator::MemoryLocation;
@@ -53,12 +53,80 @@ impl ImageDataLayout {
     }
 }
 
+#[derive(Copy,Clone,Debug,PartialEq,Eq,Hash, Default)]
+pub enum ImageAspect {
+    #[default]
+    All = 1,
+    Depth = 2,
+    Stencil = 4,
+}
+
+impl ImageAspect {
+    pub fn to_view_aspect_flags(self, format: Format) -> vk::ImageAspectFlags {
+        match self {
+            ImageAspect::All => aspects_for_format(format),
+            ImageAspect::Depth => vk::ImageAspectFlags::DEPTH,
+            ImageAspect::Stencil => vk::ImageAspectFlags::STENCIL,
+        }
+    }
+
+    pub fn to_aspect(self, format: Format) -> vk::ImageAspectFlags {
+        if (is_depth_and_stencil_format(format) || is_depth_only_format(format) || is_stencil_only_format(format)) && self == ImageAspect::All {
+            panic!("ImageAspect::All is not valid for depth/stencil formats");
+        }
+        match self {
+            ImageAspect::All => vk::ImageAspectFlags::COLOR,
+            ImageAspect::Depth => vk::ImageAspectFlags::DEPTH,
+            ImageAspect::Stencil => vk::ImageAspectFlags::STENCIL,
+        }
+    }
+}
+
+
+/*
+bitflags! {
+    /// Bitmask specifying which aspects of an image are included in a view.
+    ///
+    /// Use `DEFAULT` to include all relevant aspects for the image format.
+    #[derive(Copy,Clone,Debug,PartialEq,Eq,Hash)]
+    pub struct ImageAspectMask : u32 {
+        // These values must match vk::ImageAspectFlags, except for DEFAULT.
+        const COLOR = 1;
+        const DEPTH = 2;
+        const STENCIL = 4;
+        const METADATA = 8;
+        const DEFAULT = 0xFFFFFFFF;
+    }
+}
+
+impl Default for ImageAspectMask {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
+impl ImageAspectMask {
+    pub fn to_vk_image_aspect_flags(self, format: Format) -> vk::ImageAspectFlags {
+        if self == ImageAspectMask::DEFAULT {
+            aspects_for_format(format)
+        } else {
+            vk::ImageAspectFlags::from_raw(self.bits())
+        }
+    }
+}*/
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct ImageSubresourceLayers {
-    pub aspect_mask: vk::ImageAspectFlags,
-    pub mip_level: u32,
-    pub base_array_layer: u32,
-    pub layer_count: u32,
+    pub aspect: ImageAspect = ImageAspect::All,
+    pub mip_level: u32 = 0,
+    pub base_array_layer: u32 = 0,
+    pub layer_count: u32 = vk::REMAINING_ARRAY_LAYERS,
+}
+
+impl Default for ImageSubresourceLayers {
+    fn default() -> Self {
+        Self { .. }
+    }
 }
 
 /// The parameters of an image view.
@@ -681,17 +749,43 @@ impl Rect2D {
     }
 }
 
+/*
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub struct Point3D {
+pub struct Origin3D {
+    pub x: u32,
+    pub y: u32,
+    pub z: u32,
+}
+
+impl Origin3D {
+    pub const ZERO: Self = Self { x: 0, y: 0, z: 0 };
+}*/
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Offset3D {
     pub x: i32,
     pub y: i32,
     pub z: i32,
 }
 
+impl Offset3D {
+    pub const ZERO: Self = Self { x: 0, y: 0, z: 0 };
+}
+
+impl Into<vk::Offset3D> for Offset3D {
+    fn into(self) -> vk::Offset3D {
+        vk::Offset3D {
+            x: self.x,
+            y: self.y,
+            z: self.z
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Rect3D {
-    pub min: Point3D,
-    pub max: Point3D,
+    pub min: Offset3D,
+    pub max: Offset3D,
 }
 
 impl Rect3D {
@@ -712,7 +806,38 @@ impl Rect3D {
             depth: self.depth(),
         }
     }
+
+    pub const fn from_origin_size_2d(origin: Point2D, size: Size2D) -> Self {
+        Self {
+            min: Offset3D {
+                x: origin.x,
+                y: origin.y,
+                z: 0,
+            },
+            max: Offset3D {
+                x: origin.x + size.width as i32,
+                y: origin.y + size.height as i32,
+                z: 1,
+            },
+        }
+    }
+
+    pub const fn from_size_2d(size: Size2D) -> Self {
+        Self::from_origin_size_2d(Point2D::ZERO, size)
+    }
+
+    pub const fn from_xywh(x: i32, y: i32, width: u32, height: u32) -> Self {
+        Self {
+            min: Offset3D { x, y, z: 0 },
+            max: Offset3D {
+                x: x + width as i32,
+                y: y + height as i32,
+                z: 1,
+            },
+        }
+    }
 }
+
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Size3D {
