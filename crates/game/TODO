@@ -18,8 +18,8 @@
      It was a nasty use-after-free due to slice::from_raw_parts ignoring lifetimes
  ☐ Use vulkan swapchains instead of DXGI, to make things simpler to debug
  ☐ Load mesh
- ☐ Import shader-bridge
- ☐ move to a separate repo
+ ✔ Import shader-bridge @done (25-10-06 22:26)
+ ✔ move to a separate repo @done (25-10-06 22:26)
  ☐ get rid of winit
  ☐ get rid of arboard
  ☐ get rid of egui
@@ -35,8 +35,8 @@
     ✔ Text @done (25-10-04 23:30)
 
 Shaders:
-    ☐ [shader-bridge] `struct ShaderLibrary`: represents a loaded/parsed slang source file (in shader-bridge), as a collection of entry points; used to retrieve ShaderEntryPoint objects
-    ☐ [shader-bridge] `struct ShaderEntryPoint`: represents a shader entry point, associated SPIR-V code & useful reflection data
+    ✔ [shader-bridge] `struct ShaderLibrary`: represents a loaded/parsed slang source file (in shader-bridge), as a collection of entry points; used to retrieve ShaderEntryPoint objects @done (25-10-06 22:25)
+    ✔ [shader-bridge] `struct ShaderEntryPoint`: represents a shader entry point, associated SPIR-V code & useful reflection data @done (25-10-06 22:25)
 
 Direction:
     ☐ Figure out terrain representation 
@@ -60,11 +60,11 @@ Ideas:
 
 
 EGUI replacement:
-    ☐ unify geometry/vector types via external crate (math)
-    ☐ draw rectangles
-    ☐ draw rounded rectangles
+    ✔ unify geometry/vector types via external crate (math) @done (25-10-06 22:26)
+    ✔ draw rectangles @done (25-10-06 22:26)
+    ✔ draw rounded rectangles @done (25-10-06 22:26)
     ☐ space allocation & layout
-    ☐ text layout & rendering
+    ✔ text layout & rendering @done (25-10-06 22:26)
 
 Winit replacement:
     ☐ create win32 window

@@ -19,13 +19,16 @@ pub use text_run::TextRun;
 
 const DEFAULT_SIZE: u32 = 16;
 
-/// TODO support ligatures
-/// TODO subpixel offsets
+const SUBPIXEL_X_GRID_SIZE: u32 = 8;
+const SUBPIXEL_Y_GRID_SIZE: u32 = 8;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct GlyphKey {
     glyph_id: GlyphId,
     font_id: FontId,
     height: u32,
+    subpixel_x_key: u8, // 0..=7
+    subpixel_y_key: u8, // 0..=7
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -81,32 +84,42 @@ impl GlyphCache {
 
     /// Rasterizes a glyph and stores it in the atlas if not already present.
     ///
-    /// TODO: subpixel offsets
-    pub fn rasterize_glyph(&mut self, font: &Font, id: GlyphId, size: u32) -> GlyphEntry {
+    /// The position is used to determine the subpixel offset for better quality.
+    pub fn rasterize_glyph(&mut self, font: &Font, id: GlyphId, size: u32, position: Vec2) -> (GlyphEntry, Vec2) {
         //debug!("Rasterizing glyph id {:?} size {} for font id {:?}", id, size, font.id);
+
+        // quantize to 8x8 subpixel grid
+        let subpixel_x_key = ((position.x - position.x.floor()) * (SUBPIXEL_X_GRID_SIZE as f32)) as u8;
+        let subpixel_y_key = ((position.y - position.y.floor()) * (SUBPIXEL_Y_GRID_SIZE as f32)) as u8;
+        let subpixel_x = (subpixel_x_key as f32) / (SUBPIXEL_X_GRID_SIZE as f32);
+        let subpixel_y = (subpixel_y_key as f32) / (SUBPIXEL_Y_GRID_SIZE as f32);
+        let quantized_pos = vec2(position.x.floor(), position.y.floor());
 
         let key = GlyphKey {
             glyph_id: id,
             font_id: font.id,
             height: size,
+            subpixel_x_key,
+            subpixel_y_key,
         };
-        if let Some(rect) = self.entries.get(&key) {
-            return *rect;
+
+        if let Some(entry) = self.entries.get(&key) {
+            return (GlyphEntry { ..*entry }, quantized_pos);
         }
 
-        let glyph = id.with_scale_and_position(size as f32, ab_glyph::point(0.0, 0.0));
+        let glyph = id.with_scale_and_position(size as f32, ab_glyph::point(subpixel_x, subpixel_y));
 
         // retrieve the glyph outline
         let Some(outline) = font.data.outline_glyph(glyph) else {
             // missing glyph, return placeholder rect
             // TODO: actual placeholder
-            debug!("Missing glyph id {:?} in font id {:?}", id, font.id);
-            return GlyphEntry::placeholder();
+            //debug!("Missing glyph id {:04x?} in font id {:?}", id, font.id);
+            return (GlyphEntry::placeholder(), Vec2::ZERO);
         };
 
         // reserve space in the atlas
         let bounds = outline.px_bounds();
-        let mut atlas_mut = self.atlas.allocate(bounds.width() as u32, bounds.height() as u32);
+        let mut atlas_mut = self.atlas.allocate(bounds.width() as u32, bounds.height() as u32, 1, 1);
 
         // rasterize the outline
         outline.draw(|x, y, v| {
@@ -141,10 +154,23 @@ impl GlyphCache {
             normalized_texcoords,
             advance: h_advance,
         };
-        debug!("glyph id {:?} bounds {:?} atlas_rect={:?}", id, bounds, atlas_rect);
+
+        let char = font.data.codepoint_ids().find(|(gid, _)| *gid == id).map(|(_, c)| c);
+        debug!(
+            "glyph id {:?} bounds=[{},{} → {},{}] atlas_rect=[{},{} → {},{}], char={char:?}",
+            id,
+            bounds.min.x,
+            bounds.min.y,
+            bounds.max.x,
+            bounds.max.y,
+            atlas_rect.min.x,
+            atlas_rect.min.y,
+            atlas_rect.max.x,
+            atlas_rect.max.y
+        );
 
         self.entries.insert(key, entry);
-        entry
+        (entry, quantized_pos)
     }
 
     pub fn texture_handle(&self) -> gpu::TextureHandle {

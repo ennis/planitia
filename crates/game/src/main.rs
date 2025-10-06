@@ -60,12 +60,20 @@ impl Handler {
 
         let mut text = TextLayout::new(
             &TextFormat {
-                size: 100.0,
+                size: 32.0,
                 ..Default::default()
             },
-            "Hello, world! こんにちは",
+            r"Innumerable force of Spirits armed,
+That durst dislike his reign, and, me preferring,
+His utmost power with adverse power opposed
+In dubious battle on the plains of Heaven
+And shook his throne. What though the field be lost?
+All is not lost—the unconquerable will,
+And study of revenge, immortal hate,
+And courage never to submit or yield:
+And what is else not to be overcome?",
         );
-        text.layout(250.0);
+        text.layout(600.0);
 
         for glyph_run in text.glyph_runs() {
             scene.draw_glyph_run(vec2(0.0, 0.0), &glyph_run, &DrawGlyphRunOptions::default());

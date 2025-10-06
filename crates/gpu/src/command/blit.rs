@@ -205,7 +205,6 @@ impl CommandStream {
         self.reference_resource(destination.buffer);
     }
 
-    // TODO the call-site verbosity of this method is ridiculous, fix that
     pub fn blit_image(
         &mut self,
         src: &Image,

@@ -12,7 +12,7 @@ use math::geom::Camera;
 use math::{Mat4, Rect, U16Vec2, Vec2, Vec3, vec2};
 use shader_bridge::ShaderLibrary;
 use std::mem;
-
+use log::debug;
 use crate::paint::shape::RectShape;
 use crate::paint::tessellation::{Mesh, Tessellator};
 use crate::paint::text::{Font, Glyph, GlyphCache};
@@ -322,19 +322,21 @@ impl<'a> PaintScene<'a> {
             //);
 
             let pos = position + vec2(x + advance, y) + glyph.offset;
+            //debug!("glyph_offset = {:?}", glyph.offset);
             advance += glyph.advance;
 
-            let entry = self
+
+            let (entry, quantized_pos) = self
                 .painter
                 .glyph_cache
-                .rasterize_glyph(&format.font, glyph.id, format.size as u32);
+                .rasterize_glyph(&format.font, glyph.id, format.size as u32, pos);
 
             if entry.px_bounds.is_null() {
                 //eprintln!("    skipping empty glyph");
                 continue;
             }
 
-            let quad = entry.px_bounds.to_rect().translate(pos);
+            let quad = entry.px_bounds.to_rect().translate(quantized_pos);
             let uv0 = entry.normalized_texcoords[0];
             let uv1 = entry.normalized_texcoords[1];
             //eprintln!("    glyph {:?} quad={:?} uv0={:?} uv1={:?} tex={:?}", glyph.id, quad, uv0, uv1, self.painter.glyph_cache.texture_handle());
@@ -400,8 +402,8 @@ impl<'a> PaintScene<'a> {
                         sampler: encoder
                             .device()
                             .create_sampler(&gpu::SamplerCreateInfo {
-                                mag_filter: vk::Filter::NEAREST,
-                                min_filter: vk::Filter::NEAREST,
+                                mag_filter: vk::Filter::LINEAR,
+                                min_filter: vk::Filter::LINEAR,
                                 ..Default::default()
                             })
                             .device_handle(),

@@ -57,24 +57,30 @@ impl Atlas {
     }
 
     /// Allocates space for an image of the specified size and returns a reference to the allocated rect for writing.
-    pub fn allocate(&mut self, width: u32, height: u32) -> AtlasSliceMut<'_> {
+    ///
+    /// # Arguments
+    /// * `width` - Width of the image to allocate.
+    /// * `height` - Height of the image to allocate.
+    /// * `gap_x` - Horizontal gap to leave after the image (for padding).
+    /// * `gap_y` - Vertical gap to leave after the image (for padding).
+    pub fn allocate(&mut self, width: u32, height: u32, gap_after_x: u32, gap_after_y: u32) -> AtlasSliceMut<'_> {
         assert!(width <= self.width, "Image width exceeds atlas width");
 
-        if self.cursor_x + width > self.width {
+        if self.cursor_x + width + gap_after_x > self.width {
             self.cursor_x = 0;
             self.cursor_y += self.row_height;
             self.row_height = 0;
         }
 
-        if self.cursor_y + height > self.height {
+        if self.cursor_y + height + gap_after_y > self.height {
             panic!("Atlas is full, cannot allocate more space");
             //self.reserve_lines(self.cursor_y + height - self.height);
         }
 
         // target rect
         let rect = irect_xywh(self.cursor_x as i32, self.cursor_y as i32, width as i32, height as i32);
-        self.cursor_x += width;
-        self.row_height = self.row_height.max(height);
+        self.cursor_x += width + gap_after_x;
+        self.row_height = self.row_height.max(height + gap_after_y);
 
         let start = rect.min.y as usize * self.width as usize + rect.min.x as usize;
 
@@ -89,14 +95,14 @@ impl Atlas {
     }
 
     /// Writes the specified image in the atlas and returns the rectangle.
-    pub fn write(&mut self, width: u32, height: u32, data: &[Srgba32]) -> IRect {
+    pub fn write(&mut self, width: u32, height: u32, data: &[Srgba32], gap_after_x: u32, gap_after_y: u32) -> IRect {
         assert_eq!(
             data.len(),
             width as usize * height as usize,
             "Data size does not match image dimensions"
         );
 
-        let mut slice = self.allocate(width, height);
+        let mut slice = self.allocate(width, height, gap_after_x, gap_after_y);
 
         // Copy data into the atlas
         let mut src = 0;

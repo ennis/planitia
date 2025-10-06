@@ -199,31 +199,4 @@ impl Device {
         }
         index
     }
-
-
-
-    /*pub(crate) unsafe fn write_global_storage_image_descriptor(
-        &self,
-        heap_index: ResourceHeapIndex,
-        image_view: vk::ImageView,
-    ) {
-        let d = self.image_descriptors.lock().unwrap();
-        let dst_array_element = heap_index.index();
-        assert!(dst_array_element < d.count as u32);
-        let write = vk::WriteDescriptorSet {
-            dst_set: d.set,
-            dst_binding: 0,
-            dst_array_element,
-            descriptor_count: 1,
-            descriptor_type: DT::STORAGE_IMAGE,
-            p_image_info: &vk::DescriptorImageInfo {
-                image_view,
-                image_layout: vk::ImageLayout::GENERAL,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        trace!("image_descriptors[{}] = {:?}", dst_array_element, image_view);
-        self.raw.update_descriptor_sets(&[write], &[]);
-    }*/
 }
