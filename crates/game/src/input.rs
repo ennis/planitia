@@ -1,7 +1,8 @@
 use crate::event::Event;
-use std::fmt;
-
 pub use keyboard_types::{Key, KeyState, KeyboardEvent, Location, Modifiers, NamedKey};
+use std::fmt;
+use std::str::FromStr;
+use log::error;
 
 /// Represents a pointer button.
 // TODO why u no bitflags?
@@ -81,11 +82,124 @@ impl Default for PointerButtons {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum InputEvent {
     CursorMoved { x: u32, y: u32 },
     PointerDown { button: PointerButton, x: u32, y: u32 },
     PointerUp { button: PointerButton, x: u32, y: u32 },
+    MouseWheel { delta_x: f32, delta_y: f32 },
     KeyboardEvent(KeyboardEvent),
     Resized { width: u32, height: u32 },
+}
+
+impl InputEvent {
+    /// Returns whether the event matches the specified keyboard shortcut.
+    ///
+    /// Specifically, this looks for key down events (possibly repeated) that match the shortcut.
+    pub fn is_shortcut<S>(&self, shortcut: S) -> bool where S: TryInto<Shortcut>, S::Error: fmt::Display {
+        let shortcut = match shortcut.try_into() {
+            Ok(s) => s,
+            Err(err) => {
+                panic!("{err}");
+            }
+        };
+        match self {
+            InputEvent::KeyboardEvent(ke) if ke.state == KeyState::Down => shortcut.matches(&ke.key, ke.modifiers),
+            _ => false,
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Represents the non-modifier key in a keyboard shortcut.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ShortcutKey {
+    /// The key is a character key.
+    Character(char),
+    /// The key is a named key that does not correspond to a character (e.g., Enter, Escape, function keys, etc.).
+    Named(NamedKey),
+}
+
+/// Represents a keyboard shortcut, consisting of zero or more modifier keys and a single non-modifier key.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Shortcut {
+    pub modifiers: Modifiers,
+    pub key: ShortcutKey,
+}
+
+impl Shortcut {
+    /// Checks if the given key and modifiers match this shortcut.
+    pub fn matches(&self, key: &Key, modifiers: Modifiers) -> bool {
+        if self.modifiers == modifiers {
+            match (key, &self.key) {
+                (Key::Character(c1), ShortcutKey::Character(c2)) if c1.len() == 1 => {
+                    let c1 = c1.chars().next().unwrap();
+                    c1.eq_ignore_ascii_case(&c2)
+                }
+                (Key::Named(nk1), ShortcutKey::Named(nk2)) => nk1 == nk2,
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
+
+    /// Parses a keyboard shortcut string.
+    ///
+    /// # Example
+    ///
+    /// TODO
+    pub fn parse(mut keys: &str) -> Result<Shortcut, ParseShortcutError> {
+        let mut mods = Modifiers::empty();
+        if let Some(rest) = keys.strip_prefix("Ctrl+") {
+            keys = rest;
+            mods |= Modifiers::CONTROL;
+        }
+        if let Some(rest) = keys.strip_prefix("Alt+") {
+            keys = rest;
+            mods |= Modifiers::ALT;
+        }
+        if let Some(rest) = keys.strip_prefix("Shift+") {
+            keys = rest;
+            mods |= Modifiers::SHIFT;
+        }
+        if let Some(rest) = keys.strip_prefix("Meta+") {
+            keys = rest;
+            mods |= Modifiers::META;
+        }
+        let key = if keys.len() == 1 {
+            ShortcutKey::Character(keys.chars().next().unwrap())
+        } else {
+            match NamedKey::from_str(keys) {
+                Ok(nk) => ShortcutKey::Named(nk),
+                Err(_) => return Err(ParseShortcutError::UnrecognizedKey),
+            }
+        };
+        Ok(Shortcut { modifiers: mods, key })
+    }
+}
+
+
+#[derive(thiserror::Error, Debug)]
+pub enum ParseShortcutError {
+    #[error("invalid key in shortcut")]
+    UnrecognizedKey,
+}
+
+
+impl FromStr for Shortcut {
+    type Err = ParseShortcutError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Shortcut::parse(s)
+    }
+}
+
+impl TryFrom<&str> for Shortcut {
+    type Error = ParseShortcutError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Shortcut::parse(value)
+    }
 }

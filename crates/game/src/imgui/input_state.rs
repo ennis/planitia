@@ -65,6 +65,7 @@ impl EguiInputState {
         }
     }
 
+    /// Returns true if the event was consumed by egui.
     pub fn update(&mut self, ctx: &egui::Context, input_event: &InputEvent) -> bool {
         fn convert_pointer_button(button: PointerButton) -> Option<egui::PointerButton> {
             match button {
@@ -119,6 +120,15 @@ impl EguiInputState {
                     egui::vec2(width as f32, height as f32),
                 ));
                 false
+            }
+            &InputEvent::MouseWheel { delta_x, delta_y } => {
+                self.raw.events.push(egui::Event::MouseWheel {
+                    modifiers: self.raw.modifiers,
+                    delta: egui::vec2(delta_x, delta_y),
+                    // TODO pass this down from the platform
+                    unit: egui::MouseWheelUnit::Line,
+                });
+                ctx.wants_pointer_input()
             }
         }
     }

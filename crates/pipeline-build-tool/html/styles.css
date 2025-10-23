@@ -1,0 +1,44 @@
+:root {
+    --accent: #ffca4c;
+}
+
+body {
+    background-color: #1a1a1a;
+    color: #aba8a0;
+    font-family: Zurich, "Inter Display", Inter, sans-serif;
+    font-size: 14px;
+    margin: 0;
+    padding: 0;
+}
+
+h1 {
+    margin: 0;
+    background: linear-gradient(#372300, #180E02);
+    height: 30px;
+    padding: 10px;
+    font-size: 24px;
+    color: var(--accent);
+    border-bottom: 1px solid #393939;
+}
+
+.accent {
+    color: var(--accent);
+}
+
+.prop-grid {
+    display: grid;
+    grid-template-columns: 150px 200px 100px 1fr;
+    gap: 6px 6px;
+    align-items: baseline;
+    margin: 10px;
+}
+
+.prop-grid label {
+    grid-column: 1;
+    justify-self: end;
+}
+
+.prop-value {
+    grid-column: 2;
+    justify-self: start;
+}

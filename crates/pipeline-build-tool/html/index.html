@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Pipeline Editor</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="jquery-3.7.1.slim.min.js"></script>
+    <script defer>
+        function afterLoad() {
+            let blendFactorOptions = [
+                "ZERO",
+                "ONE",
+                "SRC",
+                "ONE_MINUS_SRC",
+                "SRC_ALPHA",
+                "ONE_MINUS_SRC_ALPHA",
+                "DST",
+                "ONE_MINUS_DST",
+                "DST_ALPHA",
+                "ONE_MINUS_DST_ALPHA",
+            ];
+
+            for (let elem of document.querySelectorAll("select.blend-factor")) {
+                for (let optionValue of blendFactorOptions) {
+                    let option = document.createElement("option");
+                    option.value = optionValue;
+                    option.text = optionValue;
+                    elem.appendChild(option);
+                }
+            }
+
+            let blendOpOptions = [
+                "ADD",
+                "SUBTRACT",
+                "REVERSE_SUBTRACT",
+                "MIN",
+                "MAX",
+            ];
+
+            for (let elem of document.querySelectorAll("select.blend-op")) {
+                for (let optionValue of blendOpOptions) {
+                    let option = document.createElement("option");
+                    option.value = optionValue;
+                    option.text = optionValue;
+                    elem.appendChild(option);
+                }
+            }
+        }
+
+
+        document.addEventListener("DOMContentLoaded", afterLoad);
+
+    </script>
+
+    <template id="depth-format-template">
+        <label>Depth Format</label>
+        <div class="prop-value">
+            <select name="depthFormat">
+                <option value="none">None</option>
+                <option value="d16unorm">D16</option>
+                <option value="d24unormS8uint">D24S8</option>
+                <option value="d32float">D32F</option>
+            </select>
+        </div>
+    </template>
+
+</head>
+<body>
+
+<h1>Pipeline Editor</h1>
+
+<div style="padding: 10px;">
+
+    <div class="prop-grid">
+
+        <label for="slangFileInput">Shader File</label>
+        <div class="prop-value">
+            <input type="file" id="slangFileInput" accept=".slang">
+        </div>
+
+
+        <label for="slangFileInput">Shader Type</label>
+        <div class="prop-value">
+            <div>
+                <input type="radio" id="graphicsPipeline" name="pipelineType" value="graphicsPipeline">
+                <label for="graphicsPipeline">Graphics</label>
+            </div>
+
+            <div>
+                <input type="radio" id="computePipeline" name="pipelineType" value="computePipeline" checked>
+                <label for="computePipeline">Compute</label>
+                </div>
+
+                <div>
+                <input type="radio" id="meshPipeline" name="pipelineType" value="meshPipeline">
+                <label for="meshPipeline">Mesh</label>
+                </div>
+        </div>
+
+        <label for="pipelineName">Name</label>
+        <div class="prop-value">
+            <input type="text" id="pipelineName" value="pipeline">
+        </div>
+
+        <label for="depthFormat">Depth Format</label>
+        <div class="prop-value">
+            <select name="depthFormat" id="depthFormat">
+                <option value="none">None</option>
+                <option value="d16unorm">D16Unorm</option>
+                <option value="d24unormS8uint">D24UnormS8Uint</option>
+                <option value="d32float">D32Float</option>
+            </select>
+        </div>
+        <button>Override</button>
+
+        <label for="polygonMode">Polygon Mode</label>
+        <div class="prop-value">
+            <select name="polygonMode" id="polygonMode">
+                <option value="fill">FILL</option>
+                <option value="line">LINE</option>
+                <option value="point">POINT</option>
+            </select>
+        </div>
+        <button>Override</button>
+
+        <label for="srcColorBlendFactor">Src Color Blend</label>
+        <div class="prop-value">
+            <select name="srcColorBlendFactor" id="srcColorBlendFactor" class="blend-factor">
+                <!-- Options will be populated by JavaScript -->
+            </select>
+        </div>
+        <button>Override</button>
+
+            <label for="dstColorBlendFactor">Dst Color Blend</label>
+        <div class="prop-value">
+            <select name="dstColorBlendFactor" id="dstColorBlendFactor" class="blend-factor">
+                <!-- Options will be populated by JavaScript -->
+            </select>
+        </div>
+        <button>Override</button>
+
+        <label for="colorBlendOp">Color Blend Op</label>
+        <div class="prop-value">
+            <select name="colorBlendOp" id="colorBlendOp" class="blend-op">
+                <!-- Options will be populated by JavaScript -->
+            </select>
+        </div>
+        <button>Override</button>
+
+        <label for="srcAlphaBlendFactor">Src Alpha Blend</label>
+        <div class="prop-value">
+            <select name="srcAlphaBlendFactor" id="srcAlphaBlendFactor" class="blend-factor">
+                <!-- Options will be populated by JavaScript -->
+            </select>
+        </div>
+        <button>Override</button>
+
+        <label for="dstAlphaBlendFactor">Dst Alpha Blend</label>
+        <div class="prop-value">
+            <select name="dstAlphaBlendFactor" id="dstAlphaBlendFactor" class="blend-factor">
+                <!-- Options will be populated by JavaScript -->
+            </select>
+        </div>
+        <button>Override</button>
+
+        <label for="alphaBlendOp">Alpha Blend Op</label>
+        <div class="prop-value">
+            <select name="alphaBlendOp" id="alphaBlendOp" class="blend-op">
+                <!-- Options will be populated by JavaScript -->
+            </select>
+        </div>
+        <button>Override</button>
+
+    </div>
+
+    <button id="savePipelineButton">Save Config</button>
+    <button id="exportPipelineButton">Export Pipeline Archive</button>
+
+</div>
+
+</body>
+</html>

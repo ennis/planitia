@@ -1,0 +1,84 @@
+
+table ArchiveHeader {
+    magic: Magic;
+    version: ushort;   // Archive version
+    file_count: uint; // Number of files in the archive
+    entries: [PipelineEntry];
+}
+
+struct Magic {
+    data: [ubyte: 4]; // "PARC"
+}
+
+table PipelineEntry {
+    name: string;
+    tags: [string];
+    depth_stencil: DepthStencilStateBlock;
+    rasterizer: RasterizerStateBlock;
+    color_targets: [ColorTarget];
+}
+
+enum PolygonMode: byte {
+    FILL = 0,
+    LINE = 1,
+    POINT = 2
+}
+
+enum BlendFactor: byte {
+    ZERO = 0,
+    ONE = 1,
+    SRC_COLOR = 2,
+    ONE_MINUS_SRC_COLOR = 3,
+    DST_COLOR = 4,
+    ONE_MINUS_DST_COLOR = 5,
+    SRC_ALPHA = 6,
+    ONE_MINUS_SRC_ALPHA = 7,
+    DST_ALPHA = 8,
+    ONE_MINUS_DST_ALPHA = 9,
+    CONSTANT_COLOR = 10,
+    ONE_MINUS_CONSTANT_COLOR = 11,
+    CONSTANT_ALPHA = 12,
+    ONE_MINUS_CONSTANT_ALPHA = 13,
+    SRC_ALPHA_SATURATE = 14
+}
+
+enum Format: ushort {
+    UNDEFINED = 0,
+    R8G8B8A8_UNORM = 37,
+    D24_UNORM_S8_UINT = 45,
+    D32_SFLOAT = 126
+}
+
+enum BlendOp: byte {
+    ADD = 0,
+    SUBTRACT = 1,
+    REVERSE_SUBTRACT = 2,
+    MIN = 3,
+    MAX = 4
+}
+
+struct DepthStencilStateBlock {
+    format: Format;
+    depth_test_enable: bool;
+    depth_write_enable: bool;
+}
+
+
+struct ColorBlendStateBlock {
+    blend_enable: bool;
+    src_color_blend_factor: BlendFactor;
+    dst_color_blend_factor: BlendFactor;
+    color_blend_op: BlendOp;
+    src_alpha_blend_factor: BlendFactor;
+    dst_alpha_blend_factor: BlendFactor;
+    alpha_blend_op: BlendOp;
+}
+
+struct ColorTarget {
+    format: Format;
+    blend: ColorBlendStateBlock;
+}
+
+struct RasterizerStateBlock {
+    polygon_mode: PolygonMode;
+}

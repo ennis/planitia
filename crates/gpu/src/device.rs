@@ -104,7 +104,7 @@ pub(crate) struct ResourceTrackingInfo {
 struct DeleteQueueEntry {
     submission: u64,
     tracker_id: Option<ResourceId>,
-    object: Box<dyn DeleteLater>,
+    _object: Box<dyn DeleteLater>,
 }
 
 pub(crate) struct DeviceTracker {
@@ -873,7 +873,7 @@ impl Device {
         self.deletion_queue.lock().unwrap().push(DeleteQueueEntry {
             submission: submission_index,
             tracker_id: resource_id,
-            object: Box::new(object),
+            _object: Box::new(object),
         });
     }
 
@@ -926,8 +926,8 @@ impl Device {
         deletion_queue.retain(
             |DeleteQueueEntry {
                  tracker_id,
-                 object: _,
                  submission,
+                 _object: _,    // dropped here
              }| {
                 if *submission > last_completed_submission_index {
                     return true;

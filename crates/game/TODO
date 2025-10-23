@@ -77,3 +77,6 @@ Winit replacement:
 
 Bugs:
     ☐ vkDestroySemaphore(): can't be called on VkSemaphore 0xcb1c7c000000001b[DxgiVulkanSharedFence] that is currently in use by VkQueue 0x1be997ad4c0.
+    ☐ ERROR_DEVICE_LOST sometimes at startup
+        \Device\Video3
+        Error occurred on GPUID: 700

@@ -12,7 +12,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             //CompilationError::CompileError(err) => write!(f, "compilation errors: {}", err),
-            Error::IoError(err) => write!(f, "I/O error: {:?}", err),
+            Error::IoError(err) => write!(f, "I/O error: {}", err),
             Error::EntryPointNotFound(name) => write!(f, "entry point not found: {}", name),
             Error::CompilationError(err) => write!(f, "compilation errors: {}", err),
         }

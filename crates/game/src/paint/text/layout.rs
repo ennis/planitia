@@ -103,7 +103,7 @@ pub struct TextFragment<'a> {
 //-------------------------------------------------------------------------------------------------
 
 #[derive(Copy, Clone, Debug)]
-pub struct GlyphClusterData {
+pub struct ClusterData {
     pub info: ClusterInfo,
     /// Number of glyphs in the cluster, or 0xFF if the cluster is a single glyph and `glyph_offset_or_id` contains the glyph id directly.
     pub glyph_len: u8,
@@ -189,7 +189,7 @@ impl<'a> Iterator for GlyphRunIter<'a> {
         } else {
             // add advances of clusters in this run
             while self.cluster < p {
-                self.x += self.layout.glyph_clusters[self.cluster].advance;
+                self.x += self.layout.clusters[self.cluster].advance;
                 self.cluster += 1;
             }
         }
@@ -248,8 +248,8 @@ impl<'a> GlyphRun<'a> {
 
     /// Returns the range of original text covered by this run.
     pub fn text_range(&self) -> Range<usize> {
-        let start_cluster = &self.layout.glyph_clusters[self.cluster_range.start];
-        let end_cluster = &self.layout.glyph_clusters[self.cluster_range.end - 1];
+        let start_cluster = &self.layout.clusters[self.cluster_range.start];
+        let end_cluster = &self.layout.clusters[self.cluster_range.end - 1];
         let start = self.fragment.text_range.start + start_cluster.text_offset as usize;
         let end = self.fragment.text_range.start + end_cluster.text_offset as usize + end_cluster.text_len as usize;
         start..end
@@ -263,7 +263,7 @@ impl<'a> GlyphRun<'a> {
     /// Iterates over the glyphs in this run.
     pub fn glyphs(&self) -> impl Iterator<Item = Glyph> + 'a {
         //let y_baseline = self.line.position.y + self.line.metrics.baseline;
-        self.layout.glyph_clusters[self.cluster_range.clone()]
+        self.layout.clusters[self.cluster_range.clone()]
             .iter()
             .flat_map(move |cluster| {
                 if cluster.glyph_len == 0xFF {
@@ -274,9 +274,10 @@ impl<'a> GlyphRun<'a> {
                         advance: cluster.advance,
                     };
                     Some(glyph)
+                } else if cluster.glyph_len == 0 {
+                    None
                 } else {
-                    // complex cluster
-                    None // TODO
+                    todo!("complex clusters");
                 }
             })
     }
@@ -289,7 +290,7 @@ pub struct TextLayout {
     height: f32,
     fragments: Vec<FragmentData>,
     lines: Vec<LineData>,
-    glyph_clusters: Vec<GlyphClusterData>,
+    clusters: Vec<ClusterData>,
     glyph_data: Vec<Glyph>,
 }
 
@@ -298,7 +299,7 @@ impl TextLayout {
     pub fn new(format: &TextFormat, text: &str) -> TextLayout {
         let mut glyph_data = Vec::new();
         // map from
-        let mut glyph_cluster_data = Vec::new();
+        let mut clusters = Vec::new();
 
         shape_text(
             &ShapingParams {
@@ -323,22 +324,31 @@ impl TextLayout {
                     info
                 };
 
+                let glyph_len;
+                let glyph_offset_or_id;
+
                 if cluster.glyphs.len() == 1 && cluster.glyphs[0].offset == Vec2::ZERO {
                     // single-glyph cluster at zero offset, store glyph id directly
-                    let source_range = cluster.source_range.clone();
-                    glyph_cluster_data.push(GlyphClusterData {
-                        info,
-                        glyph_len: 0xFF,
-                        text_len: source_range.len() as u8,
-                        glyph_offset_or_id: cluster.glyphs[0].id.0,
-                        // TODO split in multiple runs if too long
-                        text_offset: source_range.start as u16,
-                        advance: cluster.advance,
-                    });
+                    glyph_len = 0xFF;
+                    glyph_offset_or_id = cluster.glyphs[0].id.0;
+                } else if cluster.glyphs.len() == 0 {
+                    glyph_len = 0;
+                    glyph_offset_or_id = 0;
                 } else {
                     todo!("complex clusters");
                     //glyph_data.extend_from_slice(cluster.glyphs);
                 }
+
+                let source_range = cluster.source_range.clone();
+                clusters.push(ClusterData {
+                    info,
+                    glyph_len,
+                    text_len: source_range.len() as u8,
+                    glyph_offset_or_id,
+                    // TODO split in multiple runs if too long
+                    text_offset: source_range.start as u16,
+                    advance: cluster.advance,
+                });
             },
         );
 
@@ -346,7 +356,7 @@ impl TextLayout {
         let fragment = FragmentData {
             format: format.clone(),
             text_range: 0..text.len(),
-            cluster_range: 0..glyph_cluster_data.len(),
+            cluster_range: 0..clusters.len(),
         };
 
         let layout = TextLayout {
@@ -354,7 +364,7 @@ impl TextLayout {
             height: 0.0,
             fragments: vec![fragment],
             lines: Vec::new(),
-            glyph_clusters: glyph_cluster_data,
+            clusters,
             glyph_data,
         };
         //dbg!(&layout);
@@ -401,17 +411,17 @@ impl TextLayout {
     }
 
     fn cursor_at_end(&self, cursor: &CursorData) -> bool {
-        cursor.cluster >= self.glyph_clusters.len()
+        cursor.cluster >= self.clusters.len()
     }
 
     fn next_glyph_cluster(&self, cur: &mut CursorData) -> bool {
-        if cur.cluster >= self.glyph_clusters.len() {
+        if cur.cluster >= self.clusters.len() {
             return false;
         }
 
         cur.cluster = cur.cluster + 1;
 
-        if cur.cluster >= self.glyph_clusters.len() {
+        if cur.cluster >= self.clusters.len() {
             // dummy fragment index
             cur.fragment = self.fragments.len();
             // end of source text
@@ -431,15 +441,14 @@ impl TextLayout {
         assert!(cur.fragment < self.fragments.len());
 
         // update source text position
-        cur.text_pos =
-            self.fragments[cur.fragment].text_range.start + self.glyph_clusters[cur.cluster].text_offset as usize;
+        cur.text_pos = self.fragments[cur.fragment].text_range.start + self.clusters[cur.cluster].text_offset as usize;
         true
     }
 
     pub fn layout_line(&mut self, pos: &mut CursorData, available_width: f32) -> Option<&mut LineData> {
         // FIXME: should delete all lines after pos
 
-        if pos.cluster >= self.glyph_clusters.len() {
+        if pos.cluster >= self.clusters.len() {
             // no more text to layout
             return None;
         }
@@ -450,7 +459,7 @@ impl TextLayout {
 
         // place glyph clusters in the line until we run out of space or text
         loop {
-            let c = &self.glyph_clusters[pos.cluster];
+            let c = &self.clusters[pos.cluster];
 
             if c.info.is_line_break_before() {
                 // possible line break opportunity before this character
@@ -480,7 +489,7 @@ impl TextLayout {
 
                     // eat non-newline trailing whitespace
                     loop {
-                        let info = &self.glyph_clusters[pos.cluster].info;
+                        let info = &self.clusters[pos.cluster].info;
                         if info.is_mandatory_break() || !info.is_whitespace() {
                             break;
                         }
@@ -492,7 +501,7 @@ impl TextLayout {
                 break;
             }
 
-            if pos.cluster >= self.glyph_clusters.len() {
+            if pos.cluster >= self.clusters.len() {
                 // no more text to layout
                 break;
             }
@@ -549,7 +558,7 @@ impl TextLayout {
             line: 0,
             fragment: 0,
             cluster: 0,
-            last_cluster: self.glyph_clusters.len(),
+            last_cluster: self.clusters.len(),
             x: 0.0,
         }
     }

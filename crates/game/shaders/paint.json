@@ -1,0 +1,38 @@
+{
+    "type": "graphics",
+    "output": "pipelines.parc",
+    "inputs": [
+        {
+            "file_path": "paint.slang",
+            "name": "paint",
+            "vertex_entry_point": "paint_vertex_main",
+            "fragment_entry_point": "paint_fragment_main"
+        }
+    ],
+    "compilation_options": {
+        "optimize": true,
+        "debug_info": false
+    },
+    "rasterizer_state": {
+        "cull_mode": "back",
+        "fill_mode": "solid"
+    },
+    "variants": [
+        {
+            "tag": "D=D24S8",
+            "overrides": {
+                "depth_stencil_state": {
+                    "format": "D24S8"
+                }
+            }
+        },
+        {
+            "tag": "D=D32F",
+            "overrides": {
+                "depth_stencil_state": {
+                    "format": "D32F"
+                }
+            }
+        }
+    ]
+}

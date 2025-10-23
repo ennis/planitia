@@ -1,8 +1,5 @@
-//! TODO: implement a single table for all descriptors, with VK_EXT_mutable_descriptor_type
-
-use crate::{Device, ResourceDescriptorIndex, SamplerDescriptorIndex, SamplerHandle};
+use crate::{Device, ResourceDescriptorIndex, SamplerDescriptorIndex};
 use ash::vk;
-use ash::vk::DescriptorType;
 use log::trace;
 use std::ffi::c_void;
 use std::ptr;

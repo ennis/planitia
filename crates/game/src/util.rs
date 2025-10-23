@@ -2,6 +2,7 @@ use arboard::Clipboard;
 use log::error;
 use std::env;
 use std::future::pending;
+use std::path::{Path, PathBuf};
 
 /// An async future that never completes.
 pub async fn forever() {
@@ -46,4 +47,29 @@ pub fn read_clipboard() -> String {
             String::new()
         }
     }
+}
+
+/// Checks if a file or directory at the given path exists, and returns another path with a numeric suffix if it does.
+///
+/// For example, if "file.txt" exists, it will return "file (1).txt", and so on.
+pub fn make_unique_path(path: &Path) -> PathBuf {
+    let orig_path = Path::new(path);
+    // split <directory>/<file_stem>.<extension>
+    let extension = orig_path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
+    let parent = orig_path.parent().unwrap_or(Path::new(""));
+    let file_stem = orig_path.file_stem().and_then(|stem| stem.to_str()).unwrap_or("");
+
+    let mut unique_path = orig_path.to_owned();
+    let mut suffix = 1;
+
+    while Path::new(&unique_path).exists() {
+        unique_path = Path::new(parent).join(if extension.is_empty() {
+            format!("{file_stem}({suffix})")
+        } else {
+            format!("{file_stem}({suffix}).{extension}")
+        });
+        suffix += 1;
+    }
+
+    unique_path
 }

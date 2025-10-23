@@ -7,7 +7,9 @@ use math::geom::{IRect, irect_xywh};
 use std::cell::RefCell;
 use std::ops::{Index, IndexMut, Range};
 use std::slice;
+use math::{u16vec2, U16Vec2};
 
+/// Texture atlas.
 pub struct Atlas {
     pub width: u32,
     pub height: u32,
@@ -113,6 +115,20 @@ impl Atlas {
         slice.rect
     }
 
+    /// Converts an area into normalized texture coordinates.
+    pub fn rect_to_normalized_texcoords(&self, rect: IRect) -> [U16Vec2; 2] {
+        [
+            u16vec2(
+                ((rect.min.x as f32) / (self.width as f32) * 65535.0) as u16,
+                ((rect.min.y as f32) / (self.height as f32) * 65535.0) as u16,
+            ),
+            u16vec2(
+                ((rect.max.x as f32) / (self.width as f32) * 65535.0) as u16,
+                ((rect.max.y as f32) / (self.height as f32) * 65535.0) as u16,
+            ),
+        ]
+    }
+
     /*/// Reserves additional lines in the atlas, growing its height if necessary.
     fn reserve_lines(&mut self, additional_lines: u32) {
         self.texture.replace(None);
@@ -125,9 +141,11 @@ impl Atlas {
     ///
     fn upload_to_gpu(&mut self, cmd: &mut gpu::CommandStream) {
         unsafe fn slice_to_u8<T: Copy>(slice: &[T]) -> &[u8] {
-            use std::mem::size_of;
-            let len = size_of::<Srgba32>() * slice.len();
-            slice::from_raw_parts_mut(slice.as_ptr() as *mut u8, len)
+            unsafe {
+                use std::mem::size_of;
+                let len = size_of::<Srgba32>() * slice.len();
+                slice::from_raw_parts_mut(slice.as_ptr() as *mut u8, len)
+            }
         }
 
         if self.dirty.is_empty() {
@@ -168,7 +186,7 @@ impl Atlas {
     /// Returns the GPU image handle for the atlas, uploading it if necessary.
     ///
     /// The image is prepared for shader read access.
-    pub(crate) fn use_texture(&mut self, cmd: &mut gpu::CommandStream) -> gpu::TextureHandle {
+    pub(crate) fn prepare_texture(&mut self, cmd: &mut gpu::CommandStream) -> gpu::TextureHandle {
         self.upload_to_gpu(cmd);
         cmd.barrier(Barrier::new().sample_read_image(&self.texture));
         cmd.reference_resource(&self.texture);

@@ -6,17 +6,18 @@ mod shape;
 mod tessellation;
 mod text;
 
-use gpu::prelude::DeviceExt;
-use gpu::{CommandStream, RenderPassInfo, Vertex as GpuVertex, vk};
-use math::geom::Camera;
-use math::{Mat4, Rect, U16Vec2, Vec2, Vec3, vec2};
-use shader_bridge::ShaderLibrary;
-use std::mem;
-use log::debug;
 use crate::paint::shape::RectShape;
 use crate::paint::tessellation::{Mesh, Tessellator};
 use crate::paint::text::{Font, Glyph, GlyphCache};
+use gpu::prelude::DeviceExt;
+use gpu::{CommandStream, RenderPassInfo, Vertex as GpuVertex, vk};
+use log::debug;
+use math::geom::Camera;
+use math::{IVec2, Mat4, Rect, U16Vec2, UVec2, Vec2, Vec3, ivec2, u16vec2, uvec2, vec2};
+use shader_bridge::ShaderLibrary;
+use std::mem;
 
+use crate::paint::atlas::Atlas;
 pub use color::Srgba32;
 pub use text::{GlyphRun, TextFormat, TextLayout};
 
@@ -45,29 +46,8 @@ pub struct FeatherVertex {
 impl FeatherVertex {
     const SIZE_CHECK: () = assert!(size_of::<Self>() == 16);
 
-    pub const fn new(p: Vec2, feather: f32, color: Srgba32) -> Self {
-        Self {
-            p,
-            feather,
-            color,
-            uv: U16Vec2::new(0, 0),
-        }
-    }
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, GpuVertex)]
-pub struct GlyphVertex {
-    pub p: Vec2,
-    pub uv: U16Vec2,
-    pub color: Srgba32,
-}
-
-impl GlyphVertex {
-    const SIZE_CHECK: () = assert!(size_of::<Self>() == 20);
-
-    pub const fn new(p: Vec2, uv: U16Vec2, color: Srgba32) -> Self {
-        Self { p, uv, color }
+    pub const fn new(p: Vec2, uv: U16Vec2, feather: f32, color: Srgba32) -> Self {
+        Self { p, feather, color, uv }
     }
 }
 
@@ -79,7 +59,6 @@ struct PushConstants {
     line_width: f32,
     texture: gpu::TextureHandle = gpu::TextureHandle::INVALID,
     sampler: gpu::SamplerHandle = gpu::SamplerHandle::INVALID,
-    use_texture: u32 = 0,
 }
 
 #[repr(C)]
@@ -177,6 +156,29 @@ impl Pipelines {
 
 //----------------------------------------------------------------
 
+/// Converts a texel coordinate into u16 normalized UV coordinates.
+pub fn texel_to_normalized_texcoord(pos: Vec2, texture_size: UVec2) -> U16Vec2 {
+    u16vec2(
+        ((pos.x / texture_size.x as f32) * 65535.0) as u16,
+        ((pos.y / texture_size.y as f32) * 65535.0) as u16,
+    )
+}
+
+/// Initializes the paint texture atlas.
+///
+/// Returns the atlas and the UV coordinate of a white pixel in the atlas.
+fn init_atlas() -> (Atlas, U16Vec2) {
+    let mut atlas = Atlas::new(1024, 1024);
+    // Add a white pixel at (0,0) for drawing solid colors without needing additional logic in the
+    // shaders
+    let rect = atlas.write(1, 1, &[Srgba32::WHITE], 1, 1);
+    let pos = texel_to_normalized_texcoord(
+        vec2(rect.min.x as f32 + 0.5, rect.min.y as f32 + 0.5),
+        uvec2(atlas.width, atlas.height),
+    );
+    (atlas, pos)
+}
+
 pub struct PaintRenderParams<'a> {
     pub camera: Camera,
     pub color_target: &'a gpu::Image,
@@ -185,7 +187,10 @@ pub struct PaintRenderParams<'a> {
 
 pub struct Painter {
     pipelines: Pipelines,
+    texture_atlas: Atlas,
+    white_pixel_uv: U16Vec2,
     glyph_cache: GlyphCache,
+    sampler: gpu::Sampler,
     color_format: vk::Format,
     depth_format: Option<vk::Format>,
 }
@@ -199,11 +204,21 @@ impl Painter {
         target_color_format: gpu::Format,
         target_depth_format: Option<gpu::Format>,
     ) -> Painter {
+        let (atlas, white_pixel_uv) = init_atlas();
+        let sampler = device.create_sampler(&gpu::SamplerCreateInfo {
+            mag_filter: vk::Filter::LINEAR,
+            min_filter: vk::Filter::LINEAR,
+            ..Default::default()
+        });
+
         Painter {
             pipelines: Pipelines::create(device, target_color_format, target_depth_format),
             color_format: target_color_format,
             depth_format: target_depth_format,
             glyph_cache: Default::default(),
+            texture_atlas: atlas,
+            white_pixel_uv,
+            sampler,
         }
     }
 
@@ -211,24 +226,12 @@ impl Painter {
     pub fn build_scene(&mut self) -> PaintScene<'_> {
         PaintScene::new(self)
     }
-
-    // to draw text, we need the glyph cache and the font collection; the signature will look like this:
-    //
-    //      fn draw_text(&self, font_collection: &mut FontCollection, glyph_cache: &mut GlyphCache, &FormattedText)
-    //
-    // Alternatively, the painter could have its own glyph_cache.
-    // Also, the font collection would not be necessary if formatted_text holds Arcs to the fonts instead of IDs in a collection.
-    // -> do this instead
-    // -> then `FontCollection` can be removed entirely (eventually it could be something that handles font resolution)
-    // -> FormattedText can be measured without any dependency
-    // -> the glyph cache can be made global (shared between multiple painters), but I'm not sure
-    //    that there will ever be multiple painters in practice
 }
 
 pub struct Primitive {
     kind: PrimKind,
     clip: Rect,
-    texture: Option<gpu::TextureHandle>,
+    texture: gpu::TextureHandle,
 }
 
 enum PrimKind {
@@ -250,11 +253,6 @@ pub struct PaintScene<'a> {
     clip_stack: Vec<Rect>,
 }
 
-/*
-fn textured_quad(p0: Vec2, p1: Vec2, uv0: U16Vec2, uv1: U16Vec2, color: Srgba32) -> [FeatherVertex; 6] {
-
-}*/
-
 impl<'a> PaintScene<'a> {
     pub(super) fn new(painter: &'a mut Painter) -> Self {
         Self {
@@ -271,7 +269,7 @@ impl<'a> PaintScene<'a> {
             let prim = Primitive {
                 kind: PrimKind::Geometry(mesh),
                 clip: self.clip_stack.last().cloned().unwrap(),
-                texture,
+                texture: texture.unwrap_or(self.painter.texture_atlas.texture_handle()),
             };
             self.prims.push(prim);
         }
@@ -280,12 +278,15 @@ impl<'a> PaintScene<'a> {
     /// Draws a rounded rectangle at the specified position with the given size and corner radius.
     pub fn fill_rrect(&mut self, rect: Rect, radius: f32, color: impl Into<Srgba32>) {
         let color = color.into();
-        self.tess.fill_rrect(RectShape {
-            rect,
-            radius,
-            colors: [color; 4],
-            feather: 0.0,
-        });
+        self.tess.fill_rrect(
+            RectShape {
+                rect,
+                radius,
+                colors: [color; 4],
+                feather: 0.0,
+            },
+            self.painter.white_pixel_uv,
+        );
     }
 
     fn clip_rect(&self) -> Rect {
@@ -325,11 +326,13 @@ impl<'a> PaintScene<'a> {
             //debug!("glyph_offset = {:?}", glyph.offset);
             advance += glyph.advance;
 
-
-            let (entry, quantized_pos) = self
-                .painter
-                .glyph_cache
-                .rasterize_glyph(&format.font, glyph.id, format.size as u32, pos);
+            let (entry, quantized_pos) = self.painter.glyph_cache.rasterize_glyph(
+                &mut self.painter.texture_atlas,
+                &format.font,
+                glyph.id,
+                format.size as u32,
+                pos,
+            );
 
             if entry.px_bounds.is_null() {
                 //eprintln!("    skipping empty glyph");
@@ -343,8 +346,7 @@ impl<'a> PaintScene<'a> {
             self.tess.quad(quad.min, quad.max, uv0, uv1, Srgba32::WHITE);
         }
 
-
-        self.end_prim(Some(self.painter.glyph_cache.texture_handle()));
+        self.end_prim(None);
     }
 
     pub fn finish(mut self, cmd: &mut CommandStream, params: &PaintRenderParams) {
@@ -364,8 +366,8 @@ impl<'a> PaintScene<'a> {
             "mismatched depth target format"
         );
 
-        // prepare glyph cache
-        let _glyph_cache_texture = self.painter.glyph_cache.use_texture(cmd);
+        // prepare texture atlas
+        let _atlas = self.painter.texture_atlas.prepare_texture(cmd);
 
         // setup encoder
         let mut encoder = cmd.begin_rendering(RenderPassInfo {
@@ -398,16 +400,8 @@ impl<'a> PaintScene<'a> {
                         matrix: params.camera.view_projection(),
                         screen_size: [width as f32, height as f32],
                         line_width: 1.0,
-                        texture: prim.texture.unwrap_or(gpu::TextureHandle::INVALID),
-                        sampler: encoder
-                            .device()
-                            .create_sampler(&gpu::SamplerCreateInfo {
-                                mag_filter: vk::Filter::LINEAR,
-                                min_filter: vk::Filter::LINEAR,
-                                ..Default::default()
-                            })
-                            .device_handle(),
-                        use_texture: if prim.texture.is_some() { 1 } else { 0 },
+                        texture: prim.texture,
+                        sampler: self.painter.sampler.device_handle(),
                     });
                     draw_mesh(&mut encoder, params, mesh, prim.clip);
                 }

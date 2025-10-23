@@ -33,7 +33,7 @@ fn load_shader_modules_in_directory(
                     Err(err) => {
                         // output compilation errors
                         for line in err.to_string().lines() {
-                            println!("cargo:warning={line}");
+                            println!("cargo::error={line}");
                         }
                         panic!("failed to load module: {err}");
                     }

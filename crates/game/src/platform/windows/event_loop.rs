@@ -193,6 +193,21 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
                     is_composing: false,
                 }));
             }
+            WindowEvent::MouseWheel { delta, .. } => {
+                match delta {
+                    winit::event::MouseScrollDelta::LineDelta(x, y) => {
+                        // TODO pass down lines or pixels
+                        event = Some(InputEvent::MouseWheel { delta_x: x, delta_y: y });
+                    }
+                    winit::event::MouseScrollDelta::PixelDelta(pos) => {
+                        event = Some(InputEvent::MouseWheel {
+                            delta_x: pos.x as f32,
+                            delta_y: pos.y as f32,
+                        });
+                    }
+                }
+
+            }
             _ => {}
         }
 

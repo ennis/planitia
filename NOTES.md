@@ -574,3 +574,17 @@ Tentative 2:
 Tentative 3: callbacks
 - `request_timer_wakeup(callback) -> TimerToken`
 - state accessed in the callback must be 
+
+
+# Pipeline build tool
+
+A command line tool to preprocess shaders
+(generate variants according to a set of keywords, and compile them to SPIR-V).
+Invokable from build scripts.
+
+Option A: run from build script
+Issue: poor error reporting / dev experience if a shader fails to compile. 
+       The errors are emitted via cargo:warning=..., no colors, no clickable links, etc.
+
+Option B: separate command line tool
+Issue: need to run it by hand

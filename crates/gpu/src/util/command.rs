@@ -1,5 +1,8 @@
 use crate::util::DeviceExt;
-use crate::{aspects_for_format, vk, BufferUsage, CommandStream, DeviceAddress, Image, ImageAspect, ImageCopyBuffer, ImageCopyView, ImageCreateInfo, ImageDataLayout, ImageSubresourceLayers, ImageUsage, Offset3D, Rect3D, Size3D};
+use crate::{
+    vk, BufferUsage, CommandStream, DeviceAddress, Image, ImageAspect, ImageCopyBuffer, ImageCopyView, ImageCreateInfo,
+    ImageDataLayout, ImageSubresourceLayers, ImageUsage, Offset3D, Rect3D, Size3D,
+};
 
 pub trait CommandStreamExt {
     /// Copies the data to a region of an image.
@@ -72,10 +75,7 @@ impl CommandStreamExt for CommandStream {
         let height = src.height() as i32;
         self.blit_image(
             &src,
-            ImageSubresourceLayers {
-                layer_count: 1,
-                ..
-            },
+            ImageSubresourceLayers { layer_count: 1, .. },
             Rect3D {
                 min: Offset3D { x: 0, y: 0, z: 0 },
                 max: Offset3D {
@@ -85,10 +85,7 @@ impl CommandStreamExt for CommandStream {
                 },
             },
             &dst,
-            ImageSubresourceLayers {
-                layer_count: 1,
-                ..
-            },
+            ImageSubresourceLayers { layer_count: 1, .. },
             Rect3D {
                 min: Offset3D { x: 0, y: 0, z: 0 },
                 max: Offset3D {

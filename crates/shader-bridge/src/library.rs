@@ -95,10 +95,10 @@ impl ShaderLibrary {
         let blob = program.entry_point_code(0, 0)?;
 
         // dump spirv for debugging
-        use std::fs::File;
+        /*use std::fs::File;
         use std::io::Write;
         let mut f = File::create(format!("shader_{entry_point_name}.spv")).unwrap();
-        f.write_all(blob.as_slice()).unwrap();
+        f.write_all(blob.as_slice()).unwrap();*/
 
         let blob = convert_spirv_u8_to_u32(blob.as_slice());
 

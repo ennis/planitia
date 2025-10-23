@@ -1,5 +1,5 @@
 use crate::{vec2, Vec2};
-use glam::{ivec3, IVec2, IVec3};
+use glam::{ivec3, IVec2, IVec3, Mat4, Vec3, Vec3A};
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 #[repr(C)]
@@ -167,13 +167,14 @@ pub const fn irect_xywh(x: i32, y: i32, w: i32, h: i32) -> IRect {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// 3D axis-aligned box with integer coordinates.
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub struct IRect3 {
+pub struct IBox3D {
     pub min: IVec3,
     pub max: IVec3,
 }
 
-impl IRect3 {
+impl IBox3D {
     pub const fn width(&self) -> u32 {
         (self.max.x - self.min.x) as u32
     }
@@ -218,5 +219,65 @@ impl IRect3 {
             min: ivec3(rect.min.x, rect.min.y, 0),
             max: ivec3(rect.max.x, rect.max.y, 1),
         }
+    }
+}
+
+/// 3D axis-aligned box.
+#[derive(Copy, Clone, Debug)]
+pub struct Box3D {
+    pub min: Vec3,
+    pub max: Vec3,
+}
+
+impl Box3D {
+
+    pub const NULL: Self = Self {
+        min: Vec3::ZERO,
+        max: Vec3::ZERO,
+    };
+
+    /// Returns the size of the box.
+    pub fn size(&self) -> Vec3 {
+        self.max - self.min
+    }
+
+    /*/// Transforms the bounding box with the provided matrix.
+    ///
+    /// Reference:
+    /// http://dev.theomader.com/transform-bounding-boxes/
+    pub fn transform_aabb(&self, tr: &Mat4) -> Box3D {
+        let xa = tr.x_axis * self.min.x;
+        let xb = tr.x_axis * self.max.x;
+        let ya = tr.y_axis * self.min.y;
+        let yb = tr.y_axis * self.max.y;
+        let za = tr.z_axis * self.min.z;
+        let zb = tr.z_axis * self.max.z;
+
+        let min = xa.min(xb) + ya.min(yb) + za.min(zb) + tr.w_axis;
+        let max = xa.max(xb) + ya.max(yb) + za.max(zb) + tr.w_axis;
+
+        Box3D {
+            min: min.into(),
+            max: max.into(),
+        }
+    }*/
+
+    /// Returns the center of the box.
+    pub fn center(&self) -> Vec3 {
+        0.5 * (self.min + self.max)
+    }
+
+    /// Returns the union of this box with another.
+    pub fn union(&self, other: &Box3D) -> Box3D {
+        Box3D {
+            min: self.min.min(other.min),
+            max: self.max.max(other.max),
+        }
+    }
+}
+
+impl Default for Box3D {
+    fn default() -> Self {
+        Box3D::NULL
     }
 }

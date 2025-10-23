@@ -4,7 +4,11 @@ members = [
     "crates/gpu-macros",
     "crates/game",
     "crates/math",
-    "crates/shader-bridge"]
+    "crates/shader-bridge",
+    "crates/pipeline-archive",
+    "crates/utils",
+    "crates/pipeline-build-tool",
+    "crates/pipeline-build-lib"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -13,6 +17,9 @@ gpu-macros = { path = "crates/gpu-macros" }
 shader-bridge = { path = "crates/shader-bridge" }
 game = { path = "crates/game" }
 math = { path = "crates/math" }
+utils = { path = "crates/utils" }
+pipeline-archive = { path = "crates/pipeline-archive" }
+pipeline-build-lib = { path = "crates/pipeline-build-lib" }
 
 [profile.release]
 debug = true

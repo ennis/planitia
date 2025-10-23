@@ -1,6 +1,9 @@
 use crate::paint::Srgba32;
 use crate::paint::text::Font;
 
+/// Default font size.
+const DEFAULT_SIZE: u32 = 16;
+
 /// Represents a text format property.
 #[derive(Clone)]
 pub enum FormatProperty {
@@ -27,7 +30,7 @@ impl Default for TextFormat {
     fn default() -> Self {
         Self {
             font: Font::default_regular().clone(),
-            size: 16.0,
+            size: DEFAULT_SIZE as f32,
             color: Srgba32::BLACK,
         }
     }

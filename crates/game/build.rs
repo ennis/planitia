@@ -34,4 +34,13 @@ fn main() {
     }
 
     rustfmt_file(&shader_bindings);
+
+    /////////////////////////////////////////
+
+    // build shaders
+    if let Err(err) =
+        pipeline_build_lib::build_pipeline("shaders/paint.json", &pipeline_build_lib::BuildOptions { quiet: true })
+    {
+        println!("cargo::error={err:#}");
+    }
 }

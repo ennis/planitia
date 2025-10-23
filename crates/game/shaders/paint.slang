@@ -49,11 +49,7 @@ VertexOutput paint_vertex_main(FeatherVertex v, uniform PushConstants u)
 FragmentOutput paint_fragment_main(VertexOutput v, uniform PushConstants u)
 {
     float alpha = (1.0 - abs(v.feather)) * min(u.line_width, 1.0);
-    float4 tex_color = float4(1.0, 1.0, 1.0, 1.0);
-    if (u.use_texture == 1)
-    {
-        tex_color = u.texture.Sample(u.sampler, v.uv);
-    }
+    float4 tex_color = u.texture.Sample(u.sampler, v.uv);
     FragmentOutput o;
     o.color = v.color * tex_color;
     o.color.a *= alpha;

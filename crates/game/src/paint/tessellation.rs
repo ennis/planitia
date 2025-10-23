@@ -1,6 +1,6 @@
 use crate::paint::shape::RectShape;
 use crate::paint::{FeatherVertex, Srgba32};
-use math::{Vec2, vec2, U16Vec2};
+use math::{U16Vec2, Vec2, vec2};
 use std::f32::consts::PI;
 
 #[derive(Clone, Copy, Debug)]
@@ -30,7 +30,7 @@ impl GeomSink {
     }
 }
 
-fn stroke_path(path: &[PN], closed: bool, width: f32, feather: f32, out: &mut GeomSink) {
+fn stroke_path(path: &[PN], closed: bool, width: f32, feather: f32, uv: U16Vec2, out: &mut GeomSink) {
     out.reserve(
         path.len() * 2,
         if closed { path.len() * 6 } else { (path.len() - 1) * 6 },
@@ -38,9 +38,9 @@ fn stroke_path(path: &[PN], closed: bool, width: f32, feather: f32, out: &mut Ge
 
     for (i, v) in path.iter().enumerate() {
         out.vertices
-            .push(FeatherVertex::new(v.p - v.n * (width + feather), -1.0, v.c));
+            .push(FeatherVertex::new(v.p - v.n * (width + feather), uv, -1.0, v.c));
         out.vertices
-            .push(FeatherVertex::new(v.p + v.n * (width + feather), 1.0, v.c));
+            .push(FeatherVertex::new(v.p + v.n * (width + feather), uv, 1.0, v.c));
         if i > 0 {
             let base = (i * 2) as u32;
             out.indices.extend([base - 2, base - 1, base, base, base - 1, base + 1]);
@@ -53,7 +53,7 @@ fn stroke_path(path: &[PN], closed: bool, width: f32, feather: f32, out: &mut Ge
     }
 }
 
-fn tess_feathered_polygon(polygon: &[PN], feather_in: f32, feather_out: f32, out: &mut GeomSink) {
+fn tess_feathered_polygon(polygon: &[PN], feather_in: f32, feather_out: f32, uv: U16Vec2, out: &mut GeomSink) {
     assert!(feather_in >= 0.0);
     assert!(feather_out >= 0.0);
 
@@ -71,7 +71,7 @@ fn tess_feathered_polygon(polygon: &[PN], feather_in: f32, feather_out: f32, out
     out.vertices.extend(
         polygon
             .iter()
-            .map(|v| FeatherVertex::new(v.p - feather_in * v.n, 0.0, v.c)),
+            .map(|v| FeatherVertex::new(v.p - feather_in * v.n, uv, 0.0, v.c)),
     );
     for i in 1..(polygon.len() - 1) {
         let i = i as u32;
@@ -82,7 +82,8 @@ fn tess_feathered_polygon(polygon: &[PN], feather_in: f32, feather_out: f32, out
     if feather_in > 0.0 || feather_out > 0.0 {
         let base_feather = out.vertices.len() as u32;
         for v in polygon.iter() {
-            out.vertices.push(FeatherVertex::new(v.p + feather_out * v.n, 1.0, v.c));
+            out.vertices
+                .push(FeatherVertex::new(v.p + feather_out * v.n, uv, 1.0, v.c));
         }
         for i in 0..polygon.len() {
             let i = i as u32;
@@ -141,34 +142,33 @@ impl Tessellator {
         self.geometry.vertices.is_empty()
     }
 
-    pub fn fill_rrect(&mut self, rect: RectShape) {
+    pub fn fill_rrect(&mut self, rect: RectShape, uv: U16Vec2) {
         let mut p = Vec::new();
         flatten_rrect(rect, &mut p);
 
         if rect.feather > 0.0 {
-            tess_feathered_polygon(&p, 0.0, rect.feather, &mut self.geometry);
+            tess_feathered_polygon(&p, 0.0, rect.feather, uv, &mut self.geometry);
         } else {
             // 1px wide AA feather
-            tess_feathered_polygon(&p, 0.5, 0.5, &mut self.geometry);
+            tess_feathered_polygon(&p, 0.5, 0.5, uv, &mut self.geometry);
         }
     }
 
-    pub fn stroke_rrect(&mut self, rect: RectShape, width: f32) {
+    pub fn stroke_rrect(&mut self, rect: RectShape, width: f32, uv: U16Vec2) {
         let mut p = Vec::new();
         flatten_rrect(rect, &mut p);
 
         if rect.feather > 0.0 {
-            stroke_path(&p, true, width, rect.feather, &mut self.geometry);
+            stroke_path(&p, true, width, rect.feather, uv, &mut self.geometry);
         } else {
             // 1px wide AA feather
-            stroke_path(&p, true, width, 0.5, &mut self.geometry);
+            stroke_path(&p, true, width, 0.5, uv, &mut self.geometry);
         }
     }
 
     pub fn quad(&mut self, p0: Vec2, p1: Vec2, uv0: U16Vec2, uv1: U16Vec2, color: Srgba32) {
         let base = self.geometry.vertices.len() as u32;
-        self.geometry.vertices.extend(
-        [
+        self.geometry.vertices.extend([
             FeatherVertex {
                 p: Vec2::new(p0.x, p0.y),
                 uv: U16Vec2::new(uv0.x, uv0.y),
@@ -194,20 +194,18 @@ impl Tessellator {
                 feather: 0.0,
             },
         ]);
-        self.geometry.indices.extend([base+0, base+1, base+2, base+0, base+2, base+3]);
+        self.geometry
+            .indices
+            .extend([base + 0, base + 1, base + 2, base + 0, base + 2, base + 3]);
     }
 
     pub fn finish_and_reset(&mut self) -> Mesh {
-
         let vertices = self.geometry.vertices.clone();
         let indices = self.geometry.indices.clone();
         self.geometry.vertices.clear();
         self.geometry.indices.clear();
 
-        Mesh {
-            vertices: vertices,
-            indices: indices,
-        }
+        Mesh { vertices, indices }
     }
 }
 

@@ -25,7 +25,10 @@ arboard = "3.6.0"
 renderdoc = "0.12.1"
 math = { workspace = true }
 shader-bridge = { workspace = true }
+utils = { workspace = true }
+pipeline-archive = { workspace = true }
 ab_glyph = "0.2.31"
+serde_json = "1.0.145"
 
 [target.'cfg(target_os="windows")'.dependencies]
 windows = { version = "0.61.3", features = [
@@ -61,3 +64,4 @@ windows = { version = "0.61.3", features = [
 
 [build-dependencies]
 shader-bridge = { workspace = true }
+pipeline-build-lib = { workspace = true }
