@@ -7,7 +7,7 @@
 //! Hopefully egui will switch to using `keyboard_types` directly in the future.
 //! We might also move to our own immediate mode GUI in the future.
 
-use crate::input::{InputEvent, PointerButton};
+use crate::input::{InputEvent, MouseScrollDelta, PointerButton};
 use arboard::Clipboard;
 use egui::{OutputCommand, Pos2};
 use keyboard_types::{Key, Modifiers, NamedKey};
@@ -121,12 +121,15 @@ impl EguiInputState {
                 ));
                 false
             }
-            &InputEvent::MouseWheel { delta_x, delta_y } => {
+            &InputEvent::MouseWheel(delta) => {
+                let (x,y,unit) = match delta {
+                    MouseScrollDelta::LineDelta { x, y } => (x, y, egui::MouseWheelUnit::Line),
+                    MouseScrollDelta::PixelDelta { x, y } => (x, y, egui::MouseWheelUnit::Point),
+                };
                 self.raw.events.push(egui::Event::MouseWheel {
                     modifiers: self.raw.modifiers,
-                    delta: egui::vec2(delta_x, delta_y),
-                    // TODO pass this down from the platform
-                    unit: egui::MouseWheelUnit::Line,
+                    delta: egui::vec2(x, y),
+                    unit,
                 });
                 ctx.wants_pointer_input()
             }

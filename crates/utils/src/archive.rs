@@ -1,12 +1,20 @@
-use aligned_vec::{AVec, ConstAlign};
+use aligned_vec::{ABox, AVec, ConstAlign};
 use std::alloc::Layout;
 use std::fs::File;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::marker::PhantomData;
-use std::ops::{Index, IndexMut};
+use std::ops::{Deref, Index, IndexMut};
 use std::path::Path;
 use std::{ptr, slice};
+use std::borrow::Borrow;
 
+/// Boxed byte slice aligned to cache lines.
+type AlignedData = ABox<[u8]>;
+
+/// Vec<u8> aligned to cache lines.
+type AlignedVec = AVec<u8>;
+
+/// Errors while reading archive data.
 #[derive(thiserror::Error, Debug)]
 pub enum ReadError {
     #[error("unexpected end of file")]
@@ -118,21 +126,22 @@ impl<T: ?Sized + ArchiveData> Offset<T> {
     }
 
     /// Returns a reference to the data at this offset within the provided archive reader.
-    pub fn get<'a>(&self, reader: ArchiveReader<'a>) -> Result<&'a T, ReadError> {
-        self.as_ptr(reader.data.as_ptr(), reader.data.len())
+    pub fn get<'a>(&self, reader: &'a ArchiveReader) -> Result<&'a T, ReadError> {
+        self.as_ptr(reader.0.as_ptr(), reader.0.len())
             .map(|ptr| unsafe { &*ptr })
     }
 
-    pub fn as_ptr<'a>(&self, base: *const u8, len: usize) -> Result<*const T, ReadError> {
+    pub fn as_ptr(&self, base: *const u8, len: usize) -> Result<*const T, ReadError> {
         assert!((self.0 as usize) < len);
         unsafe { T::cast(base.add(self.0 as usize), len - self.0 as usize) }
     }
 
-    pub fn as_mut_ptr<'a>(&self, base: *mut u8, len: usize) -> Result<*mut T, ReadError> {
+    pub fn as_mut_ptr(&self, base: *mut u8, len: usize) -> Result<*mut T, ReadError> {
         self.as_ptr(base, len).map(|ptr| ptr as *mut T)
     }
 }
 
+/*
 #[macro_export]
 macro_rules! field_offset {
     ($offset:expr, $t:ty, $field:ident) => {{
@@ -143,36 +152,128 @@ macro_rules! field_offset {
         let field_offset = ::core::mem::offset_of!($t, $field);
         field_offset_impl($offset, field_offset as u32, |x: &$t| &x.$field)
     }};
-}
+}*/
 
 ///////////////////////////////////////////////////////////
 
 /// Wrapper around a byte slice with convenience methods to read or reinterpret data.
-#[derive(Copy, Clone)]
-pub struct ArchiveReader<'a> {
-    data: &'a [u8],
-}
+#[repr(transparent)]
+pub struct ArchiveReader([u8]);
 
-impl<'a> ArchiveReader<'a> {
-    pub fn new(data: &'a [u8]) -> Self {
-        ArchiveReader { data }
+impl ArchiveReader {
+    /// FIXME check alignment requirements
+    pub fn new(data: &[u8]) -> &Self {
+        // SAFETY: same repr.
+        unsafe { &*(data as *const [u8] as *const ArchiveReader) }
     }
 
     /// Reads the header at offset 0.
-    pub fn header<T: ArchiveData + ?Sized>(&self) -> Result<&'a T, ReadError> {
-        Offset::<T>::new(0).get(*self)
+    pub fn header<T: ArchiveData + ?Sized>(&self) -> Result<&T, ReadError> {
+        Offset::<T>::new(0).get(self)
+    }
+}
+
+impl<T: ?Sized + ArchiveData> Index<Offset<T>> for ArchiveReader {
+    type Output = T;
+
+    fn index(&self, index: Offset<T>) -> &Self::Output {
+        unsafe { &*index.as_ptr(self.0.as_ptr(), self.0.len()).unwrap() }
+    }
+}
+
+impl ToOwned for ArchiveReader {
+    type Owned = ArchiveReaderOwned;
+
+    fn to_owned(&self) -> Self::Owned {
+        let mut storage = AlignedVec::with_capacity(0, self.0.len());
+        storage.extend_from_slice(&self.0);
+        ArchiveReaderOwned::new(storage.into_boxed_slice())
+    }
+}
+
+///////////////////////////////////////////////////////////
+
+/// Owned version of ArchiveReader that keeps the data alive.
+pub struct ArchiveReaderOwned {
+    data: *mut [u8],
+    align: usize,
+    /// Self-references the contents of `data`.
+    reader: &'static ArchiveReader,
+}
+
+unsafe impl Send for ArchiveReaderOwned {}
+unsafe impl Sync for ArchiveReaderOwned {}
+
+impl Drop for ArchiveReaderOwned {
+    fn drop(&mut self) {
+        // reconstruct the box
+        unsafe {
+            let vec = AlignedData::from_raw_parts(self.align, self.data);
+            drop(vec);
+        }
+    }
+}
+
+impl ArchiveReaderOwned {
+    fn new(data: AlignedData) -> Self {
+        // convert to raw pointer because moving the box would invalidate the self-reference in ArchiveReader
+        let (data, align) = AlignedData::into_raw_parts(data);
+        let reader = unsafe { ArchiveReader::new(slice::from_raw_parts(data as *const u8, data.len())) };
+        ArchiveReaderOwned { data, align, reader }
+    }
+
+    pub fn load(path: impl AsRef<Path>) -> std::io::Result<Self> {
+        fn load_inner(path: &Path) -> std::io::Result<ArchiveReaderOwned> {
+            let mut file = File::open(path)?;
+            let file_size = file.metadata()?.len() as usize;
+            let mut storage = AVec::new(0);
+            storage.resize(file_size, 0);
+            let read = file.read(&mut storage)?;
+            if read != file_size {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "failed to read whole file",
+                ));
+            }
+
+            Ok(ArchiveReaderOwned::new(storage.into_boxed_slice()))
+        }
+
+        load_inner(path.as_ref())
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        let mut storage = AVec::new(0);
+        storage.extend_from_slice(bytes);
+        ArchiveReaderOwned::new(storage.into_boxed_slice())
+    }
+}
+
+impl Deref for ArchiveReaderOwned {
+    type Target = ArchiveReader;
+
+    fn deref(&self) -> &Self::Target {
+        &self.reader
+    }
+}
+
+impl Borrow<ArchiveReader> for ArchiveReaderOwned {
+    fn borrow(&self) -> &ArchiveReader {
+        &self.reader
     }
 }
 
 ///////////////////////////////////////////////////////////
 
 pub struct ArchiveWriter {
-    storage: AVec<u8, ConstAlign<64>>,
+    storage: AlignedVec,
 }
 
 impl ArchiveWriter {
     pub fn new() -> Self {
-        ArchiveWriter { storage: AVec::new(64) }
+        ArchiveWriter {
+            storage: AlignedVec::new(0),
+        }
     }
 
     fn alloc_layout(&mut self, layout: Layout) -> (OffsetUntyped, *mut u8) {
@@ -218,8 +319,7 @@ impl ArchiveWriter {
         offset
     }
 
-    pub fn write_slice<T: Copy + 'static>(&mut self, slice: &[T]) -> Offset<[T]>
-    {
+    pub fn write_slice<T: Copy + 'static>(&mut self, slice: &[T]) -> Offset<[T]> {
         let (offset, ptr) = self.alloc_length_prefixed::<T>(slice.len());
         unsafe {
             ptr::copy_nonoverlapping(slice.as_ptr(), ptr, slice.len());
@@ -269,6 +369,8 @@ impl<T: ?Sized + ArchiveData> IndexMut<Offset<T>> for ArchiveWriter {
         unsafe { &mut *index.as_mut_ptr(self.storage.as_mut_ptr(), self.storage.len()).unwrap() }
     }
 }
+
+////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod tests {

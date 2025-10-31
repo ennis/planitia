@@ -5,8 +5,8 @@ use color_print::{ceprintln, cprintln};
 use log::info;
 use pipeline_archive::archive::{ArchiveWriter, Offset};
 use pipeline_archive::gpu::ShaderStage;
-use pipeline_archive::zstring::{ZString16, ZString32};
-use pipeline_archive::{PIPELINE_ARCHIVE_MAGIC, PipelineEntryData};
+use pipeline_archive::zstring::{ZString16, ZString32, ZString64};
+use pipeline_archive::{PIPELINE_ARCHIVE_MAGIC, PipelineEntryData, ShaderData};
 use shader_bridge::ShaderLibrary;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -17,6 +17,7 @@ struct CompilationJob<'a> {
     configuration: Configuration,
 }
 
+/*
 fn add_variant_permutations<'a>(variants: &'a [Variant], out_permutations: &mut Vec<Vec<&'a Variant>>) {
     let mut sets = BTreeMap::new();
     for variant in variants {
@@ -36,10 +37,19 @@ fn add_variant_permutations<'a>(variants: &'a [Variant], out_permutations: &mut 
         tmp.extend(out_permutations.drain(..));
         out_permutations.clear();
         for perm in tmp.drain(..) {
-            for tag in tags {
-                let mut p = perm.clone();
-                p.push(tag);
-                out_permutations.push(p);
+            if tags.len() == 1 && tags[0].tag.value().is_none() {
+                out_permutations.push(perm.clone());
+                {
+                    let mut p = perm;
+                    p.push(tags[0]);
+                    out_permutations.push(p);
+                }
+            } else {
+                for tag in tags {
+                    let mut p = perm.clone();
+                    p.push(tag);
+                    out_permutations.push(p);
+                }
             }
         }
     }
@@ -55,7 +65,7 @@ fn print_permutation(permutation: &[&Variant]) {
         }
     }
     info!("  variant: {}", parts.join(", "));
-}
+}*/
 
 /// Bundles compilation errors from multiple jobs into a single error.
 #[derive(Debug)]
@@ -106,12 +116,6 @@ impl BuildManifest {
     }
 
     pub(crate) fn compile_to_archive(&self, archive: &mut ArchiveWriter, options: &BuildOptions) -> anyhow::Result<()> {
-        let mut base_permutations = vec![vec![]];
-        add_variant_permutations(&self.variants[..], &mut base_permutations);
-
-        eprintln!("variants: {:?}", self.variants.len());
-        eprintln!("base permutations: {}", base_permutations.len());
-
         // header
         let header = archive.write(pipeline_archive::PipelineArchiveData {
             magic: PIPELINE_ARCHIVE_MAGIC,
@@ -123,35 +127,29 @@ impl BuildManifest {
         let mut entries = Vec::new();
 
         for input in &self.inputs {
-            // add input-specific variants
-            let mut permutations = base_permutations.clone();
-            add_variant_permutations(&input.variants[..], &mut permutations);
 
-            // resolve configuration for each permutation and compile them
-            for p in &permutations {
-                let mut config = self.base.clone();
-                for variant in p {
-                    config.apply_overrides(&variant.overrides)?;
+            let mut config = self.base_configuration.clone();
+            if let Some(ref overrides) = input.overrides {
+                config.apply_overrides(overrides)?;
+            }
+
+            if !options.quiet {
+                cprintln!("<g,bold>Compiling</> {} (<i>{}</>)", input.file_path, input.name);
+            }
+
+            match self.compile_input(archive, input, &config, options) {
+                Ok(entry) => {
+                    entries.push(entry);
                 }
-
-                let variant_id = format_variant_identifier(input, p);
-                if !options.quiet {
-                    cprintln!("<g,bold>Compiling</> {} - <i>{}</>", input.file_path, variant_id);
-                }
-
-                match self.compile_variant(archive, input, &config, p, options) {
-                    Ok(entry) => {
-                        entries.push(entry);
-                    }
-                    Err(err) => {
-                        ceprintln!("<r,bold>Error(s)</>: {:#}", err);
-                        compilation_errors
-                            .0
-                            .push(err.context(format!("compiling variant {variant_id}")));
-                        eprintln!();
-                    }
+                Err(err) => {
+                    ceprintln!("<r,bold>Error(s)</>: {:#}", err);
+                    compilation_errors
+                        .0
+                        .push(err.context(format!("compiling {}", input.file_path)));
+                    eprintln!();
                 }
             }
+
         }
 
         if !compilation_errors.0.is_empty() {
@@ -180,15 +178,13 @@ impl BuildManifest {
         }
     }
 
-    fn compile_variant(
+    fn compile_input(
         &self,
         archive: &mut ArchiveWriter,
         input: &Input,
         config: &Configuration,
-        permutation: &[&Variant],
         _options: &BuildOptions,
     ) -> anyhow::Result<PipelineEntryData> {
-
         let lib = match ShaderLibrary::new(self.resolve_path(&input.file_path)) {
             Ok(lib) => lib,
             Err(err) => {
@@ -221,7 +217,13 @@ impl BuildManifest {
                         .get_compiled_entry_point(entry_point_name)
                         .map_err(|err| Error::CompilationError(err.to_string()))?;
                     push_constants_size = push_constants_size.max(entry_point_info.push_constants_size);
-                    let offset = archive.write_slice(entry_point_info.spirv.as_slice());
+                    let offset = {
+                        let spirv = archive.write_slice(entry_point_info.spirv.as_slice());
+                        archive.write(ShaderData {
+                            entry_point: ZString32::new(entry_point_name),
+                            spirv,
+                        })
+                    };
                     match ty {
                         ShaderStage::Vertex => vertex_shader_offset = offset,
                         ShaderStage::Fragment => fragment_shader_offset = offset,
@@ -239,13 +241,13 @@ impl BuildManifest {
                 let vertex_or_mesh_shaders = if mesh_shader_offset.is_valid() {
                     // mesh shading mode (mesh + optional task shader)
                     pipeline_archive::GraphicsPipelineShaders::Mesh {
-                        mesh_shader: mesh_shader_offset,
-                        task_shader: task_shader_offset,
+                        mesh: mesh_shader_offset,
+                        task: task_shader_offset,
                     }
                 } else {
                     // primitive shading mode (vertex shader)
                     pipeline_archive::GraphicsPipelineShaders::Primitive {
-                        vertex_shader: vertex_shader_offset,
+                        vertex: vertex_shader_offset,
                     }
                 };
 
@@ -268,8 +270,13 @@ impl BuildManifest {
                     .get_compiled_entry_point(entry_point_name)
                     .map_err(|err| Error::CompilationError(err.to_string()))?;
                 push_constants_size = entry_point_info.push_constants_size;
-                let offset = archive.write_slice(entry_point_info.spirv.as_slice());
-                let compute_shader_offset = offset;
+                let compute_shader_offset = {
+                    let spirv = archive.write_slice(entry_point_info.spirv.as_slice());
+                    archive.write(ShaderData {
+                        entry_point: ZString32::new(entry_point_name),
+                        spirv,
+                    })
+                };
                 pipeline_kind = pipeline_archive::PipelineKind::Compute(pipeline_archive::ComputePipelineData {
                     compute_shader: compute_shader_offset,
                     workgroup_size: entry_point_info.work_group_size,
@@ -277,18 +284,9 @@ impl BuildManifest {
             }
         }
 
-        let tags = {
-            let mut tag_offsets = Vec::new();
-            for variant in permutation.iter() {
-                tag_offsets.push(archive.write(ZString16::new(variant.tag.value().unwrap_or(""))));
-            }
-            let tag_slice = archive.write_slice(tag_offsets.as_slice());
-            tag_slice
-        };
 
-        Ok(pipeline_archive::PipelineEntryData {
-            name: ZString32::new(&input.name),
-            tags,
+        Ok(PipelineEntryData {
+            name: ZString64::new(&input.name),
             push_constants_size: push_constants_size as u16,
             kind: pipeline_kind,
         })

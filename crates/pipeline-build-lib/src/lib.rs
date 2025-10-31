@@ -2,6 +2,7 @@ mod build;
 mod manifest;
 
 use anyhow::Context;
+use color_print::cprintln;
 pub use manifest::*;
 use std::path::Path;
 
@@ -17,7 +18,19 @@ pub struct BuildOptions {
 /// * `manifest_path` - Path to the pipeline manifest file (JSON).
 pub fn build_pipeline(manifest_path: impl AsRef<Path>, options: &BuildOptions) -> anyhow::Result<()> {
     fn build_pipeline_inner(manifest_path: &Path, options: &BuildOptions) -> anyhow::Result<()> {
-        let manifest = BuildManifest::load(manifest_path)?;
+        let manifest = match BuildManifest::load(manifest_path) {
+            Ok(manifest) => manifest,
+            Err(err) => {
+                if !options.quiet {
+                    cprintln!(
+                        "<r,bold>error:</> failed to load manifest from {}: {:#}",
+                        manifest_path.display(),
+                        err
+                    );
+                }
+                return Err(err).with_context(|| format!("failed to load manifest from {}", manifest_path.display()));
+            }
+        };
 
         manifest
             .build_all(options)

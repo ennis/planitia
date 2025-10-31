@@ -1,4 +1,4 @@
-use crate::input::{InputEvent, PointerButton};
+use crate::input::{InputEvent, MouseScrollDelta, PointerButton};
 use crate::platform::windows::key_code::key_event_to_key_code;
 use crate::platform::windows::window::Window;
 use crate::platform::windows::{Error, TimerEntry, WakeReason, Win32Platform};
@@ -22,9 +22,11 @@ struct WinitAppHandler<'a> {
 }
 
 impl<'a> WinitAppHandler<'a> {
+    /// Initializes the window if it hasn't been created yet.
     fn init_window(&self, event_loop: &ActiveEventLoop) -> Result<(), Error> {
         if self.this.window.borrow().is_some() {
-            return Ok(()); // window already created
+            // window already created
+            return Ok(());
         }
 
         self.this.window.replace(Some(Window::new(
@@ -34,14 +36,14 @@ impl<'a> WinitAppHandler<'a> {
             self.this.options.height,
         )?));
 
-        // start sending vblank ticks to the event loop
+        // start the vsync clock to send vblank ticks to the event loop
         self.this.vsync_clock.start();
 
         Ok(())
     }
 
+    /// Updates the state of the modifier keys from a key event.
     fn update_modifiers(&mut self, key: &keyboard_types::Key, state: keyboard_types::KeyState) {
-        // update modifiers
         if let keyboard_types::Key::Named(nk) = key {
             match (nk, state) {
                 (keyboard_types::NamedKey::Shift, keyboard_types::KeyState::Down) => {
@@ -73,8 +75,15 @@ impl<'a> WinitAppHandler<'a> {
         }
     }
 
+    /// Maintains the list of active timers, firing events for all expired timers.
+    ///
+    /// For each expired timer, this sends an event to the handler with the corresponding token,
+    /// and removes it from the list.
+    ///
+    /// # Return value
+    ///
+    /// The timer which should be the next to expire, if there's one.
     fn update_timers(&mut self) -> Option<TimerEntry> {
-        // remove expired deadlines
         let now = Instant::now();
         let mut next = None;
         loop {
@@ -105,6 +114,7 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
             ControlFlow::Wait
         });
         if cause == StartCause::Poll {
+            // explicit polling requested
             self.inner.poll();
         }
     }
@@ -116,7 +126,6 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, reason: WakeReason) {
         match reason {
             WakeReason::VSync => {
-                //eprintln!("got vsync");
                 self.inner.vsync();
             }
             WakeReason::Token(token) => {
@@ -126,7 +135,8 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
     }
 
     fn window_event(&mut self, _event_loop: &ActiveEventLoop, _window_id: WindowId, window_event: WindowEvent) {
-        // handle window events
+
+        // translate winit window event to input event
         let mut event = None;
         match window_event {
             WindowEvent::Resized(size) => {
@@ -194,25 +204,23 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
                 }));
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                match delta {
+                let delta = match delta {
                     winit::event::MouseScrollDelta::LineDelta(x, y) => {
-                        // TODO pass down lines or pixels
-                        event = Some(InputEvent::MouseWheel { delta_x: x, delta_y: y });
+                        MouseScrollDelta::LineDelta { x, y }
                     }
                     winit::event::MouseScrollDelta::PixelDelta(pos) => {
-                        event = Some(InputEvent::MouseWheel {
-                            delta_x: pos.x as f32,
-                            delta_y: pos.y as f32,
-                        });
+                        MouseScrollDelta::PixelDelta { x: pos.x as f32, y: pos.y as f32 }
                     }
-                }
+                };
+
+                event = Some(InputEvent::MouseWheel(delta));
 
             }
             _ => {}
         }
 
+        // propagate input event to the input handler
         if let Some(event) = event {
-            // propagate input event to the input handler
             self.inner.input(event);
         }
     }

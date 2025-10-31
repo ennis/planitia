@@ -1,4 +1,4 @@
-use crate::input::{InputEvent, PointerButton};
+use crate::input::{InputEvent, MouseScrollDelta, PointerButton};
 use log::debug;
 use math::geom::{Box3D, Camera, Frustum};
 use math::{DQuat, DVec2, DVec3, Mat4, Vec3, Vec3Swizzles, Vec4Swizzles, dvec2, dvec3, vec3};
@@ -122,7 +122,9 @@ impl CameraControl {
             InputEvent::CursorMoved { x, y } => self.cursor_moved(dvec2(*x as f64, *y as f64)),
             InputEvent::PointerDown { button, .. } => self.mouse_input(*button, true),
             InputEvent::PointerUp { button, .. } => self.mouse_input(*button, false),
-            InputEvent::MouseWheel { delta_y, .. } => self.mouse_wheel(*delta_y as f64),
+            // TODO map lines to pixels properly
+            InputEvent::MouseWheel(MouseScrollDelta::LineDelta { y, .. }) => self.mouse_wheel(*y as f64),
+            InputEvent::MouseWheel(MouseScrollDelta::PixelDelta { y, .. }) => self.mouse_wheel(*y as f64),
             _ => false,
         }
     }

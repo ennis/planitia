@@ -45,6 +45,7 @@ impl Tag {
 
 #[derive(Clone, Debug)]
 pub struct Variant {
+    /// TODO remove variant tags, instead put keywords in the name of the pipeline directly
     pub tag: Tag,
     pub overrides: Json,
 }
@@ -77,7 +78,6 @@ pub struct Input {
     pub task_entry_point: String,
     pub mesh_entry_point: String,
     pub overrides: Option<Json>,
-    pub variants: Vec<Variant>,
 }
 
 #[derive(Clone)]
@@ -87,8 +87,7 @@ pub struct BuildManifest {
     pub inputs: Vec<Input>,
     /// Output archive path.
     pub output: String,
-    pub base: Configuration,
-    pub variants: Vec<Variant>,
+    pub base_configuration: Configuration,
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -337,7 +336,6 @@ impl Input {
             task_entry_point,
             mesh_entry_point,
             overrides,
-            variants: vec![],
         })
     }
 }
@@ -397,44 +395,17 @@ impl BuildManifest {
             read_color_targets(color_targets_json, &mut color_targets)?;
         }
 
-        let mut variants: Vec<Variant> = Vec::new();
-        if let Some(variants_array) = read_array(json, "variants")? {
-            for variant_json in variants_array {
-                let tag = read_str(variant_json, "tag")?.ok_or(MissingField("tag"))?.to_string();
-
-                let overrides = read_object(variant_json, "overrides")?
-                    .ok_or(MissingField("variant overrides"))?
-                    .clone();
-                if let Some(prev_variant) = variants.iter_mut().find(|v| v.tag.0 == tag) {
-                    // merge overrides with previous variant of the same tag
-                    for (key, value) in overrides.as_object().unwrap() {
-                        prev_variant
-                            .overrides
-                            .as_object_mut()
-                            .unwrap()
-                            .insert(key.clone(), value.clone());
-                    }
-                }
-
-                variants.push(Variant {
-                    tag: Tag(tag),
-                    overrides,
-                });
-            }
-        }
-
         Ok(BuildManifest {
             type_,
             output,
             manifest_path: manifest_path.to_path_buf(),
             inputs,
-            base: Configuration {
+            base_configuration: Configuration {
                 defines: Default::default(),
                 rasterization_state: rasterizer_state,
                 depth_stencil_state,
                 color_targets,
             },
-            variants,
         })
     }
 }

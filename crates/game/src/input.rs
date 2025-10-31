@@ -5,7 +5,6 @@ use std::str::FromStr;
 use log::error;
 
 /// Represents a pointer button.
-// TODO why u no bitflags?
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct PointerButton(pub u16);
 
@@ -82,13 +81,29 @@ impl Default for PointerButtons {
     }
 }
 
+/// Represents an amount of scrolling from pointer wheel input.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum MouseScrollDelta {
+    /// Scroll amount in lines.
+    LineDelta { x: f32, y: f32 },
+    /// Scroll amount in pixels.
+    PixelDelta { x: f32, y: f32 },
+}
+
+/// Represents an input event (mouse, keyboard, window resize).
 #[derive(Clone, Debug, PartialEq)]
 pub enum InputEvent {
+    /// The cursor moved to the specified window coordinates.
     CursorMoved { x: u32, y: u32 },
+    /// A pointer button was pressed.
     PointerDown { button: PointerButton, x: u32, y: u32 },
+    /// A pointer button was released.
     PointerUp { button: PointerButton, x: u32, y: u32 },
-    MouseWheel { delta_x: f32, delta_y: f32 },
+    /// The mouse wheel was scrolled.
+    MouseWheel(MouseScrollDelta),
+    /// A key was pressed or released.
     KeyboardEvent(KeyboardEvent),
+    /// The application window was resized.
     Resized { width: u32, height: u32 },
 }
 

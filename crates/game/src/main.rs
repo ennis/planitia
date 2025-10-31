@@ -13,7 +13,6 @@ use serde_json::json;
 use math::geom::rect_xywh;
 use math::{Rect, vec2};
 use crate::camera_control::{CameraControl, CameraControlInput};
-use crate::pipeline_editor::PipelineEditor;
 
 mod context;
 mod event;
@@ -30,23 +29,27 @@ mod timer;
 mod util;
 mod world;
 mod camera_control;
-mod pipeline_editor;
+//mod pipeline_editor;
+mod asset;
+mod pipeline_cache;
+//mod pipeline_cache;
 
 const WIDTH: u32 = 1280;
 const HEIGHT: u32 = 720;
 
 
-struct Handler {
+struct Game {
     physics_timer: EventToken,
     render_target_time: EventToken,
     demo: WidgetGallery,
     color: Color32,
     painter: Painter,
     camera_control: CameraControl,
-    pipeline_editor: PipelineEditor,
+    //pipeline_editor: PipelineEditor,
+    //pipeline_cache: PipelineCache,
 }
 
-impl Default for Handler {
+impl Default for Game {
     fn default() -> Self {
         let painter = Painter::new(get_gpu_device(), gpu::Format::R8G8B8A8_UNORM, None);
         let device = get_gpu_device();
@@ -63,13 +66,13 @@ impl Default for Handler {
             color: Default::default(),
             painter,
             camera_control: CameraControl::default(),
-            pipeline_editor: Default::default(),
+            //pipeline_editor: Default::default(),
             //grid_pipeline: ,
         }
     }
 }
 
-impl Handler {
+impl Game {
     fn paint_test_scene(&mut self, cmd: &mut gpu::CommandStream, target: &gpu::Image) {
         let mut scene = self.painter.build_scene();
         let [r, g, b, a] = self.color.to_srgba_unmultiplied();
@@ -116,6 +119,7 @@ And what is else not to be overcome?",
 
     fn draw_grid(&mut self, cmd: &mut gpu::CommandStream, target: &gpu::Image) {
 
+
         //
         /*let pipeline = self.pipeline_db.query("grid", [
             ColorFormat(),
@@ -132,7 +136,7 @@ And what is else not to be overcome?",
     }
 }
 
-impl AppHandler for Handler {
+impl AppHandler for Game {
     fn input(&mut self, input_event: InputEvent) {
 
         // --- SHORTCUTS ---
@@ -183,12 +187,11 @@ impl AppHandler for Handler {
             //dbg!(self.color);
             self.demo.ui(ui);
         });
-        self.pipeline_editor.show_gui(ctx);
     }
 }
 
 fn main() {
-    run::<Handler>(&InitOptions {
+    run::<Game>(&InitOptions {
         width: WIDTH,
         height: HEIGHT,
         window_title: "Planitia",
