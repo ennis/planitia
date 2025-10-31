@@ -3,7 +3,7 @@ use std::{mem, slice};
 
 use ash::vk;
 
-use crate::{Barrier, CommandStream, ComputePipeline, Descriptor, RcDevice, TrackedResource};
+use crate::{Barrier, CommandStream, ComputePipeline, Descriptor, Device, TrackedResource};
 
 /// A context object to submit commands to a command buffer after a pipeline has been bound to it.
 ///
@@ -15,16 +15,13 @@ pub struct ComputeEncoder<'a> {
 }
 
 impl<'a> ComputeEncoder<'a> {
-    pub fn device(&self) -> &RcDevice {
-        self.stream.device()
-    }
 
     pub fn reference_resource<R: TrackedResource>(&mut self, resource: &R) {
         self.stream.reference_resource(resource);
     }
 
     pub unsafe fn bind_descriptor_set(&mut self, index: u32, set: vk::DescriptorSet) {
-        self.stream.device.raw.cmd_bind_descriptor_sets(
+        Device::global().raw.cmd_bind_descriptor_sets(
             self.command_buffer,
             vk::PipelineBindPoint::COMPUTE,
             self.pipeline_layout,
@@ -53,7 +50,7 @@ impl<'a> ComputeEncoder<'a> {
 
     // SAFETY: TBD
     pub fn bind_compute_pipeline(&mut self, pipeline: &ComputePipeline) {
-        let device = self.stream.device();
+        let device = Device::global();
         unsafe {
             device
                 .raw
@@ -107,8 +104,7 @@ impl<'a> ComputeEncoder<'a> {
 
     pub fn dispatch(&mut self, group_count_x: u32, group_count_y: u32, group_count_z: u32) {
         unsafe {
-            self.stream
-                .device
+            Device::global()
                 .raw
                 .cmd_dispatch(self.command_buffer, group_count_x, group_count_y, group_count_z);
         }

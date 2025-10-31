@@ -1,10 +1,7 @@
 //! Blit command encoders
 use ash::vk;
 
-use crate::{
-    Barrier, BufferRangeUntyped, BufferUntyped, ClearColorValue, CommandStream, Image, ImageCopyBuffer, ImageCopyView,
-    ImageSubresourceLayers, Rect3D,
-};
+use crate::{Barrier, BufferRangeUntyped, BufferUntyped, ClearColorValue, CommandStream, Device, Image, ImageCopyBuffer, ImageCopyView, ImageSubresourceLayers, Rect3D};
 
 impl CommandStream {
     pub fn fill_buffer(&mut self, range: &BufferRangeUntyped, data: u32) {
@@ -14,7 +11,7 @@ impl CommandStream {
         let cb = self.get_or_create_command_buffer();
         unsafe {
             // SAFETY: FFI call and parameters are valid
-            self.device
+            Device::global()
                 .raw
                 .cmd_fill_buffer(cb, range.buffer.handle(), range.byte_offset, range.byte_size, data);
         }
@@ -28,7 +25,7 @@ impl CommandStream {
         let cb = self.get_or_create_command_buffer();
         unsafe {
             // SAFETY: FFI call and parameters are valid
-            self.device.raw.cmd_clear_color_image(
+            Device::global().raw.cmd_clear_color_image(
                 cb,
                 image.handle(),
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
@@ -51,7 +48,7 @@ impl CommandStream {
         let cb = self.get_or_create_command_buffer();
         unsafe {
             // SAFETY: FFI call and parameters are valid
-            self.device.raw.cmd_clear_depth_stencil_image(
+            Device::global().raw.cmd_clear_depth_stencil_image(
                 cb,
                 image.handle(),
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
@@ -106,7 +103,7 @@ impl CommandStream {
         // SAFETY: FFI call and parameters are valid
         let cb = self.get_or_create_command_buffer();
         unsafe {
-            self.device.raw.cmd_copy_image(
+            Device::global().raw.cmd_copy_image(
                 cb,
                 source.image.handle(),
                 vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
@@ -136,7 +133,7 @@ impl CommandStream {
         // SAFETY: FFI call and parameters are valid
         let cb = self.get_or_create_command_buffer();
         unsafe {
-            self.device.raw.cmd_copy_buffer(
+            Device::global().raw.cmd_copy_buffer(
                 cb,
                 source.handle(),
                 destination.handle(),
@@ -184,7 +181,7 @@ impl CommandStream {
         // SAFETY: FFI call and parameters are valid
         let cb = self.get_or_create_command_buffer();
         unsafe {
-            self.device.raw.cmd_copy_buffer_to_image(
+            Device::global().raw.cmd_copy_buffer_to_image(
                 cb,
                 source.buffer.handle(),
                 destination.image.handle(),
@@ -199,10 +196,11 @@ impl CommandStream {
         &mut self,
         source: ImageCopyView<'_>,
         destination: ImageCopyBuffer<'_>,
-        copy_size: vk::Extent3D,
+        _copy_size: vk::Extent3D,
     ) {
         self.reference_resource(source.image);
         self.reference_resource(destination.buffer);
+        todo!("copy_image_to_buffer");
     }
 
     pub fn blit_image(
@@ -262,7 +260,7 @@ impl CommandStream {
         // SAFETY: command buffer is OK, params OK
         let cb = self.get_or_create_command_buffer();
         unsafe {
-            self.device.raw.cmd_blit_image(
+            Device::global().raw.cmd_blit_image(
                 cb,
                 src.handle(),
                 vk::ImageLayout::TRANSFER_SRC_OPTIMAL,

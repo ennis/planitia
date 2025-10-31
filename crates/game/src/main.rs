@@ -1,6 +1,7 @@
 #![expect(unused, reason = "noisy")]
 #![feature(default_field_values)]
 
+use crate::camera_control::{CameraControl, CameraControlInput};
 use crate::context::{AppHandler, LoopHandler, get_gpu_device, quit, render_imgui, run};
 use crate::input::{InputEvent, PointerButton};
 use crate::paint::{DrawGlyphRunOptions, PaintRenderParams, PaintScene, Painter, Srgba32, TextFormat, TextLayout};
@@ -9,11 +10,11 @@ use egui::Color32;
 use egui_demo_lib::{Demo, DemoWindows, View, WidgetGallery};
 use futures::{FutureExt, StreamExt};
 use log::debug;
-use serde_json::json;
 use math::geom::rect_xywh;
 use math::{Rect, vec2};
-use crate::camera_control::{CameraControl, CameraControlInput};
+use serde_json::json;
 
+mod camera_control;
 mod context;
 mod event;
 mod executor;
@@ -28,7 +29,6 @@ mod task;
 mod timer;
 mod util;
 mod world;
-mod camera_control;
 //mod pipeline_editor;
 mod asset;
 mod pipeline_cache;
@@ -36,7 +36,6 @@ mod pipeline_cache;
 
 const WIDTH: u32 = 1280;
 const HEIGHT: u32 = 720;
-
 
 struct Game {
     physics_timer: EventToken,
@@ -51,8 +50,7 @@ struct Game {
 
 impl Default for Game {
     fn default() -> Self {
-        let painter = Painter::new(get_gpu_device(), gpu::Format::R8G8B8A8_UNORM, None);
-        let device = get_gpu_device();
+        let painter = Painter::new(gpu::Format::R8G8B8A8_UNORM, None);
         /*let grid_pipeline = device.create_graphics_pipeline(&gpu::GraphicsPipelineCreateInfo {
             vertex: gpu::ShaderModule::from_spirv_bytes(device, include_bytes!("../shaders/grid.vert.spv")).unwrap(),
             fragment: Some(gpu::ShaderModule::from_spirv_bytes(device, include_bytes!("../shaders/grid.frag.spv")).unwrap()),
@@ -114,18 +112,16 @@ And what is else not to be overcome?",
                 depth_target: None,
             },
         );
-
     }
 
     fn draw_grid(&mut self, cmd: &mut gpu::CommandStream, target: &gpu::Image) {
 
-
         //
         /*let pipeline = self.pipeline_db.query("grid", [
-            ColorFormat(),
-            DepthFormat(),
+        ColorFormat(),
+        DepthFormat(),
 
-            ]);*/
+        ]);*/
 
         // self-contained pipeline files:
         // - custom tags (for vertex signature, etc.)
@@ -138,7 +134,6 @@ And what is else not to be overcome?",
 
 impl AppHandler for Game {
     fn input(&mut self, input_event: InputEvent) {
-
         // --- SHORTCUTS ---
 
         // App exit
@@ -174,7 +169,7 @@ impl AppHandler for Game {
         self.paint_test_scene(&mut cmd, &target.image);
         render_imgui(&mut cmd, &target.image);
 
-        cmd.flush(&[target.ready], &[target.rendering_finished]).unwrap();
+        cmd.flush(&[target.ready], &[target.rendering_finished], None).unwrap();
     }
 
     fn close_requested(&mut self) {

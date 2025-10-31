@@ -5,6 +5,18 @@ use std::ffi::{c_void, CStr, CString};
 use std::os::raw::c_char;
 use std::sync::LazyLock;
 
+#[cfg(windows)]
+const INSTANCE_EXTENSIONS: &[&str] = &[
+    "VK_KHR_get_surface_capabilities2",
+    "VK_EXT_debug_utils",
+    "VK_KHR_surface",
+    "VK_KHR_win32_surface",
+];
+// TODO other platforms
+
+
+//--------------------------------------------------------------------------------------------------
+
 /// Returns the global `ash::Entry` object.
 pub fn get_vulkan_entry() -> &'static ash::Entry {
     &VULKAN_ENTRY
@@ -62,14 +74,6 @@ unsafe fn check_validation_layer_support() -> bool {
     })
 }
 
-#[cfg(windows)]
-const INSTANCE_EXTENSIONS: &[&str] = &[
-    "VK_KHR_get_surface_capabilities2",
-    "VK_EXT_debug_utils",
-    "VK_KHR_surface",
-    "VK_KHR_win32_surface",
-];
-// TODO other platforms
 
 fn create_vulkan_instance() -> ash::Instance {
     unsafe {

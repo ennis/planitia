@@ -1,6 +1,5 @@
 use crate::context::Context;
 use crate::platform::windows::{D3D12CommandQueue, D3D12Device, DXGIFactory4, GpuFenceData};
-use gpu::RcDevice;
 use log::info;
 use std::cell::{Cell, OnceCell};
 use std::ffi::OsString;
@@ -21,7 +20,6 @@ use windows::core::{IUnknown, Interface, Owned};
 
 pub(super) struct GraphicsContext {
     pub(super) adapter: IDXGIAdapter1,
-    pub(super) vk_device: RcDevice,
     pub(super) d3d_device: D3D12Device,      // thread safe
     pub(super) cmd_queue: D3D12CommandQueue, // thread safe
     pub(super) cmd_alloc: ThreadBound<ID3D12CommandAllocator>,
@@ -34,7 +32,7 @@ impl GraphicsContext {
     pub(super) fn new() -> Self {
         // XXX: create the vulkan device first so that it is picked up as the main API by
         //      renderdoc (otherwise it picks D3D12 which is not what we want)
-        let vk_device = gpu::create_device().expect("failed to create Vulkan device");
+        let _vk_device = gpu::Device::global();
 
         //=========================================================
         // DXGI Factory and adapter enumeration
@@ -151,7 +149,6 @@ impl GraphicsContext {
 
         Self {
             adapter,
-            vk_device,
             d3d_device,
             cmd_queue,
             cmd_alloc,

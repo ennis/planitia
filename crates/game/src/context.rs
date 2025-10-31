@@ -40,7 +40,7 @@ impl Context {
         let platform = Platform::new(options);
         let lua = mlua::Lua::new();
         let executor = LocalExecutor::new();
-        let imgui = RefCell::new(ImguiContext::new(platform.get_gpu_device()));
+        let imgui = RefCell::new(ImguiContext::new());
 
         let rdoc = RenderDoc::new().ok();
         if rdoc.is_some() {
@@ -232,8 +232,8 @@ pub fn run<Handler: AppHandler + Default>(init_options: &InitOptions) {
 }
 
 /// Returns the GPU device.
-pub fn get_gpu_device() -> &'static gpu::RcDevice {
-    get_context().platform.get_gpu_device()
+pub fn get_gpu_device() -> &'static gpu::Device {
+    gpu::Device::global()
 }
 
 /// Requests the event loop to quit.

@@ -91,9 +91,6 @@ pub trait PlatformHandler {
     /// Acquires a render target image that can be used for rendering.
     fn render(&self, render_callback: &mut dyn FnMut(RenderTargetImage));
 
-    /// Returns the Vulkan device instance.
-    fn get_gpu_device(&self) -> &gpu::RcDevice;
-
     /// Signals the event loop to wake up on the next vsync.
     fn wake_at_next_vsync(&self);
 

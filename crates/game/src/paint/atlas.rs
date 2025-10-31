@@ -1,6 +1,5 @@
 use crate::context::get_gpu_device;
 use crate::paint::Srgba32;
-use gpu::util::CommandStreamExt;
 use gpu::{Barrier, ImageAspect, ImageCopyView, ImageCreateInfo, MemoryLocation, Size3D, vk};
 use log::debug;
 use math::geom::{IRect, irect_xywh};
@@ -50,6 +49,7 @@ impl Atlas {
                 array_layers: 1,
                 samples: 1,
                 type_: gpu::ImageType::Image2D,
+                ..
             }),
             cursor_x: 0,
             cursor_y: 0,

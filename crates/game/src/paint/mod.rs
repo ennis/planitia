@@ -8,14 +8,11 @@ mod text;
 
 use crate::paint::shape::RectShape;
 use crate::paint::tessellation::{Mesh, Tessellator};
-use crate::paint::text::{Font, Glyph, GlyphCache};
-use gpu::prelude::DeviceExt;
-use gpu::{CommandStream, RenderPassInfo, Vertex as GpuVertex, vk};
-use log::debug;
+use crate::paint::text::GlyphCache;
+use gpu::{vk, CommandStream, Device, RenderPassInfo, Vertex as GpuVertex};
 use math::geom::Camera;
-use math::{IVec2, Mat4, Rect, U16Vec2, UVec2, Vec2, Vec3, ivec2, u16vec2, uvec2, vec2};
+use math::{u16vec2, uvec2, vec2, Mat4, Rect, U16Vec2, UVec2, Vec2};
 use shader_bridge::ShaderLibrary;
-use std::mem;
 
 use crate::paint::atlas::Atlas;
 pub use color::Srgba32;
@@ -74,7 +71,6 @@ struct Pipelines {
 
 impl Pipelines {
     fn create(
-        device: &gpu::RcDevice,
         target_color_format: gpu::Format,
         target_depth_format: Option<gpu::Format>,
     ) -> Pipelines {
@@ -124,7 +120,7 @@ impl Pipelines {
             },
         };
 
-        let paint_pipeline = device
+        let paint_pipeline = Device::global()
             .create_graphics_pipeline(create_info)
             .expect("failed to create pipeline");
 
@@ -200,19 +196,18 @@ impl Painter {
     ///
     /// `target_color_format` and `target_depth_format` specify the formats of the render targets that will be used during rendering.
     pub fn new(
-        device: &gpu::RcDevice,
         target_color_format: gpu::Format,
         target_depth_format: Option<gpu::Format>,
     ) -> Painter {
         let (atlas, white_pixel_uv) = init_atlas();
-        let sampler = device.create_sampler(&gpu::SamplerCreateInfo {
+        let sampler = Device::global().create_sampler(&gpu::SamplerCreateInfo {
             mag_filter: vk::Filter::LINEAR,
             min_filter: vk::Filter::LINEAR,
             ..Default::default()
         });
 
         Painter {
-            pipelines: Pipelines::create(device, target_color_format, target_depth_format),
+            pipelines: Pipelines::create(target_color_format, target_depth_format),
             color_format: target_color_format,
             depth_format: target_depth_format,
             glyph_cache: Default::default(),
@@ -441,8 +436,8 @@ fn draw_mesh(encoder: &mut gpu::RenderEncoder, params: &PaintRenderParams, mesh:
     if mesh.vertices.is_empty() || mesh.indices.is_empty() {
         return;
     }
-    let vertex_buffer = encoder.device().upload_slice(gpu::BufferUsage::VERTEX, &mesh.vertices);
-    let index_buffer = encoder.device().upload_slice(gpu::BufferUsage::INDEX, &mesh.indices);
+    let vertex_buffer = Device::global().upload_slice(gpu::BufferUsage::VERTEX, &mesh.vertices, "");
+    let index_buffer = Device::global().upload_slice(gpu::BufferUsage::INDEX, &mesh.indices, "");
     encoder.bind_vertex_buffer(0, vertex_buffer.as_bytes().into());
     encoder.bind_index_buffer(vk::IndexType::UINT32, index_buffer.as_bytes().into());
     set_scissor(encoder, params, clip);

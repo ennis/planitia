@@ -1,21 +1,22 @@
-use std::marker::PhantomData;
-use std::{mem, ptr};
+use crate::{BufferRange, BufferUsage, Device, DeviceAddress, ResourceAllocation, ResourceId, TrackedResource};
+use ash::vk;
+use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
+use gpu_allocator::MemoryLocation;
 use std::collections::Bound;
+use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::ops::RangeBounds;
 use std::os::raw::c_void;
 use std::ptr::NonNull;
-use std::rc::Rc;
-use ash::vk;
-use gpu_allocator::MemoryLocation;
-use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
-use crate::{BufferRange, BufferUsage, Device, DeviceAddress, RcDevice, ResourceAllocation, ResourceId, TrackedResource};
+use std::{mem, ptr};
 
 impl<T: ?Sized> Drop for Buffer<T> {
     fn drop(&mut self) {
         let mut allocation = mem::take(&mut self.allocation);
         let handle = self.handle;
-        self.device.delete_tracked_resource(self.id, move |device| unsafe {
+
+        Device::global().delete_tracked_resource(self.id, move || unsafe {
+            let device = Device::global();
             device.free_memory(&mut allocation);
             device.raw.destroy_buffer(handle, None);
         });
@@ -24,7 +25,6 @@ impl<T: ?Sized> Drop for Buffer<T> {
 
 /// A buffer of GPU-visible memory, optionally mapped in host memory, without any associated type.
 pub struct Buffer<T: ?Sized> {
-    pub(crate) device: RcDevice,
     pub(crate) id: ResourceId,
     pub(crate) memory_location: MemoryLocation,
     pub(crate) allocation: ResourceAllocation,
@@ -37,12 +37,6 @@ pub struct Buffer<T: ?Sized> {
 }
 
 impl<T: ?Sized> Buffer<T> {
-    pub fn set_name(&self, name: &str) {
-        // SAFETY: the handle is valid
-        unsafe {
-            self.device.set_object_name(self.handle, name);
-        }
-    }
 
     pub fn device_address(&self) -> DeviceAddress<T> {
         DeviceAddress {
@@ -69,11 +63,6 @@ impl<T: ?Sized> Buffer<T> {
     /// Returns the Vulkan buffer handle.
     pub fn handle(&self) -> vk::Buffer {
         self.handle
-    }
-
-    /// Returns the device on which the buffer was created.
-    pub fn device(&self) -> &RcDevice {
-        &self.device
     }
 
     /// Returns whether the buffer is host-visible, and mapped in host memory.
@@ -287,63 +276,66 @@ impl Device {
 
     /// Creates a new buffer resource.
     pub fn create_buffer(
-        self: &Rc<Self>,
+        &self,
         usage: BufferUsage,
         memory_location: MemoryLocation,
         byte_size: u64,
+        label: &str,
     ) -> BufferUntyped {
         assert!(byte_size > 0, "buffer size must be greater than zero");
 
-        // create the buffer object first
-        let create_info = vk::BufferCreateInfo {
-            flags: Default::default(),
-            size: byte_size,
-            usage: usage.to_vk_buffer_usage_flags() | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
-            sharing_mode: vk::SharingMode::EXCLUSIVE,
-            queue_family_index_count: 0,
-            p_queue_family_indices: ptr::null(),
-            ..Default::default()
-        };
-        let handle = unsafe {
-            self.raw
-                .create_buffer(&create_info, None)
-                .expect("failed to create buffer")
-        };
-
-        let mem_req = unsafe { self.raw.get_buffer_memory_requirements(handle) };
-        let allocation = self.allocate_memory_or_panic(&AllocationCreateDesc {
-            name: "",
-            requirements: mem_req,
-            location: memory_location,
-            linear: true,
-            allocation_scheme: AllocationScheme::GpuAllocatorManaged,
-        });
         unsafe {
-            self.raw
-                .bind_buffer_memory(handle, allocation.memory(), allocation.offset())
-                .unwrap();
-        }
-        let mapped_ptr = allocation.mapped_ptr();
-        let allocation = ResourceAllocation::Allocation { allocation };
-
-        let device_address = unsafe {
-            self.raw.get_buffer_device_address(&vk::BufferDeviceAddressInfo {
-                buffer: handle,
+            let create_info = vk::BufferCreateInfo {
+                flags: Default::default(),
+                size: byte_size,
+                usage: usage.to_vk_buffer_usage_flags() | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+                sharing_mode: vk::SharingMode::EXCLUSIVE,
+                queue_family_index_count: 0,
+                p_queue_family_indices: ptr::null(),
                 ..Default::default()
-            })
-        };
+            };
+            let handle =
+                self.raw
+                    .create_buffer(&create_info, None)
+                    .expect("failed to create buffer");
 
-        BufferUntyped {
-            device: self.clone(),
-            id: self.allocate_resource_id(),
-            allocation,
-            handle,
-            memory_location,
-            device_address,
-            size: byte_size,
-            usage,
-            mapped_ptr,
-            _marker: PhantomData,
+            let mem_req = self.raw.get_buffer_memory_requirements(handle);
+            let allocation = self.allocate_memory_or_panic(&AllocationCreateDesc {
+                name: "",
+                requirements: mem_req,
+                location: memory_location,
+                linear: true,
+                allocation_scheme: AllocationScheme::GpuAllocatorManaged,
+            });
+            self.raw
+                    .bind_buffer_memory(handle, allocation.memory(), allocation.offset())
+                    .unwrap();
+
+            let mapped_ptr = allocation.mapped_ptr();
+            let allocation = ResourceAllocation::Allocation { allocation };
+
+            let device_address =
+                self.raw.get_buffer_device_address(&vk::BufferDeviceAddressInfo {
+                    buffer: handle,
+                    ..Default::default()
+                });
+
+            if !label.is_empty() {
+                // SAFETY: no concurrent access possible
+                self.set_object_name(handle, label);
+            }
+
+            BufferUntyped {
+                id: self.allocate_resource_id(),
+                allocation,
+                handle,
+                memory_location,
+                device_address,
+                size: byte_size,
+                usage,
+                mapped_ptr,
+                _marker: PhantomData,
+            }
         }
     }
 }

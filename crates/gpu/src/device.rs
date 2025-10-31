@@ -7,11 +7,9 @@ use crate::{
     ComputePipelineCreateInfo, DescriptorSetLayout, Error, GraphicsPipeline, GraphicsPipelineCreateInfo, MemoryAccess,
     PreRasterizationShaders, Sampler, SamplerCreateInfo, SUBGROUP_SIZE,
 };
-use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
 use std::ffi::{c_void, CString};
-use std::rc::{Rc, Weak};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::{fmt, ptr};
 
 use crate::device::bindless::BindlessDescriptorTable;
@@ -26,58 +24,84 @@ use std::sync::atomic::AtomicU64;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// FIXME: Mutexes are useless here since this is wrapped in Rc and can't be sent across threads.
-//        Just use RefCells
-pub struct Device {
-    /// Underlying vulkan device
-    pub(crate) raw: ash::Device,
+pub(crate) struct DeviceExtensions {
+    pub(crate) khr_swapchain: ash::extensions::khr::Swapchain,
+    pub(crate) ext_shader_object: ash::extensions::ext::ShaderObject,
+    pub(crate) khr_push_descriptor: ash::extensions::khr::PushDescriptor,
+    pub(crate) ext_mesh_shader: ash::extensions::ext::MeshShader,
+    pub(crate) ext_extended_dynamic_state3: ash::extensions::ext::ExtendedDynamicState3,
+}
 
-    /// Platform-specific extension functions
-    pub(crate) platform_extensions: PlatformExtensions,
-    pub(crate) physical_device: vk::PhysicalDevice,
-    pub(crate) allocator: Mutex<gpu_allocator::vulkan::Allocator>,
-
-    // main graphics queue
-    pub(crate) queue_family: u32,
-    pub(crate) queue: vk::Queue,
-    pub(crate) timeline: vk::Semaphore,
-
-    // semaphores ready for reuse
-    pub(crate) semaphores: RefCell<Vec<vk::Semaphore>>,
-
-    // --- Extensions ---
-    pub(crate) vk_khr_swapchain: ash::extensions::khr::Swapchain,
-    pub(crate) vk_ext_shader_object: ash::extensions::ext::ShaderObject,
-    pub(crate) vk_khr_push_descriptor: ash::extensions::khr::PushDescriptor,
-    pub(crate) vk_ext_mesh_shader: ash::extensions::ext::MeshShader,
-    pub(crate) vk_ext_extended_dynamic_state3: ash::extensions::ext::ExtendedDynamicState3,
-    //vk_ext_descriptor_buffer: ash::extensions::ext::DescriptorBuffer,
-
-    // physical device properties
+/// Device state that is unconditionally safe to access from multiple threads, even though
+/// the fields themselves may not be Send or Sync.
+pub(crate) struct DeviceThreadSafeState {
     pub(crate) physical_device_memory_properties: vk::PhysicalDeviceMemoryProperties,
     _physical_device_descriptor_buffer_properties: vk::PhysicalDeviceDescriptorBufferPropertiesEXT,
     physical_device_properties: vk::PhysicalDeviceProperties2,
 
-    // We don't need to hold strong refs here, we just need an ID for them.
-    pub(crate) resource_ids: Mutex<SlotMap<ResourceId, ()>>,
-    pub(crate) resource_descriptor_indices: Mutex<SlotMap<ResourceDescriptorIndex, ()>>,
-    pub(crate) sampler_descriptor_indices: Mutex<SlotMap<SamplerDescriptorIndex, ()>>,
-    pub(crate) global_descriptors: Mutex<BindlessDescriptorTable>,
+    // SAFETY: we're never using this as an externally-synchronized command parameter.
+    pub(crate) timeline: vk::Semaphore,
+    // SAFETY: we're never using this as an externally-synchronized command parameter.
+    pub(crate) physical_device: vk::PhysicalDevice,
+}
 
-    //pub(crate) image_view_ids: Mutex<SlotMap<ImageViewId, ()>>,
+unsafe impl Send for DeviceThreadSafeState {}
+unsafe impl Sync for DeviceThreadSafeState {}
+
+/// Submission-related device state locked during command buffer submission.
+pub(crate) struct DeviceSubmissionState {
+    pub(crate) queue: vk::Queue,
+    pub(crate) active_submissions: VecDeque<ActiveSubmission>,
+    /// Pending writes not yet made visible.
+    pub(crate) writes: MemoryAccess,
+    /// Last access type tracked per resource. Used mostly to track image layouts.
+    /// Get rid of this once GENERAL layouts with no performance penalty are widely supported.
+    pub(crate) access_per_resource: SecondaryMap<ResourceId, MemoryAccess>,
+}
+
+pub(crate) struct ResourceState {
+    pub(crate) last_submission_index: u64,
+}
+
+pub(crate) struct DeviceDescriptorIndexTable {
+    pub(crate) resource_descriptor_indices: SlotMap<ResourceDescriptorIndex, ()>,
+    pub(crate) sampler_descriptor_indices: SlotMap<SamplerDescriptorIndex, ()>,
+}
+
+pub struct Device {
+    /// Underlying vulkan device
+    pub(crate) raw: ash::Device,
+
+    /// Common device extensions.
+    pub(crate) extensions: DeviceExtensions,
+    /// Platform-specific extension functions
+    pub(crate) platform_extensions: PlatformExtensions,
+    pub(crate) allocator: Mutex<gpu_allocator::vulkan::Allocator>,
+
+    // main graphics queue
+    pub(crate) queue_family: u32,
+
+    pub(crate) thread_safe: DeviceThreadSafeState,
+    pub(crate) submission_state: Mutex<DeviceSubmissionState>,
+    pub(crate) resources: Mutex<SlotMap<ResourceId, ResourceState>>,
+    pub(crate) descriptor_indices: Mutex<DeviceDescriptorIndexTable>,
+    pub(crate) descriptor_table: BindlessDescriptorTable,
+
+    // semaphores ready for reuse
+    pub(crate) semaphores: Mutex<Vec<vk::Semaphore>>,
 
     // Command pools per queue and thread.
     free_command_pools: Mutex<Vec<CommandPool>>,
 
-    // Next submission index
+    /// Index of the next submission not yet created.
     pub(crate) next_submission_index: AtomicU64,
-    // Next expected submission index
-    pub(crate) expected_submission_index: Cell<u64>,
+    /// Index of the submission expected to be submitted in the following `submit` call.
+    pub(crate) expected_submission_index: AtomicU64,
 
     /// Resources that have a zero user reference count and that should be ready for deletion soon,
     /// but we're waiting for the GPU to finish using them.
     deletion_queue: Mutex<Vec<DeleteQueueEntry>>,
-    pub(crate) tracker: Mutex<DeviceTracker>,
+
     pub(crate) sampler_cache: Mutex<HashMap<SamplerCreateInfo, Sampler>>,
 }
 
@@ -87,40 +111,14 @@ impl fmt::Debug for Device {
     }
 }
 
-pub type RcDevice = Rc<Device>;
-pub type WeakDevice = Weak<Device>;
-
 pub(crate) struct ActiveSubmission {
     pub(crate) index: u64,
     pub(crate) command_pools: Vec<CommandPool>,
 }
 
-pub(crate) struct ResourceTrackingInfo {
-    pub(crate) last_submission_index: u64,
-    // Only tracked for images
-    pub(crate) writes: MemoryAccess,
-}
-
 struct DeleteQueueEntry {
     submission: u64,
-    tracker_id: Option<ResourceId>,
-    _object: Box<dyn DeleteLater>,
-}
-
-pub(crate) struct DeviceTracker {
-    pub(crate) active_submissions: VecDeque<ActiveSubmission>,
-    pub(crate) writes: MemoryAccess,
-    pub(crate) resources: SecondaryMap<ResourceId, ResourceTrackingInfo>,
-}
-
-impl DeviceTracker {
-    fn new() -> DeviceTracker {
-        DeviceTracker {
-            active_submissions: VecDeque::new(),
-            writes: MemoryAccess::empty(),
-            resources: SecondaryMap::new(),
-        }
-    }
+    deleter: Option<Box<dyn FnOnce() + Send + Sync>>,
 }
 
 /// Dummy trait for `Device::delete_later`
@@ -128,9 +126,7 @@ trait DeleteLater {}
 impl<T> DeleteLater for T {}
 
 /// Helper struct for deleting vulkan objects.
-///
-/// TODO doc
-pub struct Defer<F: FnMut()>(F);
+struct Defer<F: FnMut()>(F);
 
 impl<F> Drop for Defer<F>
 where
@@ -229,15 +225,13 @@ fn get_preferred_swapchain_surface_format(surface_formats: &[vk::SurfaceFormatKH
 /// # Safety
 ///
 /// `present_surface` must be a valid surface handle, or `None`
-pub unsafe fn create_device_with_surface(
-    present_surface: Option<vk::SurfaceKHR>,
-) -> Result<RcDevice, DeviceCreateError> {
+unsafe fn create_device_with_surface(present_surface: Option<vk::SurfaceKHR>) -> Result<Device, DeviceCreateError> {
     let device = Device::with_surface(present_surface)?;
     Ok(device)
 }
 
 /// Creates a `Device`. A physical device is chosen automatically.
-pub fn create_device() -> Result<RcDevice, DeviceCreateError> {
+fn create_device() -> Result<Device, DeviceCreateError> {
     unsafe { create_device_with_surface(None) }
 }
 
@@ -363,14 +357,21 @@ const DEVICE_EXTENSIONS: &[&str] = &[
 ];
 
 impl Device {
+    /// Returns the global device.
+    pub fn global() -> &'static Device {
+        static DEVICE: LazyLock<&'static Device> =
+            LazyLock::new(|| Box::leak(Box::new(create_device().expect("failed to create the GPU device"))));
+        &*DEVICE
+    }
+
     fn find_compatible_memory_type_internal(
         &self,
         memory_type_bits: u32,
         memory_properties: vk::MemoryPropertyFlags,
     ) -> Option<u32> {
-        for i in 0..self.physical_device_memory_properties.memory_type_count {
+        for i in 0..self.thread_safe.physical_device_memory_properties.memory_type_count {
             if memory_type_bits & (1 << i) != 0
-                && self.physical_device_memory_properties.memory_types[i as usize]
+                && self.thread_safe.physical_device_memory_properties.memory_types[i as usize]
                     .property_flags
                     .contains(memory_properties)
             {
@@ -419,7 +420,7 @@ impl Device {
         physical_device: vk::PhysicalDevice,
         device: vk::Device,
         graphics_queue_family_index: u32,
-    ) -> Result<RcDevice, DeviceCreateError> {
+    ) -> Result<Device, DeviceCreateError> {
         let entry = get_vulkan_entry();
         let instance = get_vulkan_instance();
         let device = ash::Device::load(instance.fp_v1_0(), device);
@@ -457,11 +458,11 @@ impl Device {
             gpu_allocator::vulkan::Allocator::new(&allocator_create_desc).expect("failed to create GPU allocator");
 
         // Extensions
-        let vk_khr_swapchain = ash::extensions::khr::Swapchain::new(instance, &device);
-        let vk_ext_shader_object = ash::extensions::ext::ShaderObject::new(instance, &device);
-        let vk_khr_push_descriptor = ash::extensions::khr::PushDescriptor::new(instance, &device);
-        let vk_ext_extended_dynamic_state3 = ash::extensions::ext::ExtendedDynamicState3::new(instance, &device);
-        let vk_ext_mesh_shader = ash::extensions::ext::MeshShader::new(instance, &device);
+        let khr_swapchain = ash::extensions::khr::Swapchain::new(instance, &device);
+        let ext_shader_object = ash::extensions::ext::ShaderObject::new(instance, &device);
+        let khr_push_descriptor = ash::extensions::khr::PushDescriptor::new(instance, &device);
+        let ext_extended_dynamic_state3 = ash::extensions::ext::ExtendedDynamicState3::new(instance, &device);
+        let ext_mesh_shader = ash::extensions::ext::MeshShader::new(instance, &device);
         //let vk_ext_descriptor_buffer = ash::extensions::ext::DescriptorBuffer::new(instance, &device);
         let physical_device_memory_properties = instance.get_physical_device_memory_properties(physical_device);
         let platform_extensions = PlatformExtensions::load(entry, instance, &device);
@@ -476,48 +477,57 @@ impl Device {
         instance.get_physical_device_properties2(physical_device, &mut physical_device_properties);
 
         // Create global descriptor tables
-        let global_descriptors = BindlessDescriptorTable::new(&device, 4096);
+        let descriptor_table = BindlessDescriptorTable::new(&device, 4096);
 
-        Ok(Rc::new(Device {
+        Ok(Device {
             raw: device,
+            extensions: DeviceExtensions {
+                khr_swapchain,
+                ext_shader_object,
+                khr_push_descriptor,
+                ext_mesh_shader,
+                ext_extended_dynamic_state3,
+            },
             platform_extensions,
-            physical_device,
-            physical_device_properties,
-            _physical_device_descriptor_buffer_properties: physical_device_descriptor_buffer_properties,
-            physical_device_memory_properties,
-            queue,
-            timeline,
+            thread_safe: DeviceThreadSafeState {
+                physical_device_memory_properties,
+                _physical_device_descriptor_buffer_properties: physical_device_descriptor_buffer_properties,
+                physical_device_properties,
+                timeline,
+                physical_device,
+            },
+            submission_state: Mutex::new(DeviceSubmissionState {
+                queue,
+                active_submissions: VecDeque::new(),
+                writes: MemoryAccess::empty(),
+                access_per_resource: Default::default(),
+            }),
             queue_family: graphics_queue_family_index,
             allocator: Mutex::new(allocator),
-            vk_khr_swapchain,
-            vk_ext_shader_object,
-            vk_khr_push_descriptor,
-            vk_ext_mesh_shader,
-            vk_ext_extended_dynamic_state3,
-            //vk_ext_descriptor_buffer,
-            resource_ids: Mutex::new(Default::default()),
-            resource_descriptor_indices: Mutex::new(Default::default()),
-            sampler_descriptor_indices: Mutex::new(Default::default()),
-            tracker: Mutex::new(DeviceTracker::new()),
+            resources: Mutex::new(SlotMap::with_key()),
+            descriptor_indices: Mutex::new(DeviceDescriptorIndexTable {
+                resource_descriptor_indices: Default::default(),
+                sampler_descriptor_indices: Default::default(),
+            }),
+            descriptor_table,
             sampler_cache: Mutex::new(Default::default()),
             free_command_pools: Mutex::new(Default::default()),
             next_submission_index: AtomicU64::new(1),
-            expected_submission_index: Cell::new(1),
-            global_descriptors: Mutex::new(global_descriptors),
+            expected_submission_index: AtomicU64::new(1),
             semaphores: Default::default(),
             deletion_queue: Mutex::new(vec![]),
-        }))
+        })
     }
 
     /// Creates a new `Device`, automatically choosing a suitable physical device.
-    pub fn new() -> Result<RcDevice, DeviceCreateError> {
+    pub fn new() -> Result<Device, DeviceCreateError> {
         unsafe { Self::with_surface(None) }
     }
 
     /// Creates a new `Device` that can render to the specified `present_surface` if one is specified.
     ///
     /// Also creates queues as requested.
-    pub unsafe fn with_surface(present_surface: Option<vk::SurfaceKHR>) -> Result<RcDevice, DeviceCreateError> {
+    pub unsafe fn with_surface(present_surface: Option<vk::SurfaceKHR>) -> Result<Device, DeviceCreateError> {
         let instance = get_vulkan_instance();
         let vk_khr_surface = vk_khr_surface();
 
@@ -681,12 +691,12 @@ impl Device {
 
     /// Returns the physical device that this device was created on.
     pub fn physical_device(&self) -> vk::PhysicalDevice {
-        self.physical_device
+        self.thread_safe.physical_device
     }
 
     /// Returns the physical device properties.
     pub fn physical_device_properties(&self) -> &vk::PhysicalDeviceProperties2 {
-        &self.physical_device_properties
+        &self.thread_safe.physical_device_properties
     }
 
     /*pub fn create_command_stream(self: &Rc<Self>, queue_index: usize) -> CommandStream {
@@ -741,24 +751,24 @@ impl Device {
 
     /// Function pointers for VK_KHR_swapchain.
     pub fn khr_swapchain(&self) -> &ash::extensions::khr::Swapchain {
-        &self.vk_khr_swapchain
+        &self.extensions.khr_swapchain
     }
 
     /// Function pointers for VK_KHR_push_descriptor.
     pub fn khr_push_descriptor(&self) -> &ash::extensions::khr::PushDescriptor {
-        &self.vk_khr_push_descriptor
+        &self.extensions.khr_push_descriptor
     }
 
     pub fn ext_extended_dynamic_state3(&self) -> &ash::extensions::ext::ExtendedDynamicState3 {
-        &self.vk_ext_extended_dynamic_state3
+        &self.extensions.ext_extended_dynamic_state3
     }
 
     pub fn ext_mesh_shader(&self) -> &ash::extensions::ext::MeshShader {
-        &self.vk_ext_mesh_shader
+        &self.extensions.ext_mesh_shader
     }
 
     pub fn ext_shader_object(&self) -> &ash::extensions::ext::ShaderObject {
-        &self.vk_ext_shader_object
+        &self.extensions.ext_shader_object
     }
 
     /*pub fn ext_descriptor_buffer(&self) -> &ash::extensions::ext::DescriptorBuffer {
@@ -772,9 +782,11 @@ impl Device {
     /// * `name` - the name to associate with the object
     ///
     /// # Safety
-    /// The handle must be a valid vulkan object handle.
+    /// * The handle must be a valid vulkan object handle.
+    /// * The function is not thread safe.
     pub unsafe fn set_object_name<H: vk::Handle>(&self, handle: H, name: &str) {
         let object_name = CString::new(name).unwrap();
+        // SAFETY:
         vk_ext_debug_utils()
             .set_debug_utils_object_name(
                 self.raw.handle(),
@@ -788,13 +800,6 @@ impl Device {
             .unwrap();
     }
 
-    /*/// Increments the submission index.
-    pub(crate) fn next_submission_index(&self) -> u64 {
-        self.next_submission_index
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-            + 1
-    }*/
-
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // COMMAND STREAMS
     ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -803,31 +808,30 @@ impl Device {
     ///
     /// Once finished, the command stream should be submitted to the GPU using
     /// `CommandStream::flush`.
-    pub fn create_command_stream(self: &Rc<Self>) -> CommandStream {
-        CommandStream::new(self.clone())
+    /// They should be submitted in the same order as they were created.
+    pub fn create_command_stream(&self) -> CommandStream {
+        CommandStream::new()
     }
 
     /// Allocates a new resource ID for tracking a resource.
     pub(crate) fn allocate_resource_id(&self) -> ResourceId {
-        let id = self.resource_ids.lock().unwrap().insert(());
-        self.tracker.lock().unwrap().resources.insert(
-            id,
-            ResourceTrackingInfo {
-                last_submission_index: 0,
-                writes: MemoryAccess::UNINITIALIZED,
-            },
-        );
-        id
+        self.resources.lock().unwrap().insert(ResourceState {
+            last_submission_index: 0,
+        })
     }
 
     /// Releases a resource ID that is no longer used.
     pub(crate) fn free_resource_id(&self, resource_id: ResourceId) {
-        self.resource_ids.lock().unwrap().remove(resource_id);
+        self.resources.lock().unwrap().remove(resource_id);
     }
 
     /// Releases a resource heap index that is no longer used.
     pub(crate) fn free_resource_heap_index(&self, index: ResourceDescriptorIndex) {
-        self.resource_descriptor_indices.lock().unwrap().remove(index);
+        self.descriptor_indices
+            .lock()
+            .unwrap()
+            .resource_descriptor_indices
+            .remove(index);
     }
 
     /*/// Releases a sampler heap index that is no longer used.
@@ -836,12 +840,12 @@ impl Device {
     }*/
 
     pub(crate) fn last_submission_index(&self, resource_id: ResourceId) -> u64 {
-        self.tracker.lock().unwrap().resources[resource_id].last_submission_index
+        self.resources.lock().unwrap()[resource_id].last_submission_index
     }
 
     pub(crate) fn set_last_submission_index(&self, resource_id: ResourceId, index: u64) {
-        let mut tracker = self.tracker.lock().unwrap();
-        let resource = &mut tracker.resources[resource_id];
+        let mut resources = self.resources.lock().unwrap();
+        let resource = &mut resources[resource_id];
         resource.last_submission_index = resource.last_submission_index.max(index);
     }
 
@@ -859,39 +863,48 @@ impl Device {
             .expect("failed to allocate device memory")
     }
 
-    // TODO: instead of passing the submission index, get it via a trait method on T (GpuResource)
-    fn delete_later_inner<T: 'static>(&self, submission_index: u64, resource_id: Option<ResourceId>, object: T) {
-        let last_completed_submission_index = unsafe { self.raw.get_semaphore_counter_value(self.timeline).unwrap() };
+    /// Schedules an object for deletion.
+    ///
+    /// The object will be deleted once the GPU has finished processing commands up to and
+    /// including the specified submission index.
+    pub fn delete_later<T: Send + Sync + 'static>(&self, submission_index: u64, object: T) {
+        self.call_later(submission_index, move || {
+            drop(object);
+        });
+    }
+
+    /// Schedules a function call.
+    ///
+    /// The function will be called once the GPU has finished processing commands up to and
+    /// including the specified submission index.
+    pub fn call_later(&self, submission_index: u64, f: impl FnOnce() + Send + Sync + 'static) {
+        // if the submission is already completed, call the function right away
+        let last_completed_submission_index =
+            unsafe { self.raw.get_semaphore_counter_value(self.thread_safe.timeline).unwrap() };
         if submission_index <= last_completed_submission_index {
-            if let Some(resource_id) = resource_id {
-                self.free_resource_id(resource_id);
-            }
+            f();
             return;
         }
 
         // otherwise move it to the deferred deletion list
         self.deletion_queue.lock().unwrap().push(DeleteQueueEntry {
             submission: submission_index,
-            tracker_id: resource_id,
-            _object: Box::new(object),
+            deleter: Some(Box::new(f)),
         });
     }
 
-    pub fn call_later(&self, submission_index: u64, f: impl FnMut() + 'static) {
-        self.delete_later_inner(submission_index, None, Defer(f))
-    }
-
+    /// Schedules a tracked resource for deletion.
+    ///
+    /// The resource will be deleted once all GPU commands using the resource have finished.
     pub(crate) fn delete_tracked_resource(
-        self: &Rc<Self>,
+        &self,
         resource_id: ResourceId,
-        mut f: impl FnMut(&Self) + 'static,
+        deleter: impl FnOnce() + Send + Sync + 'static,
     ) {
-        let this = self.clone();
-        self.delete_later_inner(
-            self.last_submission_index(resource_id),
-            Some(resource_id),
-            Defer(move || f(&*this)),
-        )
+        self.call_later(self.last_submission_index(resource_id), move || {
+            Self::global().free_resource_id(resource_id);
+            deleter();
+        })
     }
 
     pub(crate) unsafe fn free_memory(&self, allocation: &mut ResourceAllocation) {
@@ -911,45 +924,41 @@ impl Device {
         }
     }
 
-    // Cleanup expired resources.
+    /// Cleanup expired resources.
+    ///
+    /// This should be called periodically to free resources that are no longer used by the GPU.
+    /// Otherwise, tasks scheduled with `call_later` or `delete_later` will never be executed.
     pub fn cleanup(&self) {
         let last_completed_submission_index = unsafe {
             self.raw
-                .get_semaphore_counter_value(self.timeline)
+                .get_semaphore_counter_value(self.thread_safe.timeline)
                 .expect("get_semaphore_counter_value failed")
         };
 
-        let mut tracker = self.tracker.lock().unwrap();
+        let mut submission_state = self.submission_state.lock().unwrap();
         let mut deletion_queue = self.deletion_queue.lock().unwrap();
 
         // *** This invokes all delayed destructors for resources which are no longer in use by the GPU.
-        deletion_queue.retain(
-            |DeleteQueueEntry {
-                 tracker_id,
-                 submission,
-                 _object: _,    // dropped here
-             }| {
-                if *submission > last_completed_submission_index {
-                    return true;
-                }
-                if let Some(resource_id) = *tracker_id {
-                    self.free_resource_id(resource_id);
-                }
-                false
-            },
-        );
+        deletion_queue.retain_mut(|DeleteQueueEntry { submission, deleter }| {
+            if *submission > last_completed_submission_index {
+                return true;
+            }
+            let deleter = deleter.take().unwrap();
+            deleter();
+            false
+        });
 
         // process all completed submissions, oldest to newest
         let mut free_command_pools = self.free_command_pools.lock().unwrap();
 
         loop {
-            let Some(submission) = tracker.active_submissions.front() else {
+            let Some(submission) = submission_state.active_submissions.front() else {
                 break;
             };
             if submission.index > last_completed_submission_index {
                 break;
             }
-            let submission = tracker.active_submissions.pop_front().unwrap();
+            let submission = submission_state.active_submissions.pop_front().unwrap();
             for mut command_pool in submission.command_pools {
                 // SAFETY: command buffers are not in use anymore
                 unsafe {
@@ -964,7 +973,7 @@ impl Device {
     /// or for which we've submitted a wait operation on this queue and that will eventually be unsignaled.
     pub fn get_or_create_semaphore(&self) -> vk::Semaphore {
         // Try to recycle one
-        if let Some(semaphore) = self.semaphores.borrow_mut().pop() {
+        if let Some(semaphore) = self.semaphores.lock().unwrap().pop() {
             return semaphore;
         }
 
@@ -979,13 +988,13 @@ impl Device {
     ///
     /// There must be a pending wait operation on the semaphore, or it must be in the unsignaled state.
     pub(crate) unsafe fn recycle_binary_semaphore(&self, binary_semaphore: vk::Semaphore) {
-        self.semaphores.borrow_mut().push(binary_semaphore);
+        self.semaphores.lock().unwrap().push(binary_semaphore);
     }
 
     /// Returns the list of supported swapchain formats for the given surface.
     pub unsafe fn get_surface_formats(&self, surface: vk::SurfaceKHR) -> Vec<vk::SurfaceFormatKHR> {
         vk_khr_surface()
-            .get_physical_device_surface_formats(self.physical_device, surface)
+            .get_physical_device_surface_formats(self.thread_safe.physical_device, surface)
             .unwrap()
     }
 
@@ -995,7 +1004,7 @@ impl Device {
         get_preferred_swapchain_surface_format(&surface_formats)
     }
 
-    pub fn create_sampler(self: &Rc<Self>, info: &SamplerCreateInfo) -> Sampler {
+    pub fn create_sampler(&self, info: &SamplerCreateInfo) -> Sampler {
         if let Some(sampler) = self.sampler_cache.lock().unwrap().get(info) {
             return sampler.clone();
         }
@@ -1027,7 +1036,6 @@ impl Device {
 
         let descriptor_index = unsafe { self.create_global_sampler_descriptor(sampler) };
         let sampler = Sampler {
-            device: Rc::downgrade(self),
             descriptor_index,
             sampler,
         };
@@ -1041,7 +1049,7 @@ impl Device {
             .iter()
             .position(|pool| pool.queue_family == queue_family);
         if let Some(index) = index {
-            return free_command_pools.swap_remove(index);
+            free_command_pools.swap_remove(index)
         } else {
             unsafe { CommandPool::new(&self.raw, queue_family) }
         }
@@ -1050,19 +1058,15 @@ impl Device {
     /// FIXME: this should be a constructor of `DescriptorSetLayout`, because now we have two
     /// functions with very similar names (`create_descriptor_set_layout` and `create_descriptor_set_layout_from_handle`)
     /// that have totally different semantics (one returns a raw vulkan handle, the other returns a RAII wrapper `DescriptorSetLayout`).
-    pub fn create_descriptor_set_layout_from_handle(
-        self: &Rc<Self>,
-        handle: vk::DescriptorSetLayout,
-    ) -> DescriptorSetLayout {
+    pub fn create_descriptor_set_layout_from_handle(&self, handle: vk::DescriptorSetLayout) -> DescriptorSetLayout {
         DescriptorSetLayout {
-            device: self.clone(),
             last_submission_index: Some(Arc::new(Default::default())),
             handle,
         }
     }
 
     pub fn create_push_descriptor_set_layout(
-        self: &Rc<Self>,
+        &self,
         bindings: &[vk::DescriptorSetLayoutBinding],
     ) -> DescriptorSetLayout {
         let create_info = vk::DescriptorSetLayoutCreateInfo {
@@ -1088,7 +1092,7 @@ impl Device {
     ) -> vk::PipelineLayout {
         let layout_handles: Vec<_> = if descriptor_set_layouts.is_empty() {
             // Empty set layouts means use the universal bindless layouts
-            vec![self.global_descriptors.lock().unwrap().layout]
+            vec![self.descriptor_table.layout]
         } else {
             descriptor_set_layouts.iter().map(|layout| layout.handle).collect()
         };
@@ -1131,10 +1135,7 @@ impl Device {
         pipeline_layout
     }
 
-    pub fn create_compute_pipeline(
-        self: &Rc<Self>,
-        create_info: ComputePipelineCreateInfo,
-    ) -> Result<ComputePipeline, Error> {
+    pub fn create_compute_pipeline(&self, create_info: ComputePipelineCreateInfo) -> Result<ComputePipeline, Error> {
         let pipeline_layout = self.create_pipeline_layout(
             vk::PipelineBindPoint::COMPUTE,
             create_info.set_layouts,
@@ -1178,7 +1179,6 @@ impl Device {
         };
 
         Ok(ComputePipeline {
-            device: self.clone(),
             pipeline,
             pipeline_layout,
             _descriptor_set_layouts: create_info.set_layouts.to_vec(),
@@ -1188,7 +1188,7 @@ impl Device {
 
     /// Creates a graphics pipeline.
     pub fn create_graphics_pipeline(
-        self: &Rc<Self>,
+        &self,
         create_info: GraphicsPipelineCreateInfo,
     ) -> Result<GraphicsPipeline, Error> {
         let pipeline_layout = self.create_pipeline_layout(
@@ -1475,7 +1475,6 @@ impl Device {
         };
 
         Ok(GraphicsPipeline {
-            device: self.clone(),
             pipeline,
             pipeline_layout,
             _descriptor_set_layouts: create_info.set_layouts.to_vec(),

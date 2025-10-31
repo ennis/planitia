@@ -1,9 +1,14 @@
+#![feature(default_field_values)]
 use image::DynamicImage;
 use std::path::Path;
 use std::ptr;
 use std::time::Duration;
 
-use gpu::{vk, BufferUsage, CommandStream, Image, ImageAspect, ImageCopyBuffer, ImageCopyView, ImageCreateInfo, ImageDataLayout, ImageSubresourceLayers, ImageType, ImageUsage, MemoryLocation, Offset3D, Rect3D, SemaphoreWait, SwapChain};
+use gpu::{
+    vk, BufferUsage, CommandStream, Device, Image, ImageAspect, ImageCopyBuffer, ImageCopyView, ImageCreateInfo,
+    ImageDataLayout, ImageSubresourceLayers, ImageType, ImageUsage, MemoryLocation, Offset3D, Rect3D, SemaphoreWait,
+    SwapChain,
+};
 use raw_window_handle::HasWindowHandle;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -12,7 +17,6 @@ use winit::window::{Window, WindowAttributes, WindowId};
 
 fn load_image(cmd: &mut CommandStream, path: impl AsRef<Path>, usage: ImageUsage) -> Image {
     let path = path.as_ref();
-    let device = cmd.device().clone();
 
     let dyn_image = image::open(path).expect("could not open image file");
 
@@ -30,23 +34,21 @@ fn load_image(cmd: &mut CommandStream, path: impl AsRef<Path>, usage: ImageUsage
     let mip_levels = gpu::mip_level_count(width, height);
 
     // create the texture
-    let image = device.create_image(&ImageCreateInfo {
+    let image = Device::global().create_image(&ImageCreateInfo {
         memory_location: MemoryLocation::GpuOnly,
         type_: ImageType::Image2D,
         usage: usage | ImageUsage::TRANSFER_DST,
         format: vk_format,
         width,
         height,
-        depth: 1,
         mip_levels,
-        array_layers: 1,
-        samples: 1,
+        ..
     });
 
     let byte_size = width as u64 * height as u64 * bpp as u64;
 
     // create a staging buffer
-    let staging_buffer = device.create_buffer(BufferUsage::TRANSFER_SRC, MemoryLocation::CpuToGpu, byte_size);
+    let staging_buffer = Device::global().create_buffer(BufferUsage::TRANSFER_SRC, MemoryLocation::CpuToGpu, byte_size, "");
 
     // read image data
     unsafe {
@@ -88,7 +90,6 @@ struct VulkanWindow {
 }
 
 struct App {
-    device: gpu::RcDevice,
     window: Option<VulkanWindow>,
 }
 
@@ -98,11 +99,9 @@ impl ApplicationHandler for App {
             let window = event_loop.create_window(WindowAttributes::default()).unwrap();
             let size = window.inner_size();
             let surface = gpu::get_vulkan_surface(window.window_handle().unwrap().as_raw());
-            let surface_format = unsafe { self.device.get_preferred_surface_format(surface) };
-            let mut swap_chain = unsafe {
-                self.device
-                    .create_swapchain(surface, surface_format, size.width, size.height)
-            };
+            let surface_format = unsafe { Device::global().get_preferred_surface_format(surface) };
+            let mut swap_chain =
+                unsafe { Device::global().create_swapchain(surface, surface_format, size.width, size.height) };
 
             self.window = Some(VulkanWindow {
                 window,
@@ -117,7 +116,7 @@ impl ApplicationHandler for App {
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
         let window = self.window.as_mut().unwrap();
-        let device = &self.device;
+        let device = Device::global();
 
         match event {
             WindowEvent::CloseRequested => {
@@ -127,8 +126,7 @@ impl ApplicationHandler for App {
                 window.width = size.width;
                 window.height = size.height;
                 unsafe {
-                    self.device
-                        .resize_swapchain(&mut window.swap_chain, window.width, window.height);
+                    device.resize_swapchain(&mut window.swap_chain, window.width, window.height);
                 }
             }
 
@@ -169,7 +167,8 @@ impl ApplicationHandler for App {
                     vk::Filter::NEAREST,
                 );
 
-                cmd.present(&[swapchain_ready.wait()], &swapchain_image).unwrap();
+                cmd.flush(&[swapchain_ready.wait()], &[], Some(&swapchain_image))
+                    .unwrap();
                 device.cleanup();
             }
             _ => {}
@@ -191,7 +190,7 @@ fn main() {
         .init();
 
     let event_loop = EventLoop::new().expect("failed to create event loop");
-    let device = gpu::create_device().expect("failed to create device");
-    let mut app = App { device, window: None };
+    let _device = Device::global();
+    let mut app = App { window: None };
     event_loop.run_app(&mut app).unwrap();
 }

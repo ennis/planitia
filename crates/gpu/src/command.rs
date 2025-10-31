@@ -1,17 +1,17 @@
-use std::ffi::{c_char, c_void, CString};
-use std::mem::{ManuallyDrop, MaybeUninit};
-use std::{mem, ptr};
-
 use ash::prelude::VkResult;
 pub use compute::ComputeEncoder;
 use fxhash::FxHashMap;
 pub use render::{RenderEncoder, RenderPassInfo};
 use slotmap::secondary::Entry;
+use std::ffi::{c_char, c_void, CString};
+use std::mem::{ManuallyDrop, MaybeUninit};
+use std::sync::atomic::Ordering::Relaxed;
+use std::{mem, ptr};
 
-use crate::device::{ActiveSubmission, ResourceTrackingInfo};
+use crate::device::ActiveSubmission;
 use crate::{
-    aspects_for_format, vk, vk_ext_debug_utils, CommandPool, Descriptor, Image, MemoryAccess, RcDevice, ResourceId,
-    SwapchainImage, TrackedResource,
+    aspects_for_format, vk, vk_ext_debug_utils, CommandPool, Descriptor, Device, Image, MemoryAccess, 
+    ResourceId, SwapchainImage, TrackedResource,
 };
 
 mod blit;
@@ -118,8 +118,6 @@ impl<'a> Barrier<'a> {
 
 /// TODO rename this, it's not really a stream as it needs to be dropped to submit work to the queue
 pub struct CommandStream {
-    pub(crate) device: RcDevice,
-    /// The queue on which we're submitting work.
     command_pool: ManuallyDrop<CommandPool>,
     submission_index: u64,
     /// Command buffers waiting to be submitted.
@@ -227,14 +225,12 @@ pub enum SemaphoreSignal {
 }
 
 impl CommandStream {
-    pub(super) fn new(device: RcDevice) -> CommandStream {
-        let submission_index = device
-            .next_submission_index
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    pub(super) fn new() -> CommandStream {
+        let device = Device::global();
+        let submission_index = device.next_submission_index.fetch_add(1, Relaxed);
         let command_pool = device.get_or_create_command_pool(device.queue_family);
 
         CommandStream {
-            device,
             command_pool: ManuallyDrop::new(command_pool),
             submission_index,
             command_buffers_to_submit: vec![],
@@ -253,10 +249,15 @@ impl CommandStream {
         bind_point: vk::PipelineBindPoint,
         pipeline_layout: vk::PipelineLayout,
     ) {
-        let set = self.device.global_descriptors.lock().unwrap().set;
-        self.device
-            .raw
-            .cmd_bind_descriptor_sets(command_buffer, bind_point, pipeline_layout, 0, &[set], &[]);
+        let device = Device::global();
+        device.raw.cmd_bind_descriptor_sets(
+            command_buffer,
+            bind_point,
+            pipeline_layout,
+            0,
+            &[device.descriptor_table.set],
+            &[],
+        );
     }
 
     unsafe fn do_cmd_push_descriptor_set(
@@ -280,7 +281,7 @@ impl CommandStream {
                     descriptors.push(DescriptorBufferOrImage {
                         image: vk::DescriptorImageInfo {
                             sampler: Default::default(),
-                            image_view: image_view.view_handle(), // TODO
+                            image_view: image_view.view_handle(),
                             image_layout: layout,
                         },
                     });
@@ -371,7 +372,7 @@ impl CommandStream {
         }
 
         unsafe {
-            self.device.khr_push_descriptor().cmd_push_descriptor_set(
+            Device::global().khr_push_descriptor().cmd_push_descriptor_set(
                 command_buffer,
                 bind_point,
                 pipeline_layout,
@@ -408,7 +409,7 @@ impl CommandStream {
         // Use the raw function pointer because the wrapper takes a `&[u8]` slice which we can't
         // get from `&[MaybeUninit<u8>]` safely (even if we won't read uninitialized data).
         unsafe {
-            (self.device.raw.fp_v1_0().cmd_push_constants)(
+            (Device::global().raw.fp_v1_0().cmd_push_constants)(
                 command_buffer,
                 pipeline_layout,
                 stages,
@@ -493,7 +494,7 @@ impl CommandStream {
             // a global memory barrier is needed or there are image layout transitions
             let command_buffer = self.get_or_create_command_buffer();
             unsafe {
-                self.device.raw.cmd_pipeline_barrier2(
+                Device::global().raw.cmd_pipeline_barrier2(
                     command_buffer,
                     &vk::DependencyInfo {
                         dependency_flags: Default::default(),
@@ -513,11 +514,6 @@ impl CommandStream {
         }
 
         self.tracked_writes = barrier.access.write_flags();
-    }
-
-    /// Returns the device associated with this queue.
-    pub fn device(&self) -> &RcDevice {
-        &self.device
     }
 
     pub fn push_debug_group(&mut self, label: &str) {
@@ -554,12 +550,11 @@ impl CommandStream {
         // TODO this should be done during submission because it's possible to drop the command stream
         //      without submitting it
         //      (well, at least it would if we didn't explicitly panic on unsubmitted command streams)
-        self.device
-            .set_last_submission_index(resource.id(), self.submission_index)
+        Device::global().set_last_submission_index(resource.id(), self.submission_index)
     }
 
     pub(crate) fn create_command_buffer_raw(&mut self) -> vk::CommandBuffer {
-        let raw_device = self.device.raw();
+        let raw_device = Device::global().raw();
         let cb = self.command_pool.alloc(raw_device);
 
         unsafe {
@@ -572,8 +567,7 @@ impl CommandStream {
                     },
                 )
                 .unwrap();
-            self.device
-                .set_object_name(cb, &format!("command buffer at submission {}", self.submission_index));
+            Device::global().set_object_name(cb, &format!("command buffer at submission {}", self.submission_index));
         }
         cb
     }
@@ -597,65 +591,58 @@ impl CommandStream {
     pub(crate) fn close_command_buffer(&mut self) {
         if let Some(cb) = self.command_buffer.take() {
             unsafe {
-                self.device.raw().end_command_buffer(cb).unwrap();
+                Device::global().raw().end_command_buffer(cb).unwrap();
             }
             self.command_buffers_to_submit.push(cb);
         }
     }
 
-    /// Finishes recording the current command buffer and presents the swapchain image.
-    pub fn present(mut self, waits: &[SemaphoreWait], swapchain_image: &SwapchainImage) -> VkResult<bool> {
-        self.barrier(Barrier::new().present(&swapchain_image.image));
-
-        let device = self.device.clone();
-
-        self.flush(
-            waits,
-            &[SemaphoreSignal::Binary {
-                semaphore: swapchain_image.render_finished,
-            }],
-        )?;
-
-        // SAFETY: ???
-        unsafe {
-            device.khr_swapchain().queue_present(
-                device.queue,
-                &vk::PresentInfoKHR {
-                    wait_semaphore_count: 1,
-                    p_wait_semaphores: &swapchain_image.render_finished,
-                    swapchain_count: 1,
-                    p_swapchains: &swapchain_image.swapchain,
-                    p_image_indices: &swapchain_image.index,
-                    p_results: ptr::null_mut(),
-                    ..Default::default()
-                },
-            )
-        }
-    }
-
     /// FIXME: this should acquire ownership of semaphores in `waits`
     ///        but then we won't be able to pass a slice
-    pub fn flush(mut self, waits: &[SemaphoreWait], signals: &[SemaphoreSignal]) -> VkResult<()> {
+    pub fn flush(
+        mut self,
+        waits: &[SemaphoreWait],
+        signals: &[SemaphoreSignal],
+        present_image: Option<&SwapchainImage>,
+    ) -> VkResult<()> {
+        let device = Device::global();
+
+        if let Some(present_image) = present_image {
+            self.barrier(Barrier::new().present(&present_image.image));
+        }
+
+        //----------------------
+        // /!\ Lock the device for command submission.
+        // This effectively synchronizes submissions on the device.
+        //----------------------
+        let mut submission_state = device.submission_state.lock().unwrap();
+
+        // Verify that the command streams are submitted in the order in which they were created.
+        // Timeline semaphore values depend on this.
         assert!(!self.submitted);
         assert_eq!(
-            self.device.expected_submission_index.get(),
+            device.expected_submission_index.load(Relaxed),
             self.submission_index,
             "CommandStream submitted out of order"
         );
+        // Increment now so that this doesn't block other submissions if this one fails somehow.
+        device
+            .expected_submission_index
+            .store(self.submission_index + 1, Relaxed);
 
-        // finish recording the current command buffer
+        // finish recording the current command buffer if not already done
         self.close_command_buffer();
-
-        // lock device tracker while we're submitting
-        let mut tracker = self.device.tracker.lock().unwrap();
 
         // The complete list of command buffers to submit, including fixup command buffers between the ones passed to this function.
         let mut command_buffers = mem::take(&mut self.command_buffers_to_submit);
 
-        // Update the state of each resource used by the command buffer in the device tracker,
+        //----------------------
+        // Update tracked resources:
+        //
+        // Update the tracked state of each resource used in the command buffer,
         // and insert pipeline barriers if necessary.
         {
-            let (src_stage_mask, src_access_mask) = tracker.writes.to_vk_scope_flags();
+            let (src_stage_mask, src_access_mask) = submission_state.writes.to_vk_scope_flags();
             let (dst_stage_mask, dst_access_mask) = self.initial_access.to_vk_scope_flags();
             // TODO: verify that a barrier is necessary
             let global_memory_barrier = Some(vk::MemoryBarrier2 {
@@ -668,15 +655,12 @@ impl CommandStream {
 
             let mut image_barriers = Vec::new();
             for (_, state) in self.tracked_images.drain() {
-                let prev_access = match tracker.resources.entry(state.id) {
+                let prev_access = match submission_state.access_per_resource.entry(state.id) {
                     Some(entry) => {
                         match entry {
-                            Entry::Occupied(res) => mem::replace(&mut res.into_mut().writes, state.last_access),
+                            Entry::Occupied(res) => mem::replace(res.into_mut(), state.last_access),
                             Entry::Vacant(res) => {
-                                res.insert(ResourceTrackingInfo {
-                                    last_submission_index: self.submission_index,
-                                    writes: state.last_access,
-                                });
+                                res.insert(state.last_access);
                                 // if the image was not previously tracked, the contents are undefined
                                 MemoryAccess::UNINITIALIZED
                             }
@@ -707,15 +691,15 @@ impl CommandStream {
                 }
             }
 
-            tracker.writes = self.tracked_writes;
+            // update tracked writes across submissions
+            submission_state.writes = self.tracked_writes;
 
             // If we need a pipeline barrier before submitting the command buffers, we insert a "fixup" command buffer
             // containing the pipeline barrier, before the others.
-
             if global_memory_barrier.is_some() || !image_barriers.is_empty() {
-                let fixup_cb = self.command_pool.alloc(&self.device.raw());
+                let fixup_cb = self.command_pool.alloc(&device.raw);
                 unsafe {
-                    self.device
+                    device
                         .raw
                         .begin_command_buffer(
                             fixup_cb,
@@ -733,7 +717,7 @@ impl CommandStream {
                             ..Default::default()
                         },
                     );
-                    self.device.raw.cmd_pipeline_barrier2(
+                    device.raw.cmd_pipeline_barrier2(
                         fixup_cb,
                         &vk::DependencyInfo {
                             dependency_flags: Default::default(),
@@ -750,7 +734,7 @@ impl CommandStream {
                         },
                     );
                     vk_ext_debug_utils().cmd_end_debug_utils_label(fixup_cb);
-                    self.device.raw.end_command_buffer(fixup_cb).unwrap();
+                    device.raw.end_command_buffer(fixup_cb).unwrap();
                 }
                 command_buffers.insert(0, fixup_cb);
             }
@@ -765,8 +749,14 @@ impl CommandStream {
         let mut d3d12_fence_submit = false;
 
         // update the timeline semaphore with the submission index
-        signal_semaphores.push(self.device.timeline);
+        signal_semaphores.push(device.thread_safe.timeline);
         signal_semaphore_values.push(self.submission_index);
+
+        // If presenting, signal the "render finished" semaphore associated with the swapchain image
+        if let Some(present_image) = present_image {
+            signal_semaphores.push(present_image.render_finished);
+            signal_semaphore_values.push(0); // dummy
+        }
 
         // setup semaphore signal operations
         for signal in signals.iter() {
@@ -803,9 +793,8 @@ impl CommandStream {
                     wait_semaphore_values.push(0);
                     if transfer_ownership {
                         // we own the semaphore and need to delete it
-                        let device = self.device.clone();
-                        self.device.call_later(self.submission_index, move || unsafe {
-                            device.raw.destroy_semaphore(semaphore, None);
+                        device.call_later(self.submission_index, move || unsafe {
+                            Device::global().raw.destroy_semaphore(semaphore, None);
                         });
                     }
                 }
@@ -859,24 +848,43 @@ impl CommandStream {
             ..Default::default()
         };
 
-        // Do the submission
-        let result = unsafe {
-            self.device
-                .raw
-                .queue_submit(self.device.queue, &[submit_info], vk::Fence::null())
-        };
-
-        // Recycle the command pool to the device
+        let mut result;
         unsafe {
-            tracker.active_submissions.push_back(ActiveSubmission {
+            // SAFETY: apart from Vulkan handles being valid, Vulkan specifies that access to the
+            //         queue object should be externally synchronized, which is realized here by the
+            //         lock on submission_state.
+            result = device
+                .raw
+                .queue_submit(submission_state.queue, &[submit_info], vk::Fence::null());
+
+            if result.is_ok() {
+                if let Some(present_image) = present_image {
+                    result = Device::global()
+                        .khr_swapchain()
+                        .queue_present(
+                            submission_state.queue,
+                            &vk::PresentInfoKHR {
+                                wait_semaphore_count: 1,
+                                p_wait_semaphores: &present_image.render_finished,
+                                swapchain_count: 1,
+                                p_swapchains: &present_image.swapchain,
+                                p_image_indices: &present_image.index,
+                                p_results: ptr::null_mut(),
+                                ..Default::default()
+                            },
+                        )
+                        .map(|_| ());
+                }
+            }
+
+            submission_state.active_submissions.push_back(ActiveSubmission {
                 index: self.submission_index,
                 // SAFETY: submitted = false so the command pool is valid
                 command_pools: vec![ManuallyDrop::take(&mut self.command_pool)],
             });
-        }
+        };
 
         self.submitted = true;
-        self.device.expected_submission_index.set(self.submission_index + 1);
 
         result
     }

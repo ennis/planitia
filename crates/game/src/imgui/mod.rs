@@ -62,11 +62,11 @@ pub(crate) struct ImguiContext {
 }
 
 impl ImguiContext {
-    pub(crate) fn new(gpu: &gpu::RcDevice) -> Self {
+    pub(crate) fn new() -> Self {
         let ctx = egui::Context::default();
         ctx.set_fonts(FontDefinitions::default());
         ctx.set_style(Style::default());
-        let renderer = egui_backend::Renderer::new(gpu);
+        let renderer = egui_backend::Renderer::new();
         Self {
             renderer,
             ctx,

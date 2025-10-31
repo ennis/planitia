@@ -34,12 +34,11 @@ pub use types::*;
 pub use gpu_macros::Vertex;
 
 pub mod prelude {
-    pub use crate::util::{CommandStreamExt, DeviceExt};
     pub use crate::{
         vk, Buffer, BufferUsage, ClearColorValue, ColorBlendEquation, ColorTargetState, CommandStream, ComputeEncoder,
         DepthStencilState, Format, FragmentState, GraphicsPipeline, GraphicsPipelineCreateInfo, Image, ImageCreateInfo,
         ImageType, ImageUsage, MemoryLocation, PipelineBindPoint, PipelineLayoutDescriptor, Point2D,
-        PreRasterizationShaders, RasterizationState, RcDevice, Rect2D, RenderEncoder, Sampler, SamplerCreateInfo,
+        PreRasterizationShaders, RasterizationState, Rect2D, RenderEncoder, Sampler, SamplerCreateInfo,
         ShaderCode, ShaderEntryPoint, ShaderSource, Size2D, StencilState, Vertex, VertexBufferDescriptor,
         VertexBufferLayoutDescription, VertexInputAttributeDescription, VertexInputState,
     };
@@ -151,7 +150,6 @@ impl SamplerHandle {
 /// TODO Drop impl
 #[derive(Clone)]
 pub struct GraphicsPipeline {
-    pub(crate) device: RcDevice,
     pub(crate) pipeline: vk::Pipeline,
     pub(crate) pipeline_layout: vk::PipelineLayout,
     // Push descriptors require live VkDescriptorSetLayouts (kill me already)
@@ -160,13 +158,6 @@ pub struct GraphicsPipeline {
 }
 
 impl GraphicsPipeline {
-    pub fn set_name(&self, label: &str) {
-        // SAFETY: the handle is valid
-        unsafe {
-            self.device.set_object_name(self.pipeline, label);
-        }
-    }
-
     pub fn pipeline(&self) -> vk::Pipeline {
         self.pipeline
     }
@@ -177,7 +168,6 @@ impl GraphicsPipeline {
 /// TODO Drop impl
 #[derive(Clone)]
 pub struct ComputePipeline {
-    pub(crate) device: RcDevice,
     pub(crate) pipeline: vk::Pipeline,
     pub(crate) pipeline_layout: vk::PipelineLayout,
     _descriptor_set_layouts: Vec<DescriptorSetLayout>,
@@ -185,13 +175,6 @@ pub struct ComputePipeline {
 }
 
 impl ComputePipeline {
-    pub fn set_name(&self, label: &str) {
-        // SAFETY: the handle is valid
-        unsafe {
-            self.device.set_object_name(self.pipeline, label);
-        }
-    }
-
     pub fn pipeline(&self) -> vk::Pipeline {
         self.pipeline
     }
@@ -200,30 +183,13 @@ impl ComputePipeline {
 /// Samplers
 #[derive(Clone, Debug)]
 pub struct Sampler {
-    // A weak ref is sufficient, the device already owns samplers in its cache
-    device: WeakDevice,
     descriptor_index: SamplerDescriptorIndex,
     sampler: vk::Sampler,
 }
 
 impl Sampler {
-    pub fn set_name(&self, label: &str) {
-        unsafe {
-            self.device
-                .upgrade()
-                .expect("the underlying device of this sampler has been destroyed")
-                .set_object_name(self.sampler, label);
-        }
-    }
-
     /// Returns the Vulkan sampler handle.
     pub fn handle(&self) -> vk::Sampler {
-        // ensure the device is still alive, because it's the device that manages the lifetime of
-        // samplers in its internal cache
-        let _device = self
-            .device
-            .upgrade()
-            .expect("the underlying device of this sampler has been destroyed");
         self.sampler
     }
 
@@ -308,7 +274,6 @@ pub trait TrackedResource {
 
 #[derive(Clone, Debug)]
 pub struct DescriptorSetLayout {
-    device: RcDevice,
     last_submission_index: Option<Arc<AtomicU64>>,
     pub handle: vk::DescriptorSetLayout,
 }
@@ -316,11 +281,10 @@ pub struct DescriptorSetLayout {
 impl Drop for DescriptorSetLayout {
     fn drop(&mut self) {
         if let Some(last_submission_index) = Arc::into_inner(self.last_submission_index.take().unwrap()) {
-            let device = self.device.clone();
             let handle = self.handle;
-            self.device
+            Device::global()
                 .call_later(last_submission_index.load(Ordering::Relaxed), move || unsafe {
-                    device.raw.destroy_descriptor_set_layout(handle, None);
+                    Device::global().raw.destroy_descriptor_set_layout(handle, None);
                 });
         }
     }

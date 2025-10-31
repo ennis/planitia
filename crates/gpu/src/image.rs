@@ -1,12 +1,11 @@
 use crate::device::get_vk_sample_count;
 use crate::{
-    aspects_for_format, BufferUntyped, Descriptor, Device, Format, ImageCreateInfo, ImageType,
-    ImageUsage, RcDevice, ResourceAllocation, ResourceDescriptorIndex, ResourceId, Size3D, StorageImageHandle,
-    TextureHandle, TrackedResource,
+    aspects_for_format, BufferUntyped, Descriptor, Device, Format, ImageCreateInfo, ImageType, ImageUsage, 
+    ResourceAllocation, ResourceDescriptorIndex, ResourceId, Size3D, StorageImageHandle, TextureHandle,
+    TrackedResource,
 };
 use ash::vk;
 use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
-use std::rc::Rc;
 use std::{mem, ptr};
 
 /// Image data stored in CPU-visible memory.
@@ -23,7 +22,6 @@ pub struct ImageBuffer {
 /// Wrapper around a Vulkan image.
 #[derive(Debug)]
 pub struct Image {
-    pub(crate) device: RcDevice,
     pub(crate) id: ResourceId,
     pub(crate) allocation: ResourceAllocation,
     pub(crate) swapchain_image: bool,
@@ -41,8 +39,10 @@ impl Drop for Image {
             let mut allocation = mem::take(&mut self.allocation);
             let handle = self.handle;
             let descriptors = self.descriptors;
-            self.device.delete_tracked_resource(self.id, move |device| unsafe {
+
+            Device::global().delete_tracked_resource(self.id, move || unsafe {
                 //debug!("dropping image {:?} (handle: {:?})", id, handle);
+                let device = Device::global();
                 device.free_resource_heap_index(descriptors.texture);
                 device.free_resource_heap_index(descriptors.storage);
                 device.raw.destroy_image_view(descriptors.image_view, None);
@@ -62,7 +62,7 @@ impl TrackedResource for Image {
 impl Image {
     pub fn set_name(&self, label: &str) {
         unsafe {
-            self.device.set_object_name(self.handle, label);
+            Device::global().set_object_name(self.handle, label);
         }
     }
 
@@ -113,10 +113,6 @@ impl Image {
     /// Returns the handle of the default image view.
     pub fn view_handle(&self) -> vk::ImageView {
         self.descriptors.image_view
-    }
-
-    pub fn device(&self) -> &RcDevice {
-        &self.device
     }
 
     /// Returns a descriptor for sampling this image in a shader.
@@ -238,73 +234,76 @@ impl Device {
         }
     }
 
-
     /// Creates a new image resource.
-    pub fn create_image(self: &Rc<Self>, image_info: &ImageCreateInfo) -> Image {
-        let create_info = vk::ImageCreateInfo {
-            image_type: image_info.type_.into(),
-            format: image_info.format,
-            extent: vk::Extent3D {
-                width: image_info.width,
-                height: image_info.height,
-                depth: image_info.depth,
-            },
-            mip_levels: image_info.mip_levels,
-            array_layers: image_info.array_layers,
-            samples: get_vk_sample_count(image_info.samples),
-            tiling: vk::ImageTiling::OPTIMAL, // LINEAR tiling not used enough to be exposed
-            usage: image_info.usage.into(),
-            sharing_mode: vk::SharingMode::EXCLUSIVE,
-            queue_family_index_count: 0,
-            p_queue_family_indices: ptr::null(),
-            initial_layout: vk::ImageLayout::UNDEFINED,
-            ..Default::default()
-        };
-        let handle = unsafe {
-            self.raw
-                .create_image(&create_info, None)
-                .expect("failed to create image")
-        };
-
-        let mem_req = unsafe { self.raw.get_image_memory_requirements(handle) };
-        let allocation = self.allocate_memory_or_panic(&AllocationCreateDesc {
-            name: "",
-            requirements: mem_req,
-            location: image_info.memory_location,
-            linear: true,
-            allocation_scheme: AllocationScheme::GpuAllocatorManaged,
-        });
+    pub fn create_image(&self, image_info: &ImageCreateInfo) -> Image {
         unsafe {
+            let create_info = vk::ImageCreateInfo {
+                image_type: image_info.type_.into(),
+                format: image_info.format,
+                extent: vk::Extent3D {
+                    width: image_info.width,
+                    height: image_info.height,
+                    depth: image_info.depth,
+                },
+                mip_levels: image_info.mip_levels,
+                array_layers: image_info.array_layers,
+                samples: get_vk_sample_count(image_info.samples),
+                tiling: vk::ImageTiling::OPTIMAL, // LINEAR tiling not used enough to be exposed
+                usage: image_info.usage.into(),
+                sharing_mode: vk::SharingMode::EXCLUSIVE,
+                queue_family_index_count: 0,
+                p_queue_family_indices: ptr::null(),
+                initial_layout: vk::ImageLayout::UNDEFINED,
+                ..Default::default()
+            };
+
+            let handle = self
+                .raw
+                .create_image(&create_info, None)
+                .expect("failed to create image");
+
+            let mem_req = self.raw.get_image_memory_requirements(handle);
+            let allocation = self.allocate_memory_or_panic(&AllocationCreateDesc {
+                name: "",
+                requirements: mem_req,
+                location: image_info.memory_location,
+                linear: true,
+                allocation_scheme: AllocationScheme::GpuAllocatorManaged,
+            });
+
             self.raw
                 .bind_image_memory(handle, allocation.memory(), allocation.offset() as u64)
                 .unwrap();
-        }
 
-        // create the bindless image view
-        let descriptors = self.create_image_resource_descriptors(
-            handle,
-            image_info.type_,
-            create_info.usage,
-            image_info.format,
-            image_info.mip_levels,
-            image_info.array_layers,
-        );
+            if !image_info.label.is_empty() {
+                self.set_object_name(handle, image_info.label);
+            }
 
-        Image {
-            handle,
-            device: self.clone(),
-            id: self.allocate_resource_id(),
-            allocation: ResourceAllocation::Allocation { allocation },
-            swapchain_image: false,
-            descriptors,
-            usage: image_info.usage,
-            type_: image_info.type_,
-            format: image_info.format,
-            size: Size3D {
-                width: image_info.width,
-                height: image_info.height,
-                depth: image_info.depth,
-            },
+            // create the bindless image view
+            let descriptors = self.create_image_resource_descriptors(
+                handle,
+                image_info.type_,
+                create_info.usage,
+                image_info.format,
+                image_info.mip_levels,
+                image_info.array_layers,
+            );
+
+            Image {
+                handle,
+                id: self.allocate_resource_id(),
+                allocation: ResourceAllocation::Allocation { allocation },
+                swapchain_image: false,
+                descriptors,
+                usage: image_info.usage,
+                type_: image_info.type_,
+                format: image_info.format,
+                size: Size3D {
+                    width: image_info.width,
+                    height: image_info.height,
+                    depth: image_info.depth,
+                },
+            }
         }
     }
 }

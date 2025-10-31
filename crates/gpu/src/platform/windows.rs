@@ -1,5 +1,5 @@
 use crate::device::{get_vk_sample_count, ResourceAllocation};
-use crate::{vk, Device, Image, ImageCreateInfo, RcDevice, Size3D};
+use crate::{vk, Device, Image, ImageCreateInfo, Size3D};
 use ash::vk::{HANDLE, SECURITY_ATTRIBUTES};
 use gpu_allocator::MemoryLocation;
 use std::ffi::{c_void, OsStr};
@@ -33,6 +33,7 @@ pub struct Win32Handle<'a> {
     pub name: &'a str,
 }*/
 
+
 fn handle_name_to_wstr(name: Option<&str>) -> (Vec<u16>, *const u16) {
     use std::os::windows::ffi::OsStrExt;
 
@@ -51,8 +52,8 @@ pub(crate) enum DedicatedAllocation {
     Image(vk::Image),
 }
 
-pub(crate) unsafe fn import_external_memory(
-    device: &RcDevice,
+unsafe fn import_external_memory(
+    device: &Device,
     memory_requirements: &vk::MemoryRequirements,
     required_flags: vk::MemoryPropertyFlags,
     preferred_flags: vk::MemoryPropertyFlags,
@@ -118,49 +119,9 @@ pub(crate) unsafe fn import_external_memory(
     device_memory
 }
 
-pub trait DeviceExtWindows {
-    unsafe fn create_imported_image_win32(
-        self: &Rc<Self>,
-        image_info: &ImageCreateInfo,
-        required_memory_flags: vk::MemoryPropertyFlags,
-        preferred_memory_flags: vk::MemoryPropertyFlags,
-        handle_type: vk::ExternalMemoryHandleTypeFlags,
-        handle: HANDLE,
-        handle_name: Option<&str>,
-    ) -> Image;
-
-    unsafe fn create_exported_image_win32(
-        self: &Rc<Self>,
-        memory_location: MemoryLocation,
-        image_info: &ImageCreateInfo,
-        handle_type: vk::ExternalMemoryHandleTypeFlags,
-        security_attributes: *const SECURITY_ATTRIBUTES,
-        access_flags: u32,
-        handle_name: Option<&str>,
-    ) -> (Image, HANDLE);
-
-    /// Creates a semaphore and exports it to a Windows handle of the specified type.
-    /// The returned semaphore should be deleted with `vkDestroySemaphore`.
-    unsafe fn create_exported_semaphore_win32(
-        self: &Rc<Self>,
-        handle_type: vk::ExternalSemaphoreHandleTypeFlags,
-        security_attributes: *const SECURITY_ATTRIBUTES,
-        access_flags: u32,
-        handle_name: Option<&str>,
-    ) -> (vk::Semaphore, HANDLE);
-
-    unsafe fn create_imported_semaphore_win32(
-        self: &Rc<Self>,
-        import_flags: vk::SemaphoreImportFlags,
-        handle_type: vk::ExternalSemaphoreHandleTypeFlags,
-        handle: HANDLE,
-        handle_name: Option<&str>,
-    ) -> vk::Semaphore;
-}
-
-impl DeviceExtWindows for Device {
-    unsafe fn create_imported_image_win32(
-        self: &Rc<Self>,
+impl Device {
+    pub unsafe fn create_imported_image_win32(
+        &self,
         image_info: &ImageCreateInfo,
         required_memory_flags: vk::MemoryPropertyFlags,
         preferred_memory_flags: vk::MemoryPropertyFlags,
@@ -219,7 +180,6 @@ impl DeviceExtWindows for Device {
 
         Image {
             handle,
-            device: self.clone(),
             id: self.allocate_resource_id(),
             allocation: ResourceAllocation::DeviceMemory { device_memory },
             swapchain_image: false,
@@ -235,7 +195,7 @@ impl DeviceExtWindows for Device {
         }
     }
 
-    unsafe fn create_exported_image_win32(
+    pub unsafe fn create_exported_image_win32(
         self: &Rc<Self>,
         memory_location: MemoryLocation,
         image_info: &ImageCreateInfo,
@@ -354,7 +314,6 @@ impl DeviceExtWindows for Device {
 
         let image = Image {
             handle,
-            device: self.clone(),
             id: self.allocate_resource_id(),
             allocation: ResourceAllocation::DeviceMemory { device_memory },
             swapchain_image: false,
@@ -371,8 +330,8 @@ impl DeviceExtWindows for Device {
         (image, win32_handle)
     }
 
-    unsafe fn create_exported_semaphore_win32(
-        self: &Rc<Self>,
+    pub unsafe fn create_exported_semaphore_win32(
+        &self,
         handle_type: vk::ExternalSemaphoreHandleTypeFlags,
         security_attributes: *const SECURITY_ATTRIBUTES,
         access_flags: u32,
@@ -412,8 +371,8 @@ impl DeviceExtWindows for Device {
         (semaphore, handle)
     }
 
-    unsafe fn create_imported_semaphore_win32(
-        self: &Rc<Self>,
+    pub unsafe fn create_imported_semaphore_win32(
+        &self,
         import_flags: vk::SemaphoreImportFlags,
         handle_type: vk::ExternalSemaphoreHandleTypeFlags,
         handle: HANDLE,

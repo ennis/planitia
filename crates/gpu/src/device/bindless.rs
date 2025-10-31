@@ -1,8 +1,8 @@
 use crate::{Device, ResourceDescriptorIndex, SamplerDescriptorIndex};
 use ash::vk;
-use log::trace;
 use std::ffi::c_void;
 use std::ptr;
+use std::sync::Mutex;
 
 type DT = vk::DescriptorType;
 
@@ -10,11 +10,18 @@ const SAMPLER_TABLE_BINDING: u32 = 0;
 const IMAGE_TABLE_BINDING: u32 = 2;
 
 /// Bindless descriptor table.
+///
+/// TODO drop impl should free the descriptor pool and layout
 #[derive(Debug)]
 pub(crate) struct BindlessDescriptorTable {
     pub(crate) layout: vk::DescriptorSetLayout,
     pub(crate) set: vk::DescriptorSet,
+
     pool: vk::DescriptorPool,
+    /// Descriptor set writes must be externally synchronized, but we don't want to
+    /// wrap `set` in a Mutex because that would require locking every time we want to copy the
+    /// handle. So instead we lock this mutex when writing to the descriptor set.
+    write_lock: Mutex<()>,
     count: usize,
 }
 
@@ -138,6 +145,7 @@ impl BindlessDescriptorTable {
             pool,
             set,
             count,
+            write_lock: Mutex::new(()),
         }
     }
 }
@@ -149,8 +157,14 @@ impl Device {
         descriptor_type: vk::DescriptorType,
         image_layout: vk::ImageLayout,
     ) -> ResourceDescriptorIndex {
-        let d = self.global_descriptors.lock().unwrap();
-        let index = self.resource_descriptor_indices.lock().unwrap().insert(());
+        let d = &self.descriptor_table;
+        let index = self
+            .descriptor_indices
+            .lock()
+            .unwrap()
+            .resource_descriptor_indices
+            .insert(());
+
         let dst_array_element = index.index();
         assert!(dst_array_element < d.count as u32);
         let write = vk::WriteDescriptorSet {
@@ -158,24 +172,32 @@ impl Device {
             dst_binding: IMAGE_TABLE_BINDING,
             dst_array_element,
             descriptor_count: 1,
-            descriptor_type: descriptor_type,
+            descriptor_type,
             p_image_info: &vk::DescriptorImageInfo {
                 image_view,
-                image_layout: image_layout,
+                image_layout,
                 ..Default::default()
             },
             ..Default::default()
         };
-        trace!("image_descriptors[{}] = {:?}", dst_array_element, image_view);
+        //trace!("image_descriptors[{}] = {:?}", dst_array_element, image_view);
+
         unsafe {
+            // SAFETY: access to the descriptor set is externally synchronized via `d.write_lock`
+            let _guard = d.write_lock.lock().unwrap();
             self.raw.update_descriptor_sets(&[write], &[]);
         }
         index
     }
 
     pub(crate) unsafe fn create_global_sampler_descriptor(&self, sampler: vk::Sampler) -> SamplerDescriptorIndex {
-        let d = self.global_descriptors.lock().unwrap();
-        let index = self.sampler_descriptor_indices.lock().unwrap().insert(());
+        let d = &self.descriptor_table;
+        let index = self
+            .descriptor_indices
+            .lock()
+            .unwrap()
+            .sampler_descriptor_indices
+            .insert(());
         let dst_array_element = index.index();
         assert!(dst_array_element < d.count as u32);
         let write = vk::WriteDescriptorSet {
@@ -190,8 +212,11 @@ impl Device {
             },
             ..Default::default()
         };
-        trace!("sampler_descriptors[{}] = {:?}", dst_array_element, sampler);
+        //trace!("sampler_descriptors[{}] = {:?}", dst_array_element, sampler);
+
         unsafe {
+            // SAFETY: access to the descriptor set is externally synchronized via `d.write_lock`
+            let _guard = d.write_lock.lock().unwrap();
             self.raw.update_descriptor_sets(&[write], &[]);
         }
         index

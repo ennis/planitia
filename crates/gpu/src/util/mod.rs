@@ -1,9 +1,6 @@
 mod command;
 mod device;
 
-pub use command::CommandStreamExt;
-pub use device::*;
-
 /*
 pub unsafe fn blit_images(
     queue: &mut Queue,

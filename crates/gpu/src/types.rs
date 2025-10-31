@@ -479,7 +479,7 @@ impl From<ImageUsage> for vk::ImageUsageFlags {
 
 /// Information passed to `Context::create_image` to describe the image to be created.
 #[derive(Copy, Clone, Debug)]
-pub struct ImageCreateInfo {
+pub struct ImageCreateInfo<'a> {
     pub memory_location: MemoryLocation,
     /// Dimensionality of the image.
     pub type_: ImageType,
@@ -489,17 +489,19 @@ pub struct ImageCreateInfo {
     pub format: Format,
     /// Size of the image.
     pub width: u32,
-    pub height: u32,
-    pub depth: u32,
+    pub height: u32 = 1,
+    pub depth: u32 = 1,
     /// Number of mipmap levels. Note that the mipmaps contents must still be generated manually. Default is 1. 0 is *not* a valid value.
-    pub mip_levels: u32,
+    pub mip_levels: u32 = 1,
     /// Number of array layers. Default is `1`. `0` is *not* a valid value.
-    pub array_layers: u32,
+    pub array_layers: u32 = 1,
     /// Number of samples. Default is `1`. `0` is *not* a valid value.
-    pub samples: u32,
+    pub samples: u32 = 1,
+    /// Optional debug label.
+    pub label: &'a str = "",
 }
 
-impl Default for ImageCreateInfo {
+impl<'a> Default for ImageCreateInfo<'a> {
     fn default() -> Self {
         ImageCreateInfo {
             memory_location: MemoryLocation::Unknown,
@@ -507,11 +509,7 @@ impl Default for ImageCreateInfo {
             usage: Default::default(),
             format: Default::default(),
             width: 1,
-            height: 1,
-            depth: 1,
-            mip_levels: 1,
-            array_layers: 1,
-            samples: 1,
+            ..
         }
     }
 }

@@ -1,8 +1,7 @@
 use crate::platform::RenderTargetImage;
 use crate::platform::windows::SWAP_CHAIN_BUFFER_COUNT;
 use crate::platform::windows::graphics::GraphicsContext;
-use gpu::platform::windows::DeviceExtWindows;
-use gpu::{SemaphoreWaitKind, vk};
+use gpu::{Device, SemaphoreWaitKind, vk};
 use log::warn;
 use std::cell::Cell;
 use windows::Win32::Foundation::{CloseHandle, GENERIC_ALL, HANDLE};
@@ -73,7 +72,9 @@ impl Drop for DxgiVulkanInteropSwapChain {
         unsafe {
             // Release the swap chain resources
             // FIXME: there should be a RAII wrapper for semaphores probably
-            gfx.vk_device.raw().destroy_semaphore(self.fence_semaphore, None);
+            gpu::Device::global()
+                .raw()
+                .destroy_semaphore(self.fence_semaphore, None);
             CloseHandle(self.fence_shared_handle).unwrap();
             for img in self.images.iter() {
                 CloseHandle(img.shared_handle).unwrap();
@@ -119,7 +120,7 @@ impl DxgiVulkanInteropSwapChain {
                     .unwrap();
 
                 // import the buffer to a vulkan image with memory imported from the shared handle
-                let imported_image = gfx.vk_device.create_imported_image_win32(
+                let imported_image = Device::global().create_imported_image_win32(
                     &gpu::ImageCreateInfo {
                         memory_location: gpu::MemoryLocation::GpuOnly,
                         type_: gpu::ImageType::Image2D,
@@ -131,6 +132,7 @@ impl DxgiVulkanInteropSwapChain {
                         mip_levels: 1,
                         array_layers: 1,
                         samples: 1,
+                        ..
                     },
                     Default::default(),
                     Default::default(),
@@ -170,13 +172,13 @@ impl DxgiVulkanInteropSwapChain {
                 .d3d_device
                 .CreateSharedHandle(&fence, None, GENERIC_ALL.0, None)
                 .unwrap();
-            let fence_semaphore = gfx.vk_device.create_imported_semaphore_win32(
+            let fence_semaphore = gpu::Device::global().create_imported_semaphore_win32(
                 vk::SemaphoreImportFlags::empty(),
                 vk::ExternalSemaphoreHandleTypeFlags::D3D12_FENCE,
                 fence_shared_handle.0,
                 None,
             );
-            gfx.vk_device.set_object_name(fence_semaphore, "DxgiVulkanSharedFence");
+            gpu::Device::global().set_object_name(fence_semaphore, "DxgiVulkanSharedFence");
 
             DxgiVulkanInteropSwapChain {
                 dxgi: swap_chain,

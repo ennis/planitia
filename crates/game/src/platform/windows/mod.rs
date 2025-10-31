@@ -23,8 +23,6 @@ use crate::context::LoopHandler;
 use crate::platform::windows::compositor_clock::CompositorClock;
 use crate::platform::windows::graphics::GraphicsContext;
 use crate::platform::windows::window::Window;
-use gpu::RcDevice;
-use gpu::platform::windows::DeviceExtWindows;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -122,11 +120,6 @@ impl PlatformHandler for Win32Platform {
         let render_target = window.get_swap_chain_image();
         render_callback(render_target);
         window.present();
-    }
-
-    fn get_gpu_device(&self) -> &RcDevice {
-        let gfx = GraphicsContext::current();
-        &gfx.vk_device
     }
 
     fn wake_at_next_vsync(&self) {

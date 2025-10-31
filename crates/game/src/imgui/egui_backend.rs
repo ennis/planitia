@@ -1,12 +1,11 @@
 use std::collections::HashMap;
-use std::{mem, slice};
+use std::slice;
 
 use crate::shaders::{EGUI_FRAG_MAIN, EGUI_VERTEX_MAIN};
 use egui::epaint::Primitive;
 use egui::{ClippedPrimitive, ImageData};
 use gpu::prelude::*;
-use gpu::util::CommandStreamExt;
-use gpu::{Barrier, ColorAttachment, ImageCopyView, Offset3D, RenderPassInfo, Size3D, Vertex};
+use gpu::{Barrier, ColorAttachment, Device, ImageCopyView, Offset3D, RenderPassInfo, Size3D, Vertex};
 
 #[derive(Copy, Clone, Vertex)]
 #[repr(C)]
@@ -36,10 +35,10 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(device: &RcDevice) -> Renderer {
-        let pipeline = create_pipeline(device);
+    pub fn new() -> Renderer {
+        let pipeline = create_pipeline();
 
-        let sampler = device.create_sampler(&SamplerCreateInfo {
+        let sampler = Device::global().create_sampler(&SamplerCreateInfo {
             mag_filter: vk::Filter::LINEAR,
             min_filter: vk::Filter::LINEAR,
             mipmap_mode: vk::SamplerMipmapMode::NEAREST,
@@ -81,7 +80,7 @@ impl Renderer {
 
             // Get or create texture
             let texture = self.textures.entry(id).or_insert_with(|| {
-                let image = cmd.device().create_image(&ImageCreateInfo {
+                let image = Device::global().create_image(&ImageCreateInfo {
                     memory_location: MemoryLocation::GpuOnly,
                     type_: ImageType::Image2D,
                     usage: ImageUsage::SAMPLED | ImageUsage::TRANSFER_DST,
@@ -92,7 +91,7 @@ impl Renderer {
                 });
                 image.set_name("egui texture");
 
-                let sampler = cmd.device().create_sampler(&SamplerCreateInfo {
+                let sampler = Device::global().create_sampler(&SamplerCreateInfo {
                     mag_filter: convert_filter(tex.options.magnification),
                     min_filter: convert_filter(tex.options.minification),
                     mipmap_mode: vk::SamplerMipmapMode::NEAREST,
@@ -162,10 +161,8 @@ impl Renderer {
         for (_, mesh) in meshes.iter() {
             let vertex_data: &[EguiVertex] =
                 unsafe { slice::from_raw_parts(mesh.vertices.as_ptr().cast(), mesh.vertices.len()) };
-            let vertex_buffer = cmd.device().upload_slice(BufferUsage::VERTEX, vertex_data);
-            let index_buffer = cmd.device().upload_slice(BufferUsage::INDEX, &mesh.indices);
-            vertex_buffer.set_name("egui vertex buffer");
-            index_buffer.set_name("egui index buffer");
+            let vertex_buffer = Device::global().upload_slice(BufferUsage::VERTEX, vertex_data, "egui vertex buffer");
+            let index_buffer = Device::global().upload_slice(BufferUsage::INDEX, &mesh.indices, "egui index buffer");
             mesh_vertex_buffers.push(vertex_buffer);
             mesh_index_buffers.push(index_buffer);
         }
@@ -234,8 +231,8 @@ impl Renderer {
     }
 }
 
-fn create_pipeline(device: &RcDevice) -> GraphicsPipeline {
-    let set_layout = device.create_push_descriptor_set_layout(&[
+fn create_pipeline() -> GraphicsPipeline {
+    let set_layout = Device::global().create_push_descriptor_set_layout(&[
         vk::DescriptorSetLayoutBinding {
             binding: 0,
             descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
@@ -254,11 +251,11 @@ fn create_pipeline(device: &RcDevice) -> GraphicsPipeline {
 
     let create_info = GraphicsPipelineCreateInfo {
         set_layouts: &[set_layout],
-        push_constants_size: mem::size_of::<EguiPushConstants>(),
+        push_constants_size: size_of::<EguiPushConstants>(),
         vertex_input: VertexInputState {
             buffers: &[VertexBufferLayoutDescription {
                 binding: 0,
-                stride: mem::size_of::<EguiVertex>() as u32,
+                stride: size_of::<EguiVertex>() as u32,
                 input_rate: vk::VertexInputRate::VERTEX,
             }],
             attributes: &[
@@ -311,7 +308,7 @@ fn create_pipeline(device: &RcDevice) -> GraphicsPipeline {
         },
     };
 
-    device
+    Device::global()
         .create_graphics_pipeline(create_info)
         .expect("failed to create pipeline")
 }
