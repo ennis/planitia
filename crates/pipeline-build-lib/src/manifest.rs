@@ -3,11 +3,10 @@ use crate::Error::MissingField;
 use anyhow::{Context, anyhow};
 use log::error;
 use pipeline_archive::ColorBlendEquationData;
-use pipeline_archive::archive::ArchiveWriter;
 use pipeline_archive::gpu::vk;
 use pipeline_archive::gpu::vk::PolygonMode;
 use serde_json::Value as Json;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap};
 use std::path::{Path, PathBuf};
 
 const MAX_COLOR_TARGETS: usize = 8;
@@ -148,6 +147,7 @@ fn read_format(fmtstr: &str) -> Result<vk::Format, Error> {
     match fmtstr {
         "RGBA8" => Ok(vk::Format::R8G8B8A8_UNORM),
         "D32F" => Ok(vk::Format::D32_SFLOAT),
+        "D32F_S8UI" => Ok(vk::Format::D32_SFLOAT_S8_UINT),
         _ => {
             error!("Unknown format: {}", fmtstr);
             Err(Error::InvalidType("format"))
@@ -198,7 +198,7 @@ fn read_depth_stencil_state(json: &Json, out: &mut pipeline_archive::DepthStenci
     if let Some(depth_write_enable) = read_bool(json, "depth_write_enable")? {
         out.depth_write_enable = depth_write_enable;
     }
-
+    out.depth_test_enable = true;
     Ok(())
 }
 
@@ -342,14 +342,6 @@ impl Input {
 
 impl BuildManifest {
 
-    /// Prints `cargo:rerun-if-changed=` directives for all input files in the manifest, and the
-    /// manifest file itself.
-    pub(crate) fn print_cargo_dependencies(&self) {
-        println!("cargo:rerun-if-changed={}", self.manifest_path.display());
-        for input in &self.inputs {
-            println!("cargo:rerun-if-changed={}", input.file_path);
-        }
-    }
 
     pub(crate) fn load(path: impl AsRef<Path>) -> Result<BuildManifest, anyhow::Error> {
         fn load_inner(path: &Path) -> Result<BuildManifest, anyhow::Error> {

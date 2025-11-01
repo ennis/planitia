@@ -5,10 +5,7 @@ use std::{ptr, slice};
 
 use ash::vk;
 
-use crate::{
-    is_depth_and_stencil_format, Barrier, BufferRangeUntyped, ClearColorValue, ColorAttachment, CommandStream,
-    DepthStencilAttachment, Descriptor, Device, GraphicsPipeline, Rect2D, TrackedResource,
-};
+use crate::{is_depth_and_stencil_format, Barrier, BufferRangeUntyped, ClearColorValue, ColorAttachment, CommandStream, DepthStencilAttachment, Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Rect2D, TrackedResource};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -164,7 +161,6 @@ impl<'a> RenderEncoder<'a> {
     /// Binds push constants.
     ///
     /// Push constants stay valid until the bound pipeline is changed.
-
     pub fn push_constants_slice(&mut self, data: &[u8]) {
         unsafe {
             self.stream.do_cmd_push_constants(
@@ -176,14 +172,14 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
-    /// Sets the primitive topology.
-    pub fn set_primitive_topology(&mut self, topology: vk::PrimitiveTopology) {
+    /*/// Sets the primitive topology.
+    pub fn set_primitive_topology(&mut self, topology: PrimitiveTopology) {
         unsafe {
             Device::global()
                 .raw
-                .cmd_set_primitive_topology(self.command_buffer, topology.into());
+                .cmd_set_primitive_topology(self.command_buffer, topology.to_vk_primitive_topology());
         }
-    }
+    }*/
 
     /// Sets the viewport.
     pub fn set_viewport(&mut self, x: f32, y: f32, width: f32, height: f32, min_depth: f32, max_depth: f32) {
@@ -308,9 +304,14 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
-    pub fn draw(&mut self, vertices: Range<u32>, instances: Range<u32>) {
+    pub fn draw(&mut self, topology: PrimitiveTopology, vertices: Range<u32>, instances: Range<u32>) {
         unsafe {
-            Device::global().raw.cmd_draw(
+            let device = &Device::global().raw;
+            device.cmd_set_primitive_topology(
+                self.command_buffer,
+                topology.to_vk_primitive_topology(),
+            );
+            device.cmd_draw(
                 self.command_buffer,
                 vertices.len() as u32,
                 instances.len() as u32,
@@ -320,9 +321,14 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
-    pub fn draw_indexed(&mut self, indices: Range<u32>, base_vertex: i32, instances: Range<u32>) {
+    pub fn draw_indexed(&mut self, topology: PrimitiveTopology, indices: Range<u32>, base_vertex: i32, instances: Range<u32>) {
         unsafe {
-            Device::global().raw.cmd_draw_indexed(
+            let device = &Device::global().raw;
+            device.cmd_set_primitive_topology(
+                self.command_buffer,
+                topology.to_vk_primitive_topology(),
+            );
+            device.cmd_draw_indexed(
                 self.command_buffer,
                 indices.len() as u32,
                 instances.len() as u32,

@@ -39,7 +39,7 @@ fn main() {
 
     // build shaders
     if let Err(err) = pipeline_build_lib::build_pipeline(
-        "assets/shaders/paint.json",
+        "assets/shaders/pipelines.json",
         &pipeline_build_lib::BuildOptions {
             quiet: true,
             emit_cargo_deps: true,

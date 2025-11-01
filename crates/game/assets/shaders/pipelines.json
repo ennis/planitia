@@ -28,5 +28,10 @@
     "rasterizer_state": {
         "cull_mode": "back",
         "fill_mode": "solid"
+    },
+    "depth_stencil_state": {
+        "format": "D32F_S8UI",
+        "depth_compare_op": "less",
+        "depth_write_enable": true
     }
 }

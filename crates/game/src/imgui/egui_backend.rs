@@ -6,6 +6,7 @@ use egui::epaint::Primitive;
 use egui::{ClippedPrimitive, ImageData};
 use gpu::prelude::*;
 use gpu::{Barrier, ColorAttachment, Device, ImageCopyView, Offset3D, RenderPassInfo, Size3D, Vertex};
+use gpu::PrimitiveTopology::TriangleList;
 
 #[derive(Copy, Clone, Vertex)]
 #[repr(C)]
@@ -81,13 +82,12 @@ impl Renderer {
             // Get or create texture
             let texture = self.textures.entry(id).or_insert_with(|| {
                 let image = Image::new(ImageCreateInfo {
-                    memory_location: MemoryLocation::GpuOnly,
                     type_: ImageType::Image2D,
                     usage: ImageUsage::SAMPLED | ImageUsage::TRANSFER_DST,
                     format,
                     width,
                     height,
-                    ..Default::default()
+                    ..
                 });
                 image.set_name("egui texture");
 
@@ -223,8 +223,7 @@ impl Renderer {
                 ],
             );
 
-            enc.set_primitive_topology(vk::PrimitiveTopology::TRIANGLE_LIST);
-            enc.draw_indexed(0..(index_buffer.len() as u32), 0, 0..1);
+            enc.draw_indexed(TriangleList,0..(index_buffer.len() as u32), 0, 0..1);
         }
 
         enc.finish();

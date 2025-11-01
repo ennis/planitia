@@ -20,7 +20,6 @@ pub struct BuildOptions {
 /// * `manifest_path` - Path to the pipeline manifest file (JSON).
 pub fn build_pipeline(manifest_path: impl AsRef<Path>, options: &BuildOptions) -> anyhow::Result<()> {
     fn build_pipeline_inner(manifest_path: &Path, options: &BuildOptions) -> anyhow::Result<()> {
-
         let manifest = match BuildManifest::load(manifest_path) {
             Ok(manifest) => manifest,
             Err(err) => {
@@ -34,11 +33,6 @@ pub fn build_pipeline(manifest_path: impl AsRef<Path>, options: &BuildOptions) -
                 return Err(err).with_context(|| format!("failed to load manifest from {}", manifest_path.display()));
             }
         };
-
-        // emit cargo dependency
-        if options.emit_cargo_deps {
-            manifest.print_cargo_dependencies();
-        }
 
         manifest
             .build_all(options)

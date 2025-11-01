@@ -1,21 +1,22 @@
 #![expect(unused, reason = "noisy")]
 #![feature(default_field_values)]
 
+use crate::asset::AssetCache;
 use crate::camera_control::{CameraControl, CameraControlInput};
 use crate::context::{AppHandler, LoopHandler, get_gpu_device, quit, render_imgui, run};
 use crate::input::{InputEvent, PointerButton};
 use crate::paint::{DrawGlyphRunOptions, PaintRenderParams, PaintScene, Painter, Srgba32, TextFormat, TextLayout};
+use crate::pipeline_cache::get_graphics_pipeline;
 use crate::platform::{EventToken, InitOptions, LoopEvent, RenderTargetImage};
 use egui::Color32;
 use egui_demo_lib::{Demo, DemoWindows, View, WidgetGallery};
 use futures::{FutureExt, StreamExt};
+use gpu::{Device, DeviceAddress, RenderPassInfo, push_constants, Image};
 use log::debug;
-use math::geom::rect_xywh;
+use math::geom::{Camera, rect_xywh};
 use math::{Rect, vec2};
 use serde_json::json;
-use gpu::{Device, DeviceAddress, RenderPassInfo};
-use crate::asset::AssetCache;
-use crate::pipeline_cache::get_graphics_pipeline;
+use gpu::PrimitiveTopology::TriangleList;
 
 mod camera_control;
 mod context;
@@ -40,6 +41,14 @@ mod pipeline_cache;
 const WIDTH: u32 = 1280;
 const HEIGHT: u32 = 720;
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct SceneUniforms {
+    view_matrix: [[f32; 4]; 4],
+    proj_matrix: [[f32; 4]; 4],
+    screen_size: [f32; 2],
+}
+
 struct Game {
     physics_timer: EventToken,
     render_target_time: EventToken,
@@ -47,19 +56,25 @@ struct Game {
     color: Color32,
     painter: Painter,
     camera_control: CameraControl,
+    depth_stencil_buffer: gpu::Image,
     //pipeline_editor: PipelineEditor,
     //pipeline_cache: PipelineCache,
 }
 
 impl Default for Game {
     fn default() -> Self {
+
         let painter = Painter::new(gpu::Format::R8G8B8A8_UNORM, None);
 
-        /*let grid_pipeline = device.create_graphics_pipeline(&gpu::GraphicsPipelineCreateInfo {
-            vertex: gpu::ShaderModule::from_spirv_bytes(device, include_bytes!("../shaders/grid.vert.spv")).unwrap(),
-            fragment: Some(gpu::ShaderModule::from_spirv_bytes(device, include_bytes!("../shaders/grid.frag.spv")).unwrap()),
-            ..Default::default()
-        }).unwrap();*/
+        let depth_buffer = Image::new(
+            gpu::ImageCreateInfo {
+                width: WIDTH,
+                height: HEIGHT,
+                format: gpu::Format::D32_SFLOAT_S8_UINT,
+                usage: gpu::ImageUsage::DEPTH_STENCIL_ATTACHMENT | gpu::ImageUsage::TRANSFER_DST,
+                ..
+            },
+        );
 
         Self {
             physics_timer: EventToken(1),
@@ -67,6 +82,7 @@ impl Default for Game {
             demo: WidgetGallery::default(),
             color: Default::default(),
             painter,
+            depth_stencil_buffer: depth_buffer,
             camera_control: CameraControl::default(),
             //pipeline_editor: Default::default(),
             //grid_pipeline: ,
@@ -75,7 +91,26 @@ impl Default for Game {
 }
 
 impl Game {
-    fn paint_test_scene(&mut self, cmd: &mut gpu::CommandStream, target: &gpu::Image) {
+    fn render_scene(
+        &mut self,
+        encoder: &mut gpu::RenderEncoder,
+        _camera: &Camera,
+        scene_uniforms: DeviceAddress<SceneUniforms>,
+    ) {
+        //----------------------------------
+        // Draw grid
+        {
+            let grid_shader = get_graphics_pipeline("/shaders/pipelines.parc#grid");
+            encoder.bind_graphics_pipeline(&grid_shader);
+            encoder.push_constants(push_constants! {
+                scene_uniforms: DeviceAddress<SceneUniforms> = scene_uniforms,
+                grid_scale: f32 = 1.0
+            });
+            encoder.draw(TriangleList, 0..6, 0..1);
+        }
+    }
+
+    fn render_overlay(&mut self, cmd: &mut gpu::CommandStream, target: &gpu::Image) {
         let mut scene = self.painter.build_scene();
         let [r, g, b, a] = self.color.to_srgba_unmultiplied();
         let color = Srgba32 { r, g, b, a };
@@ -102,12 +137,6 @@ And what is else not to be overcome?",
             scene.draw_glyph_run(vec2(0.0, 0.0), &glyph_run, &DrawGlyphRunOptions::default());
         }
 
-        /*scene.draw_glyph_run(
-            vec2(400.0, 200.0),
-            "Hello, world! こんにちは",
-            48.0,
-        );*/
-
         scene.finish(
             cmd,
             &PaintRenderParams {
@@ -116,52 +145,6 @@ And what is else not to be overcome?",
                 depth_target: None,
             },
         );
-
-        self.draw_grid(cmd, target);
-    }
-
-    fn draw_grid(&mut self, cmd: &mut gpu::CommandStream, target: &gpu::Image) {
-
-        let grid_shader = get_graphics_pipeline("/shaders/pipelines.parc#grid");
-
-        #[repr(C)]
-        #[derive(Clone, Copy)]
-        struct GridShaderSceneInfo {
-            view_matrix: [[f32; 4]; 4],
-            proj_matrix: [[f32; 4]; 4],
-            screen_size: [f32; 2],
-        }
-
-        let camera = self.camera_control.camera();
-        let scene_info = cmd.upload_temporary(&GridShaderSceneInfo {
-            view_matrix: camera.view.to_cols_array_2d(),
-            proj_matrix: camera.projection.to_cols_array_2d(),
-            screen_size: camera.screen_size.as_vec2().to_array(),
-        });
-
-        let mut encoder = cmd.begin_rendering(RenderPassInfo {
-            color_attachments: &[
-            gpu::ColorAttachment {
-                image: target,
-                clear_value: None,
-            }
-        ], depth_stencil_attachment: None });
-
-        encoder.bind_graphics_pipeline(&grid_shader);
-
-
-        #[repr(C)]
-        #[derive(Clone, Copy)]
-        struct GridShaderPushConstants {
-            scene_info: DeviceAddress<GridShaderSceneInfo>,
-            grid_scale: f32,
-        }
-
-        encoder.push_constants(&GridShaderPushConstants {
-            scene_info,
-            grid_scale: 1.0,
-        });
-        encoder.draw(0..6, 0..1);
     }
 }
 
@@ -196,10 +179,42 @@ impl AppHandler for Game {
     fn render(&mut self, target: RenderTargetImage) {
         let device = get_gpu_device();
         let mut cmd = device.create_command_stream();
-        cmd.clear_image(&target.image, gpu::ClearColorValue::Float([0.0, 0.0, 0.0, 1.0]));
 
-        //cmd.clear_image(&target.image, gpu::ClearColorValue::Float([1.0, 1.0, 1.0, 1.0]));
-        self.paint_test_scene(&mut cmd, &target.image);
+        //cmd.clear_image(&target.image, gpu::ClearColorValue::Float([0.0, 0.0, 0.0, 1.0]));
+        //cmd.clear_depth_image(&self.depth_buffer, 1.0);
+
+        //-------------------------------
+        // Render 3D scene
+        {
+            let camera = self.camera_control.camera();
+            let scene_info = cmd.upload_temporary(&SceneUniforms {
+                view_matrix: camera.view.to_cols_array_2d(),
+                proj_matrix: camera.projection.to_cols_array_2d(),
+                screen_size: camera.screen_size.as_vec2().to_array(),
+            });
+
+            let mut encoder = cmd.begin_rendering(RenderPassInfo {
+                color_attachments: &[gpu::ColorAttachment {
+                    image: target.image,
+                    clear_value: Some([0.0, 0.0, 0.0, 1.0]),
+                }],
+                depth_stencil_attachment: Some(gpu::DepthStencilAttachment {
+                    image: &self.depth_stencil_buffer,
+                    depth_clear_value: Some(1.0),
+                    stencil_clear_value: Some(0),
+                }),
+            });
+
+            self.render_scene(&mut encoder, &camera, scene_info);
+            encoder.finish();
+        }
+
+        //-------------------------------
+        // Render 2D overlays
+        self.render_overlay(&mut cmd, &target.image);
+
+        //-------------------------------
+        // Render GUI
         render_imgui(&mut cmd, &target.image);
 
         cmd.flush(&[target.ready], &[target.rendering_finished], None).unwrap();
@@ -219,8 +234,7 @@ impl AppHandler for Game {
 }
 
 fn main() {
-
-    AssetCache::register_filesystem_path(concat!(env!("CARGO_MANIFEST_DIR"), "/assets" ));
+    AssetCache::register_filesystem_path(concat!(env!("CARGO_MANIFEST_DIR"), "/assets"));
 
     run::<Game>(&InitOptions {
         width: WIDTH,

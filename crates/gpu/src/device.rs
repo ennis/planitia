@@ -117,22 +117,6 @@ struct DeleteQueueEntry {
     deleter: Option<Box<dyn FnOnce() + Send + Sync>>,
 }
 
-/// Dummy trait for `Device::delete_later`
-trait DeleteLater {}
-impl<T> DeleteLater for T {}
-
-/// Helper struct for deleting vulkan objects.
-struct Defer<F: FnMut()>(F);
-
-impl<F> Drop for Defer<F>
-where
-    F: FnMut(),
-{
-    fn drop(&mut self) {
-        self.0()
-    }
-}
-
 /// Errors during device creation.
 #[derive(thiserror::Error, Debug)]
 pub enum DeviceCreateError {

@@ -16,6 +16,7 @@ use shader_bridge::ShaderLibrary;
 
 use crate::paint::atlas::Atlas;
 pub use color::Srgba32;
+use gpu::PrimitiveTopology::TriangleList;
 pub use text::{GlyphRun, TextFormat, TextLayout};
 
 #[repr(C)]
@@ -374,7 +375,6 @@ impl<'a> PaintScene<'a> {
         encoder.set_viewport(0.0, 0.0, width as f32, height as f32, 0.0, 1.0);
         encoder.set_scissor(0, 0, width, height);
         encoder.bind_graphics_pipeline(&self.painter.pipelines.paint);
-        encoder.set_primitive_topology(gpu::vk::PrimitiveTopology::TRIANGLE_LIST);
 
         for prim in self.prims.iter() {
             if prim.clip.is_null() {
@@ -433,7 +433,7 @@ fn draw_mesh(encoder: &mut gpu::RenderEncoder, params: &PaintRenderParams, mesh:
     encoder.bind_vertex_buffer(0, vertex_buffer.as_bytes().into());
     encoder.bind_index_buffer(vk::IndexType::UINT32, index_buffer.as_bytes().into());
     set_scissor(encoder, params, clip);
-    encoder.draw_indexed(0..mesh.indices.len() as u32, 0, 0..1);
+    encoder.draw_indexed(TriangleList, 0..mesh.indices.len() as u32, 0, 0..1);
 }
 
 #[cfg(test)]

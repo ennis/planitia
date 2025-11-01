@@ -456,6 +456,30 @@ impl From<BufferUsage> for vk::BufferUsageFlags {
     }
 }
 
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub enum PrimitiveTopology {
+    TriangleList,
+    TriangleStrip,
+    LineList,
+    LineStrip,
+    PointList,
+    PatchList,
+}
+
+impl PrimitiveTopology {
+    pub const fn to_vk_primitive_topology(self) -> vk::PrimitiveTopology {
+        match self {
+            Self::TriangleList => vk::PrimitiveTopology::TRIANGLE_LIST,
+            Self::TriangleStrip => vk::PrimitiveTopology::TRIANGLE_STRIP,
+            Self::LineList => vk::PrimitiveTopology::LINE_LIST,
+            Self::LineStrip => vk::PrimitiveTopology::LINE_STRIP,
+            Self::PointList => vk::PrimitiveTopology::POINT_LIST,
+            Self::PatchList => vk::PrimitiveTopology::PATCH_LIST,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum PipelineBindPoint {
     Graphics,

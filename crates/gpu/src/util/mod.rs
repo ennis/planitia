@@ -70,3 +70,31 @@ pub unsafe fn blit_images(
     queue.submit(blit).expect("blit_images failed");
 }
 */
+
+/// Returns a reference to a temporary instance of an anonymous repr(C) struct to be used as push constants.
+///
+/// # Example
+///
+///```rust
+/// encoder.push_constants(push_constants! {
+///     time: f32 = 1.0,
+///     resolution: [f32; 2] = [800.0, 600.0],
+/// });
+///```
+#[macro_export]
+macro_rules! push_constants {
+    ( $( $field:ident : $ty:ty = $val:expr ),* ) => {
+        {
+            #[repr(C)]
+            #[derive(Copy, Clone)]
+            struct PushConstants {
+                $( $field: $ty, )*
+            }
+            &PushConstants {
+                $( $field: $val, )*
+            }
+        }
+    };
+}
+
+pub use push_constants;

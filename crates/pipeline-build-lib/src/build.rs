@@ -1,14 +1,12 @@
 use crate::manifest::{BuildManifest, Configuration, Error, Input, PipelineType, Variant};
-use crate::{BuildOptions, Tag};
+use crate::BuildOptions;
 use anyhow::anyhow;
 use color_print::{ceprintln, cprintln};
-use log::info;
 use pipeline_archive::archive::{ArchiveWriter, Offset};
 use pipeline_archive::gpu::ShaderStage;
-use pipeline_archive::zstring::{ZString16, ZString32, ZString64};
-use pipeline_archive::{PIPELINE_ARCHIVE_MAGIC, PipelineEntryData, ShaderData};
+use pipeline_archive::zstring::{ZString32, ZString64};
+use pipeline_archive::{PipelineEntryData, ShaderData, PIPELINE_ARCHIVE_MAGIC};
 use shader_bridge::ShaderLibrary;
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::{env, fmt};
 
@@ -115,13 +113,17 @@ impl BuildManifest {
         Ok(())
     }
 
-    pub(crate) fn compile_to_archive(&self, archive: &mut ArchiveWriter, options: &BuildOptions) -> anyhow::Result<()> {
+    fn compile_to_archive(&self, archive: &mut ArchiveWriter, options: &BuildOptions) -> anyhow::Result<()> {
         // header
         let header = archive.write(pipeline_archive::PipelineArchiveData {
             magic: PIPELINE_ARCHIVE_MAGIC,
             version: 1,
             entries: Offset::INVALID,
         });
+
+        if options.emit_cargo_deps {
+            println!("cargo:rerun-if-changed={}", self.manifest_path.display());
+        }
 
         let mut compilation_errors = CompilationErrors(Vec::new());
         let mut entries = Vec::new();
@@ -183,9 +185,11 @@ impl BuildManifest {
         archive: &mut ArchiveWriter,
         input: &Input,
         config: &Configuration,
-        _options: &BuildOptions,
+        options: &BuildOptions,
     ) -> anyhow::Result<PipelineEntryData> {
-        let lib = match ShaderLibrary::new(self.resolve_path(&input.file_path)) {
+
+        let resolved_shader_path = self.resolve_path(&input.file_path);
+        let lib = match ShaderLibrary::new(&resolved_shader_path) {
             Ok(lib) => lib,
             Err(err) => {
                 // convert to string error as the Error type returned by ShaderLibrary is not Send+Sync
@@ -193,6 +197,10 @@ impl BuildManifest {
                 return Err(cause.context(format!("Error loading {}", input.file_path)));
             }
         };
+
+        if options.emit_cargo_deps {
+            println!("cargo:rerun-if-changed={}", resolved_shader_path.display());
+        }
 
         let mut push_constants_size = 0;
         let pipeline_kind;

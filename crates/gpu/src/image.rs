@@ -70,9 +70,9 @@ impl From<ImageUsage> for vk::ImageUsageFlags {
 /// Information passed to `Image::new` to describe the image to be created.
 #[derive(Copy, Clone, Debug)]
 pub struct ImageCreateInfo<'a> {
-    pub memory_location: MemoryLocation,
+    pub memory_location: MemoryLocation = MemoryLocation::GpuOnly,
     /// Dimensionality of the image.
-    pub type_: ImageType,
+    pub type_: ImageType = ImageType::Image2D,
     /// Image usage flags. Must include all intended uses of the image.
     pub usage: ImageUsage,
     /// Format of the image.
@@ -89,19 +89,6 @@ pub struct ImageCreateInfo<'a> {
     pub samples: u32 = 1,
     /// Optional debug label.
     pub label: &'a str = "",
-}
-
-impl<'a> Default for ImageCreateInfo<'a> {
-    fn default() -> Self {
-        ImageCreateInfo {
-            memory_location: MemoryLocation::Unknown,
-            type_: ImageType::Image2D,
-            usage: Default::default(),
-            format: Default::default(),
-            width: 1,
-            ..
-        }
-    }
 }
 
 /// Image data stored in CPU-visible memory.

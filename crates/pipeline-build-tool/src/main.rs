@@ -12,9 +12,12 @@ static PROJECT_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/html");
 struct Args {
     /// Path to build manifest.
     manifest_path: Option<String>,
-    /// Don't print anything to stdout.
+    /// Don't print logs to stdout.
     #[clap(short, long)]
     quiet: bool,
+    /// Print cargo dependency directives.
+    #[clap(long)]
+    emit_cargo_deps: bool,
     /// Open graphical editor.
     #[clap(long)]
     editor: bool,
@@ -27,7 +30,7 @@ fn main() {
         run_editor();
         return;
     } else if let Some(manifest_path) = args.manifest_path {
-        let build_options = pipeline_build_lib::BuildOptions { quiet: args.quiet };
+        let build_options = pipeline_build_lib::BuildOptions { quiet: args.quiet, emit_cargo_deps: args.emit_cargo_deps };
         match pipeline_build_lib::build_pipeline(&manifest_path, &build_options) {
             Ok(()) => {}
             Err(_err) => {
