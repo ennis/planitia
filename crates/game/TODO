@@ -16,7 +16,8 @@
  ✔ Fix egui freezing sometimes @done (25-08-23 22:28)
  ✔ Fix egui color bug @done (25-08-23 23:15)
      It was a nasty use-after-free due to slice::from_raw_parts ignoring lifetimes
- ☐ Use vulkan swapchains instead of DXGI, to make things simpler to debug
+ ☐ Use vulkan swapchains instead of DXGI, to make things simpler to debug @low
+ ✔ Replace uses of `Device::global().function` by global functions. @done (25-11-01 10:37)
  ☐ Load mesh
  ✔ Import shader-bridge @done (25-10-06 22:26)
  ✔ move to a separate repo @done (25-10-06 22:26)
@@ -33,6 +34,7 @@
     ☐ Use case: sprites
     ☐ Test harness for rendering
     ✔ Text @done (25-10-04 23:30)
+    ☐ Font selection by name
 
 Shaders:
     ✔ [shader-bridge] `struct ShaderLibrary`: represents a loaded/parsed slang source file (in shader-bridge), as a collection of entry points; used to retrieve ShaderEntryPoint objects @done (25-10-06 22:25)

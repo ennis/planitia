@@ -1,4 +1,4 @@
-use aligned_vec::{ABox, AVec, ConstAlign};
+use aligned_vec::{ABox, AVec};
 use std::alloc::Layout;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -87,7 +87,7 @@ impl<T: Copy + 'static> ArchiveData for [T] {
         let count = unsafe { *(buffer as *const u32) as usize };
         // final layout
         let (layout, start_offset) = length_prefixed_array_layout::<T>(count);
-        dbg!(count, layout, start_offset);
+        //dbg!(count, layout, start_offset);
         // check if there's enough data for the whole prefix+array (alignment shouldn't change)
         if len < layout.size() {
             return Err(ReadError::UnexpectedEof);
@@ -187,6 +187,7 @@ impl ToOwned for ArchiveReader {
     fn to_owned(&self) -> Self::Owned {
         let mut storage = AlignedVec::with_capacity(0, self.0.len());
         storage.extend_from_slice(&self.0);
+        dbg!(self.0.len());
         ArchiveReaderOwned::new(storage.into_boxed_slice())
     }
 }
@@ -218,6 +219,7 @@ impl ArchiveReaderOwned {
     fn new(data: AlignedData) -> Self {
         // convert to raw pointer because moving the box would invalidate the self-reference in ArchiveReader
         let (data, align) = AlignedData::into_raw_parts(data);
+        //dbg!(align, data.len());
         let reader = unsafe { ArchiveReader::new(slice::from_raw_parts(data as *const u8, data.len())) };
         ArchiveReaderOwned { data, align, reader }
     }

@@ -1,5 +1,4 @@
 mod command;
-mod device;
 
 /*
 pub unsafe fn blit_images(

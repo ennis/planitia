@@ -257,6 +257,7 @@ impl BuildManifest {
                 }
                 let color_targets = archive.write_slice(color_targets.as_slice());
                 pipeline_kind = pipeline_archive::PipelineKind::Graphics(pipeline_archive::GraphicsPipelineData {
+                    push_constants_size: push_constants_size as u16,
                     vertex_or_mesh_shaders,
                     rasterization: config.rasterization_state,
                     depth_stencil: config.depth_stencil_state,
@@ -278,6 +279,7 @@ impl BuildManifest {
                     })
                 };
                 pipeline_kind = pipeline_archive::PipelineKind::Compute(pipeline_archive::ComputePipelineData {
+                    push_constants_size: push_constants_size as u16,
                     compute_shader: compute_shader_offset,
                     workgroup_size: entry_point_info.work_group_size,
                 });
@@ -287,7 +289,6 @@ impl BuildManifest {
 
         Ok(PipelineEntryData {
             name: ZString64::new(&input.name),
-            push_constants_size: push_constants_size as u16,
             kind: pipeline_kind,
         })
     }

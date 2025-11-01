@@ -16,7 +16,7 @@ const IMAGE_TABLE_BINDING: u32 = 2;
 pub(crate) struct BindlessDescriptorTable {
     pub(crate) layout: vk::DescriptorSetLayout,
     pub(crate) set: vk::DescriptorSet,
-
+    /// Kept around for deletion.
     pool: vk::DescriptorPool,
     /// Descriptor set writes must be externally synchronized, but we don't want to
     /// wrap `set` in a Mutex because that would require locking every time we want to copy the

@@ -341,6 +341,16 @@ impl Input {
 }
 
 impl BuildManifest {
+
+    /// Prints `cargo:rerun-if-changed=` directives for all input files in the manifest, and the
+    /// manifest file itself.
+    pub(crate) fn print_cargo_dependencies(&self) {
+        println!("cargo:rerun-if-changed={}", self.manifest_path.display());
+        for input in &self.inputs {
+            println!("cargo:rerun-if-changed={}", input.file_path);
+        }
+    }
+
     pub(crate) fn load(path: impl AsRef<Path>) -> Result<BuildManifest, anyhow::Error> {
         fn load_inner(path: &Path) -> Result<BuildManifest, anyhow::Error> {
             let manifest_str = std::fs::read_to_string(&path)?;

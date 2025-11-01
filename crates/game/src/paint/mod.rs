@@ -9,9 +9,9 @@ mod text;
 use crate::paint::shape::RectShape;
 use crate::paint::tessellation::{Mesh, Tessellator};
 use crate::paint::text::GlyphCache;
-use gpu::{vk, CommandStream, Device, RenderPassInfo, Vertex as GpuVertex};
+use gpu::{CommandStream, Device, RenderPassInfo, Sampler, Vertex as GpuVertex, vk};
 use math::geom::Camera;
-use math::{u16vec2, uvec2, vec2, Mat4, Rect, U16Vec2, UVec2, Vec2};
+use math::{Mat4, Rect, U16Vec2, UVec2, Vec2, u16vec2, uvec2, vec2};
 use shader_bridge::ShaderLibrary;
 
 use crate::paint::atlas::Atlas;
@@ -70,11 +70,8 @@ struct Pipelines {
 }
 
 impl Pipelines {
-    fn create(
-        target_color_format: gpu::Format,
-        target_depth_format: Option<gpu::Format>,
-    ) -> Pipelines {
-        let shader = ShaderLibrary::new("crates/game/shaders/paint.slang").unwrap();
+    fn create(target_color_format: gpu::Format, target_depth_format: Option<gpu::Format>) -> Pipelines {
+        let shader = ShaderLibrary::new("crates/game/assets/shaders/paint.slang").unwrap();
         let vertex = shader.get_compiled_entry_point("paint_vertex_main").unwrap();
         let fragment = shader.get_compiled_entry_point("paint_fragment_main").unwrap();
         //let glyph_shader = ShaderLibrary::new("crates/game/shaders/paint_glyphs.slang").unwrap();
@@ -120,9 +117,7 @@ impl Pipelines {
             },
         };
 
-        let paint_pipeline = Device::global()
-            .create_graphics_pipeline(create_info)
-            .expect("failed to create pipeline");
+        let paint_pipeline = gpu::GraphicsPipeline::new(create_info).expect("failed to create pipeline");
 
         /*// Glyph pipeline
         let create_info = gpu::GraphicsPipelineCreateInfo {
@@ -195,15 +190,12 @@ impl Painter {
     /// Creates a new painter.
     ///
     /// `target_color_format` and `target_depth_format` specify the formats of the render targets that will be used during rendering.
-    pub fn new(
-        target_color_format: gpu::Format,
-        target_depth_format: Option<gpu::Format>,
-    ) -> Painter {
+    pub fn new(target_color_format: gpu::Format, target_depth_format: Option<gpu::Format>) -> Painter {
         let (atlas, white_pixel_uv) = init_atlas();
-        let sampler = Device::global().create_sampler(&gpu::SamplerCreateInfo {
+        let sampler = Sampler::new(gpu::SamplerCreateInfo {
             mag_filter: vk::Filter::LINEAR,
             min_filter: vk::Filter::LINEAR,
-            ..Default::default()
+            ..
         });
 
         Painter {
@@ -436,8 +428,8 @@ fn draw_mesh(encoder: &mut gpu::RenderEncoder, params: &PaintRenderParams, mesh:
     if mesh.vertices.is_empty() || mesh.indices.is_empty() {
         return;
     }
-    let vertex_buffer = Device::global().upload_slice(gpu::BufferUsage::VERTEX, &mesh.vertices, "");
-    let index_buffer = Device::global().upload_slice(gpu::BufferUsage::INDEX, &mesh.indices, "");
+    let vertex_buffer = gpu::Buffer::upload_slice(gpu::BufferUsage::VERTEX, &mesh.vertices, "");
+    let index_buffer = gpu::Buffer::upload_slice(gpu::BufferUsage::INDEX, &mesh.indices, "");
     encoder.bind_vertex_buffer(0, vertex_buffer.as_bytes().into());
     encoder.bind_index_buffer(vk::IndexType::UINT32, index_buffer.as_bytes().into());
     set_scissor(encoder, params, clip);

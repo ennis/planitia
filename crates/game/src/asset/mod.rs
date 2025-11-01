@@ -38,6 +38,7 @@ use std::collections::{HashMap, HashSet};
 use std::io;
 use std::ops::Deref;
 use std::sync::{Arc, OnceLock, RwLock};
+use log::debug;
 use utils::aligned_vec::AVec;
 
 /*
@@ -67,6 +68,9 @@ pub trait Provider {
         // SAFETY: we leak the memory, so the pointer is valid for 'static
         unsafe { Ok(std::slice::from_raw_parts(ptr, length)) }
     }
+
+    /// Returns the name of this provider.
+    fn name(&self) -> &str;
 
     // Sets up an event listener for changes to the given path.
     //fn watch(&self, path: &VfsPath) -> EventToken;
@@ -111,10 +115,13 @@ impl Providers {
     /// Finds the appropriate provider for the given VFS path.
     fn find_provider(&self, path: &VfsPath) -> Result<&dyn Provider, io::Error> {
         let source = path.source().unwrap_or("");
+        debug!("find_provider: looking for provider for path `{}`, source = {}", path.as_str(), source);
         if let Some(providers) = self.by_source.get(source) {
             for provider in providers.iter().rev() {
                 if provider.exists(path) {
                     return Ok(provider.as_ref());
+                } else {
+                    debug!("find_provider: {} did not have `{}`", source, path.as_str());
                 }
             }
         }
@@ -329,5 +336,13 @@ impl AssetCache {
     pub fn instance() -> &'static AssetCache {
         static ASSET_CACHE: OnceLock<AssetCache> = OnceLock::new();
         ASSET_CACHE.get_or_init(|| AssetCache::new())
+    }
+
+    pub fn register_filesystem_path(path: impl AsRef<std::path::Path>) {
+        let mut providers = Providers::get().write().unwrap();
+        providers.register_provider(
+            "",
+            Box::new(local_provider::LocalProvider::new(path.as_ref().to_path_buf())),
+        );
     }
 }

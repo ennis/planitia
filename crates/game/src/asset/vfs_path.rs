@@ -118,6 +118,12 @@ impl AsRef<VfsPath> for VfsPath {
     }
 }
 
+impl AsRef<VfsPath> for str {
+    fn as_ref(&self) -> &VfsPath {
+        VfsPath::new(self)
+    }
+}
+
 /// Owned version of VfsPath.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct VfsPathBuf(String);

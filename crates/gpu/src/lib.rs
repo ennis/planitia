@@ -19,7 +19,6 @@ use std::sync::Arc;
 
 pub use ash::{self, vk};
 pub use gpu_allocator::MemoryLocation;
-pub use ordered_float;
 
 pub use buffer::*;
 pub use command::*;
@@ -158,6 +157,12 @@ pub struct GraphicsPipeline {
 }
 
 impl GraphicsPipeline {
+    /// Creates a new graphics pipeline.
+    pub fn new(create_info: GraphicsPipelineCreateInfo) -> Result<Self, Error> {
+        Device::global().create_graphics_pipeline(create_info)
+    }
+
+    /// Returns the Vulkan pipeline handle.
     pub fn pipeline(&self) -> vk::Pipeline {
         self.pipeline
     }
@@ -175,6 +180,12 @@ pub struct ComputePipeline {
 }
 
 impl ComputePipeline {
+    /// Creates a new compute pipeline.
+    pub fn new(create_info: ComputePipelineCreateInfo) -> Result<Self, Error> {
+        Device::global().create_compute_pipeline(create_info)
+    }
+
+    /// Returns the Vulkan pipeline handle.
     pub fn pipeline(&self) -> vk::Pipeline {
         self.pipeline
     }
@@ -188,6 +199,11 @@ pub struct Sampler {
 }
 
 impl Sampler {
+    /// Creates a new sampler object.
+    pub fn new(create_info: SamplerCreateInfo) -> Self {
+        Device::global().create_sampler(&create_info)
+    }
+
     /// Returns the Vulkan sampler handle.
     pub fn handle(&self) -> vk::Sampler {
         self.sampler

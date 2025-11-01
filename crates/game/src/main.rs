@@ -13,6 +13,9 @@ use log::debug;
 use math::geom::rect_xywh;
 use math::{Rect, vec2};
 use serde_json::json;
+use gpu::{Device, DeviceAddress, RenderPassInfo};
+use crate::asset::AssetCache;
+use crate::pipeline_cache::get_graphics_pipeline;
 
 mod camera_control;
 mod context;
@@ -51,6 +54,7 @@ struct Game {
 impl Default for Game {
     fn default() -> Self {
         let painter = Painter::new(gpu::Format::R8G8B8A8_UNORM, None);
+
         /*let grid_pipeline = device.create_graphics_pipeline(&gpu::GraphicsPipelineCreateInfo {
             vertex: gpu::ShaderModule::from_spirv_bytes(device, include_bytes!("../shaders/grid.vert.spv")).unwrap(),
             fragment: Some(gpu::ShaderModule::from_spirv_bytes(device, include_bytes!("../shaders/grid.frag.spv")).unwrap()),
@@ -112,23 +116,52 @@ And what is else not to be overcome?",
                 depth_target: None,
             },
         );
+
+        self.draw_grid(cmd, target);
     }
 
     fn draw_grid(&mut self, cmd: &mut gpu::CommandStream, target: &gpu::Image) {
 
-        //
-        /*let pipeline = self.pipeline_db.query("grid", [
-        ColorFormat(),
-        DepthFormat(),
+        let grid_shader = get_graphics_pipeline("/shaders/pipelines.parc#grid");
 
-        ]);*/
+        #[repr(C)]
+        #[derive(Clone, Copy)]
+        struct GridShaderSceneInfo {
+            view_matrix: [[f32; 4]; 4],
+            proj_matrix: [[f32; 4]; 4],
+            screen_size: [f32; 2],
+        }
 
-        // self-contained pipeline files:
-        // - custom tags (for vertex signature, etc.)
-        // - SPIR-V shader modules
-        // - fixed-function state (rasterization, depth-stencil, blending)
-        // - specialization constants (formats, etc.)
-        // - useful reflection data (push constant sizes)
+        let camera = self.camera_control.camera();
+        let scene_info = cmd.upload_temporary(&GridShaderSceneInfo {
+            view_matrix: camera.view.to_cols_array_2d(),
+            proj_matrix: camera.projection.to_cols_array_2d(),
+            screen_size: camera.screen_size.as_vec2().to_array(),
+        });
+
+        let mut encoder = cmd.begin_rendering(RenderPassInfo {
+            color_attachments: &[
+            gpu::ColorAttachment {
+                image: target,
+                clear_value: None,
+            }
+        ], depth_stencil_attachment: None });
+
+        encoder.bind_graphics_pipeline(&grid_shader);
+
+
+        #[repr(C)]
+        #[derive(Clone, Copy)]
+        struct GridShaderPushConstants {
+            scene_info: DeviceAddress<GridShaderSceneInfo>,
+            grid_scale: f32,
+        }
+
+        encoder.push_constants(&GridShaderPushConstants {
+            scene_info,
+            grid_scale: 1.0,
+        });
+        encoder.draw(0..6, 0..1);
     }
 }
 
@@ -186,6 +219,9 @@ impl AppHandler for Game {
 }
 
 fn main() {
+
+    AssetCache::register_filesystem_path(concat!(env!("CARGO_MANIFEST_DIR"), "/assets" ));
+
     run::<Game>(&InitOptions {
         width: WIDTH,
         height: HEIGHT,

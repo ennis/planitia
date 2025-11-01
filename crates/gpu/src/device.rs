@@ -2,11 +2,7 @@
 mod bindless;
 
 use crate::instance::{vk_ext_debug_utils, vk_khr_surface};
-use crate::{
-    get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, CommandPool, CommandStream, ComputePipeline,
-    ComputePipelineCreateInfo, DescriptorSetLayout, Error, GraphicsPipeline, GraphicsPipelineCreateInfo, MemoryAccess,
-    PreRasterizationShaders, Sampler, SamplerCreateInfo, SUBGROUP_SIZE,
-};
+use crate::{get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, CommandPool, CommandStream, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error, GraphicsPipeline, GraphicsPipelineCreateInfo, MemoryAccess, PreRasterizationShaders, Sampler, SamplerCreateInfo, SamplerCreateInfoHashable, SUBGROUP_SIZE};
 use std::collections::{HashMap, VecDeque};
 use std::ffi::{c_void, CString};
 use std::sync::{Arc, LazyLock, Mutex};
@@ -102,7 +98,7 @@ pub struct Device {
     /// but we're waiting for the GPU to finish using them.
     deletion_queue: Mutex<Vec<DeleteQueueEntry>>,
 
-    pub(crate) sampler_cache: Mutex<HashMap<SamplerCreateInfo, Sampler>>,
+    pub(crate) sampler_cache: Mutex<HashMap<SamplerCreateInfoHashable, Sampler>>,
 }
 
 impl fmt::Debug for Device {
@@ -645,8 +641,14 @@ impl Device {
             ..Default::default()
         };
 
-        let mut features2 = vk::PhysicalDeviceFeatures2 {
+        let mut vk11_features = vk::PhysicalDeviceVulkan11Features {
             p_next: &mut vk12_features as *mut _ as *mut c_void,
+            shader_draw_parameters: vk::TRUE,
+            ..Default::default()
+        };
+
+        let mut features2 = vk::PhysicalDeviceFeatures2 {
+            p_next: &mut vk11_features as *mut _ as *mut c_void,
             features: vk::PhysicalDeviceFeatures {
                 tessellation_shader: vk::TRUE,
                 fill_mode_non_solid: vk::TRUE,
@@ -1004,8 +1006,10 @@ impl Device {
         get_preferred_swapchain_surface_format(&surface_formats)
     }
 
-    pub fn create_sampler(&self, info: &SamplerCreateInfo) -> Sampler {
-        if let Some(sampler) = self.sampler_cache.lock().unwrap().get(info) {
+    pub(crate) fn create_sampler(&self, info: &SamplerCreateInfo) -> Sampler {
+
+        let info_hashable = SamplerCreateInfoHashable::from(*info);
+        if let Some(sampler) = self.sampler_cache.lock().unwrap().get(&info_hashable) {
             return sampler.clone();
         }
 
@@ -1017,13 +1021,13 @@ impl Device {
             address_mode_u: info.address_mode_u,
             address_mode_v: info.address_mode_v,
             address_mode_w: info.address_mode_w,
-            mip_lod_bias: info.mip_lod_bias.0,
+            mip_lod_bias: info.mip_lod_bias,
             anisotropy_enable: info.anisotropy_enable.into(),
-            max_anisotropy: info.max_anisotropy.0,
+            max_anisotropy: info.max_anisotropy,
             compare_enable: info.compare_enable.into(),
             compare_op: info.compare_op.into(),
-            min_lod: info.min_lod.0,
-            max_lod: info.max_lod.0,
+            min_lod: info.min_lod,
+            max_lod: info.max_lod,
             border_color: info.border_color,
             ..Default::default()
         };
@@ -1039,7 +1043,7 @@ impl Device {
             descriptor_index,
             sampler,
         };
-        self.sampler_cache.lock().unwrap().insert(info.clone(), sampler.clone());
+        self.sampler_cache.lock().unwrap().insert(info_hashable, sampler.clone());
         sampler
     }
 
@@ -1135,7 +1139,7 @@ impl Device {
         pipeline_layout
     }
 
-    pub fn create_compute_pipeline(&self, create_info: ComputePipelineCreateInfo) -> Result<ComputePipeline, Error> {
+    pub(crate) fn create_compute_pipeline(&self, create_info: ComputePipelineCreateInfo) -> Result<ComputePipeline, Error> {
         let pipeline_layout = self.create_pipeline_layout(
             vk::PipelineBindPoint::COMPUTE,
             create_info.set_layouts,
@@ -1187,7 +1191,7 @@ impl Device {
     }
 
     /// Creates a graphics pipeline.
-    pub fn create_graphics_pipeline(
+    pub(crate) fn create_graphics_pipeline(
         &self,
         create_info: GraphicsPipelineCreateInfo,
     ) -> Result<GraphicsPipeline, Error> {

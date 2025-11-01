@@ -33,12 +33,11 @@ impl Atlas {
     ///
     /// The width is fixed, but the height will grow as needed (up to max_height).
     pub fn new(width: u32, height: u32) -> Self {
-        let gpu = get_gpu_device();
         Atlas {
             width,
             height,
             data: vec![Srgba32::TRANSPARENT; width as usize * height as usize],
-            texture: gpu.create_image(&ImageCreateInfo {
+            texture: gpu::Image::new(ImageCreateInfo {
                 memory_location: MemoryLocation::GpuOnly,
                 width,
                 height,

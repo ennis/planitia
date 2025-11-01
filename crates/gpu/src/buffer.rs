@@ -8,7 +8,7 @@ use std::mem::MaybeUninit;
 use std::ops::RangeBounds;
 use std::os::raw::c_void;
 use std::ptr::NonNull;
-use std::{mem, ptr};
+use std::{mem, ptr, slice};
 
 impl<T: ?Sized> Drop for Buffer<T> {
     fn drop(&mut self) {
@@ -21,6 +21,18 @@ impl<T: ?Sized> Drop for Buffer<T> {
             device.raw.destroy_buffer(handle, None);
         });
     }
+}
+
+/// Buffer creation info.
+#[derive(Copy, Clone, Debug)]
+pub struct BufferCreateInfo<'a> {
+    /// Length in number of elements.
+    pub len: usize,
+    /// Usage flags. Must include all intended uses of the buffer.
+    pub usage: BufferUsage,
+    pub memory_location: MemoryLocation = MemoryLocation::GpuOnly,
+    /// Debug label.
+    pub label: &'a str = "",
 }
 
 /// A buffer of GPU-visible memory, optionally mapped in host memory, without any associated type.
@@ -36,8 +48,43 @@ pub struct Buffer<T: ?Sized> {
     _marker: PhantomData<T>,
 }
 
-impl<T: ?Sized> Buffer<T> {
+impl<T: Copy> Buffer<[T]> {
+    /// Creates a new buffer with the specified number of elements.
+    pub fn new(create_info: BufferCreateInfo) -> Self {
+        let buffer = Device::global().create_buffer(size_of::<T>(), create_info);
+        unsafe {
+            // SAFETY: the buffer is large enough to hold `len` elements of type `T`
+            buffer.cast()
+        }
+    }
 
+    /// Creates a CpuToGpu buffer and copies data into it.
+    pub fn upload_slice(usage: BufferUsage, data: &[T], label: &str) -> Buffer<[T]> {
+        let buffer = Buffer::new(
+            BufferCreateInfo {
+                len: data.len(),
+                usage,
+                label,
+                memory_location: MemoryLocation::CpuToGpu,
+            },
+        );
+        unsafe {
+            // copy data to mapped buffer
+            ptr::copy_nonoverlapping(data.as_ptr(), buffer.as_mut_ptr() as *mut T, data.len());
+        }
+        buffer
+    }
+}
+
+impl<T: Copy> Buffer<T> {
+    /// Creates a CpuToGpu buffer and copies data into it.
+    pub fn upload(usage: BufferUsage, data: &T, label: &str) -> Buffer<T> {
+        let buffer = Buffer::upload_slice(usage, slice::from_ref(data), label);
+        buffer.single()
+    }
+}
+
+impl<T: ?Sized> Buffer<T> {
     pub fn device_address(&self) -> DeviceAddress<T> {
         DeviceAddress {
             address: self.device_address,
@@ -270,69 +317,65 @@ impl<'a, T: Copy> From<&'a Buffer<[T]>> for BufferRange<'a, T> {
     }
 }
 
-
 /// Buffer creation.
 impl Device {
-
     /// Creates a new buffer resource.
-    pub fn create_buffer(
-        &self,
-        usage: BufferUsage,
-        memory_location: MemoryLocation,
-        byte_size: u64,
-        label: &str,
-    ) -> BufferUntyped {
-        assert!(byte_size > 0, "buffer size must be greater than zero");
+    pub(crate) fn create_buffer(&self, elem_size: usize, create_info: BufferCreateInfo) -> BufferUntyped {
+
+        assert!(create_info.len > 0, "buffer size must be greater than zero");
+        let byte_size = elem_size as u64 * create_info.len as u64;
 
         unsafe {
-            let create_info = vk::BufferCreateInfo {
-                flags: Default::default(),
-                size: byte_size,
-                usage: usage.to_vk_buffer_usage_flags() | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
-                sharing_mode: vk::SharingMode::EXCLUSIVE,
-                queue_family_index_count: 0,
-                p_queue_family_indices: ptr::null(),
-                ..Default::default()
-            };
-            let handle =
-                self.raw
-                    .create_buffer(&create_info, None)
-                    .expect("failed to create buffer");
+            let handle = self
+                .raw
+                .create_buffer(
+                    &vk::BufferCreateInfo {
+                        flags: Default::default(),
+                        size: byte_size,
+                        usage: create_info.usage.to_vk_buffer_usage_flags()
+                            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+                        sharing_mode: vk::SharingMode::EXCLUSIVE,
+                        queue_family_index_count: 0,
+                        p_queue_family_indices: ptr::null(),
+                        ..Default::default()
+                    },
+                    None,
+                )
+                .expect("failed to create buffer");
 
             let mem_req = self.raw.get_buffer_memory_requirements(handle);
             let allocation = self.allocate_memory_or_panic(&AllocationCreateDesc {
                 name: "",
                 requirements: mem_req,
-                location: memory_location,
+                location: create_info.memory_location,
                 linear: true,
                 allocation_scheme: AllocationScheme::GpuAllocatorManaged,
             });
             self.raw
-                    .bind_buffer_memory(handle, allocation.memory(), allocation.offset())
-                    .unwrap();
+                .bind_buffer_memory(handle, allocation.memory(), allocation.offset())
+                .unwrap();
 
             let mapped_ptr = allocation.mapped_ptr();
             let allocation = ResourceAllocation::Allocation { allocation };
 
-            let device_address =
-                self.raw.get_buffer_device_address(&vk::BufferDeviceAddressInfo {
-                    buffer: handle,
-                    ..Default::default()
-                });
+            let device_address = self.raw.get_buffer_device_address(&vk::BufferDeviceAddressInfo {
+                buffer: handle,
+                ..Default::default()
+            });
 
-            if !label.is_empty() {
+            if !create_info.label.is_empty() {
                 // SAFETY: no concurrent access possible
-                self.set_object_name(handle, label);
+                self.set_object_name(handle, create_info.label);
             }
 
             BufferUntyped {
                 id: self.allocate_resource_id(),
                 allocation,
                 handle,
-                memory_location,
+                memory_location: create_info.memory_location,
                 device_address,
                 size: byte_size,
-                usage,
+                usage: create_info.usage,
                 mapped_ptr,
                 _marker: PhantomData,
             }

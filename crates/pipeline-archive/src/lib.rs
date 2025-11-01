@@ -39,8 +39,6 @@ pub struct PipelineArchiveData {
 pub struct PipelineEntryData {
     /// Name of the pipeline.
     pub name: ZString<64>,
-    /// Size of push constant block in bytes.
-    pub push_constants_size: u16,
     pub kind: PipelineKind,
 }
 
@@ -89,6 +87,8 @@ pub enum GraphicsPipelineShaders {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct GraphicsPipelineData {
+    /// Size of push constant block in bytes.
+    pub push_constants_size: u16,
     /// Rasterization data.
     pub rasterization: RasterizerStateData,
     /// Depth/stencil data.
@@ -103,6 +103,8 @@ pub struct GraphicsPipelineData {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct ComputePipelineData {
+    /// Size of push constant block in bytes.
+    pub push_constants_size: u16,
     pub compute_shader: Offset<ShaderData>,
     pub workgroup_size: [u32; 3],
 }
@@ -161,12 +163,29 @@ impl PipelineArchive {
         Ok(Self(Cow::Borrowed(archive)))
     }
 
-    pub fn find_by_name(&self, name: &str) -> Option<PipelineEntryData> {
+    pub fn find_graphics_pipeline(&self, name: &str) -> Option<&GraphicsPipelineData> {
         let archive_data: &PipelineArchiveData = self.0.header().unwrap();
         let entries = &self.0[archive_data.entries];
         for entry in entries {
             if entry.name.as_str() == name {
-                return Some(*entry);
+                match &entry.kind {
+                    PipelineKind::Graphics(data) => return Some(data),
+                    _ => continue,
+                }
+            }
+        }
+        None
+    }
+
+    pub fn find_compute_pipeline(&self, name: &str) -> Option<&ComputePipelineData> {
+        let archive_data: &PipelineArchiveData = self.0.header().unwrap();
+        let entries = &self.0[archive_data.entries];
+        for entry in entries {
+            if entry.name.as_str() == name {
+                match &entry.kind {
+                    PipelineKind::Compute(data) => return Some(data),
+                    _ => continue,
+                }
             }
         }
         None
@@ -218,8 +237,8 @@ mod tests {
             1,
             [PipelineEntryData {
                 name: ZString64::new("example_pipeline"),
-                push_constants_size: 128,
                 kind: PipelineKind::Graphics(GraphicsPipelineData {
+                    push_constants_size: 128,
                     // just some example state
                     rasterization: RasterizerStateData {
                         polygon_mode: PolygonMode::FILL,

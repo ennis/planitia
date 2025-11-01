@@ -38,14 +38,14 @@ impl Renderer {
     pub fn new() -> Renderer {
         let pipeline = create_pipeline();
 
-        let sampler = Device::global().create_sampler(&SamplerCreateInfo {
+        let sampler = Sampler::new(SamplerCreateInfo {
             mag_filter: vk::Filter::LINEAR,
             min_filter: vk::Filter::LINEAR,
             mipmap_mode: vk::SamplerMipmapMode::NEAREST,
             address_mode_u: vk::SamplerAddressMode::CLAMP_TO_EDGE,
             address_mode_v: vk::SamplerAddressMode::CLAMP_TO_EDGE,
             address_mode_w: vk::SamplerAddressMode::CLAMP_TO_EDGE,
-            ..Default::default()
+            ..
         });
 
         Renderer {
@@ -80,7 +80,7 @@ impl Renderer {
 
             // Get or create texture
             let texture = self.textures.entry(id).or_insert_with(|| {
-                let image = Device::global().create_image(&ImageCreateInfo {
+                let image = Image::new(ImageCreateInfo {
                     memory_location: MemoryLocation::GpuOnly,
                     type_: ImageType::Image2D,
                     usage: ImageUsage::SAMPLED | ImageUsage::TRANSFER_DST,
@@ -91,7 +91,7 @@ impl Renderer {
                 });
                 image.set_name("egui texture");
 
-                let sampler = Device::global().create_sampler(&SamplerCreateInfo {
+                let sampler = Sampler::new(SamplerCreateInfo {
                     mag_filter: convert_filter(tex.options.magnification),
                     min_filter: convert_filter(tex.options.minification),
                     mipmap_mode: vk::SamplerMipmapMode::NEAREST,
@@ -161,8 +161,8 @@ impl Renderer {
         for (_, mesh) in meshes.iter() {
             let vertex_data: &[EguiVertex] =
                 unsafe { slice::from_raw_parts(mesh.vertices.as_ptr().cast(), mesh.vertices.len()) };
-            let vertex_buffer = Device::global().upload_slice(BufferUsage::VERTEX, vertex_data, "egui vertex buffer");
-            let index_buffer = Device::global().upload_slice(BufferUsage::INDEX, &mesh.indices, "egui index buffer");
+            let vertex_buffer = Buffer::upload_slice(BufferUsage::VERTEX, vertex_data, "egui vertex buffer");
+            let index_buffer = Buffer::upload_slice(BufferUsage::INDEX, &mesh.indices, "egui index buffer");
             mesh_vertex_buffers.push(vertex_buffer);
             mesh_index_buffers.push(index_buffer);
         }
@@ -308,9 +308,7 @@ fn create_pipeline() -> GraphicsPipeline {
         },
     };
 
-    Device::global()
-        .create_graphics_pipeline(create_info)
-        .expect("failed to create pipeline")
+    GraphicsPipeline::new(create_info).expect("failed to create pipeline")
 }
 
 fn pixels_as_byte_slice(slice: &[egui::Color32]) -> &[u8] {

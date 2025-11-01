@@ -1,12 +1,108 @@
 use crate::device::get_vk_sample_count;
 use crate::{
-    aspects_for_format, BufferUntyped, Descriptor, Device, Format, ImageCreateInfo, ImageType, ImageUsage, 
-    ResourceAllocation, ResourceDescriptorIndex, ResourceId, Size3D, StorageImageHandle, TextureHandle,
-    TrackedResource,
+    aspects_for_format, BufferUntyped, Descriptor, Device, Format, ResourceAllocation, ResourceDescriptorIndex,
+    ResourceId, Size3D, StorageImageHandle, TextureHandle, TrackedResource,
 };
 use ash::vk;
+use bitflags::bitflags;
 use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
+use gpu_allocator::MemoryLocation;
 use std::{mem, ptr};
+
+/// Dimensionality of an image.
+#[derive(Copy, Clone, Debug)]
+pub enum ImageType {
+    Image1D,
+    Image2D,
+    Image3D,
+}
+
+impl ImageType {
+    pub const fn to_vk_image_type(self) -> vk::ImageType {
+        match self {
+            Self::Image1D => vk::ImageType::TYPE_1D,
+            Self::Image2D => vk::ImageType::TYPE_2D,
+            Self::Image3D => vk::ImageType::TYPE_3D,
+        }
+    }
+}
+
+impl From<ImageType> for vk::ImageType {
+    fn from(ty: ImageType) -> Self {
+        ty.to_vk_image_type()
+    }
+}
+
+bitflags! {
+    /// Bits describing the intended usage of an image.
+    #[repr(transparent)]
+    #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+    pub struct ImageUsage: u32 {
+        const TRANSFER_SRC = 0b1;
+        const TRANSFER_DST = 0b10;
+        const SAMPLED = 0b100;
+        const STORAGE = 0b1000;
+        const COLOR_ATTACHMENT = 0b1_0000;
+        const DEPTH_STENCIL_ATTACHMENT = 0b10_0000;
+        const TRANSIENT_ATTACHMENT = 0b100_0000;
+        const INPUT_ATTACHMENT = 0b1000_0000;
+    }
+}
+
+impl Default for ImageUsage {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
+impl ImageUsage {
+    pub const fn to_vk_image_usage_flags(self) -> vk::ImageUsageFlags {
+        vk::ImageUsageFlags::from_raw(self.bits())
+    }
+}
+
+impl From<ImageUsage> for vk::ImageUsageFlags {
+    fn from(usage: ImageUsage) -> Self {
+        usage.to_vk_image_usage_flags()
+    }
+}
+
+/// Information passed to `Image::new` to describe the image to be created.
+#[derive(Copy, Clone, Debug)]
+pub struct ImageCreateInfo<'a> {
+    pub memory_location: MemoryLocation,
+    /// Dimensionality of the image.
+    pub type_: ImageType,
+    /// Image usage flags. Must include all intended uses of the image.
+    pub usage: ImageUsage,
+    /// Format of the image.
+    pub format: Format,
+    /// Size of the image.
+    pub width: u32,
+    pub height: u32 = 1,
+    pub depth: u32 = 1,
+    /// Number of mipmap levels. Note that the mipmaps contents must still be generated manually. Default is 1. 0 is *not* a valid value.
+    pub mip_levels: u32 = 1,
+    /// Number of array layers. Default is `1`. `0` is *not* a valid value.
+    pub array_layers: u32 = 1,
+    /// Number of samples. Default is `1`. `0` is *not* a valid value.
+    pub samples: u32 = 1,
+    /// Optional debug label.
+    pub label: &'a str = "",
+}
+
+impl<'a> Default for ImageCreateInfo<'a> {
+    fn default() -> Self {
+        ImageCreateInfo {
+            memory_location: MemoryLocation::Unknown,
+            type_: ImageType::Image2D,
+            usage: Default::default(),
+            format: Default::default(),
+            width: 1,
+            ..
+        }
+    }
+}
 
 /// Image data stored in CPU-visible memory.
 pub struct ImageBuffer {
@@ -19,7 +115,7 @@ pub struct ImageBuffer {
     depth: u32,
 }
 
-/// Wrapper around a Vulkan image.
+/// Represents an image resource on the GPU.
 #[derive(Debug)]
 pub struct Image {
     pub(crate) id: ResourceId,
@@ -60,6 +156,11 @@ impl TrackedResource for Image {
 }
 
 impl Image {
+    /// Creates a new image resource.
+    pub fn new(image_info: ImageCreateInfo) -> Image {
+        Device::global().create_image(&image_info)
+    }
+
     pub fn set_name(&self, label: &str) {
         unsafe {
             Device::global().set_object_name(self.handle, label);
@@ -235,7 +336,7 @@ impl Device {
     }
 
     /// Creates a new image resource.
-    pub fn create_image(&self, image_info: &ImageCreateInfo) -> Image {
+    pub(crate) fn create_image(&self, image_info: &ImageCreateInfo) -> Image {
         unsafe {
             let create_info = vk::ImageCreateInfo {
                 image_type: image_info.type_.into(),

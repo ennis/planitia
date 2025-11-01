@@ -5,9 +5,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 /// Path to the shader directory.
-const SHADERS_DIR: &str = "shaders/";
+const SHADERS_DIR: &str = "assets/shaders/";
 /// Shader containing declarations shared between host & shader code.
-const SLANG_SHARED: &str = "shaders/shared.slang";
+const SLANG_SHARED: &str = "assets/shaders/shared.slang";
 
 fn main() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
@@ -38,9 +38,13 @@ fn main() {
     /////////////////////////////////////////
 
     // build shaders
-    if let Err(err) =
-        pipeline_build_lib::build_pipeline("shaders/paint.json", &pipeline_build_lib::BuildOptions { quiet: true })
-    {
+    if let Err(err) = pipeline_build_lib::build_pipeline(
+        "assets/shaders/paint.json",
+        &pipeline_build_lib::BuildOptions {
+            quiet: true,
+            emit_cargo_deps: true,
+        },
+    ) {
         println!("cargo::error={err:#}");
     }
 }

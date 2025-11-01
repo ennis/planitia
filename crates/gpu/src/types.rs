@@ -1,12 +1,12 @@
+// TODO: eventually all vk types should disappear from the public API
+use crate::{
+    aspects_for_format, is_depth_and_stencil_format, is_depth_only_format, is_stencil_only_format, ShaderEntryPoint,
+};
+use ash::vk;
+use bitflags::bitflags;
 use std::borrow::Cow;
 use std::path::Path;
 use std::slice;
-// TODO: eventually all vk types should disappear from the public API
-use crate::{aspects_for_format, is_depth_and_stencil_format, is_depth_only_format, is_stencil_only_format, ShaderEntryPoint};
-use ash::vk;
-use bitflags::bitflags;
-use gpu_allocator::MemoryLocation;
-use ordered_float::OrderedFloat;
 
 pub type Format = vk::Format;
 
@@ -53,7 +53,7 @@ impl ImageDataLayout {
     }
 }
 
-#[derive(Copy,Clone,Debug,PartialEq,Eq,Hash, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum ImageAspect {
     #[default]
     All = 1,
@@ -71,7 +71,9 @@ impl ImageAspect {
     }
 
     pub fn to_aspect(self, format: Format) -> vk::ImageAspectFlags {
-        if (is_depth_and_stencil_format(format) || is_depth_only_format(format) || is_stencil_only_format(format)) && self == ImageAspect::All {
+        if (is_depth_and_stencil_format(format) || is_depth_only_format(format) || is_stencil_only_format(format))
+            && self == ImageAspect::All
+        {
             panic!("ImageAspect::All is not valid for depth/stencil formats");
         }
         match self {
@@ -81,7 +83,6 @@ impl ImageAspect {
         }
     }
 }
-
 
 /*
 bitflags! {
@@ -420,100 +421,6 @@ impl ImageAccess {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-pub enum ImageType {
-    Image1D,
-    Image2D,
-    Image3D,
-}
-
-impl ImageType {
-    pub const fn to_vk_image_type(self) -> vk::ImageType {
-        match self {
-            Self::Image1D => vk::ImageType::TYPE_1D,
-            Self::Image2D => vk::ImageType::TYPE_2D,
-            Self::Image3D => vk::ImageType::TYPE_3D,
-        }
-    }
-}
-
-impl From<ImageType> for vk::ImageType {
-    fn from(ty: ImageType) -> Self {
-        ty.to_vk_image_type()
-    }
-}
-
-// TODO see if we can't get rid of some of those flags, if the underlying driver doesn't care about them
-bitflags! {
-    #[repr(transparent)]
-    #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-    pub struct ImageUsage: u32 {
-        const TRANSFER_SRC = 0b1;
-        const TRANSFER_DST = 0b10;
-        const SAMPLED = 0b100;
-        const STORAGE = 0b1000;
-        const COLOR_ATTACHMENT = 0b1_0000;
-        const DEPTH_STENCIL_ATTACHMENT = 0b10_0000;
-        const TRANSIENT_ATTACHMENT = 0b100_0000;
-        const INPUT_ATTACHMENT = 0b1000_0000;
-    }
-}
-
-impl Default for ImageUsage {
-    fn default() -> Self {
-        Self::empty()
-    }
-}
-
-impl ImageUsage {
-    pub const fn to_vk_image_usage_flags(self) -> vk::ImageUsageFlags {
-        vk::ImageUsageFlags::from_raw(self.bits())
-    }
-}
-
-impl From<ImageUsage> for vk::ImageUsageFlags {
-    fn from(usage: ImageUsage) -> Self {
-        usage.to_vk_image_usage_flags()
-    }
-}
-
-/// Information passed to `Context::create_image` to describe the image to be created.
-#[derive(Copy, Clone, Debug)]
-pub struct ImageCreateInfo<'a> {
-    pub memory_location: MemoryLocation,
-    /// Dimensionality of the image.
-    pub type_: ImageType,
-    /// Image usage flags. Must include all intended uses of the image.
-    pub usage: ImageUsage,
-    /// Format of the image.
-    pub format: Format,
-    /// Size of the image.
-    pub width: u32,
-    pub height: u32 = 1,
-    pub depth: u32 = 1,
-    /// Number of mipmap levels. Note that the mipmaps contents must still be generated manually. Default is 1. 0 is *not* a valid value.
-    pub mip_levels: u32 = 1,
-    /// Number of array layers. Default is `1`. `0` is *not* a valid value.
-    pub array_layers: u32 = 1,
-    /// Number of samples. Default is `1`. `0` is *not* a valid value.
-    pub samples: u32 = 1,
-    /// Optional debug label.
-    pub label: &'a str = "",
-}
-
-impl<'a> Default for ImageCreateInfo<'a> {
-    fn default() -> Self {
-        ImageCreateInfo {
-            memory_location: MemoryLocation::Unknown,
-            type_: ImageType::Image2D,
-            usage: Default::default(),
-            format: Default::default(),
-            width: 1,
-            ..
-        }
-    }
-}
-
 bitflags! {
     #[repr(transparent)]
     #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -546,31 +453,6 @@ impl BufferUsage {
 impl From<BufferUsage> for vk::BufferUsageFlags {
     fn from(usage: BufferUsage) -> Self {
         usage.to_vk_buffer_usage_flags()
-    }
-}
-
-/// Information passed to `Context::create_buffer` to describe the buffer to be created.
-#[derive(Copy, Clone, Debug)]
-pub struct BufferCreateInfo {
-    pub memory_location: MemoryLocation,
-    /// Usage flags. Must include all intended uses of the buffer.
-    pub usage: BufferUsage,
-    /// Size of the buffer in bytes.
-    pub byte_size: u64,
-    /// Whether the memory for the resource should be mapped for host access immediately.
-    /// If this flag is set, `create_buffer` will also return a pointer to the mapped buffer.
-    /// This flag is ignored for resources that can't be mapped.
-    pub map_on_create: bool,
-}
-
-impl Default for BufferCreateInfo {
-    fn default() -> Self {
-        BufferCreateInfo {
-            memory_location: MemoryLocation::Unknown,
-            usage: Default::default(),
-            byte_size: 0,
-            map_on_create: false,
-        }
     }
 }
 
@@ -648,43 +530,68 @@ pub struct PipelineLayoutDescriptor<'a> {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // SAMPLERS
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
 pub struct SamplerCreateInfo {
+    pub mag_filter: vk::Filter = vk::Filter::LINEAR,
+    pub min_filter: vk::Filter = vk::Filter::LINEAR,
+    pub mipmap_mode: vk::SamplerMipmapMode =  vk::SamplerMipmapMode::LINEAR,
+    pub address_mode_u: vk::SamplerAddressMode = vk::SamplerAddressMode::CLAMP_TO_EDGE,
+    pub address_mode_v: vk::SamplerAddressMode = vk::SamplerAddressMode::CLAMP_TO_EDGE,
+    pub address_mode_w: vk::SamplerAddressMode = vk::SamplerAddressMode::CLAMP_TO_EDGE,
+    pub mip_lod_bias: f32 = 0.0,
+    pub anisotropy_enable: bool = false,
+    pub max_anisotropy: f32 = 0.0,
+    pub compare_enable: bool = false,
+    pub compare_op: vk::CompareOp = vk::CompareOp::ALWAYS,
+    pub min_lod: f32 = 0.0,
+    pub max_lod: f32 = 0.0,
+    pub border_color: vk::BorderColor = vk::BorderColor::INT_OPAQUE_BLACK,
+    pub unnormalized_coordinates: bool = false,
+}
+
+impl Default for SamplerCreateInfo {
+    fn default() -> Self {
+        SamplerCreateInfo { .. }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, Ord, PartialOrd)]
+pub struct SamplerCreateInfoHashable {
     pub mag_filter: vk::Filter,
     pub min_filter: vk::Filter,
     pub mipmap_mode: vk::SamplerMipmapMode,
     pub address_mode_u: vk::SamplerAddressMode,
     pub address_mode_v: vk::SamplerAddressMode,
     pub address_mode_w: vk::SamplerAddressMode,
-    pub mip_lod_bias: OrderedFloat<f32>,
+    pub mip_lod_bias_f32_bits: u32,
     pub anisotropy_enable: bool,
-    pub max_anisotropy: OrderedFloat<f32>,
+    pub max_anisotropy_f32_bits: u32,
     pub compare_enable: bool,
     pub compare_op: vk::CompareOp,
-    pub min_lod: OrderedFloat<f32>,
-    pub max_lod: OrderedFloat<f32>,
+    pub min_lod_f32_bits: u32,
+    pub max_lod_f32_bits: u32,
     pub border_color: vk::BorderColor,
     pub unnormalized_coordinates: bool,
 }
 
-impl Default for SamplerCreateInfo {
-    fn default() -> Self {
-        SamplerCreateInfo {
-            mag_filter: vk::Filter::LINEAR,
-            min_filter: vk::Filter::LINEAR,
-            mipmap_mode: vk::SamplerMipmapMode::LINEAR,
-            address_mode_u: vk::SamplerAddressMode::CLAMP_TO_EDGE,
-            address_mode_v: vk::SamplerAddressMode::CLAMP_TO_EDGE,
-            address_mode_w: vk::SamplerAddressMode::CLAMP_TO_EDGE,
-            mip_lod_bias: 0.0.into(),
-            anisotropy_enable: false,
-            max_anisotropy: 0.0.into(),
-            compare_enable: false,
-            compare_op: vk::CompareOp::ALWAYS,
-            min_lod: 0.0.into(),
-            max_lod: 0.0.into(),
-            border_color: vk::BorderColor::INT_OPAQUE_BLACK,
-            unnormalized_coordinates: false,
+impl From<SamplerCreateInfo> for SamplerCreateInfoHashable {
+    fn from(info: SamplerCreateInfo) -> Self {
+        Self {
+            mag_filter: info.mag_filter,
+            min_filter: info.min_filter,
+            mipmap_mode: info.mipmap_mode,
+            address_mode_u: info.address_mode_u,
+            address_mode_v: info.address_mode_v,
+            address_mode_w: info.address_mode_w,
+            mip_lod_bias_f32_bits: info.mip_lod_bias.to_bits(),
+            anisotropy_enable: info.anisotropy_enable,
+            max_anisotropy_f32_bits: info.max_anisotropy.to_bits(),
+            compare_enable: info.compare_enable,
+            compare_op: info.compare_op,
+            min_lod_f32_bits: info.min_lod.to_bits(),
+            max_lod_f32_bits: info.max_lod.to_bits(),
+            border_color: info.border_color,
+            unnormalized_coordinates: info.unnormalized_coordinates,
         }
     }
 }
@@ -775,7 +682,7 @@ impl Into<vk::Offset3D> for Offset3D {
         vk::Offset3D {
             x: self.x,
             y: self.y,
-            z: self.z
+            z: self.z,
         }
     }
 }
@@ -835,7 +742,6 @@ impl Rect3D {
         }
     }
 }
-
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Size3D {

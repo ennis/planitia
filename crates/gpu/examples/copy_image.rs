@@ -5,9 +5,9 @@ use std::ptr;
 use std::time::Duration;
 
 use gpu::{
-    vk, BufferUsage, CommandStream, Device, Image, ImageAspect, ImageCopyBuffer, ImageCopyView, ImageCreateInfo,
-    ImageDataLayout, ImageSubresourceLayers, ImageType, ImageUsage, MemoryLocation, Offset3D, Rect3D, SemaphoreWait,
-    SwapChain,
+    vk, BufferCreateInfo, BufferUntyped, BufferUsage, CommandStream, Device, Image, ImageAspect, ImageCopyBuffer,
+    ImageCopyView, ImageCreateInfo, ImageDataLayout, ImageSubresourceLayers, ImageType, ImageUsage, MemoryLocation,
+    Offset3D, Rect3D, SemaphoreWait, SwapChain,
 };
 use raw_window_handle::HasWindowHandle;
 use winit::application::ApplicationHandler;
@@ -34,7 +34,7 @@ fn load_image(cmd: &mut CommandStream, path: impl AsRef<Path>, usage: ImageUsage
     let mip_levels = gpu::mip_level_count(width, height);
 
     // create the texture
-    let image = Device::global().create_image(&ImageCreateInfo {
+    let image = Image::new(ImageCreateInfo {
         memory_location: MemoryLocation::GpuOnly,
         type_: ImageType::Image2D,
         usage: usage | ImageUsage::TRANSFER_DST,
@@ -45,10 +45,15 @@ fn load_image(cmd: &mut CommandStream, path: impl AsRef<Path>, usage: ImageUsage
         ..
     });
 
-    let byte_size = width as u64 * height as u64 * bpp as u64;
+    let byte_size = width as usize * height as usize * bpp as usize;
 
     // create a staging buffer
-    let staging_buffer = Device::global().create_buffer(BufferUsage::TRANSFER_SRC, MemoryLocation::CpuToGpu, byte_size, "");
+    let staging_buffer = BufferUntyped::new(BufferCreateInfo {
+        len: byte_size,
+        usage: BufferUsage::TRANSFER_SRC,
+        memory_location: MemoryLocation::CpuToGpu,
+        ..
+    });
 
     // read image data
     unsafe {
