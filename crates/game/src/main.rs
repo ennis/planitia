@@ -3,20 +3,20 @@
 
 use crate::asset::AssetCache;
 use crate::camera_control::{CameraControl, CameraControlInput};
-use crate::context::{AppHandler, LoopHandler, get_gpu_device, quit, render_imgui, run};
+use crate::context::{App, AppHandler, LoopHandler};
 use crate::input::{InputEvent, PointerButton};
 use crate::paint::{DrawGlyphRunOptions, PaintRenderParams, PaintScene, Painter, Srgba32, TextFormat, TextLayout};
 use crate::pipeline_cache::get_graphics_pipeline;
-use crate::platform::{EventToken, InitOptions, LoopEvent, RenderTargetImage};
+use crate::platform::{EventToken, InitOptions, RenderTargetImage, UserEvent};
 use egui::Color32;
 use egui_demo_lib::{Demo, DemoWindows, View, WidgetGallery};
 use futures::{FutureExt, StreamExt};
-use gpu::{Device, DeviceAddress, RenderPassInfo, push_constants, Image};
+use gpu::PrimitiveTopology::TriangleList;
+use gpu::{Device, DeviceAddress, Image, RenderPassInfo, push_constants};
 use log::debug;
 use math::geom::{Camera, rect_xywh};
 use math::{Rect, vec2};
 use serde_json::json;
-use gpu::PrimitiveTopology::TriangleList;
 
 mod camera_control;
 mod context;
@@ -27,9 +27,7 @@ mod input;
 mod notifier;
 mod paint;
 mod platform;
-mod script;
 mod shaders;
-mod task;
 mod timer;
 mod util;
 mod world;
@@ -37,6 +35,9 @@ mod world;
 mod asset;
 mod pipeline_cache;
 //mod pipeline_cache;
+
+/// Global application singleton.
+static APP: App<Game> = App::new();
 
 const WIDTH: u32 = 1280;
 const HEIGHT: u32 = 720;
@@ -63,18 +64,15 @@ struct Game {
 
 impl Default for Game {
     fn default() -> Self {
-
         let painter = Painter::new(gpu::Format::R8G8B8A8_UNORM, None);
 
-        let depth_buffer = Image::new(
-            gpu::ImageCreateInfo {
-                width: WIDTH,
-                height: HEIGHT,
-                format: gpu::Format::D32_SFLOAT_S8_UINT,
-                usage: gpu::ImageUsage::DEPTH_STENCIL_ATTACHMENT | gpu::ImageUsage::TRANSFER_DST,
-                ..
-            },
-        );
+        let depth_buffer = Image::new(gpu::ImageCreateInfo {
+            width: WIDTH,
+            height: HEIGHT,
+            format: gpu::Format::D32_SFLOAT_S8_UINT,
+            usage: gpu::ImageUsage::DEPTH_STENCIL_ATTACHMENT | gpu::ImageUsage::TRANSFER_DST,
+            ..
+        });
 
         Self {
             physics_timer: EventToken(1),
@@ -104,7 +102,7 @@ impl Game {
             encoder.bind_graphics_pipeline(&grid_shader);
             encoder.push_constants(push_constants! {
                 scene_uniforms: DeviceAddress<SceneUniforms> = scene_uniforms,
-                grid_scale: f32 = 1.0
+                grid_scale: f32 = 100.0
             });
             encoder.draw(TriangleList, 0..6, 0..1);
         }
@@ -133,9 +131,9 @@ And what is else not to be overcome?",
         );
         text.layout(1000.0);
 
-        for glyph_run in text.glyph_runs() {
-            scene.draw_glyph_run(vec2(0.0, 0.0), &glyph_run, &DrawGlyphRunOptions::default());
-        }
+        //for glyph_run in text.glyph_runs() {
+        //    scene.draw_glyph_run(vec2(0.0, 0.0), &glyph_run, &DrawGlyphRunOptions::default());
+        //}
 
         scene.finish(
             cmd,
@@ -150,12 +148,14 @@ And what is else not to be overcome?",
 
 impl AppHandler for Game {
     fn input(&mut self, input_event: InputEvent) {
+
+
         // --- SHORTCUTS ---
 
         // App exit
         if input_event.is_shortcut("Ctrl+Q") {
             debug!("Quit requested via Ctrl+Q");
-            quit();
+            APP.quit();
         }
 
         // Home camera
@@ -168,7 +168,7 @@ impl AppHandler for Game {
         self.camera_control.handle_input(&input_event);
     }
 
-    fn event(&mut self, token: EventToken) {}
+    fn event(&mut self, event: UserEvent) {}
 
     fn resized(&mut self, width: u32, height: u32) {
         self.camera_control.resize(width, height);
@@ -177,11 +177,7 @@ impl AppHandler for Game {
     fn vsync(&mut self) {}
 
     fn render(&mut self, target: RenderTargetImage) {
-        let device = get_gpu_device();
-        let mut cmd = device.create_command_stream();
-
-        //cmd.clear_image(&target.image, gpu::ClearColorValue::Float([0.0, 0.0, 0.0, 1.0]));
-        //cmd.clear_depth_image(&self.depth_buffer, 1.0);
+        let mut cmd = gpu::CommandStream::new();
 
         //-------------------------------
         // Render 3D scene
@@ -215,13 +211,13 @@ impl AppHandler for Game {
 
         //-------------------------------
         // Render GUI
-        render_imgui(&mut cmd, &target.image);
+        APP.render_imgui(&mut cmd, &target.image);
 
         cmd.flush(&[target.ready], &[target.rendering_finished], None).unwrap();
     }
 
     fn close_requested(&mut self) {
-        quit();
+        APP.quit();
     }
 
     fn imgui(&mut self, ctx: &egui::Context) {
@@ -235,8 +231,7 @@ impl AppHandler for Game {
 
 fn main() {
     AssetCache::register_filesystem_path(concat!(env!("CARGO_MANIFEST_DIR"), "/assets"));
-
-    run::<Game>(&InitOptions {
+    APP.run(&InitOptions {
         width: WIDTH,
         height: HEIGHT,
         window_title: "Planitia",

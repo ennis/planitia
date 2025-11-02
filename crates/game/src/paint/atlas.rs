@@ -1,4 +1,3 @@
-use crate::context::get_gpu_device;
 use crate::paint::Srgba32;
 use gpu::{Barrier, ImageAspect, ImageCopyView, ImageCreateInfo, MemoryLocation, Size3D, vk};
 use log::debug;

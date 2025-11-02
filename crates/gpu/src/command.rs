@@ -225,7 +225,13 @@ pub enum SemaphoreSignal {
 }
 
 impl CommandStream {
-    pub(super) fn new() -> CommandStream {
+
+    /// Creates a command stream used to submit commands to the GPU.
+    ///
+    /// Once finished, the command stream should be submitted to the GPU using
+    /// `CommandStream::flush`.
+    /// They should be submitted in the same order as they were created.
+    pub fn new() -> CommandStream {
         let device = Device::global();
         let submission_index = device.next_submission_index.fetch_add(1, Relaxed);
         let command_pool = device.get_or_create_command_pool(device.queue_family);

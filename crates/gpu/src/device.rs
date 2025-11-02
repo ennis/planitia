@@ -790,11 +790,7 @@ impl Device {
     // COMMAND STREAMS
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
-    /// Creates a command stream used to submit commands to the GPU.
-    ///
-    /// Once finished, the command stream should be submitted to the GPU using
-    /// `CommandStream::flush`.
-    /// They should be submitted in the same order as they were created.
+    #[deprecated]
     pub fn create_command_stream(&self) -> CommandStream {
         CommandStream::new()
     }

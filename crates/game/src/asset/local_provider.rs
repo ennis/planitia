@@ -61,6 +61,12 @@ impl Provider for LocalProvider {
         buffer.resize(file_size as usize, 0);
         let mut file = std::fs::File::open(&p)?;
         file.read_exact(&mut buffer)?;
+
+        // now, if we were to add a file watch here, how would that work?
+        // - call a global function to register a watch on this file path
+        // - event loop receives file change events
+        //     - who sends the event to the asset system?
+
         Ok(buffer)
     }
 

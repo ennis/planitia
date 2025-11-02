@@ -1,5 +1,5 @@
 //! Windows platform backend
-use crate::platform::{EventToken, InitOptions, PlatformHandler, RenderTargetImage};
+use crate::platform::{EventToken, InitOptions, PlatformHandler, RenderTargetImage, UserEvent};
 use log::error;
 use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
@@ -23,6 +23,7 @@ use crate::context::LoopHandler;
 use crate::platform::windows::compositor_clock::CompositorClock;
 use crate::platform::windows::graphics::GraphicsContext;
 use crate::platform::windows::window::Window;
+pub use event_loop::wake_event_loop;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -84,10 +85,11 @@ fn get_hwnd(handle: RawWindowHandle) -> HWND {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug)]
 enum WakeReason {
     VSync,
-    Token(EventToken),
+    Task,
+    User(UserEvent),
 }
 
 #[derive(Copy, Clone, PartialOrd, Ord, Eq, PartialEq, Debug)]

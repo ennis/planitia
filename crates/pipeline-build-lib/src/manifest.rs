@@ -202,35 +202,28 @@ fn read_depth_stencil_state(json: &Json, out: &mut pipeline_archive::DepthStenci
     Ok(())
 }
 
-fn read_color_blend_equation(json: &Json, out: &mut ColorBlendEquationData) -> Result<(), Error> {
-    if let Some(src_color_blend_factor) = read_str(json, "src_color_blend_factor")? {
-        out.src_color_blend_factor = read_blend_factor(src_color_blend_factor)?;
-    }
-    if let Some(dst_color_blend_factor) = read_str(json, "dst_color_blend_factor")? {
-        out.dst_color_blend_factor = read_blend_factor(dst_color_blend_factor)?;
-    }
-    if let Some(color_blend_op) = read_str(json, "color_blend_op")? {
-        out.color_blend_op = read_blend_op(color_blend_op)?;
-    }
-    if let Some(src_alpha_blend_factor) = read_str(json, "src_alpha_blend_factor")? {
-        out.src_alpha_blend_factor = read_blend_factor(src_alpha_blend_factor)?;
-    }
-    if let Some(dst_alpha_blend_factor) = read_str(json, "dst_alpha_blend_factor")? {
-        out.dst_alpha_blend_factor = read_blend_factor(dst_alpha_blend_factor)?;
-    }
-    if let Some(alpha_blend_op) = read_str(json, "alpha_blend_op")? {
-        out.alpha_blend_op = read_blend_op(alpha_blend_op)?;
-    }
-
-    Ok(())
-}
 
 fn read_color_target(json: &Json, out: &mut pipeline_archive::ColorTarget) -> Result<(), Error> {
     if let Some(format_str) = read_str(json, "format")? {
         out.format = read_format(format_str)?;
     }
-    if let Some(blend_obj) = read_object(json, "blend")? {
-        read_color_blend_equation(blend_obj, &mut out.blend)?;
+    if let Some(src_color_blend_factor) = read_str(json, "src_color_blend_factor")? {
+        out.blend.src_color_blend_factor = read_blend_factor(src_color_blend_factor)?;
+    }
+    if let Some(dst_color_blend_factor) = read_str(json, "dst_color_blend_factor")? {
+        out.blend.dst_color_blend_factor = read_blend_factor(dst_color_blend_factor)?;
+    }
+    if let Some(color_blend_op) = read_str(json, "color_blend_op")? {
+        out.blend.color_blend_op = read_blend_op(color_blend_op)?;
+    }
+    if let Some(src_alpha_blend_factor) = read_str(json, "src_alpha_blend_factor")? {
+        out.blend.src_alpha_blend_factor = read_blend_factor(src_alpha_blend_factor)?;
+    }
+    if let Some(dst_alpha_blend_factor) = read_str(json, "dst_alpha_blend_factor")? {
+        out.blend.dst_alpha_blend_factor = read_blend_factor(dst_alpha_blend_factor)?;
+    }
+    if let Some(alpha_blend_op) = read_str(json, "alpha_blend_op")? {
+        out.blend.alpha_blend_op = read_blend_op(alpha_blend_op)?;
     }
 
     Ok(())
@@ -272,10 +265,10 @@ fn read_color_targets(json: &Json, out: &mut Vec<pipeline_archive::ColorTarget>)
 
 impl Configuration {
     pub fn apply_overrides(&mut self, overrides: &Json) -> Result<(), Error> {
-        if let Some(rasterizer_obj) = read_object(overrides, "rasterization")? {
+        if let Some(rasterizer_obj) = read_object(overrides, "rasterizer_state")? {
             read_rasterizer_state(rasterizer_obj, &mut self.rasterization_state)?;
         }
-        if let Some(depth_stencil_obj) = read_object(overrides, "depth_stencil")? {
+        if let Some(depth_stencil_obj) = read_object(overrides, "depth_stencil_state")? {
             read_depth_stencil_state(depth_stencil_obj, &mut self.depth_stencil_state)?;
         }
         if let Some(color_targets_json) = read_object(overrides, "color_targets")? {
@@ -393,9 +386,10 @@ impl BuildManifest {
         };
 
         let mut color_targets = Vec::new();
-        if let Some(color_targets_json) = read_object(json, "color_targets")? {
-            read_color_targets(color_targets_json, &mut color_targets)?;
-        }
+        // color targets array is mandatory
+        let color_targets_json = json.get("color_targets").ok_or(MissingField("color_targets"))?;
+        read_color_targets(color_targets_json, &mut color_targets)?;
+
 
         Ok(BuildManifest {
             type_,

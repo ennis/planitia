@@ -2,7 +2,7 @@ use crate::input::{InputEvent, MouseScrollDelta, PointerButton};
 use crate::platform::windows::key_code::key_event_to_key_code;
 use crate::platform::windows::window::Window;
 use crate::platform::windows::{Error, TimerEntry, WakeReason, Win32Platform};
-use crate::platform::{EventToken, LoopHandler};
+use crate::platform::{EventToken, LoopHandler, UserEvent};
 use keyboard_types::KeyboardEvent;
 use std::sync::OnceLock;
 use std::task::{RawWaker, RawWakerVTable, Waker};
@@ -90,7 +90,8 @@ impl<'a> WinitAppHandler<'a> {
             next = self.this.timers.borrow_mut().pop();
             if let Some(TimerEntry { deadline, token }) = next {
                 if deadline <= now {
-                    self.inner.event(token);
+                    // TODO: timer callback instead of user event?
+                    self.inner.event(Box::new(token));
                 } else {
                     // Timer not expired, put it back and break
                     self.this.timers.borrow_mut().push(next.unwrap());
@@ -128,14 +129,15 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
             WakeReason::VSync => {
                 self.inner.vsync();
             }
-            WakeReason::Token(token) => {
-                self.inner.event(token);
+            WakeReason::Task => {
+            }
+            WakeReason::User(event) => {
+                self.inner.event(event);
             }
         }
     }
 
     fn window_event(&mut self, _event_loop: &ActiveEventLoop, _window_id: WindowId, window_event: WindowEvent) {
-
         // translate winit window event to input event
         let mut event = None;
         match window_event {
@@ -205,16 +207,14 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 let delta = match delta {
-                    winit::event::MouseScrollDelta::LineDelta(x, y) => {
-                        MouseScrollDelta::LineDelta { x, y }
-                    }
-                    winit::event::MouseScrollDelta::PixelDelta(pos) => {
-                        MouseScrollDelta::PixelDelta { x: pos.x as f32, y: pos.y as f32 }
-                    }
+                    winit::event::MouseScrollDelta::LineDelta(x, y) => MouseScrollDelta::LineDelta { x, y },
+                    winit::event::MouseScrollDelta::PixelDelta(pos) => MouseScrollDelta::PixelDelta {
+                        x: pos.x as f32,
+                        y: pos.y as f32,
+                    },
                 };
 
                 event = Some(InputEvent::MouseWheel(delta));
-
             }
             _ => {}
         }
@@ -236,23 +236,20 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
 /// Proxy to wake the event loop from other threads.
 pub(crate) static EVENT_LOOP_PROXY: OnceLock<EventLoopProxy<WakeReason>> = OnceLock::new();
 
-pub fn wake_event_loop(token: EventToken) {
+/// Wakes the event loop with the given user event.
+pub fn wake_event_loop(payload: UserEvent) {
     EVENT_LOOP_PROXY
         .get()
         .unwrap()
-        .send_event(WakeReason::Token(token))
+        .send_event(WakeReason::User(payload))
         .unwrap()
 }
 
 fn main_loop_waker() -> Waker {
     static VTABLE: RawWakerVTable = RawWakerVTable::new(
         |_: *const ()| -> RawWaker { RawWaker::new(std::ptr::null(), &VTABLE) },
-        |_: *const ()| {
-            wake_event_loop(EventToken::TASK);
-        },
-        |_: *const ()| {
-            wake_event_loop(EventToken::TASK);
-        },
+        |_: *const ()| EVENT_LOOP_PROXY.get().unwrap().send_event(WakeReason::Task).unwrap(),
+        |_: *const ()| EVENT_LOOP_PROXY.get().unwrap().send_event(WakeReason::Task).unwrap(),
         |_: *const ()| {},
     );
     unsafe { Waker::from_raw(RawWaker::new(std::ptr::null(), &VTABLE)) }

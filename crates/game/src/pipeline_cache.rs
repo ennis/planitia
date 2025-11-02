@@ -1,5 +1,5 @@
 use crate::asset::{AssetCache, Dependencies, Handle, VfsPath};
-use gpu::{PreRasterizationShaders, ShaderEntryPoint};
+use gpu::{vk, PreRasterizationShaders, ShaderEntryPoint};
 use pipeline_archive::{GraphicsPipelineShaders, PipelineArchive, ShaderData};
 use utils::archive::Offset;
 
@@ -65,7 +65,7 @@ fn create_graphics_pipeline_from_archive(
                         dst_alpha_blend_factor: c.blend.dst_alpha_blend_factor,
                         alpha_blend_op: c.blend.alpha_blend_op,
                     }),
-                    color_write_mask: Default::default(),
+                    color_write_mask: vk::ColorComponentFlags::RGBA,
                 }
             })
             .collect()
@@ -113,6 +113,7 @@ fn create_graphics_pipeline_from_archive(
             blend_constants: [0.0, 0.0, 0.0, 0.0],
         },
     };
+    dbg!(&gpci);
     let pipeline = gpu::GraphicsPipeline::new(gpci)?;
     Ok(pipeline)
 }

@@ -1,10 +1,14 @@
 //! Platform-specific implementations of certain types and functions.
 
+use std::any::Any;
+use std::path::Path;
 use crate::input::InputEvent;
 use std::time::Instant;
 
 #[cfg(windows)]
 pub mod windows;
+#[cfg(windows)]
+pub use windows::wake_event_loop;
 
 #[cfg(windows)]
 pub type Platform = windows::Win32Platform;
@@ -25,23 +29,7 @@ pub struct RenderTargetImage<'a> {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct EventToken(pub u64);
 
-impl EventToken {
-    /// Predefined event token for async task wakeups.
-    pub const TASK: Self = EventToken(0);
-    /// Predefined event token for vsync events.
-    pub const VSYNC: Self = EventToken(1);
-}
-
-/// Identifies the reason for waking the event loop.
-pub enum LoopEvent {
-    /// An input event, such as a key press or mouse movement.
-    Input(InputEvent),
-    /// A user event, emitted when `wake_event_loop` is called.
-    Event(EventToken),
-    /// Polling
-    Poll,
-}
-
+/*
 /// A request to wake up the event loop at a particular time.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum WakeupRequest {
@@ -51,7 +39,7 @@ pub enum WakeupRequest {
     At(Instant),
     /// Wake up the event loop immediately after the current event loop iteration.
     Poll,
-}
+}*/
 
 /// Platform initialization options.
 #[derive(Debug, Clone, Copy)]
@@ -73,11 +61,13 @@ impl Default for InitOptions {
     }
 }
 
+pub type UserEvent = Box<dyn Any + Send>;
+
 /// Defines methods that are called when the event loop resumes.
 #[allow(unused_variables)]
 pub trait LoopHandler {
     fn input(&mut self, input_event: InputEvent);
-    fn event(&mut self, token: EventToken);
+    fn event(&mut self, payload: UserEvent);
     fn resized(&mut self, width: u32, height: u32);
     fn vsync(&mut self);
     fn poll(&mut self);
