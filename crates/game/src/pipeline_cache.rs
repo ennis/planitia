@@ -143,7 +143,7 @@ pub fn get_graphics_pipeline(path: impl AsRef<VfsPath>) -> Handle<gpu::GraphicsP
         let archive = load_pipeline_archive(archive_file);
         dependencies.add(&archive);
         // TODO: handle errors
-        create_graphics_pipeline_from_archive(&archive, name).unwrap()
+        create_graphics_pipeline_from_archive(&archive.get(), name).unwrap()
     }
 
     let path = path.as_ref();

@@ -1,3 +1,5 @@
+import common;
+
 struct VSOut
 {
     float4 pos : SV_Position;
@@ -65,9 +67,11 @@ float grid(float2 uv, float line_width)
     return grid;
 }
 
+
 [shader("fragment")]
 float4 grid_fragment_main(VSOut i, uint2 frag_pos: SV_Position, uniform PushConstants u)
 {
     float2 frag_uv = frag_pos.xy / u.scene.screen_size;
-    return float4(grid(i.uv*10.0, 0.05).xxx,1.0);
+    float grid = grid(i.uv * 10.0, 0.05);
+    return float4(linear_to_srgb_normalized(grid.xxx).xxx, 1.0);
 }

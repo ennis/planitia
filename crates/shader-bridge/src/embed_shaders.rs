@@ -83,6 +83,7 @@ pub fn compile_and_embed_shaders(
             components.push(entry_point.downcast().clone());
         }
         let program = session.create_composite_component_type(&components).unwrap();
+        let program = program.link().unwrap();
         let reflection = program.layout(0).expect("failed to get reflection");
 
         //ctx.generate_interface(&reflection);
@@ -91,7 +92,16 @@ pub fn compile_and_embed_shaders(
             let ep = module.entry_point_by_index(i).unwrap();
             let module_file_path = PathBuf::from(module.file_path()).canonicalize().unwrap();
             let entry_point_name = ep.function_reflection().name();
-            let code = program.entry_point_code(i as i64, 0).unwrap();
+            let code = match program.entry_point_code(i as i64, 0) {
+                Ok(code) => code,
+                Err(err) => {
+                    // output compilation errors
+                    for line in err.to_string().lines() {
+                        println!("cargo::error={line}");
+                    }
+                    panic!("failed to get entry point code for {}", module_file_path.display());
+                }
+            };
 
             // write SPIR-V code of entry point to output directory
             //let module_file_stem = module_file_path

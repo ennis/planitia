@@ -142,6 +142,14 @@ impl AsRef<VfsPath> for VfsPathBuf {
     }
 }
 
+impl PartialEq for VfsPath {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl Eq for VfsPath {}
+
 #[cfg(test)]
 mod tests {
     use super::VfsPath;

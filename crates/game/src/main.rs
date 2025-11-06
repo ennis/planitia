@@ -1,7 +1,7 @@
 #![expect(unused, reason = "noisy")]
 #![feature(default_field_values)]
 
-use crate::asset::AssetCache;
+use crate::asset::{AssetCache, Handle};
 use crate::camera_control::{CameraControl, CameraControlInput};
 use crate::context::{App, AppHandler, LoopHandler};
 use crate::input::{InputEvent, PointerButton};
@@ -58,6 +58,7 @@ struct Game {
     painter: Painter,
     camera_control: CameraControl,
     depth_stencil_buffer: gpu::Image,
+    grid_shader: Handle<gpu::GraphicsPipeline>,
     //pipeline_editor: PipelineEditor,
     //pipeline_cache: PipelineCache,
 }
@@ -82,6 +83,7 @@ impl Default for Game {
             painter,
             depth_stencil_buffer: depth_buffer,
             camera_control: CameraControl::default(),
+            grid_shader: get_graphics_pipeline("/shaders/pipelines.parc#grid"),
             //pipeline_editor: Default::default(),
             //grid_pipeline: ,
         }
@@ -89,6 +91,7 @@ impl Default for Game {
 }
 
 impl Game {
+
     fn render_scene(
         &mut self,
         encoder: &mut gpu::RenderEncoder,
@@ -98,7 +101,7 @@ impl Game {
         //----------------------------------
         // Draw grid
         {
-            let grid_shader = get_graphics_pipeline("/shaders/pipelines.parc#grid");
+            let grid_shader = self.grid_shader.get();
             encoder.bind_graphics_pipeline(&grid_shader);
             encoder.push_constants(push_constants! {
                 scene_uniforms: DeviceAddress<SceneUniforms> = scene_uniforms,

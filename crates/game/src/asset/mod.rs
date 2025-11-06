@@ -36,10 +36,13 @@ pub use vfs_path::*;
 
 use log::debug;
 use std::collections::{HashMap, HashSet};
-use std::io;
+use std::{io, mem};
+use std::cmp::PartialEq;
+use std::marker::PhantomData;
 use std::ops::Deref;
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::sync::atomic::AtomicBool;
+use slotmap::SlotMap;
 use utils::aligned_vec::AVec;
 
 /*
@@ -162,15 +165,19 @@ impl Providers {
 }
 
 /// Trait for types that can be inserted in the asset cache. A marker trait, synonymous with `'static + Send + Sync`.
-pub trait Asset: 'static + Send + Sync {}
+pub trait Asset: 'static + Any + Send + Sync {}
 impl<T: 'static + Send + Sync> Asset for T {}
 
 /// A reference to a loaded asset.
-pub struct Handle<T: Asset>(Arc<Entry<WithLoader<T>>>);
+pub struct Handle<T: Asset>(Arc<Entry<T>>);
 
 impl<T: Asset> Handle<T> {
-    fn new(entry: Arc<Entry<WithLoader<T>>>) -> Self {
+    fn new(entry: Arc<Entry<T>>) -> Self {
         Self(entry)
+    }
+
+    pub fn get(&self) -> MutexGuard<'_, T> {
+        self.0.asset.lock().unwrap()
     }
 }
 
@@ -207,6 +214,7 @@ impl<T: Asset> Ord for Handle<T> {
     }
 }
 
+/*
 // derefs to the asset object
 impl<T: Asset> Deref for Handle<T> {
     type Target = T;
@@ -214,32 +222,81 @@ impl<T: Asset> Deref for Handle<T> {
     fn deref(&self) -> &Self::Target {
         &self.0.asset_and_loader.asset
     }
-}
+}*/
 
 ////////////////////////////////////////////////////////////////////
 
-enum Loader<T> {
-    FromSlice(fn(&[u8], &mut Dependencies) -> T),
-    FromStaticSlice(fn(&'static [u8], &mut Dependencies) -> T),
-    WithDependencies(fn(&VfsPath, &mut Dependencies) -> T),
+enum LoaderKind {
+    FromSlice,          // (fn(&[u8], &mut Dependencies) -> T),
+    FromStaticSlice,    // (fn(&'static [u8], &mut Dependencies) -> T),
+    WithDependencies,   // (fn(&VfsPath, &mut Dependencies) -> T),
 }
 
-fn load_asset<T: Asset>(load_fn: &Loader<T>, path: &VfsPath, providers: &Providers, deps: &mut Dependencies) -> T {
-    let providers = Providers::get().read().unwrap();
-    let asset = match load_fn {
-        Loader::FromSlice(f) => {
-            let bytes = providers.load(path).unwrap();
-            f(&bytes, deps)
+struct Loader {
+    type_id: TypeId,
+    kind: LoaderKind,
+    func: *const (),
+    reload: fn(&Entry<dyn Asset>),
+}
+
+// SAFETY: Loader only contains function pointers, so it's safe to send/sync it
+unsafe impl Send for Loader {}
+unsafe impl Sync for Loader {}
+
+fn reload_thunk<T: Asset>(entry: &Entry<dyn Asset>) {
+    entry.downcast_ref::<T>().unwrap().reload()
+}
+
+impl Loader {
+
+    fn from_slice<T: Asset>(f: fn(&[u8], &mut Dependencies) -> T) -> Self {
+        Self {
+            type_id: TypeId::of::<T>(),
+            kind: LoaderKind::FromSlice,
+            func: f as *const (),
+            reload: reload_thunk::<T>
         }
-        Loader::FromStaticSlice(f) => {
-            // Note that we shouldn't reload assets loaded from static slices, since the data
-            // isn't supposed to change
-            let bytes = providers.load_static(path).unwrap();
-            f(bytes, deps)
+    }
+
+    fn from_static_slice<T: Asset>(f: fn(&'static [u8], &mut Dependencies) -> T) -> Self {
+        Self {
+            type_id: TypeId::of::<T>(),
+            kind: LoaderKind::FromStaticSlice,
+            func: f as *const (),
+            reload: reload_thunk::<T>
         }
-        Loader::WithDependencies(f) => f(path, deps),
-    };
-    asset
+    }
+
+    fn with_dependencies<T: Asset>(f: fn(&VfsPath, &mut Dependencies) -> T) -> Self {
+        Self {
+            type_id: TypeId::of::<T>(),
+            kind: LoaderKind::WithDependencies,
+            func: f as *const (),
+            reload: reload_thunk::<T>
+        }
+    }
+
+    fn load<T: Asset>(&self, path: &VfsPath, providers: &Providers, deps: &mut Dependencies) -> T {
+        let asset = match self.kind {
+            LoaderKind::FromSlice => {
+                let f: fn(&[u8], &mut Dependencies) -> T = unsafe { std::mem::transmute(self.func) };
+                let bytes = providers.load(path).unwrap();
+                f(&bytes, deps)
+            }
+            LoaderKind::FromStaticSlice => {
+                // Note that we shouldn't reload assets loaded from static slices, since the data
+                // isn't supposed to change
+                let f: fn(&'static [u8], &mut Dependencies) -> T = unsafe { std::mem::transmute(self.func) };
+                let bytes = providers.load_static(path).unwrap();
+                f(bytes, deps)
+            }
+            LoaderKind::WithDependencies => {
+                let f: fn(&VfsPath, &mut Dependencies) -> T = unsafe { std::mem::transmute(self.func) };
+                f(path, deps)
+            }
+        };
+        asset
+    }
 }
 
 
@@ -247,9 +304,24 @@ struct Entry<T: ?Sized> {
     path: VfsPathBuf,
     dependencies: Dependencies,
     dirty: AtomicBool,
-    asset_and_loader: T,
+    loader: Loader,
+    asset: Mutex<T>,
 }
 
+
+impl<T: Asset> Entry<T> {
+    fn reload(&self) {
+        let mut deps = Dependencies::new();
+        let providers = Providers::get().read().unwrap();
+        let asset = self.loader.load(&self.path, &providers, &mut deps);
+        // swap the asset
+        // FIXME: we only update the asset;
+        //        we assume that the dependencies don't change but that may not be true
+        *self.asset.lock().unwrap() = asset;
+    }
+}
+
+/*
 // separate struct so that we can unsize Arc<Entry<WithLoader<T>>> to Arc<Entry<dyn Any + Send + Sync>>
 // (the function pointers block unsized coercion)
 struct WithLoader<T> {
@@ -274,17 +346,29 @@ impl<T: Asset> Reload for WithLoader<T> {
         self.asset = new_asset;
         deps
     }
-}
+}*/
 
-impl Entry<dyn Any + Send + Sync> {
-    fn downcast<T: Asset>(self: Arc<Self>) -> Option<Arc<Entry<WithLoader<T>>>> {
-        if self.asset_and_loader.is::<WithLoader<T>>() {
-            // SAFETY: we just checked that the type is correct
-            let ptr = Arc::into_raw(self) as *const Entry<WithLoader<T>>;
-            Some(unsafe { Arc::from_raw(ptr) })
+impl Entry<dyn Asset> {
+    fn downcast_ref<T: Asset>(&self) -> Option<&Entry<T>> {
+        if self.loader.type_id == TypeId::of::<T>() {
+            // SAFETY: we checked the type id
+            Some(unsafe { &*(self as *const Entry<dyn Asset> as *const Entry<T>) })
         } else {
             None
         }
+    }
+
+    fn downcast<T:Asset>(self: Arc<Self>) -> Option<Arc<Entry<T>>> {
+        if self.loader.type_id == TypeId::of::<T>() {
+            // SAFETY: we checked the type id
+            Some(unsafe { Arc::from_raw(Arc::into_raw(self) as *const Entry<T>) })
+        } else {
+            None
+        }
+    }
+
+    fn reload_dyn(&self) {
+        (self.loader.reload)(self);
     }
 }
 
@@ -321,17 +405,20 @@ impl Dependencies {
 
 /// Holds cached assets indexed by their VFS path and type.
 pub struct AssetCache {
-    by_path: RwLock<HashMap<CacheKey, Arc<Entry<dyn Any + Send + Sync>>>>,
+    by_path: RwLock<HashMap<CacheKey, Arc<Entry<dyn Asset>>>>,
+    dirty_paths: Mutex<HashSet<VfsPathBuf>>,
 }
+
 
 impl AssetCache {
     fn new() -> Self {
         Self {
             by_path: RwLock::new(HashMap::new()),
+            dirty_paths: Mutex::new(Default::default()),
         }
     }
 
-    fn insert_inner<T: Asset>(&self, path: &VfsPath, loader: Loader<T>) -> Handle<T> {
+    unsafe fn insert_inner<T: Asset>(&self, path: &VfsPath, loader: Loader) -> Handle<T> {
         let key = CacheKey {
             path: path.to_path_buf(),
             type_id: TypeId::of::<T>(),
@@ -349,13 +436,14 @@ impl AssetCache {
         let entry = {
             let mut deps = Dependencies::new();
             let providers = Providers::get().read().unwrap();
-            let asset = load_asset(&loader, path, &providers, &mut deps);
+            let asset = loader.load(path, &providers, &mut deps);
 
             Arc::new(Entry {
                 path: path.to_path_buf(),
                 dependencies: deps,
                 dirty: Default::default(),
-                asset_and_loader: WithLoader { loader, asset },
+                loader,
+                asset: Mutex::new(asset),
             })
         };
 
@@ -366,8 +454,14 @@ impl AssetCache {
         Handle::new(entry)
     }
 
+    pub fn get<T:Asset>(&self, handle: &Handle<T>) -> &T {
+        todo!()
+    }
+
     pub fn load_and_insert<T: Asset>(&self, path: &VfsPath, loader: fn(&[u8], &mut Dependencies) -> T) -> Handle<T> {
-        self.insert_inner(path, Loader::FromSlice(loader))
+        unsafe {
+            self.insert_inner(path, Loader::from_slice(loader))
+        }
     }
 
     pub fn load_and_insert_static<T: Asset>(
@@ -375,7 +469,9 @@ impl AssetCache {
         path: &VfsPath,
         loader: fn(&'static [u8], &mut Dependencies) -> T,
     ) -> Handle<T> {
-        self.insert_inner(path, Loader::FromStaticSlice(loader))
+        unsafe {
+            self.insert_inner(path, Loader::from_static_slice(loader))
+        }
     }
 
     pub fn insert_with_dependencies<T: Asset>(
@@ -383,38 +479,38 @@ impl AssetCache {
         path: &VfsPath,
         loader: fn(&VfsPath, &mut Dependencies) -> T,
     ) -> Handle<T> {
-        self.insert_inner(path, Loader::WithDependencies(loader))
+        unsafe {
+            self.insert_inner(path, Loader::with_dependencies(loader))
+        }
+    }
+
+    pub fn do_reload(&self) {
+        let dirty_paths = mem::take(&mut *self.dirty_paths.lock().unwrap());
+
+        let mut to_reload = Vec::new();
+        {
+            let entries = self.by_path.read().unwrap();
+            for path in dirty_paths {
+                to_reload.extend(entries.values().filter(|entry| { entry.path.path_without_fragment() == &*path }).cloned());
+            }
+        }
+
+        // TODO: handle dependencies
+        for entry in to_reload {
+            (entry.loader.reload)(&*entry);
+        }
     }
 
     /// Called by providers to notify that a file has changed.
     pub fn asset_changed(&self, path: &VfsPath) {
-        let keys_to_remove: Vec<CacheKey> = {
-            let cache = self.by_path.read().unwrap();
-            cache
-                .keys()
-                .filter(|key| key.path.as_str() == path.as_str())
-                .cloned()
-                .collect()
-        };
-
-        // we have two options for hot-reload:
-        // - mark the entry as dirty, and reload it on next access
-        // - mark the entry as dirty, and start reload on idle
-
-        //
-
-        if !keys_to_remove.is_empty() {
-            let mut cache = self.by_path.write().unwrap();
-            for key in keys_to_remove {
-                let mut entry = cache[&key].clone();
-            }
-        }
+        self.dirty_paths.lock().unwrap().insert(path.path_without_fragment().to_path_buf());
     }
 
     /// Returns the global instance of the asset cache.
     pub fn instance() -> &'static AssetCache {
         static ASSET_CACHE: OnceLock<AssetCache> = OnceLock::new();
-        ASSET_CACHE.get_or_init(|| AssetCache::new())
+        let cache = ASSET_CACHE.get_or_init(|| AssetCache::new());
+        cache
     }
 
     pub fn register_filesystem_path(path: impl AsRef<std::path::Path>) {

@@ -1,19 +1,9 @@
+import common;
 
 struct PushConstants {
     float2 screenSize;
 };
 
-// 0-1 linear  from  0-255 sRGB
-float3 linearFromSRGB(float3 srgb) {
-    bool3 cutoff = srgb < float3(10.31475);
-    float3 lower = srgb / float3(3294.6);
-    float3 higher = pow((srgb + float3(14.025)) / float3(269.025), float3(2.4));
-    return select(cutoff, lower, higher);
-}
-
-float4 linearFromSRGBA(float4 srgba) {
-    return float4(linearFromSRGB(srgba.rgb), srgba.a / 255.0);
-}
 
 struct Vertex {
     [[vk::location(0)]] float2 pos;
@@ -52,6 +42,6 @@ struct FragmentOutput
 [shader("fragment")]
 FragmentOutput eguiFragMain(VertexOutput v) {
     FragmentOutput o;
-    o.color = v.color * tex.Sample(sampler, v.uv);   // texture(u_tex, v.uv);
+    o.color = srgba_to_linear(v.color) * tex.Sample(sampler, v.uv);   // texture(u_tex, v.uv);
     return o;
 }
