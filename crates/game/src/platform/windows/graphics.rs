@@ -78,7 +78,7 @@ impl GraphicsContext {
             }
         }
         let adapter = chosen_adapter.expect("no suitable video adapter found");
-        info!("Using DXGI adapter: {}", chosen_adapter_name);
+        info!("using DXGI adapter: {}", chosen_adapter_name);
 
         //=========================================================
         // D3D12 stuff

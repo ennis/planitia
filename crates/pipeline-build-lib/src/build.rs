@@ -1,11 +1,11 @@
-use crate::manifest::{BuildManifest, Configuration, Error, Input, PipelineType, Variant};
 use crate::BuildOptions;
+use crate::manifest::{BuildManifest, Configuration, Error, Input, PipelineType, Variant};
 use anyhow::anyhow;
 use color_print::{ceprintln, cprintln};
 use pipeline_archive::archive::{ArchiveWriter, Offset};
 use pipeline_archive::gpu::ShaderStage;
 use pipeline_archive::zstring::{ZString32, ZString64};
-use pipeline_archive::{PipelineEntryData, ShaderData, PIPELINE_ARCHIVE_MAGIC};
+use pipeline_archive::{PIPELINE_ARCHIVE_MAGIC, PipelineEntryData, ShaderData};
 use shader_bridge::ShaderLibrary;
 use std::path::{Path, PathBuf};
 use std::{env, fmt};
@@ -114,12 +114,20 @@ impl BuildManifest {
     }
 
     fn compile_to_archive(&self, archive: &mut ArchiveWriter, options: &BuildOptions) -> anyhow::Result<()> {
-        // header
+        // write the header first since it contains the signature
+        // TODO: the signature should be a feature of ArchiveWriter
         let header = archive.write(pipeline_archive::PipelineArchiveData {
             magic: PIPELINE_ARCHIVE_MAGIC,
             version: 1,
+            manifest_path: Offset::INVALID,
             entries: Offset::INVALID,
         });
+
+        {
+            let manifest_path =
+                archive.write_str(self.manifest_path.canonicalize().unwrap().to_string_lossy().as_ref());
+            archive[header].manifest_path = manifest_path;
+        }
 
         if options.emit_cargo_deps {
             println!("cargo:rerun-if-changed={}", self.manifest_path.display());
@@ -129,7 +137,6 @@ impl BuildManifest {
         let mut entries = Vec::new();
 
         for input in &self.inputs {
-
             let mut config = self.base_configuration.clone();
             if let Some(ref overrides) = input.overrides {
                 config.apply_overrides(overrides)?;
@@ -151,7 +158,6 @@ impl BuildManifest {
                     eprintln!();
                 }
             }
-
         }
 
         if !compilation_errors.0.is_empty() {
@@ -187,7 +193,6 @@ impl BuildManifest {
         config: &Configuration,
         options: &BuildOptions,
     ) -> anyhow::Result<PipelineEntryData> {
-
         let resolved_shader_path = self.resolve_path(&input.file_path);
         let lib = match ShaderLibrary::new(&resolved_shader_path) {
             Ok(lib) => lib,
@@ -294,10 +299,14 @@ impl BuildManifest {
             }
         }
 
+        // TODO find a way to get paths to module dependencies as well
+        let source_offset = archive.write_str(resolved_shader_path.canonicalize().unwrap().to_string_lossy().as_ref());
+        let sources = archive.write_slice(&[source_offset]);
 
         Ok(PipelineEntryData {
             name: ZString64::new(&input.name),
             kind: pipeline_kind,
+            sources,
         })
     }
 }

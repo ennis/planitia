@@ -48,14 +48,10 @@ impl Context {
 
         let rdoc = RenderDoc::new().ok();
         if rdoc.is_some() {
-            info!("Running with RenderDoc");
+            info!("running with RenderDoc");
         } else {
-            info!("RenderDoc not loaded");
+            info!("not running with RenderDoc");
         }
-
-        //let mut debouncer = notify_debouncer_mini::new_debouncer(|| {
-        //    wake_event_loop();
-        //});
 
         Self {
             platform,
@@ -78,7 +74,7 @@ impl Context {
 
     fn start_renderdoc_capture(&self) {
         if let Some(rdoc) = &self.rdoc {
-            info!("Starting RenderDoc capture");
+            info!("starting RenderDoc capture");
             rdoc.borrow_mut()
                 .start_frame_capture(unsafe { rdoc_instance_ptr() }, std::ptr::null());
         }
@@ -87,6 +83,7 @@ impl Context {
     fn end_renderdoc_capture(&self) {
         if let Some(rdoc) = &self.rdoc {
             if rdoc.borrow().is_frame_capturing() {
+                info!("finishing RenderDoc capture");
                 rdoc.borrow_mut()
                     .end_frame_capture(unsafe { rdoc_instance_ptr() }, std::ptr::null());
             }
@@ -142,7 +139,7 @@ impl<H: AppHandler + Default + 'static> App<H> {
     pub fn run(&'static self, init_options: &InitOptions) {
         pretty_env_logger::init();
         tracy_client::set_thread_name!("main thread");
-        info!("Running with Tracy profiler enabled");
+        info!("running with Tracy profiler enabled");
 
         let app = self.0.get_or_init(|| AppInner {
             // This needs to be a leaked static because ThreadBound wouldn't be Send, and

@@ -31,6 +31,7 @@ pub struct PipelineArchiveData {
     pub magic: [u8; 4],
     /// 1
     pub version: u32,
+    pub manifest_path: Offset<str>,
     pub entries: Offset<[PipelineEntryData]>,
 }
 
@@ -40,6 +41,8 @@ pub struct PipelineEntryData {
     /// Name of the pipeline.
     pub name: ZString<64>,
     pub kind: PipelineKind,
+    /// List of source files.
+    pub sources: Offset<[Offset<str>]>,
 }
 
 #[repr(C)]
@@ -217,6 +220,7 @@ mod tests {
         let header = writer.write(PipelineArchiveData {
             magic: *b"PARC",
             version: 1,
+            manifest_path: Offset::INVALID,
             entries: Offset::INVALID,
         });
         let color_targets = {
@@ -255,6 +259,7 @@ mod tests {
                     },
                     fragment_shader: Offset::INVALID,
                 }),
+                sources: Offset::INVALID,
             }],
         );
         writer[header].entries = entries;

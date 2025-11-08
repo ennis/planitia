@@ -153,7 +153,7 @@ impl Atlas {
         let height = self.dirty.end - self.dirty.start;
         let range = (self.dirty.start * self.width) as usize..(self.dirty.end * self.width) as usize;
 
-        debug!("Uploading atlas rows {}..{}", self.dirty.start, self.dirty.end);
+        debug!("uploading atlas rows {}..{}", self.dirty.start, self.dirty.end);
 
         cmd.upload_image_data(
             ImageCopyView {

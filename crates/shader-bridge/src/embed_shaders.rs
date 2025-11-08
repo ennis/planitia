@@ -92,18 +92,9 @@ pub fn compile_and_embed_shaders(
             let ep = module.entry_point_by_index(i).unwrap();
             let module_file_path = PathBuf::from(module.file_path()).canonicalize().unwrap();
             let entry_point_name = ep.function_reflection().name();
-            let code = match program.entry_point_code(i as i64, 0) {
-                Ok(code) => code,
-                Err(err) => {
-                    // output compilation errors
-                    for line in err.to_string().lines() {
-                        println!("cargo::error={line}");
-                    }
-                    panic!("failed to get entry point code for {}", module_file_path.display());
-                }
-            };
+            let code = program.entry_point_code(i as i64, 0).unwrap();
 
-            // write SPIR-V code of entry point to output directory
+            // DEBUG: write SPIR-V code of entry point to output directory
             //let module_file_stem = module_file_path
             //    .file_stem()
             //    .unwrap_or(module_file_path.file_name().unwrap())

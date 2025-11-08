@@ -1,5 +1,6 @@
-use crate::asset::{Provider, VfsPath};
+use crate::asset::{AssetCache, FileMetadata, Provider, VfsPath, VfsPathBuf};
 use log::warn;
+use std::collections::HashMap;
 use std::io;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -49,9 +50,13 @@ fn get_file_size(path: &Path) -> io::Result<u64> {
 }
 
 impl Provider for LocalProvider {
-    fn exists(&self, path: &VfsPath) -> bool {
+    fn exists(&self, path: &VfsPath) -> Result<FileMetadata, io::Error> {
         let p = self.full_path(path);
-        p.exists()
+        if p.exists() {
+            Ok(FileMetadata { local_path: Some(p) })
+        } else {
+            Err(io::Error::new(io::ErrorKind::NotFound, "File not found"))
+        }
     }
 
     fn load(&self, path: &VfsPath) -> Result<AVec<u8>, io::Error> {
@@ -61,12 +66,6 @@ impl Provider for LocalProvider {
         buffer.resize(file_size as usize, 0);
         let mut file = std::fs::File::open(&p)?;
         file.read_exact(&mut buffer)?;
-
-        // now, if we were to add a file watch here, how would that work?
-        // - call a global function to register a watch on this file path
-        // - event loop receives file change events
-        //     - who sends the event to the asset system?
-
         Ok(buffer)
     }
 

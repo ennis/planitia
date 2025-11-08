@@ -522,7 +522,7 @@ impl Device {
         );
 
         debug!(
-            "Selected physical device: {:?}",
+            "selected physical device: {:?}",
             CStr::from_ptr(phy.properties.device_name.as_ptr())
         );
 

@@ -113,7 +113,6 @@ fn create_graphics_pipeline_from_archive(
             blend_constants: [0.0, 0.0, 0.0, 0.0],
         },
     };
-    dbg!(&gpci);
     let pipeline = gpu::GraphicsPipeline::new(gpci)?;
     Ok(pipeline)
 }
@@ -143,7 +142,7 @@ pub fn get_graphics_pipeline(path: impl AsRef<VfsPath>) -> Handle<gpu::GraphicsP
         let archive = load_pipeline_archive(archive_file);
         dependencies.add(&archive);
         // TODO: handle errors
-        create_graphics_pipeline_from_archive(&archive.get(), name).unwrap()
+        create_graphics_pipeline_from_archive(archive.get().as_ref().unwrap(), name).unwrap()
     }
 
     let path = path.as_ref();

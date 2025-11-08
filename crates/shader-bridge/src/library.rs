@@ -2,7 +2,7 @@ use crate::error::Error;
 use crate::session::create_session;
 use crate::SHADER_PROFILE;
 use slang::Downcast;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Additional options for loading a `ShaderLibrary`.
 #[derive(Default)]
@@ -118,6 +118,17 @@ impl ShaderLibrary {
             entry_point_name: entry_point_name.to_string(),
             path: self.path.clone(),
         })
+    }
+
+    /// Returns the list of all source files that were included in this shader library.
+    pub fn source_paths(&self) -> Vec<PathBuf> {
+        // TODO: this currently only returns the main source file, need to find a way to get
+        //       referenced modules as well
+        if let Some(path) = &self.path {
+            vec![PathBuf::from(path)]
+        } else {
+            vec![]
+        }
     }
 }
 

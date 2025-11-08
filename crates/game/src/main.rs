@@ -102,7 +102,7 @@ impl Game {
         // Draw grid
         {
             let grid_shader = self.grid_shader.get();
-            encoder.bind_graphics_pipeline(&grid_shader);
+            encoder.bind_graphics_pipeline(grid_shader.as_ref().unwrap());
             encoder.push_constants(push_constants! {
                 scene_uniforms: DeviceAddress<SceneUniforms> = scene_uniforms,
                 grid_scale: f32 = 100.0
@@ -180,6 +180,11 @@ impl AppHandler for Game {
     fn vsync(&mut self) {}
 
     fn render(&mut self, target: RenderTargetImage) {
+        // TODO: that's not the right time to reload assets.
+        //       Ideally this should be done asynchronously, on another thread, so as not
+        //       to block the GUI and rendering.
+        AssetCache::instance().do_reload();
+
         let mut cmd = gpu::CommandStream::new();
 
         //-------------------------------

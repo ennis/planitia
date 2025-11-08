@@ -51,7 +51,7 @@ impl CompositorClock {
                 unsafe {
                     let wait_result = DCompositionWaitForCompositorClock(Some(&[abort_event]), INFINITE);
                     if wait_result == WAIT_OBJECT_0.0 {
-                        trace!("Compositor clock stopping");
+                        trace!("compositor clock stopping");
                         break;
                     } else if wait_result == WAIT_OBJECT_0.0 + 1 {
                         // Ignore delivery errors if the event loop is not running
@@ -66,7 +66,7 @@ impl CompositorClock {
                 }
             }
         });
-        info!("Compositor clock started");
+        trace!("compositor clock started");
     }
 
     /// Stops the compositor clock thread.

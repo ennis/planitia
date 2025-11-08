@@ -97,6 +97,28 @@ impl<T: Copy + 'static> ArchiveData for [T] {
     }
 }
 
+impl ArchiveData for str {
+    unsafe fn cast(buffer: *const u8, len: usize) -> Result<*const Self, ReadError> {
+        // check if there's enough data for the length prefix
+        if len < size_of::<u32>() {
+            return Err(ReadError::UnexpectedEof);
+        }
+        // read length prefix
+        let count = unsafe { *(buffer as *const u32) as usize };
+        let total_size = size_of::<u32>() + count;
+        // check if there's enough data for the whole prefix+string
+        if len < total_size {
+            return Err(ReadError::UnexpectedEof);
+        }
+        // SAFETY: size checked
+        let str_slice = unsafe { slice::from_raw_parts(buffer.add(size_of::<u32>()), count) };
+        match std::str::from_utf8(str_slice) {
+            Ok(s) => Ok(s),
+            Err(_) => Err(ReadError::InvalidData),
+        }
+    }
+}
+
 ///////////////////////////////////////////////////////////
 
 /// Represents an offset to some data of an unspecified type within an archive file.
@@ -187,7 +209,6 @@ impl ToOwned for ArchiveReader {
     fn to_owned(&self) -> Self::Owned {
         let mut storage = AlignedVec::with_capacity(0, self.0.len());
         storage.extend_from_slice(&self.0);
-        dbg!(self.0.len());
         ArchiveReaderOwned::new(storage.into_boxed_slice())
     }
 }
@@ -327,6 +348,12 @@ impl ArchiveWriter {
             ptr::copy_nonoverlapping(slice.as_ptr(), ptr, slice.len());
         }
         offset
+    }
+
+    pub fn write_str(&mut self, s: &str) -> Offset<str> {
+        let bytes = s.as_bytes();
+        let offset = self.write_slice(bytes);
+        Offset::new(offset.0)
     }
 
     pub fn write_iter<T: Copy + 'static, I>(&mut self, count: usize, values: I) -> Offset<[T]>
