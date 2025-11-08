@@ -1,6 +1,9 @@
 use crate::asset::{AssetCache, Dependencies, Handle, VfsPath};
-use gpu::{vk, PreRasterizationShaders, ShaderEntryPoint};
+use gpu::{PreRasterizationShaders, ShaderEntryPoint, vk};
+use log::{debug, warn};
 use pipeline_archive::{GraphicsPipelineShaders, PipelineArchive, ShaderData};
+use std::time::SystemTime;
+use std::{fs, io};
 use utils::archive::Offset;
 
 #[derive(thiserror::Error, Debug)]
@@ -19,10 +22,82 @@ pub struct ArchiveLoadOptions {
     pub hot_reload: bool,
 }
 
+fn unix_mtime(last_modified: SystemTime) -> u64 {
+    if last_modified > SystemTime::now() {
+        warn!("last modification time is in the future: {:?}", last_modified);
+    }
+
+    match last_modified.duration_since(SystemTime::UNIX_EPOCH) {
+        Ok(duration) => duration.as_secs(),
+        Err(_) => {
+            warn!("invalid modification time (before UNIX_EPOCH)");
+            0
+        }
+    }
+}
+
 /// Loads a pipeline archive file or retrieves it from the asset cache.
 pub fn load_pipeline_archive(path: impl AsRef<VfsPath>) -> Handle<PipelineArchive> {
     let cache = AssetCache::instance();
-    cache.load_and_insert(path.as_ref(), |data, _| PipelineArchive::from_bytes(data).unwrap())
+    cache.load_and_insert(path.as_ref(), |data, metadata, deps| {
+        // add dependencies on the manifest and source files
+        let a = PipelineArchive::from_bytes(data).unwrap();
+
+        // hot reloading support
+        #[cfg(feature = "hot_reload")]
+        {
+            fn should_rebuild_archive(archive: &PipelineArchive) -> bool {
+                fn inner(archive: &PipelineArchive) -> io::Result<bool> {
+                    let manifest_path = &archive[archive.manifest_file().path];
+                    let manifest_mtime = unix_mtime(fs::metadata(manifest_path)?.modified()?);
+
+                    if manifest_mtime > archive.manifest_file().mtime {
+                        debug!(
+                            "pipeline manifest modified: {} (last:{:?}, archive:{:?})",
+                            manifest_path,
+                            manifest_mtime,
+                            archive.manifest_file().mtime
+                        );
+                        return Ok(true);
+                    }
+
+                    for source in archive.source_files() {
+                        let path = &archive[source.path];
+                        let source_metadata = fs::metadata(path)?;
+                        if unix_mtime(source_metadata.modified()?) > source.mtime {
+                            debug!(
+                                "pipeline archive dependency modified: {} (last:{:?}, archive:{:?})",
+                                path,
+                                source_metadata.modified()?,
+                                source.mtime
+                            );
+                            return Ok(true);
+                        }
+                    }
+                    Ok(false)
+                }
+
+                inner(archive).unwrap_or(false)
+            }
+            if should_rebuild_archive(&a) {
+                pipeline_build_lib::build_pipeline(
+                    &a[a.manifest_file().path],
+                    &pipeline_build_lib::BuildOptions {
+                        quiet: false,
+                        emit_cargo_deps: false,
+                    },
+                )
+                .unwrap();
+            }
+
+            for source in a.source_files() {
+                deps.add_local_file(&a[source.path]);
+            }
+            deps.add_local_file(&a[a.manifest_file().path]);
+        }
+
+        a
+    })
 }
 
 fn get_shader_entry_point(

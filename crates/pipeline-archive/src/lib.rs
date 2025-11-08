@@ -1,13 +1,14 @@
+#![feature(default_field_values)]
 //! Pipeline archive files.
-
-// Pipeline files hold a collection of pipelines (which are variants of the same pipeline).
-// It contains fixed function state, SPIR-V shader modules, tags for pipeline variants,
-// specialization constants, useful reflection data (e.g. push constant sizes),
-// and possibly cached pipeline binary blobs.
-//
-// Information in a pipeline file is sufficient to create a complete pipeline object.
-//
-// Pipeline files can be directly mapped in memory and read without any copy or parsing step.
+//!
+//! Pipeline files hold a collection of pipelines (which are variants of the same pipeline).
+//! It contains fixed function state, SPIR-V shader modules, tags for pipeline variants,
+//! specialization constants, useful reflection data (e.g. push constant sizes),
+//! and possibly cached pipeline binary blobs.
+//!
+//! Information in a pipeline file is sufficient to create a complete pipeline object.
+//!
+//! Pipeline files can be directly mapped in memory and read without any copy or parsing step.
 
 use gpu::vk;
 use gpu::vk::PolygonMode;
@@ -15,6 +16,7 @@ use std::borrow::Cow;
 use std::io;
 use std::ops::Deref;
 use std::path::Path;
+use std::time::SystemTime;
 use utils::archive::{ArchiveReader, ArchiveReaderOwned, Offset};
 use utils::zstring::ZString;
 
@@ -31,9 +33,31 @@ pub struct PipelineArchiveData {
     pub magic: [u8; 4],
     /// 1
     pub version: u32,
-    pub manifest_path: Offset<str>,
+    pub manifest_file: FileDependency,
     pub entries: Offset<[PipelineEntryData]>,
 }
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct FileDependency {
+    pub path: Offset<str> = Offset::INVALID,
+    /// Modification time as UNIX timestamp (seconds since epoch).
+    pub mtime: u64 = 0,
+}
+
+/*
+impl FileDependency {
+    pub fn modification_time(&self) -> SystemTime {
+        SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(self.mtime)
+    }
+}*/
+
+impl Default for FileDependency {
+    fn default() -> Self {
+        Self { .. }
+    }
+}
+
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -42,7 +66,7 @@ pub struct PipelineEntryData {
     pub name: ZString<64>,
     pub kind: PipelineKind,
     /// List of source files.
-    pub sources: Offset<[Offset<str>]>,
+    pub sources: Offset<[FileDependency]>,
 }
 
 #[repr(C)]
@@ -153,12 +177,38 @@ pub struct PipelineArchive(Cow<'static, ArchiveReader>);
 impl PipelineArchive {
     pub fn load(file_path: impl AsRef<Path>) -> io::Result<Self> {
         let archive = ArchiveReaderOwned::load(file_path)?;
-        Ok(Self(Cow::Owned(archive)))
+        let this = Self(Cow::Owned(archive));
+        this.check_header()?;
+        Ok(this)
     }
 
     pub fn from_bytes(data: &[u8]) -> io::Result<Self> {
         let archive = ArchiveReaderOwned::from_bytes(data);
-        Ok(Self(Cow::Owned(archive)))
+        let this = Self(Cow::Owned(archive));
+        this.check_header()?;
+        Ok(this)
+    }
+
+    fn check_header(&self) -> io::Result<()> {
+        let header: &PipelineArchiveData = self.0.header().unwrap();
+        if header.magic != PIPELINE_ARCHIVE_MAGIC {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Invalid pipeline archive magic",
+            ));
+        }
+        if header.version != 1 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Unsupported pipeline archive version",
+            ));
+        }
+        Ok(())
+    }
+
+    fn data(&self) -> &PipelineArchiveData {
+        let header: &PipelineArchiveData = self.0.header().unwrap();
+        header
     }
 
     pub fn from_bytes_static(data: &'static [u8]) -> io::Result<Self> {
@@ -167,12 +217,12 @@ impl PipelineArchive {
     }
 
     pub fn find_graphics_pipeline(&self, name: &str) -> Option<&GraphicsPipelineData> {
-        let archive_data: &PipelineArchiveData = self.0.header().unwrap();
-        let entries = &self.0[archive_data.entries];
+        let data = self.data();
+        let entries = &self.0[data.entries];
         for entry in entries {
             if entry.name.as_str() == name {
                 match &entry.kind {
-                    PipelineKind::Graphics(data) => return Some(data),
+                    PipelineKind::Graphics(p) => return Some(p),
                     _ => continue,
                 }
             }
@@ -181,17 +231,33 @@ impl PipelineArchive {
     }
 
     pub fn find_compute_pipeline(&self, name: &str) -> Option<&ComputePipelineData> {
-        let archive_data: &PipelineArchiveData = self.0.header().unwrap();
-        let entries = &self.0[archive_data.entries];
+        let data = self.data();
+        let entries = &self.0[data.entries];
         for entry in entries {
             if entry.name.as_str() == name {
                 match &entry.kind {
-                    PipelineKind::Compute(data) => return Some(data),
+                    PipelineKind::Compute(p) => return Some(p),
                     _ => continue,
                 }
             }
         }
         None
+    }
+
+    /// Returns an iterator over all source files referenced by the pipelines in this archive.
+    pub fn source_files<'a>(&'a self) -> impl Iterator<Item = &'a FileDependency> + 'a {
+        let data = self.data();
+        let entries = &self.0[data.entries];
+        entries.iter().flat_map(move |entry| {
+            let sources = &self.0[entry.sources];
+            sources.iter()
+        })
+    }
+
+    /// Returns the manifest path used to generate this pipeline archive.
+    pub fn manifest_file(&self) -> &FileDependency {
+        let data = self.data();
+        &data.manifest_file
     }
 }
 
@@ -220,7 +286,10 @@ mod tests {
         let header = writer.write(PipelineArchiveData {
             magic: *b"PARC",
             version: 1,
-            manifest_path: Offset::INVALID,
+            manifest_file: FileDependency {
+                path: Offset::INVALID,
+                mtime: 0,
+            },
             entries: Offset::INVALID,
         });
         let color_targets = {

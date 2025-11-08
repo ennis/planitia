@@ -53,7 +53,8 @@ impl Provider for LocalProvider {
     fn exists(&self, path: &VfsPath) -> Result<FileMetadata, io::Error> {
         let p = self.full_path(path);
         if p.exists() {
-            Ok(FileMetadata { local_path: Some(p) })
+            let metadata = std::fs::metadata(&p)?;
+            Ok(FileMetadata { local_path: Some(p), modified: metadata.modified()? })
         } else {
             Err(io::Error::new(io::ErrorKind::NotFound, "File not found"))
         }

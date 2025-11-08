@@ -5,17 +5,38 @@ use color_print::{ceprintln, cprintln};
 use pipeline_archive::archive::{ArchiveWriter, Offset};
 use pipeline_archive::gpu::ShaderStage;
 use pipeline_archive::zstring::{ZString32, ZString64};
-use pipeline_archive::{PIPELINE_ARCHIVE_MAGIC, PipelineEntryData, ShaderData};
+use pipeline_archive::{PIPELINE_ARCHIVE_MAGIC, PipelineEntryData, ShaderData, FileDependency};
 use shader_bridge::ShaderLibrary;
 use std::path::{Path, PathBuf};
 use std::{env, fmt};
+use std::time::SystemTime;
+use log::warn;
 
 struct CompilationJob<'a> {
     input: &'a Input,
     configuration: Configuration,
 }
 
-/*
+
+fn make_file_dependency(path: &Path, archive: &mut ArchiveWriter) -> anyhow::Result<FileDependency> {
+    let canonical_path = path.canonicalize()?;
+    let modified_time = std::fs::metadata(&canonical_path)?.modified()?;
+    let mtime = match modified_time
+        .duration_since(SystemTime::UNIX_EPOCH) {
+        Ok(duration) => duration.as_secs(),
+        Err(_) => {
+            warn!("invalid mtime for {} (before UNIX_EPOCH)", canonical_path.display());
+            0
+        }
+    };
+    let path_offset = archive.write_str(canonical_path.to_string_lossy().as_ref());
+    Ok(FileDependency {
+        path: path_offset,
+        mtime,
+    })
+}
+
+       /*
 fn add_variant_permutations<'a>(variants: &'a [Variant], out_permutations: &mut Vec<Vec<&'a Variant>>) {
     let mut sets = BTreeMap::new();
     for variant in variants {
@@ -119,15 +140,11 @@ impl BuildManifest {
         let header = archive.write(pipeline_archive::PipelineArchiveData {
             magic: PIPELINE_ARCHIVE_MAGIC,
             version: 1,
-            manifest_path: Offset::INVALID,
+            manifest_file: FileDependency::default(),
             entries: Offset::INVALID,
         });
 
-        {
-            let manifest_path =
-                archive.write_str(self.manifest_path.canonicalize().unwrap().to_string_lossy().as_ref());
-            archive[header].manifest_path = manifest_path;
-        }
+        archive[header].manifest_file = make_file_dependency(&self.manifest_path, archive)?;
 
         if options.emit_cargo_deps {
             println!("cargo:rerun-if-changed={}", self.manifest_path.display());
@@ -300,8 +317,8 @@ impl BuildManifest {
         }
 
         // TODO find a way to get paths to module dependencies as well
-        let source_offset = archive.write_str(resolved_shader_path.canonicalize().unwrap().to_string_lossy().as_ref());
-        let sources = archive.write_slice(&[source_offset]);
+        let source_file = make_file_dependency(&resolved_shader_path, archive)?;
+        let sources = archive.write_slice(&[source_file]);
 
         Ok(PipelineEntryData {
             name: ZString64::new(&input.name),

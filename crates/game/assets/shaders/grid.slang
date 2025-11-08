@@ -58,8 +58,8 @@ float grid(float2 uv, float line_width)
     let dpdx = ddx(uv);
     let dpdy = ddy(uv);
     let fw = abs(dpdx) + abs(dpdy);
-    let effective_line_width = fw;
-    //let effective_line_width = min(0.5,max(line_width, fw));
+    //let effective_line_width = fw;
+    let effective_line_width = min(0.5,max(line_width, fw));
     let line_aa = 1.5 * fw;
     let grid_uv = abs(2 * fract(uv) - 1.0);
     let grid2 = saturate(line_width / effective_line_width) * smoothstep(effective_line_width + line_aa, effective_line_width - line_aa, grid_uv);
@@ -73,5 +73,5 @@ float4 grid_fragment_main(VSOut i, uint2 frag_pos: SV_Position, uniform PushCons
 {
     float2 frag_uv = frag_pos.xy / u.scene.screen_size;
     float grid = grid(i.uv * 10.0, 0.05);
-    return float4(linear_to_srgb_normalized(grid.xxx), 1.0);
+    return float4(grid.xxx, 1.0);
 }

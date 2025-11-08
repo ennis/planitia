@@ -44,9 +44,10 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak};
-use std::{io, mem};
 use std::sync::atomic::Ordering::Relaxed;
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak};
+use std::time::SystemTime;
+use std::{io, mem};
 use utils::aligned_vec::AVec;
 
 /*
@@ -59,6 +60,8 @@ path resolution:
 pub struct FileMetadata {
     /// If this is a file on the local file system, the absolute path to the file.
     pub local_path: Option<PathBuf>,
+    /// Last modification time.
+    pub modified: SystemTime,
 }
 
 /// File system providers provide file data from VFS paths.
@@ -239,6 +242,10 @@ enum LoaderKind {
     WithDependencies, // (fn(&VfsPath, &mut Dependencies) -> T),
 }
 
+type LoadFromSliceFn<T> = fn(&[u8], &FileMetadata, &mut Dependencies) -> T;
+type LoadFromStaticSliceFn<T> = fn(&'static [u8], &FileMetadata, &mut Dependencies) -> T;
+type LoadWithDependenciesFn<T> = fn(&VfsPath, &mut Dependencies) -> T;
+
 struct Loader {
     type_id: TypeId,
     kind: LoaderKind,
@@ -255,7 +262,7 @@ fn reload_thunk<T: Asset>(entry: &Entry) {
 }
 
 impl Loader {
-    fn from_slice<T: Asset>(f: fn(&[u8], &mut Dependencies) -> T) -> Self {
+    fn from_slice<T: Asset>(f: LoadFromSliceFn<T>) -> Self {
         Self {
             type_id: TypeId::of::<T>(),
             kind: LoaderKind::FromSlice,
@@ -264,7 +271,7 @@ impl Loader {
         }
     }
 
-    fn from_static_slice<T: Asset>(f: fn(&'static [u8], &mut Dependencies) -> T) -> Self {
+    fn from_static_slice<T: Asset>(f: LoadFromStaticSliceFn<T>) -> Self {
         Self {
             type_id: TypeId::of::<T>(),
             kind: LoaderKind::FromStaticSlice,
@@ -273,7 +280,7 @@ impl Loader {
         }
     }
 
-    fn with_dependencies<T: Asset>(f: fn(&VfsPath, &mut Dependencies) -> T) -> Self {
+    fn with_dependencies<T: Asset>(f: LoadWithDependenciesFn<T>) -> Self {
         Self {
             type_id: TypeId::of::<T>(),
             kind: LoaderKind::WithDependencies,
@@ -285,30 +292,30 @@ impl Loader {
     fn load<T: Asset>(&self, path: &VfsPath, providers: &Providers, deps: &mut Dependencies) -> T {
         let asset = match self.kind {
             LoaderKind::FromSlice => {
-                let f: fn(&[u8], &mut Dependencies) -> T = unsafe { std::mem::transmute(self.func) };
+                let f: LoadFromSliceFn<T> = unsafe { std::mem::transmute(self.func) };
                 // TODO error handling
                 let (provider, metadata) = providers.find_provider(path).unwrap();
                 let bytes = provider.load(path).unwrap();
                 // track local file dependencies for hot reloading
-                if let Some(local_path) = metadata.local_path {
+                if let Some(ref local_path) = metadata.local_path {
                     deps.add_local_file(local_path);
                 }
-                f(&bytes, deps)
+                f(&bytes, &metadata, deps)
             }
             LoaderKind::FromStaticSlice => {
                 // Note that we shouldn't reload assets loaded from static slices, since the data
                 // isn't supposed to change
-                let f: fn(&'static [u8], &mut Dependencies) -> T = unsafe { std::mem::transmute(self.func) };
+                let f: LoadFromStaticSliceFn<T> = unsafe { std::mem::transmute(self.func) };
                 let (provider, metadata) = providers.find_provider(path).unwrap();
                 let bytes = provider.load_static(path).unwrap();
                 // track local file dependencies for hot reloading
-                if let Some(local_path) = metadata.local_path {
+                if let Some(ref local_path) = metadata.local_path {
                     deps.add_local_file(local_path);
                 }
-                f(bytes, deps)
+                f(bytes, &metadata, deps)
             }
             LoaderKind::WithDependencies => {
-                let f: fn(&VfsPath, &mut Dependencies) -> T = unsafe { std::mem::transmute(self.func) };
+                let f: LoadWithDependenciesFn<T> = unsafe { std::mem::transmute(self.func) };
                 f(path, deps)
             }
         };
@@ -318,7 +325,7 @@ impl Loader {
 
 type AssetStorage<T> = Mutex<Option<T>>;
 
-struct Entry<T:?Sized = dyn Any + Send + Sync> {
+struct Entry<T: ?Sized = dyn Any + Send + Sync> {
     path: VfsPathBuf,
     dependencies: HashSet<CacheKey>,
     local_files: Debouncer<RecommendedWatcher>,
@@ -332,11 +339,15 @@ impl<T: Asset> Entry<AssetStorage<T>> {
         let mut deps = Dependencies::new(&self.path);
         let providers = Providers::get().read().unwrap();
         let asset = self.loader.load(&self.path, &providers, &mut deps);
+        // Mark as clean before reloading, because some loaders may immediately modify/rebuild
+        // the underlying asset file, triggering another reload. This is the case, for example,
+        // with pipeline archives in hot-reload mode, which are automatically rebuilt if their
+        // source files have a later modification time.
+        self.dirty.store(false, Relaxed);
         // swap the asset
         // FIXME: we only update the asset;
         //        we assume that the dependencies don't change but that may not be true
         *self.asset.lock().unwrap() = Some(asset);
-        self.dirty.store(false, Relaxed);
     }
 }
 
@@ -501,7 +512,7 @@ impl AssetCache {
                     local_files: deps.local_files,
                     dirty: Default::default(),
                     loader,
-                    asset:  Mutex::new(Some(asset)),
+                    asset: Mutex::new(Some(asset)),
                 }),
                 deps.dependencies,
             )
@@ -525,28 +536,19 @@ impl AssetCache {
         Handle::new(entry)
     }
 
-    pub fn load_and_insert<T: Asset>(&self, path: &VfsPath, loader: fn(&[u8], &mut Dependencies) -> T) -> Handle<T> {
+    pub fn load_and_insert<T: Asset>(&self, path: &VfsPath, loader: LoadFromSliceFn<T>) -> Handle<T> {
         unsafe { self.insert_inner(path, Loader::from_slice(loader)) }
     }
 
-    pub fn load_and_insert_static<T: Asset>(
-        &self,
-        path: &VfsPath,
-        loader: fn(&'static [u8], &mut Dependencies) -> T,
-    ) -> Handle<T> {
+    pub fn load_and_insert_static<T: Asset>(&self, path: &VfsPath, loader: LoadFromStaticSliceFn<T>) -> Handle<T> {
         unsafe { self.insert_inner(path, Loader::from_static_slice(loader)) }
     }
 
-    pub fn insert_with_dependencies<T: Asset>(
-        &self,
-        path: &VfsPath,
-        loader: fn(&VfsPath, &mut Dependencies) -> T,
-    ) -> Handle<T> {
+    pub fn insert_with_dependencies<T: Asset>(&self, path: &VfsPath, loader: LoadWithDependenciesFn<T>) -> Handle<T> {
         unsafe { self.insert_inner(path, Loader::with_dependencies(loader)) }
     }
 
     pub fn do_reload(&self) {
-
         let dirty_paths = mem::take(&mut *self.dirty_paths.lock().unwrap());
 
         let mut keys_to_reload: HashSet<CacheKey> = {
@@ -563,7 +565,6 @@ impl AssetCache {
                 .collect()
         };
 
-
         loop {
             for k in mem::take(&mut keys_to_reload) {
                 let inner = self.inner.read().unwrap();
@@ -573,7 +574,9 @@ impl AssetCache {
                 // skip if the entry is not ready to be reloaded: i.e. if any of its dependencies are dirty
                 let mut can_reload = true;
                 for dep_key in entry.dependencies.iter() {
-                    let Some(dep_entry) = inner.get_entry(dep_key) else { continue };
+                    let Some(dep_entry) = inner.get_entry(dep_key) else {
+                        continue;
+                    };
                     if dep_entry.dirty.load(Relaxed) {
                         can_reload = false;
                         break;
