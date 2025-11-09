@@ -96,8 +96,8 @@ impl CameraControl {
         let dir = orig.center - orig.eye;
         let right = dir.normalize().cross(orig.up);
         let dist = dir.length();
-        self.frame.eye = orig.eye + dist * (-delta.x * right + delta.y * orig.up);
-        self.frame.center = orig.center + dist * (-delta.x * right + delta.y * orig.up);
+        self.frame.eye = orig.eye + dist * (-delta.x * right - delta.y * orig.up);
+        self.frame.center = orig.center + dist * (-delta.x * right - delta.y * orig.up);
         self.last_cam.set(None);
     }
 
@@ -109,7 +109,7 @@ impl CameraControl {
         let delta = (to - from) / self.screen_size;
         let eye_dir = orig.eye - orig.center;
         let right = eye_dir.normalize().cross(orig.up);
-        let r = DQuat::from_rotation_y(-delta.x * TAU) * DQuat::from_axis_angle(right, delta.y * TAU);
+        let r = DQuat::from_rotation_y(-delta.x * TAU) * DQuat::from_axis_angle(right, -delta.y * TAU);
         let new_eye = orig.center + r * eye_dir;
         let new_up = r * orig.up;
         self.frame.eye = new_eye;

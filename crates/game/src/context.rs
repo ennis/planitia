@@ -91,7 +91,6 @@ impl Context {
     }
 }
 
-
 //------------------------------------------------------------------------------------------------
 
 #[allow(unused_variables)]
@@ -137,7 +136,13 @@ impl<H: AppHandler + Default + 'static> App<H> {
     }
 
     pub fn run(&'static self, init_options: &InitOptions) {
-        pretty_env_logger::init();
+        env_logger::builder()
+            .parse_default_env()
+            .format_target(false)
+            .format_timestamp(None)
+            .init();
+
+        //gpu::initialize_debug_messenger();
         tracy_client::set_thread_name!("main thread");
         info!("running with Tracy profiler enabled");
 

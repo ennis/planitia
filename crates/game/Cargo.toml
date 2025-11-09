@@ -13,7 +13,7 @@ threadbound = "0.1.8"
 event-listener = "5.4.0"
 mlua = { version = "0.11.1", features = ["luau", "async"] }
 log = "0.4.27"
-pretty_env_logger = "0.5.0"
+env_logger = "0.11.8"
 tracy-client = "0.18.2"
 bumpalo = "3.19.0"
 thiserror = "2.0.16"

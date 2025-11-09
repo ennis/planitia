@@ -48,6 +48,13 @@ pub mod prelude {
 /// Standard subgroup size.
 pub const SUBGROUP_SIZE: u32 = 32;
 
+/// Waits for the GPU to complete all submitted work.
+pub fn wait_idle() {
+    unsafe {
+        Device::global().raw.device_wait_idle().unwrap()
+    }
+}
+
 /// Device address of a GPU buffer.
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, PartialEq, Eq, Hash)]
 #[repr(transparent)]

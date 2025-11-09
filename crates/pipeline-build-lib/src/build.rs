@@ -216,7 +216,7 @@ impl BuildManifest {
             Err(err) => {
                 // convert to string error as the Error type returned by ShaderLibrary is not Send+Sync
                 let cause = anyhow!("{err}");
-                return Err(cause.context(format!("Error loading {}", input.file_path)));
+                return Err(cause.context(format!("when loading {}", input.file_path)));
             }
         };
 

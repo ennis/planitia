@@ -67,11 +67,12 @@ impl Drop for DxgiVulkanInteropSwapChain {
         // Before releasing the buffers, we must make sure that the swap chain is not in use
         // We don't bother with setting up fences around the swap chain, we just wait for all commands to complete.
         // We could use fences to avoid unnecessary waiting, but not sure that it's worth the complication.
-        gfx.wait_for_gpu();
+        gfx.wait_gpu_idle();
 
         unsafe {
             // Release the swap chain resources
             // FIXME: there should be a RAII wrapper for semaphores probably
+            gpu::Device::global().raw().device_wait_idle().unwrap();
             gpu::Device::global()
                 .raw()
                 .destroy_semaphore(self.fence_semaphore, None);

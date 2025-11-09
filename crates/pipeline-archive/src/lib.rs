@@ -11,7 +11,7 @@
 //! Pipeline files can be directly mapped in memory and read without any copy or parsing step.
 
 use gpu::vk;
-use gpu::vk::PolygonMode;
+use gpu::vk::{CullModeFlags, PolygonMode};
 use std::borrow::Cow;
 use std::io;
 use std::ops::Deref;
@@ -140,6 +140,7 @@ pub struct ComputePipelineData {
 #[derive(Clone, Copy, Default)]
 pub struct RasterizerStateData {
     pub polygon_mode: PolygonMode,
+    pub cull_mode: CullModeFlags,
 }
 
 #[repr(C)]
@@ -315,6 +316,7 @@ mod tests {
                     // just some example state
                     rasterization: RasterizerStateData {
                         polygon_mode: PolygonMode::FILL,
+                        cull_mode: CullModeFlags::BACK,
                     },
                     depth_stencil: DepthStencilStateData {
                         format: vk::Format::D32_SFLOAT,

@@ -159,8 +159,8 @@ impl GraphicsContext {
     }
 
     /// Waits for submitted GPU commands to complete.
-    pub(super) fn wait_for_gpu(&self) {
-        let _span = tracy_client::span!("wait_for_gpu");
+    pub(super) fn wait_gpu_idle(&self) {
+        let _span = tracy_client::span!("wait_gpu_idle");
         unsafe {
             let mut val = self.fence.value.get();
             val += 1;

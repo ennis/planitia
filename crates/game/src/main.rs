@@ -51,6 +51,8 @@ struct SceneUniforms {
 }
 
 struct Game {
+    width: u32,
+    height: u32,
     physics_timer: EventToken,
     render_target_time: EventToken,
     demo: WidgetGallery,
@@ -63,27 +65,30 @@ struct Game {
     //pipeline_cache: PipelineCache,
 }
 
+fn create_depth_buffer(width: u32, height: u32) -> Image {
+    Image::new(gpu::ImageCreateInfo {
+        width,
+        height,
+        format: gpu::Format::D32_SFLOAT_S8_UINT,
+        usage: gpu::ImageUsage::DEPTH_STENCIL_ATTACHMENT | gpu::ImageUsage::TRANSFER_DST,
+        ..
+    })
+}
+
 impl Default for Game {
     fn default() -> Self {
         let painter = Painter::new(gpu::Format::R8G8B8A8_UNORM, None);
-
-        let depth_buffer = Image::new(gpu::ImageCreateInfo {
-            width: WIDTH,
-            height: HEIGHT,
-            format: gpu::Format::D32_SFLOAT_S8_UINT,
-            usage: gpu::ImageUsage::DEPTH_STENCIL_ATTACHMENT | gpu::ImageUsage::TRANSFER_DST,
-            ..
-        });
-
         Self {
             physics_timer: EventToken(1),
             render_target_time: EventToken(2),
             demo: WidgetGallery::default(),
             color: Default::default(),
             painter,
-            depth_stencil_buffer: depth_buffer,
+            depth_stencil_buffer: create_depth_buffer(WIDTH, HEIGHT),
             camera_control: CameraControl::default(),
             grid_shader: get_graphics_pipeline("/shaders/pipelines.parc#grid"),
+            width: WIDTH,
+            height: HEIGHT,
             //pipeline_editor: Default::default(),
             //grid_pipeline: ,
         }
@@ -91,7 +96,6 @@ impl Default for Game {
 }
 
 impl Game {
-
     fn render_scene(
         &mut self,
         encoder: &mut gpu::RenderEncoder,
@@ -101,13 +105,15 @@ impl Game {
         //----------------------------------
         // Draw grid
         {
-            let grid_shader = self.grid_shader.get();
-            encoder.bind_graphics_pipeline(grid_shader.as_ref().unwrap());
-            encoder.push_constants(push_constants! {
-                scene_uniforms: DeviceAddress<SceneUniforms> = scene_uniforms,
-                grid_scale: f32 = 100.0
-            });
-            encoder.draw(TriangleList, 0..6, 0..1);
+            let grid_shader = self.grid_shader.read();
+            if let Ok(grid_shader) = grid_shader.try_get() {
+                encoder.bind_graphics_pipeline(grid_shader);
+                encoder.push_constants(push_constants! {
+                    scene_uniforms: DeviceAddress<SceneUniforms> = scene_uniforms,
+                    grid_scale: f32 = 100.0
+                });
+                encoder.draw(TriangleList, 0..6, 0..1);
+            }
         }
     }
 
@@ -134,9 +140,9 @@ And what is else not to be overcome?",
         );
         text.layout(1000.0);
 
-        //for glyph_run in text.glyph_runs() {
-        //    scene.draw_glyph_run(vec2(0.0, 0.0), &glyph_run, &DrawGlyphRunOptions::default());
-        //}
+        for glyph_run in text.glyph_runs() {
+            scene.draw_glyph_run(vec2(0.0, 0.0), &glyph_run, &DrawGlyphRunOptions::default());
+        }
 
         scene.finish(
             cmd,
@@ -151,8 +157,6 @@ And what is else not to be overcome?",
 
 impl AppHandler for Game {
     fn input(&mut self, input_event: InputEvent) {
-
-
         // --- SHORTCUTS ---
 
         // App exit
@@ -174,7 +178,10 @@ impl AppHandler for Game {
     fn event(&mut self, event: UserEvent) {}
 
     fn resized(&mut self, width: u32, height: u32) {
+        self.width = width;
+        self.height = height;
         self.camera_control.resize(width, height);
+        self.depth_stencil_buffer = create_depth_buffer(width, height);
     }
 
     fn vsync(&mut self) {}
@@ -231,7 +238,6 @@ impl AppHandler for Game {
     fn imgui(&mut self, ctx: &egui::Context) {
         egui::Window::new("imgui").show(ctx, |ui| {
             ui.color_edit_button_srgba(&mut self.color);
-            //dbg!(self.color);
             self.demo.ui(ui);
         });
     }

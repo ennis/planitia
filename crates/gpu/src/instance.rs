@@ -32,7 +32,7 @@ pub fn get_instance_extensions() -> &'static [&'static str] {
     INSTANCE_EXTENSIONS
 }
 
-pub fn intialize_debug_messenger() -> &'static vk::DebugUtilsMessengerEXT {
+pub fn initialize_debug_messenger() -> &'static vk::DebugUtilsMessengerEXT {
     &DEBUG_MESSENGER
 }
 

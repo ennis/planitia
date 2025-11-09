@@ -42,6 +42,6 @@ struct FragmentOutput
 [shader("fragment")]
 FragmentOutput eguiFragMain(VertexOutput v) {
     FragmentOutput o;
-    o.color = srgba_to_linear(v.color) * tex.Sample(sampler, v.uv);   // texture(u_tex, v.uv);
+    o.color = v.color * tex.Sample(sampler, v.uv);
     return o;
 }

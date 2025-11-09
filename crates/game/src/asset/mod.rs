@@ -38,6 +38,7 @@ use log::{debug, info};
 use notify_debouncer_mini::notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use notify_debouncer_mini::{Debouncer, new_debouncer};
 use slotmap::SlotMap;
+use std::cell::UnsafeCell;
 use std::cmp::PartialEq;
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
@@ -55,6 +56,19 @@ path resolution:
 - if there's an explicit source, query the registered provider for that source
 - otherwise, use the default resolver:
 */
+
+pub type LoadResult<T> = Result<T, anyhow::Error>;
+
+#[derive(thiserror::Error, Debug)]
+pub enum AssetLoadError {
+    #[error("no provider found for path")]
+    NoProviderFound,
+    #[error("I/O error while loading asset: {0}")]
+    IoError(#[source] io::Error),
+    /// Error from loader.
+    #[error("asset not loaded")]
+    NotLoaded,
+}
 
 /// Metadata about a file in the VFS.
 pub struct FileMetadata {
@@ -178,6 +192,30 @@ impl Providers {
 pub trait Asset: 'static + Any + Send + Sync {}
 impl<T: 'static + Send + Sync> Asset for T {}
 
+pub struct AssetReadGuard<'a, T: Asset> {
+    guard: RwLockReadGuard<'a, LoadResult<T>>,
+}
+
+impl<'a, T: Asset> Deref for AssetReadGuard<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        match &*self.guard {
+            Ok(asset) => asset,
+            Err(err) => panic!("attempted to read an asset that failed to load: {}", err),
+        }
+    }
+}
+
+impl<'a, T: Asset> AssetReadGuard<'a, T> {
+    pub fn try_get(&self) -> Result<&T, AssetLoadError> {
+        match self.guard.as_ref() {
+            Ok(asset) => Ok(asset),
+            Err(_err) => Err(AssetLoadError::NotLoaded),
+        }
+    }
+}
+
 /// A reference to a loaded asset.
 pub struct Handle<T: Asset>(Arc<Entry<AssetStorage<T>>>);
 
@@ -186,8 +224,10 @@ impl<T: Asset> Handle<T> {
         Self(entry)
     }
 
-    pub fn get(&self) -> MutexGuard<'_, Option<T>> {
-        self.0.asset.lock().unwrap()
+    pub fn read(&self) -> AssetReadGuard<'_, T> {
+        AssetReadGuard {
+            guard: self.0.asset.read().unwrap(),
+        }
     }
 }
 
@@ -242,9 +282,9 @@ enum LoaderKind {
     WithDependencies, // (fn(&VfsPath, &mut Dependencies) -> T),
 }
 
-type LoadFromSliceFn<T> = fn(&[u8], &FileMetadata, &mut Dependencies) -> T;
-type LoadFromStaticSliceFn<T> = fn(&'static [u8], &FileMetadata, &mut Dependencies) -> T;
-type LoadWithDependenciesFn<T> = fn(&VfsPath, &mut Dependencies) -> T;
+type LoadFromSliceFn<T> = fn(&[u8], &FileMetadata, &mut Dependencies) -> LoadResult<T>;
+type LoadFromStaticSliceFn<T> = fn(&'static [u8], &FileMetadata, &mut Dependencies) -> LoadResult<T>;
+type LoadWithDependenciesFn<T> = fn(&VfsPath, &mut Dependencies) -> LoadResult<T>;
 
 struct Loader {
     type_id: TypeId,
@@ -289,13 +329,13 @@ impl Loader {
         }
     }
 
-    fn load<T: Asset>(&self, path: &VfsPath, providers: &Providers, deps: &mut Dependencies) -> T {
-        let asset = match self.kind {
+    fn load<T: Asset>(&self, path: &VfsPath, providers: &Providers, deps: &mut Dependencies) -> LoadResult<T> {
+        let result = match self.kind {
             LoaderKind::FromSlice => {
                 let f: LoadFromSliceFn<T> = unsafe { std::mem::transmute(self.func) };
                 // TODO error handling
-                let (provider, metadata) = providers.find_provider(path).unwrap();
-                let bytes = provider.load(path).unwrap();
+                let (provider, metadata) = providers.find_provider(path)?;
+                let bytes = provider.load(path)?;
                 // track local file dependencies for hot reloading
                 if let Some(ref local_path) = metadata.local_path {
                     deps.add_local_file(local_path);
@@ -306,8 +346,8 @@ impl Loader {
                 // Note that we shouldn't reload assets loaded from static slices, since the data
                 // isn't supposed to change
                 let f: LoadFromStaticSliceFn<T> = unsafe { std::mem::transmute(self.func) };
-                let (provider, metadata) = providers.find_provider(path).unwrap();
-                let bytes = provider.load_static(path).unwrap();
+                let (provider, metadata) = providers.find_provider(path)?;
+                let bytes = provider.load_static(path)?;
                 // track local file dependencies for hot reloading
                 if let Some(ref local_path) = metadata.local_path {
                     deps.add_local_file(local_path);
@@ -319,18 +359,25 @@ impl Loader {
                 f(path, deps)
             }
         };
-        asset
+
+        match result {
+            Err(err) => {
+                info!("failed to load asset `{}`: {}", path.as_str(), err);
+                Err(err)
+            }
+            Ok(asset) => Ok(asset),
+        }
     }
 }
 
-type AssetStorage<T> = Mutex<Option<T>>;
+type AssetStorage<T> = RwLock<LoadResult<T>>;
 
 struct Entry<T: ?Sized = dyn Any + Send + Sync> {
     path: VfsPathBuf,
-    dependencies: HashSet<CacheKey>,
-    local_files: Debouncer<RecommendedWatcher>,
     dirty: AtomicBool,
     loader: Loader,
+    #[cfg(feature = "hot_reload")]
+    dependencies: Dependencies,
     asset: T,
 }
 
@@ -338,16 +385,18 @@ impl<T: Asset> Entry<AssetStorage<T>> {
     fn reload(&self) {
         let mut deps = Dependencies::new(&self.path);
         let providers = Providers::get().read().unwrap();
-        let asset = self.loader.load(&self.path, &providers, &mut deps);
+        let result = self.loader.load(&self.path, &providers, &mut deps);
         // Mark as clean before reloading, because some loaders may immediately modify/rebuild
         // the underlying asset file, triggering another reload. This is the case, for example,
         // with pipeline archives in hot-reload mode, which are automatically rebuilt if their
         // source files have a later modification time.
         self.dirty.store(false, Relaxed);
+
         // swap the asset
         // FIXME: we only update the asset;
         //        we assume that the dependencies don't change but that may not be true
-        *self.asset.lock().unwrap() = Some(asset);
+        let mut asset = self.asset.write().unwrap();
+        *asset = result;
     }
 }
 
@@ -411,31 +460,45 @@ struct CacheKey {
 }
 
 /// Asset cache proxy that tracks dependencies during asset loading.
+///
+/// This is a no-op if hot reloading is disabled.
 pub struct Dependencies {
+    #[cfg(feature = "hot_reload")]
     dependencies: HashSet<CacheKey>,
+    #[cfg(feature = "hot_reload")]
     local_files: Debouncer<RecommendedWatcher>,
 }
 
 impl Dependencies {
     fn new(path: &VfsPath) -> Self {
-        Self {
-            dependencies: HashSet::new(),
-            local_files: new_debouncer(std::time::Duration::from_millis(500), {
-                let path = path.to_path_buf();
-                move |event| {
-                    AssetCache::instance().asset_changed(&path);
-                }
-            })
-            .unwrap(),
+        #[cfg(feature = "hot_reload")]
+        {
+            Self {
+                dependencies: HashSet::new(),
+                local_files: new_debouncer(std::time::Duration::from_millis(500), {
+                    let path = path.to_path_buf();
+                    move |event| {
+                        AssetCache::instance().asset_changed(&path);
+                    }
+                })
+                .unwrap(),
+            }
+        }
+        #[cfg(not(feature = "hot_reload"))]
+        {
+            Self {}
         }
     }
 
     fn add_path<T: Asset>(&mut self, path: &VfsPath) {
-        let key = CacheKey {
-            path: path.to_path_buf(),
-            type_id: TypeId::of::<T>(),
-        };
-        self.dependencies.insert(key);
+        #[cfg(feature = "hot_reload")]
+        {
+            let key = CacheKey {
+                path: path.to_path_buf(),
+                type_id: TypeId::of::<T>(),
+            };
+            self.dependencies.insert(key);
+        }
     }
 
     pub fn add<T: Asset>(&mut self, handle: &Handle<T>) {
@@ -446,12 +509,15 @@ impl Dependencies {
     ///
     /// If hot reloading is enabled, changes to the file will trigger asset reloads.
     pub fn add_local_file<P: AsRef<Path>>(&mut self, path: P) {
-        let path = path.as_ref();
-        debug!("watching for changes: `{}`", path.display());
-        self.local_files
-            .watcher()
-            .watch(path, RecursiveMode::NonRecursive)
-            .unwrap()
+        #[cfg(feature = "hot_reload")]
+        {
+            let path = path.as_ref();
+            debug!("watching for changes: `{}`", path.display());
+            self.local_files
+                .watcher()
+                .watch(path, RecursiveMode::NonRecursive)
+                .unwrap()
+        }
     }
 }
 
@@ -500,38 +566,46 @@ impl AssetCache {
         // Cache unlocked here.
 
         // Read the asset file, and load the asset.
-        let (entry, dependencies) = {
+        let dependencies;
+        let entry = {
             let mut deps = Dependencies::new(path);
             let providers = Providers::get().read().unwrap();
             let asset = loader.load(path, &providers, &mut deps);
 
-            (
-                Arc::new(Entry {
-                    path: path.to_path_buf(),
-                    dependencies: deps.dependencies.clone(),
-                    local_files: deps.local_files,
-                    dirty: Default::default(),
-                    loader,
-                    asset: Mutex::new(Some(asset)),
-                }),
-                deps.dependencies,
-            )
+            #[cfg(feature = "hot_reload")]
+            {
+                dependencies = deps.dependencies.clone();
+            }
+
+            Arc::new(Entry {
+                path: path.to_path_buf(),
+                #[cfg(feature = "hot_reload")]
+                dependencies: deps,
+                dirty: Default::default(),
+                loader,
+                asset: RwLock::new(asset),
+            })
         };
 
         // Insert the entry into the cache.
         // Note that another thread may have inserted the same entry in the meantime, but
         // there's nothing we can do about it.
         let mut inner = self.inner.write().unwrap();
-        // update dependencies
-        for dep in dependencies.iter() {
-            debug!("asset `{}` depends on `{}`", path.as_str(), dep.path.as_str());
-            // TODO we track only one level of dependencies for now
-            inner
-                .dependency_graph
-                .entry(dep.clone())
-                .or_default()
-                .insert(key.clone());
+
+        #[cfg(feature = "hot_reload")]
+        {
+            // update dependencies for hot reload
+            for dep in dependencies.iter() {
+                debug!("asset `{}` depends on `{}`", path.as_str(), dep.path.as_str());
+                // TODO we track only one level of dependencies for now
+                inner
+                    .dependency_graph
+                    .entry(dep.clone())
+                    .or_default()
+                    .insert(key.clone());
+            }
         }
+
         inner.by_path.insert(key, entry.clone());
         Handle::new(entry)
     }
@@ -548,6 +622,7 @@ impl AssetCache {
         unsafe { self.insert_inner(path, Loader::with_dependencies(loader)) }
     }
 
+    #[cfg(feature = "hot_reload")]
     pub fn do_reload(&self) {
         let dirty_paths = mem::take(&mut *self.dirty_paths.lock().unwrap());
 
@@ -573,7 +648,7 @@ impl AssetCache {
 
                 // skip if the entry is not ready to be reloaded: i.e. if any of its dependencies are dirty
                 let mut can_reload = true;
-                for dep_key in entry.dependencies.iter() {
+                for dep_key in entry.dependencies.dependencies.iter() {
                     let Some(dep_entry) = inner.get_entry(dep_key) else {
                         continue;
                     };
@@ -607,6 +682,7 @@ impl AssetCache {
 
     /// Called by providers to notify that a file has changed.
     pub fn asset_changed(&self, path: &VfsPath) {
+        #[cfg(feature = "hot_reload")]
         self.dirty_paths
             .lock()
             .unwrap()

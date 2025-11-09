@@ -14,7 +14,7 @@ impl fmt::Display for Error {
             //CompilationError::CompileError(err) => write!(f, "compilation errors: {}", err),
             Error::IoError(err) => write!(f, "I/O error: {}", err),
             Error::EntryPointNotFound(name) => write!(f, "entry point not found: {}", name),
-            Error::CompilationError(err) => write!(f, "compilation errors: {}", err),
+            Error::CompilationError(err) => write!(f, "compilation errors:\n{}", err),
         }
     }
 }

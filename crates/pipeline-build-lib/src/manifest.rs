@@ -140,6 +140,19 @@ fn read_rasterizer_state(json: &Json, out: &mut pipeline_archive::RasterizerStat
         };
     }
 
+    if let Some(cull_mode) = read_str(json, "cull_mode")? {
+        out.cull_mode = match cull_mode {
+            "none" => vk::CullModeFlags::NONE,
+            "front" => vk::CullModeFlags::FRONT,
+            "back" => vk::CullModeFlags::BACK,
+            "front_and_back" => vk::CullModeFlags::FRONT_AND_BACK,
+            _ => {
+                error!("Unknown cull mode: {}", cull_mode);
+                vk::CullModeFlags::BACK
+            }
+        };
+    }
+
     Ok(())
 }
 

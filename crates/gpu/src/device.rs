@@ -2,7 +2,11 @@
 mod bindless;
 
 use crate::instance::{vk_ext_debug_utils, vk_khr_surface};
-use crate::{get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, CommandPool, CommandStream, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error, GraphicsPipeline, GraphicsPipelineCreateInfo, MemoryAccess, PreRasterizationShaders, Sampler, SamplerCreateInfo, SamplerCreateInfoHashable, SUBGROUP_SIZE};
+use crate::{
+    get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, CommandPool, CommandStream, ComputePipeline,
+    ComputePipelineCreateInfo, DescriptorSetLayout, Error, GraphicsPipeline, GraphicsPipelineCreateInfo, MemoryAccess,
+    PreRasterizationShaders, Sampler, SamplerCreateInfo, SamplerCreateInfoHashable, SUBGROUP_SIZE,
+};
 use std::collections::{HashMap, VecDeque};
 use std::ffi::{c_void, CString};
 use std::sync::{Arc, LazyLock, Mutex};
@@ -987,7 +991,6 @@ impl Device {
     }
 
     pub(crate) fn create_sampler(&self, info: &SamplerCreateInfo) -> Sampler {
-
         let info_hashable = SamplerCreateInfoHashable::from(*info);
         if let Some(sampler) = self.sampler_cache.lock().unwrap().get(&info_hashable) {
             return sampler.clone();
@@ -1023,7 +1026,10 @@ impl Device {
             descriptor_index,
             sampler,
         };
-        self.sampler_cache.lock().unwrap().insert(info_hashable, sampler.clone());
+        self.sampler_cache
+            .lock()
+            .unwrap()
+            .insert(info_hashable, sampler.clone());
         sampler
     }
 
@@ -1119,7 +1125,10 @@ impl Device {
         pipeline_layout
     }
 
-    pub(crate) fn create_compute_pipeline(&self, create_info: ComputePipelineCreateInfo) -> Result<ComputePipeline, Error> {
+    pub(crate) fn create_compute_pipeline(
+        &self,
+        create_info: ComputePipelineCreateInfo,
+    ) -> Result<ComputePipeline, Error> {
         let pipeline_layout = self.create_pipeline_layout(
             vk::PipelineBindPoint::COMPUTE,
             create_info.set_layouts,

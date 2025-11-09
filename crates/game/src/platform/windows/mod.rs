@@ -117,8 +117,8 @@ impl PlatformHandler for Win32Platform {
     }
 
     fn render(&self, render_callback: &mut dyn FnMut(RenderTargetImage)) {
-        let window = self.window.borrow();
-        let window = window.as_ref().unwrap();
+        let mut window = self.window.borrow_mut();
+        let window = window.as_mut().unwrap();
         let render_target = window.get_swap_chain_image();
         render_callback(render_target);
         window.present();

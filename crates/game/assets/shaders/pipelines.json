@@ -26,8 +26,8 @@
         "debug_info": false
     },
     "rasterizer_state": {
-        "cull_mode": "back",
-        "fill_mode": "solid"
+        "cull_mode": "none",
+        "polygon_mode": "fill"
     },
     "depth_stencil_state": {
         "format": "D32F_S8UI",

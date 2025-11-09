@@ -1,9 +1,10 @@
-use crate::asset::{AssetCache, Dependencies, Handle, VfsPath};
+use crate::asset::{AssetCache, Dependencies, Handle, LoadResult, VfsPath};
 use gpu::{PreRasterizationShaders, ShaderEntryPoint, vk};
 use log::{debug, warn};
 use pipeline_archive::{GraphicsPipelineShaders, PipelineArchive, ShaderData};
 use std::time::SystemTime;
 use std::{fs, io};
+use std::sync::MutexGuard;
 use utils::archive::Offset;
 
 #[derive(thiserror::Error, Debug)]
@@ -86,8 +87,7 @@ pub fn load_pipeline_archive(path: impl AsRef<VfsPath>) -> Handle<PipelineArchiv
                         quiet: false,
                         emit_cargo_deps: false,
                     },
-                )
-                .unwrap();
+                )?;
             }
 
             for source in a.source_files() {
@@ -96,7 +96,7 @@ pub fn load_pipeline_archive(path: impl AsRef<VfsPath>) -> Handle<PipelineArchiv
             deps.add_local_file(&a[a.manifest_file().path]);
         }
 
-        a
+        Ok(a)
     })
 }
 
@@ -159,6 +159,7 @@ fn create_graphics_pipeline_from_archive(
 
     let rasterization = gpu::RasterizationState {
         polygon_mode: entry.rasterization.polygon_mode,
+        cull_mode: entry.rasterization.cull_mode,
         ..Default::default()
     };
 
@@ -211,13 +212,14 @@ fn create_compute_pipeline_from_archive(
 
 /// Loads a graphics pipeline object from the specified archive file and pipeline name.
 pub fn get_graphics_pipeline(path: impl AsRef<VfsPath>) -> Handle<gpu::GraphicsPipeline> {
-    fn load(path: &VfsPath, dependencies: &mut Dependencies) -> gpu::GraphicsPipeline {
+    fn load(path: &VfsPath, dependencies: &mut Dependencies) -> LoadResult<gpu::GraphicsPipeline> {
         let archive_file = path.path_without_fragment();
         let name = path.fragment().expect("pipeline name missing in path");
-        let archive = load_pipeline_archive(archive_file);
-        dependencies.add(&archive);
-        // TODO: handle errors
-        create_graphics_pipeline_from_archive(archive.get().as_ref().unwrap(), name).unwrap()
+        let archive_handle = load_pipeline_archive(archive_file);
+        dependencies.add(&archive_handle);
+
+        let archive = archive_handle.read();
+        Ok(create_graphics_pipeline_from_archive(archive.try_get()?, name)?)
     }
 
     let path = path.as_ref();
