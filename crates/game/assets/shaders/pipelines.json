@@ -19,6 +19,17 @@
             "name": "grid",
             "vertex_entry_point": "grid_vertex_main",
             "fragment_entry_point": "grid_fragment_main"
+        },
+        {
+            "file_path": "background.slang",
+            "name": "background",
+            "vertex_entry_point": "background_vertex_main",
+            "fragment_entry_point": "background_fragment_main",
+            "overrides": {
+                "depth_stencil_state": {
+                    "depth_write_enable": false
+                }
+            }
         }
     ],
     "compilation_options": {

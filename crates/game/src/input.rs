@@ -1,4 +1,3 @@
-use crate::event::Event;
 pub use keyboard_types::{Key, KeyState, KeyboardEvent, Location, Modifiers, NamedKey};
 use std::fmt;
 use std::str::FromStr;

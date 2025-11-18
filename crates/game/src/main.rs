@@ -5,7 +5,7 @@ use crate::asset::{AssetCache, Handle};
 use crate::camera_control::{CameraControl, CameraControlInput};
 use crate::context::{App, AppHandler, LoopHandler};
 use crate::input::{InputEvent, PointerButton};
-use crate::paint::{DrawGlyphRunOptions, PaintRenderParams, PaintScene, Painter, Srgba32, TextFormat, TextLayout};
+use crate::paint::{DrawGlyphRunOptions, PaintRenderParams, PaintScene, Painter, TextFormat, TextLayout};
 use crate::pipeline_cache::get_graphics_pipeline;
 use crate::platform::{EventToken, InitOptions, RenderTargetImage, UserEvent};
 use egui::Color32;
@@ -15,8 +15,9 @@ use gpu::PrimitiveTopology::TriangleList;
 use gpu::{Device, DeviceAddress, Image, RenderPassInfo, push_constants};
 use log::debug;
 use math::geom::{Camera, rect_xywh};
-use math::{Rect, vec2};
+use math::{Rect, vec2, U8Vec4, u8vec4};
 use serde_json::json;
+use color::{srgba32, Srgba32};
 
 mod camera_control;
 mod context;
@@ -48,21 +49,22 @@ struct SceneUniforms {
     view_matrix: [[f32; 4]; 4],
     proj_matrix: [[f32; 4]; 4],
     screen_size: [f32; 2],
+    time: f32,
+    frame: u32
 }
 
 struct Game {
     width: u32,
     height: u32,
-    physics_timer: EventToken,
-    render_target_time: EventToken,
     demo: WidgetGallery,
     color: Color32,
     painter: Painter,
     camera_control: CameraControl,
     depth_stencil_buffer: gpu::Image,
     grid_shader: Handle<gpu::GraphicsPipeline>,
-    //pipeline_editor: PipelineEditor,
-    //pipeline_cache: PipelineCache,
+    background_shader: Handle<gpu::GraphicsPipeline>,
+    frame_count: u32,
+    start_time: std::time::Instant,
 }
 
 fn create_depth_buffer(width: u32, height: u32) -> Image {
@@ -77,20 +79,18 @@ fn create_depth_buffer(width: u32, height: u32) -> Image {
 
 impl Default for Game {
     fn default() -> Self {
-        let painter = Painter::new(gpu::Format::R8G8B8A8_UNORM, None);
         Self {
-            physics_timer: EventToken(1),
-            render_target_time: EventToken(2),
             demo: WidgetGallery::default(),
             color: Default::default(),
-            painter,
+            painter: Painter::new(gpu::Format::R8G8B8A8_UNORM, None),
             depth_stencil_buffer: create_depth_buffer(WIDTH, HEIGHT),
             camera_control: CameraControl::default(),
             grid_shader: get_graphics_pipeline("/shaders/pipelines.parc#grid"),
+            background_shader: get_graphics_pipeline("/shaders/pipelines.parc#background"),
+            frame_count: 0,
             width: WIDTH,
             height: HEIGHT,
-            //pipeline_editor: Default::default(),
-            //grid_pipeline: ,
+            start_time: std::time::Instant::now(),
         }
     }
 }
@@ -102,6 +102,21 @@ impl Game {
         _camera: &Camera,
         scene_uniforms: DeviceAddress<SceneUniforms>,
     ) {
+        //----------------------------------
+        // Draw background
+        {
+            let background_shader = self.background_shader.read();
+            if let Ok(background_shader) = background_shader.try_get() {
+                encoder.bind_graphics_pipeline(background_shader);
+                encoder.push_constants(push_constants! {
+                    scene_uniforms: DeviceAddress<SceneUniforms> = scene_uniforms,
+                    bottom_color: Srgba32 = srgba32(20, 20, 40, 255),
+                    top_color: Srgba32 = srgba32(100, 150, 255, 255)
+                });
+                encoder.draw(TriangleList, 0..6, 0..1);
+            }
+        }
+
         //----------------------------------
         // Draw grid
         {
@@ -193,15 +208,21 @@ impl AppHandler for Game {
         AssetCache::instance().do_reload();
 
         let mut cmd = gpu::CommandStream::new();
+        let time = self.start_time.elapsed().as_secs_f32();
+        let frame = self.frame_count;
+        self.frame_count += 1;
 
         //-------------------------------
         // Render 3D scene
         {
+
             let camera = self.camera_control.camera();
             let scene_info = cmd.upload_temporary(&SceneUniforms {
                 view_matrix: camera.view.to_cols_array_2d(),
                 proj_matrix: camera.projection.to_cols_array_2d(),
                 screen_size: camera.screen_size.as_vec2().to_array(),
+                time,
+                frame,
             });
 
             let mut encoder = cmd.begin_rendering(RenderPassInfo {

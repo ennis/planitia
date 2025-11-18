@@ -588,3 +588,38 @@ Issue: poor error reporting / dev experience if a shader fails to compile.
 
 Option B: separate command line tool
 Issue: need to run it by hand
+
+
+# Terrain rendering
+
+Some kind of LOD for far terrain rendering. 
+
+Insight: for our type of rendering, we mostly care about the details on silhouettes (e.g. ridges of mountains). 
+Maybe there's a way to do far-terrain LODs that preserve high-frequency details on silhouettes.
+
+Terrain is fully static, so possible to generate a non-grid mesh that aligns to silhouettes.
+
+Investigate a nanite-like approach for LODs.
+
+Point clouds?
+
+Tentative approach:
+- start with a high-res TIN of a terrain heightmap
+- slice into chunks
+- simplify to 1/4 triangle count
+  - for each fine vertex, assign index of nearest coarse triangle for interpolation
+- repeat for max LOD count
+
+
+
+# Mesh file format
+
+Actually it's more like a memory format.
+
+- position data
+- normals (per-vertex)
+- attributes (per-vertex)
+- indices
+- only triangles
+- extension: face attributes
+- extension: meshlets, meshlet clusters

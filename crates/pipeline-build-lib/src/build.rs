@@ -12,11 +12,6 @@ use std::{env, fmt};
 use std::time::SystemTime;
 use log::warn;
 
-struct CompilationJob<'a> {
-    input: &'a Input,
-    configuration: Configuration,
-}
-
 
 fn make_file_dependency(path: &Path, archive: &mut ArchiveWriter) -> anyhow::Result<FileDependency> {
     let canonical_path = path.canonicalize()?;
@@ -100,6 +95,7 @@ impl fmt::Display for CompilationErrors {
     }
 }
 
+/*
 /// Formats a unique identifier for a given input and variant permutation.
 ///
 /// The format is: `<file_path>:<name>?<tag1>=<value1>&<tag2>&<tag3>=<value3>...`
@@ -121,7 +117,7 @@ fn format_variant_identifier(input: &Input, permutation: &[&Variant]) -> String 
     }
 
     name
-}
+}*/
 
 impl BuildManifest {
     pub(crate) fn build_all(&self, options: &BuildOptions) -> anyhow::Result<()> {

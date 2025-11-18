@@ -2,7 +2,6 @@
 use crate::Error::MissingField;
 use anyhow::{Context, anyhow};
 use log::error;
-use pipeline_archive::ColorBlendEquationData;
 use pipeline_archive::gpu::vk;
 use pipeline_archive::gpu::vk::PolygonMode;
 use serde_json::Value as Json;
@@ -97,12 +96,13 @@ fn read_str<'a>(json: &'a Json, field: &'static str) -> Result<Option<&'a str>, 
     }
 }
 
+/*
 fn read_f32(json: &Json, field: &'static str) -> Result<Option<f32>, Error> {
     match json.get(field) {
         None => Ok(None),
         Some(value) => value.as_f64().ok_or(Error::InvalidType(field)).map(|v| Some(v as f32)),
     }
-}
+}*/
 
 fn read_bool(json: &Json, field: &'static str) -> Result<Option<bool>, Error> {
     match json.get(field) {

@@ -50,6 +50,7 @@ impl Window {
             );
 
             // Bind the swap chain to the root visual.
+            // NOTE: this is done after the first present instead.
             //root_visual.SetContent(&swap_chain.dxgi).unwrap();
             //gfx.compositor.Commit().unwrap();
 

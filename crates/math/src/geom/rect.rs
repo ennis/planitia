@@ -1,5 +1,5 @@
 use crate::{vec2, Vec2};
-use glam::{ivec3, IVec2, IVec3, Mat4, Vec3, Vec3A};
+use glam::{ivec3, IVec2, IVec3, Vec3};
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 #[repr(C)]

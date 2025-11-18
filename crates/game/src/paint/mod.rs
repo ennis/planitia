@@ -1,11 +1,11 @@
 mod atlas;
-mod color;
 mod painter;
 mod scene;
 mod shape;
 mod tessellation;
 mod text;
 
+use color::Srgba32;
 use crate::paint::shape::RectShape;
 use crate::paint::tessellation::{Mesh, Tessellator};
 use crate::paint::text::GlyphCache;
@@ -15,7 +15,6 @@ use math::{Mat4, Rect, U16Vec2, UVec2, Vec2, u16vec2, uvec2, vec2};
 use shader_bridge::ShaderLibrary;
 
 use crate::paint::atlas::Atlas;
-pub use color::Srgba32;
 use gpu::PrimitiveTopology::TriangleList;
 pub use text::{GlyphRun, TextFormat, TextLayout};
 
@@ -72,6 +71,7 @@ struct Pipelines {
 
 impl Pipelines {
     fn create(target_color_format: gpu::Format, target_depth_format: Option<gpu::Format>) -> Pipelines {
+        // TODO replace with embedded pipeline archive
         let shader = ShaderLibrary::new("crates/game/assets/shaders/paint.slang").unwrap();
         let vertex = shader.get_compiled_entry_point("paint_vertex_main").unwrap();
         let fragment = shader.get_compiled_entry_point("paint_fragment_main").unwrap();
@@ -149,6 +149,8 @@ impl Pipelines {
 //----------------------------------------------------------------
 
 /// Converts a texel coordinate into u16 normalized UV coordinates.
+///
+/// Equivalent to `pos / texture_size * 65535`.
 pub fn texel_to_normalized_texcoord(pos: Vec2, texture_size: UVec2) -> U16Vec2 {
     u16vec2(
         ((pos.x / texture_size.x as f32) * 65535.0) as u16,

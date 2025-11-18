@@ -73,5 +73,5 @@ float4 grid_fragment_main(VSOut i, uint2 frag_pos: SV_Position, uniform PushCons
 {
     float2 frag_uv = frag_pos.xy / u.scene.screen_size;
     float grid = grid(i.uv * 10.0, 0.05);
-    return float4(grid.xxx, 1.0);
+    return float4(float3(1.0), grid.x);
 }

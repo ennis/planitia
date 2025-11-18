@@ -25,6 +25,27 @@
  ☐ get rid of arboard
  ☐ get rid of egui
  ☐ object picking
+ ☐ arbitrary data containers based on archive format
+ ☐ Mesh file format
+
+
+Terrain rendering:
+    ☐ Find out how to do the initial adaptive meshing
+    ☐ Draw the initial meshing
+    ☐ use meshoptimizer to create clusters
+    ☐ build the cluster hierarchy
+
+
+World:
+    ☐ Character navigation
+        ☐ Navmeshes
+    ☐ Third-person camera
+    ☐ Character collision
+    ☐ Animation
+        ☐ Limb IK
+    ☐ Lighting
+    ☐ Mesh import
+    ☐ Skinning & animated characters
 
 
 2D rendering:

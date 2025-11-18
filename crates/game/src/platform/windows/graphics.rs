@@ -126,13 +126,13 @@ impl GraphicsContext {
         let compositor: IDCompositionDesktopDevice =
             unsafe { DCompositionCreateDevice3(None).expect("failed to create composition device") };
 
-        #[cfg(debug_assertions)]
+        /*#[cfg(debug_assertions)]
         {
             let composition_device_debug: IDCompositionDeviceDebug = compositor.cast().unwrap();
             unsafe {
                 composition_device_debug.EnableDebugCounters().unwrap();
             }
-        }
+        }*/
 
         let fence = unsafe {
             let fence = d3d_device

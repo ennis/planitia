@@ -8,7 +8,10 @@ members = [
     "crates/pipeline-archive",
     "crates/utils",
     "crates/pipeline-build-tool",
-    "crates/pipeline-build-lib"]
+    "crates/pipeline-build-lib",
+    "crates/color",
+    "crates/geomtool",
+    "crates/terrain-file"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -20,6 +23,9 @@ math = { path = "crates/math" }
 utils = { path = "crates/utils" }
 pipeline-archive = { path = "crates/pipeline-archive" }
 pipeline-build-lib = { path = "crates/pipeline-build-lib" }
+color = { path = "crates/color" }
+geomtool = { path = "crates/geomtool" }
+terrain-file = { path = "crates/terrain-file" }
 
 [profile.release]
 debug = true

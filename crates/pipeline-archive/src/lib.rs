@@ -1,4 +1,4 @@
-#![feature(default_field_values)]
+
 //! Pipeline archive files.
 //!
 //! Pipeline files hold a collection of pipelines (which are variants of the same pipeline).
@@ -10,13 +10,14 @@
 //!
 //! Pipeline files can be directly mapped in memory and read without any copy or parsing step.
 
+#![feature(default_field_values)]
+
 use gpu::vk;
 use gpu::vk::{CullModeFlags, PolygonMode};
 use std::borrow::Cow;
 use std::io;
 use std::ops::Deref;
 use std::path::Path;
-use std::time::SystemTime;
 use utils::archive::{ArchiveReader, ArchiveReaderOwned, Offset};
 use utils::zstring::ZString;
 
@@ -278,7 +279,7 @@ mod tests {
     use super::*;
     use std::fs;
     use utils::archive::ArchiveWriter;
-    use utils::zstring::{ZString16, ZString32, ZString64};
+    use utils::zstring::ZString64;
 
     #[test]
     fn generate_archive() {
