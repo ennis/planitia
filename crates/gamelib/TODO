@@ -1,0 +1,109 @@
+ ✔ Create window with DXGI Swapchain & vulkan interop @done (25-08-03 17:11)
+ ✔ Import graal @done (25-08-03 17:11)
+ ✔ Input events @done (25-08-03 17:43)
+ ✔ Simple rendering (clear color) @done (25-08-03 18:22)
+ ✔ Unify statics in a single context struct @done (25-08-03 20:25)
+ ✔ timers @done (25-08-21 23:33)
+ ✔ collect input events @done (25-08-06 16:50)
+ ✔ non-async loop handler @done (25-08-21 23:33)
+ ✔ move compositor clock thread to separate module @done (25-08-22 12:36)
+ ✔ quit on close @done (25-08-21 23:34)
+ ✔ egui integration @done (25-08-23 17:46)
+ ✔ Skip frame if late (late vsync event) @done (25-08-24 12:50)
+ ☐ Create entity / serialize
+ ✔ imgui: handle window resize @done (25-08-23 23:38)
+ ✔ Make things debuggable with renderdoc @done (25-08-23 23:38)
+ ✔ Fix egui freezing sometimes @done (25-08-23 22:28)
+ ✔ Fix egui color bug @done (25-08-23 23:15)
+     It was a nasty use-after-free due to slice::from_raw_parts ignoring lifetimes
+ ☐ Use vulkan swapchains instead of DXGI, to make things simpler to debug @low
+ ✔ Replace uses of `Device::global().function` by global functions. @done (25-11-01 10:37)
+ ☐ Load mesh
+ ✔ Import shader-bridge @done (25-10-06 22:26)
+ ✔ move to a separate repo @done (25-10-06 22:26)
+ ☐ get rid of winit
+ ☐ get rid of arboard
+ ☐ get rid of egui
+ ☐ object picking
+ ☐ arbitrary data containers based on archive format
+ ☐ Mesh file format
+ ☐ Move assets, painting, platform etc. to another crate for potential reuse
+ ☐ async asset reloading
+ ☐ move egui shaders to shader-archive
+ ☐ Deprecate shader-bridge? Move functionality to shadertool
+
+
+Terrain rendering:
+    ☐ Find out how to do the initial adaptive meshing
+    ☐ Draw the initial meshing
+    ☐ use meshoptimizer to create clusters
+    ☐ build the cluster hierarchy
+
+
+World:
+    ☐ Character navigation
+        ☐ Navmeshes
+    ☐ Third-person camera
+    ☐ Character collision
+    ☐ Animation
+        ☐ Limb IK
+    ☐ Lighting
+    ☐ Mesh import
+    ☐ Skinning & animated characters
+
+
+2D rendering:
+    ☐ Use case: GUI
+    ☐ Use case: 3D overlay
+    ☐ Use case: load/save vector drawings
+    ☐ Use case: sprites
+    ☐ Test harness for rendering
+    ✔ Text @done (25-10-04 23:30)
+    ☐ Font selection by name
+
+Shaders:
+    ✔ [shader-bridge] `struct ShaderLibrary`: represents a loaded/parsed slang source file (in shader-bridge), as a collection of entry points; used to retrieve ShaderEntryPoint objects @done (25-10-06 22:25)
+    ✔ [shader-bridge] `struct ShaderEntryPoint`: represents a shader entry point, associated SPIR-V code & useful reflection data @done (25-10-06 22:25)
+
+Direction:
+    ☐ Figure out terrain representation 
+    ☐ Repr: construction grids
+    ☐ Repr: caves & cliffs
+    ☐ Repr: artificial structures
+    ☐ Repr: vegetation
+    ☐ Repr: atmospheric effects / ambience
+    ☐ Figure out object picking technique
+    ☐ Identifying assets (e.g. some object references a font, then the name of the font is renamed; how do we identify the font?)
+        ☐ Identify assets with GUIDs (within a project)
+    ☐ Managing associated resources & cached resources
+        ☐ E.g. if a font file is unloaded, should also free its associated cache entry in the global FontCollection
+        ☐ E.g. if an image is unloaded, should also free associated GPU textures
+
+Ideas:
+    ☐ Idea: take satellite maps as input (w/ elevation) & generate stylized landscape from that, by pattern recognition
+    ☐ Simulate electrical/communication networks
+
+--- ✄ -----------------------
+
+
+EGUI replacement:
+    ✔ unify geometry/vector types via external crate (math) @done (25-10-06 22:26)
+    ✔ draw rectangles @done (25-10-06 22:26)
+    ✔ draw rounded rectangles @done (25-10-06 22:26)
+    ☐ space allocation & layout
+    ✔ text layout & rendering @done (25-10-06 22:26)
+
+Winit replacement:
+    ☐ create win32 window
+    ☐ Win32 event loop
+    ☐ mouse (WM_POINTER) events
+    ☐ keyboard event translation
+    ☐ resizing
+    ☐ custom cursors 
+    ☐ clipboard
+
+Bugs:
+    ☐ vkDestroySemaphore(): can't be called on VkSemaphore 0xcb1c7c000000001b[DxgiVulkanSharedFence] that is currently in use by VkQueue 0x1be997ad4c0.
+    ☐ ERROR_DEVICE_LOST sometimes at startup
+        \Device\Video3
+        Error occurred on GPUID: 700

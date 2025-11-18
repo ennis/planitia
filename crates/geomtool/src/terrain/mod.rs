@@ -44,7 +44,7 @@ fn generate_terrain_meshes_inner(
     };
 
     let mut progress_cb = |triangle_count, error| {
-        bar.println(format!("Current error: {error}"));
+        //bar.println(format!("Current error: {error}"));
         bar.set_position(triangle_count as u64);
     };
 

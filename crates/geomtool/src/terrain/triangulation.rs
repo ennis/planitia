@@ -5,6 +5,7 @@ use spade::handles::{FaceHandle, InnerTag};
 use spade::{DelaunayTriangulation, HasPosition, HierarchyHintGenerator, Point2, Triangulation};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+use std::io::BufWriter;
 use color_print::cprintln;
 
 struct PointWithHeight {
@@ -258,13 +259,14 @@ pub(super) fn tessellate_heightmap(
         use std::io::Write;
 
         let mut obj_file = File::create("../../terrain_mesh.obj").unwrap();
+        let mut buf_writer = BufWriter::new(&mut obj_file);
 
         let mut vertex_map = HashMap::<usize, usize>::new();
 
         for (i, v) in dt.vertices().enumerate() {
             vertex_map.insert(v.index(), i);
             let h = v.data().height;
-            writeln!(obj_file, "v {} {} {}", v.position().x, h * 100.0, v.position().y).unwrap();
+            writeln!(buf_writer, "v {} {} {}", v.position().x, h * 100.0, v.position().y).unwrap();
         }
 
         for f in dt.inner_faces() {
@@ -272,7 +274,7 @@ pub(super) fn tessellate_heightmap(
             let ia = vertex_map[&a.index()];
             let ib = vertex_map[&b.index()];
             let ic = vertex_map[&c.index()];
-            writeln!(obj_file, "f {} {} {}", ib + 1, ia + 1, ic + 1).unwrap(); // OBJ is 1-indexed
+            writeln!(buf_writer, "f {} {} {}", ib + 1, ia + 1, ic + 1).unwrap(); // OBJ is 1-indexed
         }
     }
 }

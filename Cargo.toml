@@ -1,31 +1,34 @@
 [workspace]
 members = [
-    "crates/gpu",
-    "crates/gpu-macros",
-    "crates/game",
-    "crates/math",
-    "crates/shader-bridge",
-    "crates/pipeline-archive",
-    "crates/utils",
-    "crates/pipeline-build-tool",
-    "crates/pipeline-build-lib",
-    "crates/color",
-    "crates/geomtool",
-    "crates/terrain-file"]
+    "crates/gamelib",        # Game support library
+    "crates/game",           # Game binary
+    "crates/gpu",            # GPU API
+    "crates/gpu/gpu-macros", # Derive macros for `gpu`
+    "crates/math",           # Common math types
+    "crates/color",          # Color types and related functions
+    "crates/utils",          # Shared utility types and functions
+    "crates/shader-bridge",  # Compile Slang shaders and extract/generate reflection data
+    "crates/shader-archive", # Archive file format for precompiled shaders
+    "crates/shadertool",     # Binary/library for building shader archives from a JSON manifest
+    "crates/geomtool",       # Tool for generating geometry files, like terrain meshes
+    "crates/terrain-file",   # Terrain file format and related functions
+    "crates/geom"            # Common geometry types and definition of various geometry file formats
+]
 resolver = "2"
 
 [workspace.dependencies]
 gpu = { path = "crates/gpu" }
-gpu-macros = { path = "crates/gpu-macros" }
+gpu-macros = { path = "crates/gpu/gpu-macros" }
 shader-bridge = { path = "crates/shader-bridge" }
-game = { path = "crates/game" }
+gamelib = { path = "crates/gamelib" }
 math = { path = "crates/math" }
 utils = { path = "crates/utils" }
-pipeline-archive = { path = "crates/pipeline-archive" }
-pipeline-build-lib = { path = "crates/pipeline-build-lib" }
+shader-archive = { path = "crates/shader-archive" }
+shadertool = { path = "crates/shadertool" }
 color = { path = "crates/color" }
 geomtool = { path = "crates/geomtool" }
 terrain-file = { path = "crates/terrain-file" }
+geom = { path = "crates/geom" }
 
 [profile.release]
 debug = true

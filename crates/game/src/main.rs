@@ -1,41 +1,24 @@
 #![expect(unused, reason = "noisy")]
 #![feature(default_field_values)]
 
-use crate::asset::{AssetCache, Handle};
-use crate::camera_control::{CameraControl, CameraControlInput};
-use crate::context::{App, AppHandler, LoopHandler};
-use crate::input::{InputEvent, PointerButton};
-use crate::paint::{DrawGlyphRunOptions, PaintRenderParams, PaintScene, Painter, TextFormat, TextLayout};
-use crate::pipeline_cache::get_graphics_pipeline;
-use crate::platform::{EventToken, InitOptions, RenderTargetImage, UserEvent};
-use egui::Color32;
-use egui_demo_lib::{Demo, DemoWindows, View, WidgetGallery};
-use futures::{FutureExt, StreamExt};
-use gpu::PrimitiveTopology::TriangleList;
-use gpu::{Device, DeviceAddress, Image, RenderPassInfo, push_constants};
-use log::debug;
-use math::geom::{Camera, rect_xywh};
-use math::{Rect, vec2, U8Vec4, u8vec4};
-use serde_json::json;
-use color::{srgba32, Srgba32};
+use gamelib::asset::{AssetCache, Handle};
+use gamelib::camera_control::{CameraControl, CameraControlInput};
+use gamelib::context::{App, AppHandler, LoopHandler};
+use gamelib::egui::Color32;
+use gamelib::egui;
+use gamelib::input::{InputEvent, PointerButton};
+use gamelib::paint::{DrawGlyphRunOptions, PaintRenderParams, PaintScene, Painter, TextFormat, TextLayout};
+use gamelib::pipeline_cache::get_graphics_pipeline;
+use gamelib::platform::{EventToken, InitOptions, RenderTargetImage, UserEvent};
 
-mod camera_control;
-mod context;
-mod event;
-mod executor;
-mod imgui;
-mod input;
-mod notifier;
-mod paint;
-mod platform;
-mod shaders;
-mod timer;
-mod util;
-mod world;
-//mod pipeline_editor;
-mod asset;
-mod pipeline_cache;
-//mod pipeline_cache;
+use color::{Srgba32, srgba32};
+use egui_demo_lib::{View, WidgetGallery};
+use gpu::PrimitiveTopology::TriangleList;
+use gpu::{DeviceAddress, Image, RenderPassInfo, push_constants};
+use log::debug;
+use math::geom::Camera;
+
+mod experiments;
 
 /// Global application singleton.
 static APP: App<Game> = App::new();
@@ -50,7 +33,7 @@ struct SceneUniforms {
     proj_matrix: [[f32; 4]; 4],
     screen_size: [f32; 2],
     time: f32,
-    frame: u32
+    frame: u32,
 }
 
 struct Game {
@@ -130,42 +113,17 @@ impl Game {
                 encoder.draw(TriangleList, 0..6, 0..1);
             }
         }
+
+        //----------------------------------
+        // Draw editor
     }
 
     fn render_overlay(&mut self, cmd: &mut gpu::CommandStream, target: &gpu::Image) {
-        let mut scene = self.painter.build_scene();
-        let [r, g, b, a] = self.color.to_srgba_unmultiplied();
-        let color = Srgba32 { r, g, b, a };
-        scene.fill_rrect(rect_xywh(100.0, 100.0, 200.0, 200.0), 20.0, color);
-
-        let mut text = TextLayout::new(
-            &TextFormat {
-                size: 48.0,
-                ..Default::default()
-            },
-            r"Innumerable force of Spirits armed,
-That durst dislike his reign, and, me preferring,
-His utmost power with adverse power opposed
-In dubious battle on the plains of Heaven
-And shook his throne. What though the field be lost?
-All is not lost—the unconquerable will,
-And study of revenge, immortal hate,
-And courage never to submit or yield:
-And what is else not to be overcome?",
-        );
-        text.layout(1000.0);
-
-        for glyph_run in text.glyph_runs() {
-            scene.draw_glyph_run(vec2(0.0, 0.0), &glyph_run, &DrawGlyphRunOptions::default());
-        }
-
-        scene.finish(
+        experiments::painting_test(
+            &mut self.painter,
             cmd,
-            &PaintRenderParams {
-                camera: Default::default(),
-                color_target: target,
-                depth_target: None,
-            },
+            target,
+            Srgba32::from(self.color.to_srgba_unmultiplied()),
         );
     }
 }
@@ -215,7 +173,6 @@ impl AppHandler for Game {
         //-------------------------------
         // Render 3D scene
         {
-
             let camera = self.camera_control.camera();
             let scene_info = cmd.upload_temporary(&SceneUniforms {
                 view_matrix: camera.view.to_cols_array_2d(),
@@ -265,7 +222,10 @@ impl AppHandler for Game {
 }
 
 fn main() {
-    AssetCache::register_filesystem_path(concat!(env!("CARGO_MANIFEST_DIR"), "/assets"));
+    // register asset directories
+    AssetCache::register_directory(concat!(env!("CARGO_MANIFEST_DIR"), "/assets"));
+    gamelib::register_asset_directory();
+
     APP.run(&InitOptions {
         width: WIDTH,
         height: HEIGHT,

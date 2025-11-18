@@ -1,0 +1,16 @@
+[package]
+name = "geomtool"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+image = { version = "0.25.9", features = ["exr", "png", "tiff"] }
+log = "0.4.28"
+clap = { version = "4.5", features = ["derive"] }
+thiserror = "2.0.17"
+anyhow = "1.0.100"
+spade = "2.15.0"
+math = { workspace = true }
+priority-queue = "2.7.0"
+indicatif = "0.18.3"
+color-print = "0.3.7"

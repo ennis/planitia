@@ -1,8 +1,0 @@
-[package]
-name = "pipeline-archive"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-utils = { workspace = true }
-gpu = { workspace = true }

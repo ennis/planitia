@@ -1,0 +1,25 @@
+[package]
+name = "shadertool"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+log = "0.4.28"
+shader-bridge = { workspace = true }
+shader-archive = { workspace = true }
+serde_json = "1.0.145"
+thiserror = "2.0.17"
+anyhow = "1.0.100"
+color-print = "0.3.7"
+wry = { version =  "0.53.4", optional = true}
+winit = { version = "0.30.12", optional = true }
+include_dir = { version = "0.7.4", optional = true }
+clap = { version = "4.5.50", features = ["derive"], optional = true }
+
+[features]
+binary = ["wry", "winit", "include_dir", "clap"]
+
+[[bin]]
+name = "shadertool"
+path = "src/bin/shadertool.rs"
+required-features = ["binary"]
