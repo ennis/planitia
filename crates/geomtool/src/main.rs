@@ -6,6 +6,7 @@ use clap::{Parser, Subcommand};
 use crate::terrain::{generate_terrain_meshes, TerrainConfig};
 
 mod terrain;
+mod houdini;
 
 #[derive(Parser, Debug)]
 struct Args {

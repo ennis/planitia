@@ -1,0 +1,72 @@
+[package]
+name = "gamelib"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gpu = { workspace = true }
+math = { workspace = true }
+color = { workspace = true, features = ["gpu-support"] }
+utils = { workspace = true }
+futures = { version = "0.3", features = ["executor"] }
+slab = "0.4"
+winit = "0.30"
+slotmap = "1.0.7"
+threadbound = "0.1.8"
+event-listener = "5.4.0"
+mlua = { version = "0.11.1", features = ["luau", "async"] }
+log = "0.4.27"
+env_logger = "0.11.8"
+tracy-client = "0.18.2"
+bumpalo = "3.19.0"
+thiserror = "2.0.16"
+egui = { version = "0.32.1", features = ["persistence", "default_fonts"] }
+uniform-cubic-splines = "0.5.0"
+keyboard-types = "0.8.0"
+arboard = "3.6.0"
+renderdoc = "0.12.1"
+shader-bridge = { workspace = true }
+shader-archive = { workspace = true }
+ab_glyph = "0.2.31"
+serde_json = "1.0.145"
+anyhow = "1.0.100"
+notify-debouncer-mini = "0.7.0"
+shadertool = { workspace = true, optional = true }
+
+[target.'cfg(target_os="windows")'.dependencies]
+windows = { version = "0.61.3", features = [
+    "Win32_Graphics_Direct2D",
+    "Win32_Foundation",
+    "Win32_System_Threading",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_System_SystemServices",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_Com",
+    "Win32_Graphics_Direct3D12",
+    "Win32_UI_Shell_Common",
+    "Win32_Graphics_Gdi",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "System",
+    "Foundation",
+    "Graphics_DirectX",
+    "Win32_System_WinRT",
+    "Win32_System_WinRT_Composition",
+    "UI_Composition",
+    "UI_Composition_Desktop",
+    "Foundation_Numerics",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_DirectWrite",
+    "Win32_Security",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_DirectComposition",
+    "Win32_Graphics_Imaging"] }
+
+[build-dependencies]
+shader-bridge = { workspace = true }
+shadertool = { workspace = true }
+
+[features]
+hot_reload = ["dep:shadertool"]

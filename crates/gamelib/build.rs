@@ -6,8 +6,6 @@ use std::path::{Path, PathBuf};
 
 /// Path to the shader directory.
 const SHADERS_DIR: &str = "assets/gamelib/shaders/";
-/// Shader containing declarations shared between host & shader code.
-const SLANG_SHARED: &str = "assets/gamelib/shaders/shared.slang";
 
 fn main() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
@@ -21,13 +19,13 @@ fn main() {
         )
         .unwrap();
 
-        // Translate `slang/shared.slang`
+        /*// Translate `slang/shared.slang`
         let slang_shared = Path::new(SLANG_SHARED);
         // FIXME: this works, more or less, but RustRover doesn't update its browsing info
         //        when a shader is changed (need to clear the caches). This results in an extremely
         //        poor developer experience. There wasn't a problem when we did the opposite
         //        (generating shader code from rust structs).
-        translate_slang_shared_decls(slang_shared, &mut output);
+        translate_slang_shared_decls(slang_shared, &mut output);*/
 
         // Compile and embed shaders
         compile_and_embed_shaders(SHADERS_DIR, &[], &out_dir, &mut output);
