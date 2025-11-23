@@ -10,12 +10,23 @@ use std::{fs, slice};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum StorageKind {
     FpReal32,
     FpReal64,
     Int32,
     Int64,
+}
+
+impl StorageKind {
+    pub fn byte_size(&self) -> usize {
+        match self {
+            StorageKind::FpReal32 => 4,
+            StorageKind::FpReal64 => 8,
+            StorageKind::Int32 => 4,
+            StorageKind::Int64 => 8,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -61,6 +72,7 @@ pub struct Topology {
 #[derive(Clone, Debug)]
 pub enum Primitive {
     BezierRun(BezierRun),
+    PolygonCurveRun(PolygonCurveRun)
 }
 
 /// The contents of a houdini geometry file.
@@ -126,11 +138,18 @@ pub struct BezierBasis {
 /// A geometry variable that can be either uniform over a sequence of elements,
 /// or varying per element.
 #[derive(Clone, Debug)]
-pub enum PrimVar<T> {
+pub enum Var<T> {
     /// Same value for all elements in the sequence.
     Uniform(T),
     /// One value per element in the sequence.
     Varying(Vec<T>),
+    // TODO: RLE?
+}
+
+impl<T: Default> Default for Var<T> {
+    fn default() -> Self {
+        Var::Uniform(T::default())
+    }
 }
 
 /// A run of Bézier curves.
@@ -142,11 +161,22 @@ pub struct BezierRun {
     ///
     /// They are indices into the `topology` vector.
     /// They are usually `Varying`, because a bezier run with the same control points isn't very useful.
-    pub vertices: PrimVar<Vec<i32>>,
+    pub vertices: Var<Vec<i32>>,
     /// Whether the curve is closed.
-    pub closed: PrimVar<bool>,
+    pub closed: Var<bool>,
     /// Curve basis information.
-    pub basis: PrimVar<BezierBasis>,
+    pub basis: Var<BezierBasis>,
+}
+
+/// A run of polygon curves.
+#[derive(Clone, Debug, Default)]
+pub struct PolygonCurveRun {
+    /// Number of curves in the run.
+    pub count: usize,
+    /// Array of vertex count for each curve.
+    pub vertex_counts: Var<i32>,
+    /// Index of the first vertex of the curve run.
+    pub start_vertex: u32,
 }
 
 pub struct BezierRunIter<'a> {
@@ -163,18 +193,18 @@ impl<'a> Iterator for BezierRunIter<'a> {
         }
 
         let vertices = match &self.run.vertices {
-            PrimVar::Uniform(vertices) => vertices.as_slice(),
-            PrimVar::Varying(vertices) => &vertices[self.index],
+            Var::Uniform(vertices) => vertices.as_slice(),
+            Var::Varying(vertices) => &vertices[self.index],
         };
 
         let closed = match &self.run.closed {
-            PrimVar::Uniform(closed) => *closed,
-            PrimVar::Varying(closed) => closed[self.index],
+            Var::Uniform(closed) => *closed,
+            Var::Varying(closed) => closed[self.index],
         };
 
         let basis = match &self.run.basis {
-            PrimVar::Uniform(basis) => basis,
-            PrimVar::Varying(basis) => &basis[self.index],
+            Var::Uniform(basis) => basis,
+            Var::Varying(basis) => &basis[self.index],
         };
 
         self.index += 1;
@@ -210,9 +240,9 @@ impl Default for BezierRun {
     fn default() -> Self {
         BezierRun {
             count: 0,
-            vertices: PrimVar::Varying(vec![]),
-            closed: PrimVar::Varying(vec![]),
-            basis: PrimVar::Varying(vec![]),
+            vertices: Var::Varying(vec![]),
+            closed: Var::Varying(vec![]),
+            basis: Var::Varying(vec![]),
         }
     }
 }

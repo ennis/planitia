@@ -2,10 +2,13 @@ mod binary;
 mod json;
 
 use super::Error::Malformed;
-use super::{Attribute, AttributeStorage, BezierBasis, BezierRun, Error, Geo, PrimVar, Primitive, StorageKind};
+use super::{
+    Attribute, AttributeStorage, BezierBasis, BezierRun, Error, Geo, PolygonCurveRun, Primitive, StorageKind, Var,
+};
 use json::ParserImpl;
 use smol_str::SmolStr;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::path::Path;
 use std::{fs, ptr};
@@ -83,7 +86,12 @@ impl<'a> Event<'a> {
 macro_rules! expect {
     ($p:expr, $pat:pat) => {
         let $pat = $p.next()? else {
-            return Err(Error::Malformed(""));
+            return Err(Error::Malformed(concat!("expected ", stringify!($pat))));
+        };
+    };
+    ($p:expr, $pat:pat, $msg:literal) => {
+        let $pat = $p.next()? else {
+            return Err(Error::Malformed($msg));
         };
     };
 }
@@ -131,8 +139,11 @@ trait Parser<'a> {
 
     /// Reads a boolean value.
     fn boolean(&mut self) -> Result<bool, Error> {
-        expect!(self, Event::Boolean(b));
-        Ok(b)
+        match self.next()? {
+            Event::Integer(i) => Ok(i != 0),
+            Event::Boolean(b) => Ok(b),
+            _ => Err(Error::Malformed("expected boolean")),
+        }
     }
 
     /// Reads a string value.
@@ -150,6 +161,60 @@ trait Parser<'a> {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+trait AttribValue: Copy + 'static {
+    const STORAGE_KIND: StorageKind;
+    const ZERO: Self;
+    fn read(p: &mut dyn Parser) -> Result<Self, Error>;
+}
+
+impl AttribValue for f32 {
+    const STORAGE_KIND: StorageKind = StorageKind::FpReal32;
+    const ZERO: Self = 0.0;
+    fn read(p: &mut dyn Parser) -> Result<Self, Error> {
+        match p.next_no_eof()? {
+            Event::Float(f) => Ok(f as f32),
+            Event::Integer(i) => Ok(i as f32),
+            _ => Err(Error::Malformed("expected float")),
+        }
+    }
+}
+
+impl AttribValue for f64 {
+    const STORAGE_KIND: StorageKind = StorageKind::FpReal64;
+    const ZERO: Self = 0.0;
+    fn read(p: &mut dyn Parser) -> Result<Self, Error> {
+        match p.next_no_eof()? {
+            Event::Float(f) => Ok(f),
+            Event::Integer(i) => Ok(i as f64),
+            _ => Err(Error::Malformed("expected float")),
+        }
+    }
+}
+
+impl AttribValue for i32 {
+    const STORAGE_KIND: StorageKind = StorageKind::Int32;
+    const ZERO: Self = 0;
+    fn read(p: &mut dyn Parser) -> Result<Self, Error> {
+        match p.next_no_eof()? {
+            Event::Integer(i) => Ok(i as i32),
+            Event::Float(f) => Ok(f as i32),
+            _ => Err(Error::Malformed("expected integer")),
+        }
+    }
+}
+
+impl AttribValue for i64 {
+    const STORAGE_KIND: StorageKind = StorageKind::Int64;
+    const ZERO: Self = 0;
+    fn read(p: &mut dyn Parser) -> Result<Self, Error> {
+        match p.next_no_eof()? {
+            Event::Integer(i) => Ok(i),
+            Event::Float(f) => Ok(f as i64),
+            _ => Err(Error::Malformed("expected integer")),
+        }
+    }
+}
+
 impl StorageKind {
     fn parse(s: &str) -> Result<StorageKind, Error> {
         match s {
@@ -157,7 +222,7 @@ impl StorageKind {
             "fpreal64" => Ok(StorageKind::FpReal64),
             "int32" => Ok(StorageKind::Int32),
             "int64" => Ok(StorageKind::Int64),
-            _ => Err(Error::Malformed("unknown storage kind")),
+            _ => Err(Malformed("unknown storage kind")),
         }
     }
 }
@@ -171,31 +236,9 @@ impl AttributeStorage {
             StorageKind::Int64 => AttributeStorage::Int64(Vec::new()),
         }
     }
-
-    fn read_element(&mut self, e: &mut dyn Parser<'_>) -> Result<(), Error> {
-        //eprintln!("read_element");
-        match e.next()? {
-            Event::Float(f) => match self {
-                AttributeStorage::FpReal32(v) => v.push(f as f32),
-                AttributeStorage::FpReal64(v) => v.push(f as f64),
-                AttributeStorage::Int32(v) => v.push(f as i32),
-                AttributeStorage::Int64(v) => v.push(f as i64),
-            },
-            Event::Integer(i) => match self {
-                AttributeStorage::FpReal32(v) => v.push(i as f32),
-                AttributeStorage::FpReal64(v) => v.push(i as f64),
-                AttributeStorage::Int32(v) => v.push(i as i32),
-                AttributeStorage::Int64(v) => v.push(i),
-            },
-            _ => {
-                return Err(Malformed("invalid attribute element"));
-            }
-        }
-        Ok(())
-    }
 }
 
-pub(crate) fn read_int32_array(p: &mut dyn Parser) -> Result<Vec<i32>, Error> {
+fn read_int32_array(p: &mut dyn Parser) -> Result<Vec<i32>, Error> {
     let mut v = Vec::new();
     expect!(p, Event::BeginArray);
     loop {
@@ -209,7 +252,7 @@ pub(crate) fn read_int32_array(p: &mut dyn Parser) -> Result<Vec<i32>, Error> {
     Ok(v)
 }
 
-pub(crate) fn read_fp32_array(p: &mut dyn Parser) -> Result<Vec<f32>, Error> {
+fn read_fp32_array(p: &mut dyn Parser) -> Result<Vec<f32>, Error> {
     let mut v = Vec::new();
     expect!(p, Event::BeginArray);
     loop {
@@ -288,11 +331,184 @@ fn read_topology(p: &mut dyn Parser, geo: &mut Geo) -> Result<(), Error> {
     Ok(())
 }
 
+fn read_rawpagedata_generic<T: AttribValue>(
+    p: &mut dyn Parser,
+    storage: &mut Vec<T>,
+    pagesize: usize,
+    packing: &[i32],
+    constantpageflags: &[Vec<i32>],
+) -> Result<(), Error> {
+    // Packing = [3,1] => PackOffsets = [0,3]
+    // Packing = [4]   => PackOffsets = [0]
+    // Packing = [1,1,1,1] => PackOffsets = [0,1,2,3]
+    let packoffsets = packing
+        .iter()
+        .scan(0, |acc, &size| {
+            let offset = *acc;
+            *acc += size as usize;
+            Some(offset)
+        })
+        .collect::<Vec<_>>();
+
+    // (X, Y, Z) => 3
+    // (X, Y, Z, W) => 4
+    let tuplesize: usize = packing.iter().map(|&s| s as usize).sum();
+
+    // unfortunately, we have to read the whole raw data into storage first: due to the way it
+    // is packed, we need to know in advance the size of the raw data to unpack it correctly,
+    // so we can't unpack it on the fly.
+    let mut raw = Vec::new();
+    expect!(p, Event::BeginArray);
+    while !p.eos() {
+        raw.push(T::read(p)?);
+    }
+    expect!(p, Event::EndArray);
+
+    // ... and we can't determine the size of storage in advance either, because of constant pages.
+    // Assume no constant pages for now, we'll resize later.
+    storage.resize(raw.len(), T::ZERO);
+
+    // base offset of current page in target storage
+    let mut base = 0;
+    // raw data read pointer
+    let mut ptr = 0;
+    let len = raw.len();
+
+    eprintln!("constantpageflags {:?}", constantpageflags);
+
+    let mut pageindex = 0;
+    loop {
+        if ptr >= len {
+            break;
+        }
+
+        // cur_pagesize == number of tuples in the current page
+        // this depends on whether we're at the last page and constant flags for the page
+
+        let mut a = 0; // size in elements of constant packs
+        let mut b = 0; // size in elements of varying packs; number of elements in page == a + cur_pagesize * b
+        for (packindex, packsize) in packing.iter().enumerate() {
+            let constant = !constantpageflags.is_empty()
+                && !constantpageflags[packindex].is_empty()
+                && constantpageflags[packindex][pageindex] == 1;
+            if constant {
+                a += *packsize as usize;
+            } else {
+                b += *packsize as usize;
+            }
+        }
+
+        // remaining elements in raw data
+        let remaining = len - ptr;
+        let tuples_in_page = if remaining < a + b * pagesize {
+            // not enough data for a full page, compute cur_pagesize accordingly
+            (remaining - a) / b
+        } else {
+            pagesize
+        };
+        eprintln!("tuples_in_page: {tuples_in_page}, ptr={ptr}, len={len}");
+
+        // number of elements represented by the current page
+        let num_elements_in_page = tuples_in_page * tuplesize;
+
+        // ensure that the storage is large enough to receive the current page
+        if storage.len() < base + num_elements_in_page {
+            storage.resize(base + num_elements_in_page, T::ZERO);
+        }
+
+        // read each packed subvector in the page
+        for (packindex, packsize) in packing.iter().enumerate() {
+            let packsize = *packsize as usize;
+            let mut off = packoffsets[packindex];
+
+            let constant = !constantpageflags.is_empty()
+                && !constantpageflags[packindex].is_empty()
+                && constantpageflags[packindex][pageindex] == 1;
+
+            for _ in 0..tuples_in_page {
+                storage[base + off..base + off + packsize].copy_from_slice(&raw[ptr..ptr + packsize]);
+
+                off += tuplesize;
+                if !constant {
+                    ptr += packsize;
+                }
+            }
+            if constant {
+                ptr += packsize;
+            }
+        }
+
+        pageindex += 1;
+        base += num_elements_in_page;
+    }
+
+    Ok(())
+}
+
+fn read_rawpagedata(
+    p: &mut dyn Parser,
+    storage: &mut AttributeStorage,
+    size: usize,
+    pagesize: usize,
+    packing: &[i32],
+    constantpageflags: &[Vec<i32>],
+) -> Result<(), Error> {
+    match storage {
+        AttributeStorage::FpReal32(v) => {
+            v.resize(size, 0.0);
+            read_rawpagedata_generic::<f32>(p, v, pagesize, packing, constantpageflags)?;
+        }
+        AttributeStorage::FpReal64(v) => {
+            v.resize(size, 0.0);
+            read_rawpagedata_generic::<f64>(p, v, pagesize, packing, constantpageflags)?;
+        }
+        AttributeStorage::Int32(v) => {
+            v.resize(size, 0);
+            read_rawpagedata_generic::<i32>(p, v, pagesize, packing, constantpageflags)?;
+        }
+        AttributeStorage::Int64(v) => {
+            v.resize(size, 0);
+            read_rawpagedata_generic::<i64>(p, v, pagesize, packing, constantpageflags)?;
+        }
+    }
+    Ok(())
+}
+
+fn read_arrays_generic<T: AttribValue>(p: &mut dyn Parser, storage: &mut Vec<T>) -> Result<(), Error> {
+    read_array! {p =>
+        read_array! {p =>
+            storage.push(T::read(p)?)
+        }
+    };
+    Ok(())
+}
+
+fn read_arrays(p: &mut dyn Parser, storage: &mut AttributeStorage) -> Result<(), Error> {
+    match storage {
+        AttributeStorage::FpReal32(v) => {
+            read_arrays_generic::<f32>(p, v)?;
+        }
+        AttributeStorage::FpReal64(v) => {
+            read_arrays_generic::<f64>(p, v)?;
+        }
+        AttributeStorage::Int32(v) => {
+            read_arrays_generic::<i32>(p, v)?;
+        }
+        AttributeStorage::Int64(v) => {
+            read_arrays_generic::<i64>(p, v)?;
+        }
+    }
+    Ok(())
+}
+
 fn read_point_attribute(p: &mut dyn Parser) -> Result<Attribute, Error> {
     let mut name = SmolStr::default();
     let mut storage = None;
     let mut size = 0;
     let mut storage_kind = StorageKind::Int32;
+    let mut packing = vec![];
+    let mut pagesize = 0;
+    let mut constantpageflags: Vec<Vec<i32>> = vec![];
 
     //eprintln!("read_point_attribute metadata");
     //eprintln!("read_point_attribute data");
@@ -317,28 +533,48 @@ fn read_point_attribute(p: &mut dyn Parser) -> Result<Attribute, Error> {
                 "storage" => {
                     storage_kind = StorageKind::parse(&p.str()?)?;
                 }
+                "packing" => {
+                    packing = read_int32_array(p)?;
+                }
+                "pagesize" => {
+                    pagesize = p.integer()? as usize;
+                }
                 "arrays" => {
                     storage = Some(AttributeStorage::new(storage_kind));
-                    read_array! {p =>
-                        read_array! {p =>
-                            storage.as_mut().unwrap().read_element(p)?
-                        }
-                    }
+                    read_arrays(p, storage.as_mut().ok_or(Malformed("expected arrays"))?)?;
                 }
                 "tuples" => {
                     storage = Some(AttributeStorage::new(storage_kind));
-                    //eprintln!("read tuple data");
-                    read_array! { p =>
-                        read_array! { p =>
-                            storage.as_mut().unwrap().read_element(p)?
-                        }
+                    read_arrays(p, storage.as_mut().ok_or(Malformed("expected tuples"))?)?;
+                }
+                "constantpageflags" => {
+                    read_array!(p => {
+                        let mut subvector_flags = Vec::new();
+                        read_array!(p => {
+                            subvector_flags.push(p.boolean()? as i32);
+                        });
+                        constantpageflags.push(subvector_flags);
+                    });
+                }
+                "rawpagedata" => {
+                    storage = Some(AttributeStorage::new(storage_kind));
+                    if packing.is_empty() {
+                        packing = vec![size as i32];
                     }
+                    read_rawpagedata(
+                        p,
+                        storage.as_mut().ok_or(Malformed("expected rawpagedata"))?,
+                        size,
+                        pagesize,
+                        &packing,
+                        &constantpageflags,
+                    )?;
                 }
             );
         }
     }
 
-    expect!(p, Event::EndArray);
+    expect!(p, Event::EndArray, "expected end of attribute array");
 
     let Some(storage) = storage else {
         return Err(Malformed("no storage data"));
@@ -348,6 +584,8 @@ fn read_point_attribute(p: &mut dyn Parser) -> Result<Attribute, Error> {
 
 enum PrimType {
     Run,
+    PolygonCurveRun,
+    BezierRun,
 }
 
 fn read_bezier_basis(p: &mut dyn Parser) -> Result<BezierBasis, Error> {
@@ -377,13 +615,13 @@ impl PrimitiveRun {
         match self {
             PrimitiveRun::BezierRun(r) => read_map! {p,
                 "vertex" => {
-                    r.vertices = PrimVar::Uniform(read_int32_array(p)?);
+                    r.vertices = Var::Uniform(read_int32_array(p)?);
                 }
                 "closed" => {
-                    r.closed = PrimVar::Uniform(p.boolean()?);
+                    r.closed = Var::Uniform(p.boolean()?);
                 }
                 "basis" => {
-                    r.basis = PrimVar::Uniform(read_bezier_basis(p)?);
+                    r.basis = Var::Uniform(read_bezier_basis(p)?);
                 }
             },
         }
@@ -392,91 +630,177 @@ impl PrimitiveRun {
 
     fn read_varying_fields(&mut self, fields: &[String], p: &mut dyn Parser) -> Result<(), Error> {
         match self {
-            PrimitiveRun::BezierRun(r) => {
-                let mut vertices = vec![];
-                let mut basis = vec![];
-                let mut closed = vec![];
-
-                read_array! {p =>
-                    // array of primitives
-                    {
-                        r.count += 1;
-                        read_array!{p =>
-                            // array of fields in the primitive
-                            for f in fields {
-                                match f.as_str() {
-                                    "vertex" => {
-                                        vertices.push(read_int32_array(p)?);
-                                    }
-                                    "closed" => {
-                                        closed.push(p.boolean()?);
-                                    }
-                                    "basis" => {
-                                        basis.push(read_bezier_basis(p)?);
-                                    }
-                                    _ => {
-                                        p.skip();
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if !vertices.is_empty() {
-                    r.vertices = PrimVar::Varying(vertices);
-                }
-                if !closed.is_empty() {
-                    r.closed = PrimVar::Varying(closed);
-                }
-                if !basis.is_empty() {
-                    r.basis = PrimVar::Varying(basis);
-                }
-            }
+            PrimitiveRun::BezierRun(r) => {}
         }
         Ok(())
     }
+}
+
+fn read_bezier_run_data(
+    p: &mut dyn Parser,
+    fields: &[String],
+    uniform_fields: &UniformFields,
+) -> Result<BezierRun, Error> {
+    let mut r = BezierRun::default();
+
+    if let Some(vertices) = &uniform_fields.vertices {
+        r.vertices = Var::Uniform(vertices.clone());
+    }
+    if let Some(closed) = uniform_fields.closed {
+        r.closed = Var::Uniform(closed);
+    }
+    if let Some(basis) = &uniform_fields.basis {
+        r.basis = Var::Uniform(basis.clone());
+    }
+
+    let mut vertices = vec![];
+    let mut basis = vec![];
+    let mut closed = vec![];
+
+    read_array! {p =>
+        // array of primitives
+        {
+            r.count += 1;
+            read_array!{p =>
+                // array of fields in the primitive
+                for f in fields {
+                    match f.as_str() {
+                        "vertex" => {
+                            vertices.push(read_int32_array(p)?);
+                        }
+                        "closed" => {
+                            closed.push(p.boolean()?);
+                        }
+                        "basis" => {
+                            basis.push(read_bezier_basis(p)?);
+                        }
+                        _ => {
+                            p.skip();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if !vertices.is_empty() {
+        r.vertices = Var::Varying(vertices);
+    }
+    if !closed.is_empty() {
+        r.closed = Var::Varying(closed);
+    }
+    if !basis.is_empty() {
+        r.basis = Var::Varying(basis);
+    }
+    Ok(r)
+}
+
+fn decode_rle_array(p: &mut dyn Parser) -> Result<Var<i32>, Error> {
+    let mut pairs = read_int32_array(p)?;
+    if pairs.len() % 2 != 0 {
+        return Err(Malformed("expected even number of RLE values"));
+    }
+    if pairs.len() == 2 {
+        return Ok(Var::Uniform(pairs[1]));
+    } else {
+        let mut values = Vec::new();
+        let mut i = 0;
+        while i < pairs.len() {
+            let count = pairs[i] as usize;
+            let value = pairs[i + 1];
+            for _ in 0..count {
+                values.push(value);
+            }
+            i += 2;
+        }
+        Ok(Var::Varying(values))
+    }
+}
+
+fn read_polygon_curve_run_data(p: &mut dyn Parser) -> Result<PolygonCurveRun, Error> {
+    let mut r = PolygonCurveRun::default();
+    read_kv_array! {p,
+        "startvertex" | "s_v" => {
+            r.start_vertex = p.integer()? as u32;
+        }
+        "nprimitives" | "n_p" => {
+            r.count = p.integer()? as usize;
+        }
+        "nvertices_rle" | "r_v" => {
+            r.vertex_counts = decode_rle_array(p)?;
+        }
+    }
+    Ok(r)
+}
+
+#[derive(Default)]
+struct UniformFields {
+    /// Curve vertices
+    vertices: Option<Vec<i32>>,
+    /// Curve basis
+    basis: Option<BezierBasis>,
+    /// Whether the curve is closed
+    closed: Option<bool>,
+}
+
+fn read_uniform_fields(p: &mut dyn Parser) -> Result<UniformFields, Error> {
+    let mut r = UniformFields::default();
+    read_map! {p,
+        "vertex" => {
+            r.vertices = Some(read_int32_array(p)?);
+        }
+        "closed" => {
+            r.closed = Some(p.boolean()?);
+        }
+        "basis" => {
+            r.basis = Some(read_bezier_basis(p)?);
+        }
+    }
+    Ok(r)
 }
 
 fn read_primitives(p: &mut dyn Parser, geo: &mut Geo) -> Result<(), Error> {
     read_array! {p => {
         expect!(p, Event::BeginArray);
         let mut prim_type = None;
-        let mut varying_fields = Vec::new();
-        let mut primitive_run = None;
+
+        let mut varyingfields = Vec::new();
+        let mut uniformfields = UniformFields::default();
 
         read_kv_array! {p,
             "type" => {
                 match p.str()?.as_ref() {
                     "run" => prim_type = Some(PrimType::Run),
+                    "PolygonCurve_run" | "c_r" => prim_type = Some(PrimType::PolygonCurveRun),
                     _ => {}
                 }
             }
             "runtype" => {
                 match p.str()?.as_ref() {
-                    "BezierCurve" => primitive_run = Some(PrimitiveRun::BezierRun(BezierRun::default())),
+                    "BezierCurve" => prim_type = Some(PrimType::BezierRun), //primitive_run = Some(PrimitiveRun::BezierRun(BezierRun::default())),
                     _ => {}
                 }
             }
             "varyingfields" => {
-                read_array!(p => varying_fields.push(p.str()?.to_string()));
+                read_array!(p => varyingfields.push(p.str()?.to_string()));
             }
             "uniformfields" => {
-                let primitive_run = primitive_run.as_mut().ok_or(Malformed(""))?;
-                primitive_run.read_uniform_fields(p)?;
+                uniformfields = read_uniform_fields(p)?;
             }
         }
 
-        {
-            let primitive_run = primitive_run.as_mut().ok_or(Malformed(""))?;
-            primitive_run.read_varying_fields(&varying_fields, p)?;
-        }
-
-        match primitive_run {
-            Some(PrimitiveRun::BezierRun(r)) => {
-                geo.primitives.push(Primitive::BezierRun(r));
+        match prim_type {
+            Some(PrimType::PolygonCurveRun) => {
+                geo.primitives.push(Primitive::PolygonCurveRun(read_polygon_curve_run_data(p)?));
             }
-            _ => {}
+            Some(PrimType::BezierRun) => {
+                geo.primitives.push(Primitive::BezierRun(read_bezier_run_data(p, &varyingfields, &uniformfields)?));
+            }
+            _ => {
+                // skip unknown primitive types
+                eprintln!("skipping unknown primitive type");
+                p.skip();
+            }
         }
 
         expect!(p, Event::EndArray);

@@ -30,9 +30,6 @@ impl<'a> Parser<'a> for ParserImpl<'a> {
         }
     }
 
-    fn skip(&mut self) {
-        todo!()
-    }
 }
 
 

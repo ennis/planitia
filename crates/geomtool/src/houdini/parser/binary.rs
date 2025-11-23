@@ -62,6 +62,10 @@ pub(crate) struct ParserImpl<'a> {
     depth: usize,
     uniform_type: i8,
     uniform_count_remaining: usize,
+    /// For UniformArray(JID_BOOL), current entry of the bitmap
+    cur_bits: u32,
+    /// How many bits are remaining in `bool_bits`
+    rem_bits: u8,
 }
 
 impl<'a> ParserImpl<'a> {
@@ -73,6 +77,8 @@ impl<'a> ParserImpl<'a> {
             depth: 0,
             uniform_type: 0,
             uniform_count_remaining: 0,
+            cur_bits: 0,
+            rem_bits: 0,
         }
     }
 
@@ -292,8 +298,22 @@ impl<'a> ParserImpl<'a> {
                 return Ok(Event::EndArray);
             }
             self.uniform_count_remaining -= 1;
-            let event = self.read_value(self.uniform_type)?;
-            return Ok(event);
+
+            if self.uniform_type == JID_BOOL {
+                // read next byte if necessary
+                if self.rem_bits == 0 {
+                    self.cur_bits = self.read_u32()?;
+                    self.rem_bits = 32;
+                }
+                // read next bit
+                let bit = self.cur_bits & 1 != 0;
+                self.cur_bits >>= 1;
+                self.rem_bits -= 1;
+                return Ok(Event::Boolean(bit));
+            } else {
+                let event = self.read_value(self.uniform_type)?;
+                return Ok(event);
+            }
         }
 
         let token = match self.read_jid() {
@@ -361,6 +381,8 @@ impl<'a> ParserImpl<'a> {
                             self.uniform_type = self.read_i8()?;
                             eprintln!("JID_UNIFORM_ARRAY {:0x}", self.uniform_type);
                             self.uniform_count_remaining = self.read_len()?;
+                            self.cur_bits = 0;
+                            self.rem_bits = 0;
                             self.state.push(UniformArray);
                             next_event = Event::BeginArray;
                         }
