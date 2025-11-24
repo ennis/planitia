@@ -2,4 +2,5 @@
 
 #![feature(default_field_values)]
 
-mod mesh;
+pub mod mesh;
+pub mod coating;

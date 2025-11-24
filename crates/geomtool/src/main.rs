@@ -35,6 +35,13 @@ enum Commands {
         #[clap(long)]
         triangle_count: Option<usize>,
     },
+    /// Generate coating meshes from geometry exported from Houdini.
+    Coating {
+        /// Path to Houdini .geo/.bgeo file.
+        geo_file: String,
+        /// Path to output file.
+        output_file: Option<String>,
+    }
 }
 
 /// Config options common between all tools.
@@ -52,6 +59,9 @@ fn main() {
         Commands::Terrain { heightmap, error_threshold, triangle_count } => {
             let terrain_cfg = TerrainConfig { error_threshold, triangle_count_target: triangle_count };
             generate_terrain_meshes(heightmap, &terrain_cfg, &global_cfg);
+        }
+        Commands::Coating { geo_file, output_file } => {
+            //let
         }
     }
 }

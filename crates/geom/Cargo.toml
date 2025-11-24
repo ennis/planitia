@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 math = {workspace = true}
 utils = {workspace = true}
+color = {workspace = true}

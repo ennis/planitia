@@ -3,8 +3,10 @@ mod json;
 
 use super::Error::Malformed;
 use super::{
-    Attribute, AttributeStorage, BezierBasis, BezierRun, Error, Geo, PolygonCurveRun, Primitive, StorageKind, Var,
+    Attribute, AttributeStorage, BezierBasis, BezierRun, Error, Geo, Group, PolygonCurveRun, PolygonRun, PrimRuns,
+    StorageKind, Var,
 };
+use fixedbitset::FixedBitSet;
 use json::ParserImpl;
 use smol_str::SmolStr;
 use std::borrow::Cow;
@@ -12,6 +14,7 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::path::Path;
 use std::{fs, ptr};
+use log::warn;
 
 #[derive(Clone, Debug)]
 struct PackedArray<'a, T: Copy> {
@@ -156,6 +159,24 @@ trait Parser<'a> {
     fn integer(&mut self) -> Result<i64, Error> {
         expect!(self, e);
         e.as_integer().ok_or(Error::Malformed("expected integer"))
+    }
+
+    /// Reads an integer value, with a maximum value of i32::MAX.
+    fn int32(&mut self) -> Result<i32, Error> {
+        let i = self.integer()?;
+        if i > i32::MAX as i64 {
+            return Err(Error::Malformed("integer out of range for i32"));
+        }
+        Ok(i as i32)
+    }
+
+    /// Reads an unsigned integer value, with a maximum value of u32::MAX.
+    fn uint32(&mut self) -> Result<u32, Error> {
+        let i = self.integer()?;
+        if i < 0 || i > u32::MAX as i64 {
+            return Err(Error::Malformed("integer out of range for u32"));
+        }
+        Ok(i as u32)
     }
 }
 
@@ -585,7 +606,9 @@ fn read_point_attribute(p: &mut dyn Parser) -> Result<Attribute, Error> {
 enum PrimType {
     Run,
     PolygonCurveRun,
+    PolygonRun,
     BezierRun,
+    Unknown(String),
 }
 
 fn read_bezier_basis(p: &mut dyn Parser) -> Result<BezierBasis, Error> {
@@ -701,13 +724,13 @@ fn decode_rle_array(p: &mut dyn Parser) -> Result<Var<i32>, Error> {
         return Err(Malformed("expected even number of RLE values"));
     }
     if pairs.len() == 2 {
-        return Ok(Var::Uniform(pairs[1]));
+        return Ok(Var::Uniform(pairs[0]));
     } else {
         let mut values = Vec::new();
         let mut i = 0;
         while i < pairs.len() {
-            let count = pairs[i] as usize;
-            let value = pairs[i + 1];
+            let value = pairs[i];
+            let count = pairs[i + 1] as usize;
             for _ in 0..count {
                 values.push(value);
             }
@@ -717,14 +740,72 @@ fn decode_rle_array(p: &mut dyn Parser) -> Result<Var<i32>, Error> {
     }
 }
 
-fn read_polygon_curve_run_data(p: &mut dyn Parser) -> Result<PolygonCurveRun, Error> {
-    let mut r = PolygonCurveRun::default();
+fn read_group(p: &mut dyn Parser, prim_count_hint: usize) -> Result<(SmolStr, Group), Error> {
+    expect!(p, Event::BeginArray);
+
+    let mut name = SmolStr::default();
+    let mut bool_rle = Vec::new();
+    //let mut bitset = FixedBitSet::with_capacity(prim_count_hint);
+
+    read_kv_array! {p,
+        "name" => {
+            name = SmolStr::new(p.str()?);
+        }
+    }
+
+    read_kv_array! {p,
+        "selection" => {
+            read_kv_array! {p,
+                "unordered" => {
+                    read_kv_array!{p,
+                        "boolRLE" => {
+                            let mut index = 0;
+                            read_array!{p =>
+                                {
+                                    let run_length = p.uint32()?;
+                                    let value = p.boolean()?;
+                                    if value {
+                                        bool_rle.push(index..(index+run_length));
+                                    }
+                                    index += run_length;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    expect!(p, Event::EndArray);
+
+    let group = if !bool_rle.is_empty() {
+        Group::RunLengthEncoded(bool_rle)
+    } else {
+        todo!("group bitsets")
+    };
+
+    Ok((name, group))
+}
+
+#[derive(Default)]
+struct PolyRunData {
+    start_vertex: u32,
+    count: usize,
+    vertex_counts: Var<i32>,
+}
+
+fn read_poly_run_data(p: &mut dyn Parser) -> Result<PolyRunData, Error> {
+    let mut r = PolyRunData::default();
     read_kv_array! {p,
         "startvertex" | "s_v" => {
             r.start_vertex = p.integer()? as u32;
         }
         "nprimitives" | "n_p" => {
             r.count = p.integer()? as usize;
+        }
+        "nvertices" | "n_v" => {
+            r.vertex_counts = Var::Varying(read_int32_array(p)?);
         }
         "nvertices_rle" | "r_v" => {
             r.vertex_counts = decode_rle_array(p)?;
@@ -772,12 +853,15 @@ fn read_primitives(p: &mut dyn Parser, geo: &mut Geo) -> Result<(), Error> {
                 match p.str()?.as_ref() {
                     "run" => prim_type = Some(PrimType::Run),
                     "PolygonCurve_run" | "c_r" => prim_type = Some(PrimType::PolygonCurveRun),
-                    _ => {}
+                    "Polygon_run" | "p_r" => prim_type = Some(PrimType::PolygonRun),
+                    other => {
+                        prim_type = Some(PrimType::Unknown(other.to_string()));
+                    }
                 }
             }
             "runtype" => {
                 match p.str()?.as_ref() {
-                    "BezierCurve" => prim_type = Some(PrimType::BezierRun), //primitive_run = Some(PrimitiveRun::BezierRun(BezierRun::default())),
+                    "BezierCurve" => prim_type = Some(PrimType::BezierRun),
                     _ => {}
                 }
             }
@@ -790,16 +874,31 @@ fn read_primitives(p: &mut dyn Parser, geo: &mut Geo) -> Result<(), Error> {
         }
 
         match prim_type {
+            Some(PrimType::PolygonRun) => {
+                let rundata = read_poly_run_data(p)?;
+                geo.prim_runs.push(PrimRuns::PolygonRun(PolygonRun {
+                    start_vertex: rundata.start_vertex,
+                    count: rundata.count,
+                    vertex_counts: rundata.vertex_counts,
+                }));
+            }
             Some(PrimType::PolygonCurveRun) => {
-                geo.primitives.push(Primitive::PolygonCurveRun(read_polygon_curve_run_data(p)?));
+                let rundata = read_poly_run_data(p)?;
+                geo.prim_runs.push(PrimRuns::PolygonCurveRun(PolygonCurveRun {
+                    start_vertex: rundata.start_vertex,
+                    count: rundata.count,
+                    vertex_counts: rundata.vertex_counts,
+                }));
             }
             Some(PrimType::BezierRun) => {
-                geo.primitives.push(Primitive::BezierRun(read_bezier_run_data(p, &varyingfields, &uniformfields)?));
+                geo.prim_runs.push(PrimRuns::BezierRun(read_bezier_run_data(p, &varyingfields, &uniformfields)?));
+            }
+            Some(PrimType::Unknown(ty)) => {
+                warn!("not loading unknown primitive type: {ty}");
+                p.skip();
             }
             _ => {
-                // skip unknown primitive types
-                eprintln!("skipping unknown primitive type");
-                p.skip();
+                return Err(Malformed("primitive type not specified"));
             }
         }
 
@@ -834,6 +933,18 @@ fn read_file(p: &mut dyn Parser) -> Result<Geo, Error> {
         "topology" => {read_topology(p, &mut geo)?}
         "attributes" => {read_attributes(p, &mut geo)?}
         "primitives" => {read_primitives(p, &mut geo)?}
+        "pointgroups" => {
+            read_array!(p => {
+                let (name, group) = read_group(p, geo.primitive_count)?;
+                geo.point_groups.insert(name, group);
+            })
+        }
+        "primitivegroups" => {
+            read_array!(p => {
+                let (name, group) = read_group(p, geo.primitive_count)?;
+                geo.primitive_groups.insert(name, group);
+            })
+        }
     }
 
     // Sanity checks for the position attribute.
@@ -848,11 +959,7 @@ fn read_file(p: &mut dyn Parser) -> Result<Geo, Error> {
         "the first point attribute should be the point position"
     );
     assert_eq!(positions.size, 3, "the position attribute should have 3 components");
-    assert!(
-        positions.as_f32_slice().is_some(),
-        "the position attribute should be fpreal32"
-    );
-    let positions_fp32 = positions.as_f32_slice().unwrap();
+    let positions_fp32 = positions.cast::<f32>();
     assert!(
         positions_fp32.len() % 3 == 0,
         "the number of positions should be a multiple of 3"

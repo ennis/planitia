@@ -212,37 +212,37 @@ impl<'a> ParserImpl<'a> {
         let event;
         match jid {
             JID_STRING => {
-                eprintln!("JID_STRING");
+                //eprintln!("JID_STRING");
                 let s = self.read_str()?;
                 event = Event::String(Cow::Borrowed(s));
             }
             JID_TOKENREF => {
                 let s = self.read_string_token()?;
-                eprintln!("JID_TOKENREF `{s}`");
+                //eprintln!("JID_TOKENREF `{s}`");
                 event = Event::String(Cow::Borrowed(s));
             }
             JID_INT8 => {
-                eprintln!("JID_INT8");
+                //eprintln!("JID_INT8");
                 let i = self.read_i8()?;
                 event = Event::Integer(i as i64);
             }
             JID_INT16 => {
-                //eprintln!("JID_INT16");
+                ////eprintln!("JID_INT16");
                 let i = self.read_u16()?;
                 event = Event::Integer(i as i64);
             }
             JID_INT32 => {
-                eprintln!("JID_INT32");
+                //eprintln!("JID_INT32");
                 let i = self.read_u32()?;
                 event = Event::Integer(i as i64);
             }
             JID_INT64 => {
-                eprintln!("JID_INT64");
+                //eprintln!("JID_INT64");
                 let i = self.read_i64()?;
                 event = Event::Integer(i);
             }
             JID_UINT8 => {
-                eprintln!("JID_UINT8");
+                //eprintln!("JID_UINT8");
                 let u = self.read_u8()?;
                 event = Event::Integer(u as i64);
             }
@@ -257,20 +257,20 @@ impl<'a> ParserImpl<'a> {
                 event = Event::Float(f as f64);
             }
             JID_REAL64 => {
-                eprintln!("JID_REAL64");
+                //eprintln!("JID_REAL64");
                 let f = self.read_f64()?;
                 event = Event::Float(f);
             }
             JID_TRUE => {
-                eprintln!("JID_TRUE");
+                //eprintln!("JID_TRUE");
                 event = Event::Boolean(true);
             }
             JID_FALSE => {
-                eprintln!("JID_FALSE");
+                //eprintln!("JID_FALSE");
                 event = Event::Boolean(false);
             }
             JID_BOOL => {
-                eprintln!("JID_BOOL");
+                //eprintln!("JID_BOOL");
                 let b = self.read_u8()?;
                 event = match b {
                     0 => Event::Boolean(false),
@@ -278,9 +278,9 @@ impl<'a> ParserImpl<'a> {
                 };
             }
             _ => {
-                eprintln!("unexpected jid value: {:0x}", jid);
-                return Err(Error::Malformed("unexpected value"))
-            },
+                //eprintln!("unexpected jid value: {:0x}", jid);
+                return Err(Error::Malformed("unexpected value"));
+            }
         }
 
         Ok(event)
@@ -329,9 +329,8 @@ impl<'a> ParserImpl<'a> {
         use State::*;
         match state {
             Start | MapNeedValue | ArrayNeedValue | ArrayStart => match token {
-
                 JID_ARRAY_END => {
-                    eprintln!("JID_ARRAY_END");
+                    //eprintln!("JID_ARRAY_END");
                     if !matches!(state, ArrayStart | ArrayNeedValue) {
                         return Err(Error::Malformed("unexpected array end"));
                     }
@@ -341,7 +340,7 @@ impl<'a> ParserImpl<'a> {
                     next_event = Event::EndArray;
                 }
                 JID_MAP_END => {
-                    eprintln!("JID_MAP_END");
+                    //eprintln!("JID_MAP_END");
                     if state != MapStart {
                         return Err(Error::Malformed("unexpected map end"));
                     }
@@ -349,11 +348,12 @@ impl<'a> ParserImpl<'a> {
                     next_event = Event::EndMap;
                 }
                 //JID_KEY_SEPARATOR | JID_VALUE_SEPARATOR => {
-                //    eprintln!("JID_KEY_SEPARATOR or JID_VALUE_SEPARATOR");
+                //    //eprintln!("JID_KEY_SEPARATOR or JID_VALUE_SEPARATOR");
                 //    return Err(Error::Malformed("invalid separator token"));
                 //}
                 JID_STRING | JID_BOOL | JID_NULL | JID_INT8 | JID_INT16 | JID_INT32 | JID_INT64 | JID_UINT8
-                | JID_UINT16 | JID_REAL64 | JID_UNIFORM_ARRAY | JID_TRUE | JID_FALSE | JID_TOKENREF | JID_MAP_BEGIN | JID_ARRAY_BEGIN => {
+                | JID_UINT16 | JID_REAL64 | JID_UNIFORM_ARRAY | JID_TRUE | JID_FALSE | JID_TOKENREF | JID_MAP_BEGIN
+                | JID_ARRAY_BEGIN => {
                     match state {
                         Start => {
                             self.set_state(Complete);
@@ -368,18 +368,18 @@ impl<'a> ParserImpl<'a> {
                     }
                     match token {
                         JID_MAP_BEGIN => {
-                            eprintln!("JID_MAP_BEGIN");
+                            //eprintln!("JID_MAP_BEGIN");
                             self.state.push(MapStart);
                             next_event = Event::BeginMap;
                         }
                         JID_ARRAY_BEGIN => {
-                            eprintln!("JID_ARRAY_BEGIN");
+                            //eprintln!("JID_ARRAY_BEGIN");
                             self.state.push(ArrayStart);
                             next_event = Event::BeginArray;
                         }
                         JID_UNIFORM_ARRAY => {
                             self.uniform_type = self.read_i8()?;
-                            eprintln!("JID_UNIFORM_ARRAY {:0x}", self.uniform_type);
+                            //eprintln!("JID_UNIFORM_ARRAY {:0x}", self.uniform_type);
                             self.uniform_count_remaining = self.read_len()?;
                             self.cur_bits = 0;
                             self.rem_bits = 0;
@@ -392,37 +392,37 @@ impl<'a> ParserImpl<'a> {
                     }
                 }
                 _ => {
-                    eprintln!("unexpected token: {:0x}", token);
+                    //eprintln!("unexpected token: {:0x}", token);
                     return Err(Error::Malformed("unexpected token"));
                 }
             },
             MapStart | MapNeedKey => match token {
                 JID_TOKENREF => {
-                    let key = self.read_string_token()?;
-                    eprintln!("JID_TOKENREF `{key}`");
                     self.set_state(MapNeedValue);
+                    let key = self.read_string_token()?;
+                    //eprintln!("JID_TOKENREF `{key}`");
                     next_event = Event::String(Cow::Borrowed(key));
                 }
                 JID_STRING => {
                     self.set_state(MapNeedValue);
                     let key = self.read_str()?;
-                    eprintln!("JID_STRING `{key}`");
-                    next_event = Event::String(Cow::Borrowed(self.read_str()?));
+                    //eprintln!("JID_STRING `{key}`");
+                    next_event = Event::String(Cow::Borrowed(key));
                 }
                 JID_MAP_END => {
-                    eprintln!("JID_MAP_END");
+                    //eprintln!("JID_MAP_END");
                     self.state.pop().ok_or(Error::Malformed("unbalanced map delimiters"))?;
                     next_event = Event::EndMap;
                 }
                 _ => {
-                    eprintln!("unexpected token in map key position: {:0x}", token);
+                    //eprintln!("unexpected token in map key position: {:0x}", token);
                     return Err(Error::Malformed("expected string key or map end"));
                 }
             },
             // after key
             //MapSep => match token {
             //    JID_KEY_SEPARATOR => {
-            //        eprintln!("JID_KEY_SEPARATOR");
+            //        //eprintln!("JID_KEY_SEPARATOR");
             //        self.set_state(MapNeedValue);
             //        return self.next_event();
             //    }
@@ -433,12 +433,12 @@ impl<'a> ParserImpl<'a> {
             // after map value, expect either `,` or `}`
             //MapGotValue => match token {
             //    JID_VALUE_SEPARATOR => {
-            //        eprintln!("JID_VALUE_SEPARATOR");
+            //        //eprintln!("JID_VALUE_SEPARATOR");
             //        self.set_state(MapNeedKey);
             //        return self.next_event();
             //    }
             //    JID_MAP_END => {
-            //        eprintln!("JID_MAP_END");
+            //        //eprintln!("JID_MAP_END");
             //        self.state.pop().ok_or(Error::Malformed("unbalanced map delimiters"))?;
             //        next_event = Event::EndMap;
             //    }
@@ -448,19 +448,19 @@ impl<'a> ParserImpl<'a> {
             //},
             //ArrayGotValue => match token {
             //    JID_VALUE_SEPARATOR => {
-            //        eprintln!("JID_VALUE_SEPARATOR");
+            //        //eprintln!("JID_VALUE_SEPARATOR");
             //        self.set_state(ArrayNeedValue);
             //        return self.next_event();
             //    }
             //    JID_ARRAY_END => {
-            //        eprintln!("JID_ARRAY_END");
+            //        //eprintln!("JID_ARRAY_END");
             //        self.state
             //            .pop()
             //            .ok_or(Error::Malformed("unbalanced array delimiters"))?;
             //        next_event = Event::EndArray;
             //    }
             //    _ => {
-            //        eprintln!("unexpected token after array value: {:0x}", token);
+            //        //eprintln!("unexpected token after array value: {:0x}", token);
             //        return Err(Error::Malformed("expected value separator or array end"));
             //    }
             //},
@@ -486,12 +486,11 @@ impl<'a> Parser<'a> for ParserImpl<'a> {
         let state = *self.state.last().unwrap();
 
         (state == UniformArray && self.uniform_count_remaining == 0)
-            ||
-        (state != UniformArray
-            && match self.data.get(0) {
-                Some(x) if *x as i8 == JID_ARRAY_END || *x as i8 == JID_MAP_END => true,
-                None => true,
-                _ => false,
-            })
+            || (state != UniformArray
+                && match self.data.get(0) {
+                    Some(x) if *x as i8 == JID_ARRAY_END || *x as i8 == JID_MAP_END => true,
+                    None => true,
+                    _ => false,
+                })
     }
 }

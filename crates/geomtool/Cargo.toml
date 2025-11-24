@@ -16,3 +16,7 @@ indicatif = "0.18.3"
 color-print = "0.3.7"
 smol_str = "0.3.4"
 serde_json = "1.0.145"
+color = { workspace = true }
+utils = { workspace = true }
+geom = { workspace = true }
+fixedbitset = "0.5.7"
