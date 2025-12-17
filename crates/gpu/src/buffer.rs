@@ -1,7 +1,8 @@
-use crate::{BufferRange, BufferUsage, Device, DeviceAddress, ResourceAllocation, ResourceId, TrackedResource};
+use crate::{BufferRange, BufferUsage, Device, Ptr, ResourceAllocation, ResourceId, TrackedResource};
 use ash::vk;
 use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
 use gpu_allocator::MemoryLocation;
+use log::{trace, warn};
 use std::collections::Bound;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
@@ -17,6 +18,7 @@ impl<T: ?Sized> Drop for Buffer<T> {
 
         Device::global().delete_tracked_resource(self.id, move || unsafe {
             let device = Device::global();
+            trace!("GPU: deleting buffer: {:?}", handle);
             device.free_memory(&mut allocation);
             device.raw.destroy_buffer(handle, None);
         });
@@ -30,7 +32,7 @@ pub struct BufferCreateInfo<'a> {
     pub len: usize,
     /// Usage flags. Must include all intended uses of the buffer.
     pub usage: BufferUsage,
-    pub memory_location: MemoryLocation = MemoryLocation::GpuOnly,
+    pub memory_location: MemoryLocation = MemoryLocation::Unknown,
     /// Debug label.
     pub label: &'a str = "",
 }
@@ -60,14 +62,12 @@ impl<T: Copy> Buffer<[T]> {
 
     /// Creates a CpuToGpu buffer and copies data into it.
     pub fn upload_slice(usage: BufferUsage, data: &[T], label: &str) -> Buffer<[T]> {
-        let buffer = Buffer::new(
-            BufferCreateInfo {
-                len: data.len(),
-                usage,
-                label,
-                memory_location: MemoryLocation::CpuToGpu,
-            },
-        );
+        let buffer = Buffer::new(BufferCreateInfo {
+            len: data.len(),
+            usage,
+            label,
+            memory_location: MemoryLocation::CpuToGpu,
+        });
         unsafe {
             // copy data to mapped buffer
             ptr::copy_nonoverlapping(data.as_ptr(), buffer.as_mut_ptr() as *mut T, data.len());
@@ -85,9 +85,10 @@ impl<T: Copy> Buffer<T> {
 }
 
 impl<T: ?Sized> Buffer<T> {
-    pub fn device_address(&self) -> DeviceAddress<T> {
-        DeviceAddress {
-            address: self.device_address,
+    /// Returns the device address of the buffer, for use in shaders.
+    pub fn ptr(&self) -> Ptr<T> {
+        Ptr {
+            raw: self.device_address,
             _phantom: PhantomData,
         }
     }
@@ -321,17 +322,26 @@ impl<'a, T: Copy> From<&'a Buffer<[T]>> for BufferRange<'a, T> {
 impl Device {
     /// Creates a new buffer resource.
     pub(crate) fn create_buffer(&self, elem_size: usize, create_info: BufferCreateInfo) -> BufferUntyped {
+        //assert!(create_info.len > 0, "buffer size must be greater than zero");
 
-        assert!(create_info.len > 0, "buffer size must be greater than zero");
+        if create_info.len == 0 || elem_size == 0 {
+            warn!("creating zero-sized buffer; this is not supported by Vulkan and a minimum size of 1 byte will be used");
+        }
         let byte_size = elem_size as u64 * create_info.len as u64;
 
+        // We support zero-sized buffers, but Vulkan doesn't, so we enforce a minimum size of 1 byte.
+        // The length exposed to the user is still zero.
+        const MINIMUM_BUFFER_SIZE: u64 = 1;
+        let nonzero_byte_size = byte_size.max(MINIMUM_BUFFER_SIZE);
+
+        
         unsafe {
             let handle = self
                 .raw
                 .create_buffer(
                     &vk::BufferCreateInfo {
                         flags: Default::default(),
-                        size: byte_size,
+                        size: nonzero_byte_size,
                         usage: create_info.usage.to_vk_buffer_usage_flags()
                             | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
                         sharing_mode: vk::SharingMode::EXCLUSIVE,
@@ -342,6 +352,7 @@ impl Device {
                     None,
                 )
                 .expect("failed to create buffer");
+
 
             let mem_req = self.raw.get_buffer_memory_requirements(handle);
             let allocation = self.allocate_memory_or_panic(&AllocationCreateDesc {
@@ -367,9 +378,12 @@ impl Device {
                 // SAFETY: no concurrent access possible
                 self.set_object_name(handle, create_info.label);
             }
+            
+            let id = self.allocate_resource_id();
+            trace!("GPU: create buffer {:?} {} {id:?}", handle, create_info.label);
 
             BufferUntyped {
-                id: self.allocate_resource_id(),
+                id,
                 allocation,
                 handle,
                 memory_location: create_info.memory_location,

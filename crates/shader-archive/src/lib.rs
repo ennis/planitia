@@ -191,6 +191,11 @@ impl PipelineArchive {
         Ok(this)
     }
 
+    pub fn from_bytes_static(data: &'static [u8]) -> io::Result<Self> {
+        let archive = ArchiveReader::new(data);
+        Ok(Self(Cow::Borrowed(archive)))
+    }
+
     fn check_header(&self) -> io::Result<()> {
         let header: &PipelineArchiveData = self.0.header().unwrap();
         if header.magic != PIPELINE_ARCHIVE_MAGIC {
@@ -213,10 +218,6 @@ impl PipelineArchive {
         header
     }
 
-    pub fn from_bytes_static(data: &'static [u8]) -> io::Result<Self> {
-        let archive = ArchiveReader::new(data);
-        Ok(Self(Cow::Borrowed(archive)))
-    }
 
     pub fn find_graphics_pipeline(&self, name: &str) -> Option<&GraphicsPipelineData> {
         let data = self.data();

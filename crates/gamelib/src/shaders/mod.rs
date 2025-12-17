@@ -2,7 +2,7 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 
-use gpu::DeviceAddress;
+use gpu::Ptr;
 use std::marker::PhantomData;
 
 // Define type aliases for slang types. These are referenced in the generated bindings, which
@@ -11,7 +11,7 @@ use std::marker::PhantomData;
 // WARNING: these must match the layout of the corresponding slang types in the shaders.
 //          Notably, the `Texture*_Handle` types must have the same layout as `[u32;2]`
 //          to match slang.
-type Pointer<T> = DeviceAddress<T>;
+type Pointer<T> = Ptr<T>;
 type uint = u32;
 type int = i32;
 type float = f32;

@@ -1,5 +1,5 @@
 use crate::paint::shape::RectShape;
-use crate::paint::{FeatherVertex, Srgba32};
+use crate::paint::{FeatherVertex, Srgba8};
 use math::{U16Vec2, Vec2, vec2};
 use std::f32::consts::PI;
 
@@ -8,11 +8,11 @@ struct PN {
     p: Vec2,
     /// Not necessarily normalized
     n: Vec2,
-    c: Srgba32,
+    c: Srgba8,
 }
 
 impl PN {
-    const fn new(p: Vec2, n: Vec2, c: Srgba32) -> Self {
+    const fn new(p: Vec2, n: Vec2, c: Srgba8) -> Self {
         Self { p, n, c }
     }
 }
@@ -166,7 +166,7 @@ impl Tessellator {
         }
     }
 
-    pub fn quad(&mut self, p0: Vec2, p1: Vec2, uv0: U16Vec2, uv1: U16Vec2, color: Srgba32) {
+    pub fn quad(&mut self, p0: Vec2, p1: Vec2, uv0: U16Vec2, uv1: U16Vec2, color: Srgba8) {
         let base = self.geometry.vertices.len() as u32;
         self.geometry.vertices.extend([
             FeatherVertex {

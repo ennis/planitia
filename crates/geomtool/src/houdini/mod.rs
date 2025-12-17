@@ -3,15 +3,14 @@
 mod error;
 mod parser;
 
+use color_print::{cprint, cprintln};
 pub use error::Error;
 use fixedbitset::FixedBitSet;
-use math::Vec3;
+use math::{Vec2, Vec3, Vec4};
 use smol_str::SmolStr;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::ops::{Index, Range};
-use std::path::Path;
-use std::{fmt, fs, slice};
-use color_print::cprintln;
+use std::{fmt, slice};
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -44,6 +43,7 @@ impl StorageKind {
     }
 }
 
+// TODO: should have other storage types (RLE, constant, etc)
 #[derive(Clone, Debug)]
 pub enum AttributeStorage {
     FpReal32(Vec<f32>),
@@ -52,7 +52,7 @@ pub enum AttributeStorage {
     Int64(Vec<i64>),
 }
 
-pub trait AttributeType {
+pub trait AttributeType: Copy + Default {
     const STORAGE_KIND: StorageKind;
     const TUPLE_SIZE: usize;
 }
@@ -70,7 +70,9 @@ impl_attribute_type!(f32, StorageKind::FpReal32, 1);
 impl_attribute_type!(f64, StorageKind::FpReal64, 1);
 impl_attribute_type!(i32, StorageKind::Int32, 1);
 impl_attribute_type!(i64, StorageKind::Int64, 1);
+impl_attribute_type!(Vec2, StorageKind::FpReal32, 2);
 impl_attribute_type!(Vec3, StorageKind::FpReal32, 3);
+impl_attribute_type!(Vec4, StorageKind::FpReal32, 4);
 
 /// Geometry attribute.
 #[derive(Clone, Debug)]
@@ -93,7 +95,7 @@ impl Attribute {
         }
     }
 
-    fn storage_type(&self) -> StorageKind {
+    pub fn storage_kind(&self) -> StorageKind {
         match &self.storage {
             AttributeStorage::FpReal32(_) => StorageKind::FpReal32,
             AttributeStorage::FpReal64(_) => StorageKind::FpReal64,
@@ -103,7 +105,7 @@ impl Attribute {
     }
 
     pub fn try_cast<T: AttributeType>(&self) -> Option<&TypedAttribute<T>> {
-        if self.storage_type() != T::STORAGE_KIND {
+        if self.storage_kind() != T::STORAGE_KIND {
             return None;
         }
         // It's OK to reinterpret a vec3 array as an array of f32s with 3x the size.
@@ -151,9 +153,15 @@ pub struct Topology {
 }
 
 #[derive(Clone, Debug)]
-pub enum PrimRuns {
+pub struct PrimRun {
+    pub base_index: u32,
+    pub count: u32,
+    pub kind: PrimRunKind,
+}
+
+#[derive(Clone, Debug)]
+pub enum PrimRunKind {
     BezierRun(BezierRun),
-    PolygonCurveRun(PolygonCurveRun),
     PolygonRun(PolygonRun),
 }
 
@@ -165,8 +173,10 @@ pub struct Geo {
     pub primitive_count: usize,
     pub topology: Vec<u32>,
     pub point_attributes: Vec<Attribute>,
+    pub vertex_attributes: Vec<Attribute>,
     pub primitive_attributes: Vec<Attribute>,
-    pub prim_runs: Vec<PrimRuns>,
+    /// `(prim_start_index, prim_run)`
+    pub prim_runs: Vec<PrimRun>,
     pub primitive_groups: BTreeMap<SmolStr, Group>,
     pub point_groups: BTreeMap<SmolStr, Group>,
 }
@@ -183,43 +193,113 @@ impl Geo {
         self.point_attribute(name)?.try_cast::<T>()
     }
 
+    pub fn vertex_attribute(&self, name: &str) -> Option<&Attribute> {
+        self.vertex_attributes.iter().find(|a| a.name == name)
+    }
+
+    pub fn vertex_attribute_typed<T: AttributeType>(&self, name: &str) -> Option<&TypedAttribute<T>> {
+        self.vertex_attribute(name)?.try_cast::<T>()
+    }
+
+    /// Returns the point index for the given vertex.
+    pub fn vertexpoint(&self, vertex_index: u32) -> u32 {
+        self.topology[vertex_index as usize]
+    }
+
+    /// Reads a vertex attribute value.
+    pub fn vertexattrib<T: AttributeType>(&self, vertex_index: u32, name: &str) -> T {
+        if let Some(attr) = self.vertex_attribute_typed::<T>(name) {
+            attr[vertex_index as usize]
+        } else if let Some(attr) = self.point_attribute_typed::<T>(name) {
+            let point_index = self.topology[vertex_index as usize] as usize;
+            attr[point_index]
+        } else {
+            T::default()
+        }
+    }
+
+    /// Reads a point attribute value.
+    pub fn pointattrib<T: AttributeType>(&self, point_index: u32, name: &str) -> T {
+        self.point_attribute_typed::<T>(name)
+            .map(|a| a[point_index as usize])
+            .unwrap_or_default()
+    }
+
     /// Returns the contents of the position attribute (`P`).
-    pub fn positions(&self) -> &[Vec3] {
+    pub fn all_positions(&self) -> &[Vec3] {
         // The first attribute is always the position attribute.
         // The fact that this is a f32 attribute is ensured by the loader.
         self.point_attributes[0].cast::<Vec3>().as_slice()
     }
 
     /// Returns the contents of the color attribute (`Cd`).
-    pub fn color(&self) -> Option<&[Vec3]> {
+    pub fn all_colors(&self) -> Option<&[Vec3]> {
         let data = self.point_attribute("Cd")?.cast().as_slice();
         Some(data)
     }
 
-    /// Returns the position of the given vertex.
+    /*/// Returns the position of the given vertex.
     pub fn vertex_position(&self, vertex_index: i32) -> Vec3 {
         // The vertex is an index into the topology array, which gives us the index into the point attribute.
         // The double indirection is because different vertices can share the same point.
         let point = self.topology[vertex_index as usize] as usize;
-        self.positions()[point]
-    }
+        self.all_positions()[point]
+    }*/
 
-    /// Returns the color of the given vertex.
+    /*/// Returns the color of the given vertex.
     pub fn vertex_color(&self, vertex_index: i32) -> Option<Vec3> {
         let point = self.topology[vertex_index as usize] as usize;
-        Some(self.color()?[point])
-    }
+        Some(self.all_colors()?[point])
+    }*/
 
-    /// Iterates over all polyline curves in the geometry.
-    pub fn iter_polylines(&self) -> impl Iterator<Item = PolygonCurveRef> {
+    /// Iterates over all Bézier curves in the geometry.
+    pub fn iter_beziers(&self) -> impl Iterator<Item = BezierRef> {
         self.prim_runs
             .iter()
             .filter_map(|run| {
-                if let PrimRuns::PolygonCurveRun(polygon_run) = run {
-                    Some(polygon_run.iter(self))
+                if let PrimRunKind::BezierRun(ref bezier_run) = run.kind {
+                    Some(BezierRunIter {
+                        run: bezier_run,
+                        index: 0,
+                    })
                 } else {
                     None
                 }
+            })
+            .flatten()
+    }
+
+    /// Iterates over all polygons in the geometry, including open polygons (polylines).
+    pub fn iter_polygons(&self) -> impl Iterator<Item = PolygonRef> {
+        self.prim_runs
+            .iter()
+            .filter_map(|run| {
+                if let PrimRunKind::PolygonRun(ref polygon_run) = run.kind {
+                    Some(PolygonRunIter {
+                        geo: self,
+                        run: polygon_run,
+                        index: 0,
+                        vertex: polygon_run.start_vertex as usize,
+                    })
+                } else {
+                    None
+                }
+            })
+            .flatten()
+    }
+
+    /// Iterates over all polylines (open polygons).
+    pub fn iter_polylines(&self) -> impl Iterator<Item = PolygonRef> {
+        self.prim_runs
+            .iter()
+            .filter_map(|run| match run.kind {
+                PrimRunKind::PolygonRun(ref polygon_run) if !polygon_run.closed => Some(PolygonRunIter {
+                    geo: self,
+                    run: polygon_run,
+                    index: 0,
+                    vertex: polygon_run.start_vertex as usize,
+                }),
+                _ => None,
             })
             .flatten()
     }
@@ -243,8 +323,6 @@ impl Geo {
     pub fn point_group(&self, name: &str) -> &Group {
         self.point_groups.get(name).unwrap_or(Group::empty())
     }
-
-
 }
 
 #[derive(Clone, Debug)]
@@ -265,6 +343,13 @@ impl Group {
         &EMPTY_GROUP
     }
 
+    pub fn count(&self) -> usize {
+        match self {
+            Group::Bitset(bitset) => bitset.count_ones(..),
+            Group::RunLengthEncoded(rle) => rle.iter().map(|r| (r.end - r.start) as usize).sum(),
+        }
+    }
+
     /// Returns whether the group contains the given element index.
     ///
     /// # Arguments
@@ -274,9 +359,7 @@ impl Group {
     pub fn contains(&self, index: u32) -> bool {
         match self {
             Group::Bitset(bitset) => bitset[index as usize],
-            Group::RunLengthEncoded(rle) => rle
-                .iter()
-                .any(|r| r.contains(&index)),
+            Group::RunLengthEncoded(rle) => rle.iter().any(|r| r.contains(&index)),
         }
     }
 }
@@ -304,12 +387,13 @@ impl<T: Default> Default for Var<T> {
         Var::Uniform(T::default())
     }
 }
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// A run of Bézier curves.
 #[derive(Clone, Debug)]
 pub struct BezierRun {
-    /// Number of curves in the run.
-    pub count: usize,
+    pub base_prim_index: u32,
+    pub count: u32,
     /// Vertices of the control points.
     ///
     /// They are indices into the `topology` vector.
@@ -321,133 +405,21 @@ pub struct BezierRun {
     pub basis: Var<BezierBasis>,
 }
 
-/// A run of polygon curves.
-#[derive(Clone, Debug, Default)]
-pub struct PolygonCurveRun {
-    /// Number of curves in the run.
-    pub count: usize,
-    /// Array of vertex counts for each curve.
-    pub vertex_counts: Var<i32>,
-    /// Index of the first vertex of the curve run.
-    pub start_vertex: u32,
-}
-
-/// Polygon data.
-#[derive(Clone, Debug, Default)]
-pub struct PolygonRun {
-    /// Number of polygons in the run.
-    pub count: usize,
-    /// Array of vertex counts for each polygon.
-    pub vertex_counts: Var<i32>,
-    /// Index of the first vertex of the polygon run.
-    pub start_vertex: u32,
-}
-
-pub struct PolygonCurveRef<'a> {
-    //pub run: &'a PolygonCurveRun,
-    pub geo: &'a Geo,
-    pub start_vertex: usize,
-    pub vertex_count: usize,
-}
-
-impl<'a> PolygonCurveRef<'a> {
-    /// Returns the position of the i-th vertex of the polygon curve.
-    pub fn vertex_position(&self, index: usize) -> Vec3 {
-        let vertex_index = self.start_vertex + index;
-        self.geo.vertex_position(vertex_index as i32)
-    }
-}
-
-impl PolygonCurveRun {
-    /// Returns an iterator over the polygon curves in the run.
-    fn iter<'a>(&'a self, geo: &'a Geo) -> impl Iterator<Item = PolygonCurveRef<'a>> + 'a {
-        struct Iter<'a> {
-            geo: &'a Geo,
-            run: &'a PolygonCurveRun,
-            index: usize,
-            vertex: usize,
+impl Default for BezierRun {
+    fn default() -> Self {
+        BezierRun {
+            base_prim_index: 0,
+            count: 0,
+            vertices: Var::Varying(vec![]),
+            closed: Var::Varying(vec![]),
+            basis: Var::Varying(vec![]),
         }
-
-        impl<'a> Iterator for Iter<'a> {
-            type Item = PolygonCurveRef<'a>;
-
-            fn next(&mut self) -> Option<Self::Item> {
-                if self.index >= self.run.count {
-                    return None;
-                }
-
-                let vertex_count = match &self.run.vertex_counts {
-                    Var::Uniform(count) => *count,
-                    Var::Varying(counts) => counts[self.index],
-                };
-
-                let start_vertex = self.vertex;
-                self.vertex += vertex_count as usize;
-                self.index += 1;
-
-                Some(PolygonCurveRef {
-                    geo: self.geo,
-                    start_vertex,
-                    vertex_count: vertex_count as usize,
-                })
-            }
-        }
-
-        Iter {
-            geo,
-            run: self,
-            index: 0,
-            vertex: self.start_vertex as usize,
-        }
-    }
-}
-
-pub struct BezierRunIter<'a> {
-    run: &'a BezierRun,
-    index: usize,
-}
-
-impl<'a> Iterator for BezierRunIter<'a> {
-    type Item = BezierRef<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.index >= self.run.count {
-            return None;
-        }
-
-        let vertices = match &self.run.vertices {
-            Var::Uniform(vertices) => vertices.as_slice(),
-            Var::Varying(vertices) => &vertices[self.index],
-        };
-
-        let closed = match &self.run.closed {
-            Var::Uniform(closed) => *closed,
-            Var::Varying(closed) => closed[self.index],
-        };
-
-        let basis = match &self.run.basis {
-            Var::Uniform(basis) => basis,
-            Var::Varying(basis) => &basis[self.index],
-        };
-
-        self.index += 1;
-
-        Some(BezierRef {
-            vertices,
-            closed,
-            basis,
-        })
-    }
-}
-
-impl BezierRun {
-    pub fn iter(&self) -> BezierRunIter {
-        BezierRunIter { run: self, index: 0 }
     }
 }
 
 /// Represents a bezier curve.
 pub struct BezierRef<'a> {
+    pub primitive_index: u32,
     /// Vertices of the control points.
     ///
     /// They are indices into the `topology` vector.
@@ -459,17 +431,109 @@ pub struct BezierRef<'a> {
     pub basis: &'a BezierBasis,
 }
 
-impl Default for BezierRun {
-    fn default() -> Self {
-        BezierRun {
-            count: 0,
-            vertices: Var::Varying(vec![]),
-            closed: Var::Varying(vec![]),
-            basis: Var::Varying(vec![]),
+pub struct BezierRunIter<'a> {
+    run: &'a BezierRun,
+    index: u32,
+}
+
+impl<'a> Iterator for BezierRunIter<'a> {
+    type Item = BezierRef<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.run.count {
+            return None;
         }
+        let primitive_index = self.run.base_prim_index + self.index;
+
+        let vertices = match &self.run.vertices {
+            Var::Uniform(vertices) => vertices.as_slice(),
+            Var::Varying(vertices) => &vertices[self.index as usize],
+        };
+
+        let closed = match &self.run.closed {
+            Var::Uniform(closed) => *closed,
+            Var::Varying(closed) => closed[self.index as usize],
+        };
+
+        let basis = match &self.run.basis {
+            Var::Uniform(basis) => basis,
+            Var::Varying(basis) => &basis[self.index as usize],
+        };
+
+        self.index += 1;
+
+        Some(BezierRef {
+            primitive_index,
+            vertices,
+            closed,
+            basis,
+        })
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Polygon run.
+#[derive(Clone, Debug, Default)]
+pub struct PolygonRun {
+    pub base_prim_index: u32,
+    pub count: u32,
+    /// Array of vertex counts for each polygon.
+    pub vertex_counts: Var<i32>,
+    /// Index of the first vertex of the polygon run.
+    pub start_vertex: u32,
+    pub closed: bool,
+}
+
+pub struct PolygonRef<'a> {
+    pub geo: &'a Geo,
+    pub primitive_index: u32,
+    pub start_vertex: usize,
+    pub vertex_count: usize,
+    pub closed: bool,
+}
+
+impl<'a> PolygonRef<'a> {
+    /// Iterates over the vertex indices of the polygon.
+    pub fn vertices(&self) -> impl Iterator<Item = u32> + '_ {
+        self.start_vertex as u32..(self.start_vertex as u32 + self.vertex_count as u32)
+    }
+}
+
+struct PolygonRunIter<'a, 'b> {
+    geo: &'a Geo,
+    run: &'b PolygonRun,
+    index: u32,
+    vertex: usize,
+}
+
+impl<'a, 'b> Iterator for PolygonRunIter<'a, 'b> {
+    type Item = PolygonRef<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.run.count {
+            return None;
+        }
+        let primitive_index = self.run.base_prim_index + self.index;
+
+        let vertex_count = match &self.run.vertex_counts {
+            Var::Uniform(count) => *count,
+            Var::Varying(counts) => counts[self.index as usize],
+        };
+
+        let start_vertex = self.vertex;
+        self.vertex += vertex_count as usize;
+        self.index += 1;
+
+        Some(PolygonRef {
+            geo: self.geo,
+            primitive_index,
+            start_vertex,
+            vertex_count: vertex_count as usize,
+            closed: self.run.closed,
+        })
+    }
+}
 
 /// Prints a color-formatted summary of the geometry to stdout.
 pub fn print_geometry_summary(geo: &Geo) {
@@ -477,13 +541,52 @@ pub fn print_geometry_summary(geo: &Geo) {
     cprintln!("  Points:     <b>{}</>", geo.point_count);
     cprintln!("  Primitives: <y>{}</>", geo.primitive_count);
     cprintln!("  Vertices:   <m>{}</>", geo.vertex_count);
+
+    let polygon_count = geo.iter_polygons().count();
+    let bezier_count = geo.iter_beziers().count();
+    cprint!("  Primitive types:");
+    if polygon_count > 0 {
+        cprint!(" polygons (incl. polylines) ({polygon_count})");
+    }
+    if bezier_count > 0 {
+        cprint!(" beziers ({bezier_count})");
+    }
+    cprintln!();
+
     cprintln!("  Point Attributes:");
     for attr in &geo.point_attributes {
-        cprintln!("    <bold>{:10}</>   <i>{} × {:?}</>", attr.name, attr.size, attr.storage_type());
+        cprintln!(
+            "    <b><bold>{:10}</></>   <i>{} × {:?}</>",
+            attr.name,
+            attr.size,
+            attr.storage_kind()
+        );
+    }
+    cprintln!("  Vertex Attributes:");
+    for attr in &geo.vertex_attributes {
+        cprintln!(
+            "    <m><bold>{:10}</></>   <i>{} × {:?}</>",
+            attr.name,
+            attr.size,
+            attr.storage_kind()
+        );
     }
     cprintln!("  Primitive Attributes:");
     for attr in &geo.primitive_attributes {
-        cprintln!("    <bold>{:10}</>   <i>{} × {:?}</>", attr.name, attr.size, attr.storage_type());
+        cprintln!(
+            "    <y><bold>{:10}</></>   <i>{} × {:?}</>",
+            attr.name,
+            attr.size,
+            attr.storage_kind()
+        );
+    }
+    cprintln!("  Point Groups:");
+    for (name, group) in geo.point_groups() {
+        cprintln!("    <b><bold>{}</></> (<i>{}</>)", name, group.count());
+    }
+    cprintln!("  Primitive Groups:");
+    for (name, group) in geo.primitive_groups() {
+        cprintln!("    <y><bold>{}</></> (<i>{}</>)", name, group.count());
     }
 }
 
@@ -491,7 +594,7 @@ pub fn print_geometry_summary(geo: &Geo) {
 
 #[cfg(test)]
 mod test {
-    use super::{print_geometry_summary, Geo};
+    use super::{Geo, print_geometry_summary};
 
     #[test]
     fn json_geo() {
@@ -512,7 +615,5 @@ mod test {
         //    }
         //    eprintln!();
         //}
-
-
     }
 }

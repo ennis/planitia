@@ -24,9 +24,12 @@ Modifying geometry:
 	
 	int  addprim(int geohandle, string type) 					// returns primitive number
 	int  addpoint(int geohandle, int point_number) 				// add a copy of point number
+	int  addpoint(int geohandle, vector pos) 
 	int  addvertex(int geohandle, int prim_num, int point_num)	// add point as vertex in current geometry
 	int  setpointattrib(int geohandle, string name, int point_num, <type>value, string mode="set")
 	int  setpointattrib(int geohandle, string name, int point_num, <type>value[], string mode="set")
+	int  setprimgroup(int geohandle, string name, int prim_num, int value, string mode="set")
+
 
 To set only a component of a point attrib:
 	

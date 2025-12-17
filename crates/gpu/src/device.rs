@@ -16,7 +16,7 @@ use crate::device::bindless::BindlessDescriptorTable;
 use crate::platform::PlatformExtensions;
 use ash::vk;
 use gpu_allocator::vulkan::AllocationCreateDesc;
-use log::debug;
+use log::{debug, error, trace};
 use slotmap::{SecondaryMap, SlotMap};
 use std::ffi::CStr;
 use std::mem;
@@ -624,6 +624,7 @@ impl Device {
             buffer_device_address_capture_replay: vk::TRUE,
             timeline_semaphore: vk::TRUE,
             storage_buffer8_bit_access: vk::TRUE,
+            storage_push_constant8: vk::TRUE,
             shader_int8: vk::TRUE,
             scalar_block_layout: vk::TRUE,
             ..Default::default()
@@ -632,6 +633,8 @@ impl Device {
         let mut vk11_features = vk::PhysicalDeviceVulkan11Features {
             p_next: &mut vk12_features as *mut _ as *mut c_void,
             shader_draw_parameters: vk::TRUE,
+            storage_buffer16_bit_access: vk::TRUE,
+            storage_push_constant16: vk::TRUE,
             ..Default::default()
         };
 
@@ -867,7 +870,12 @@ impl Device {
         // if the submission is already completed, call the function right away
         let last_completed_submission_index =
             unsafe { self.raw.get_semaphore_counter_value(self.thread_safe.timeline).unwrap() };
+        if last_completed_submission_index == u64::MAX {
+            error!("GetSemaphoreCounterValue returned UINT64_MAX");
+            return;
+        }
         if submission_index <= last_completed_submission_index {
+            debug!("GPU: immediate call_later for submission {submission_index} (last_completed_submission_index={last_completed_submission_index})");
             f();
             return;
         }
@@ -888,6 +896,7 @@ impl Device {
         deleter: impl FnOnce() + Send + Sync + 'static,
     ) {
         self.call_later(self.last_submission_index(resource_id), move || {
+            trace!("GPU: deleting tracked resource {:?}", resource_id);
             Self::global().free_resource_id(resource_id);
             deleter();
         })
@@ -920,6 +929,11 @@ impl Device {
                 .get_semaphore_counter_value(self.thread_safe.timeline)
                 .expect("get_semaphore_counter_value failed")
         };
+        if last_completed_submission_index == u64::MAX {
+            error!("GetSemaphoreCounterValue returned UINT64_MAX");
+            return;
+        }
+        trace!("GPU: cleaning up to submission {last_completed_submission_index}");
 
         let mut submission_state = self.submission_state.lock().unwrap();
         let mut deletion_queue = self.deletion_queue.lock().unwrap();

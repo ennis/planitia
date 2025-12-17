@@ -3,8 +3,17 @@
 typedef uint8_t4 Srgba8;
 
 /// Remaps RGBA8 (0-255) colors to float4 (0.0-1.0) color
-float4 color32_to_float4(Srgba8 srgba8) {
+float4 srgba8_to_float4(Srgba8 srgba8) {
     return float4(srgba8 / 255.0);
+}
+
+Srgba8 srgba8(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    return Srgba8(r, g, b, a);
+}
+
+Srgba8 linear_to_srgba8(float4 linear) {
+    float3 srgb = linear_to_srgb_normalized(linear.rgb);
+    return Srgba8(clamp(float4(srgb, linear.a) * float4(255.0), 0.0, 255.0));
 }
 
 /// 0-1 linear  from  0-255 sRGB
@@ -26,6 +35,7 @@ float3 linear_to_srgb_normalized(float3 linear) {
     float3 lower = linear.rgb * float3(12.92);
     return select(cutoff, lower, higher);
 }
+
 
 
 /// IQ's palette function
@@ -89,6 +99,34 @@ float fbm(float2 uv)
 
 float4 dither(float4 color, uint2 frag_coord, float time)
 {
-    color.rgb += float3(0.02 * noise(float2(frag_coord.xy) + 10000.0 * time));
+    color.rgb += float3(0.02 * noise(float2(frag_coord.xy) + 10000 * fmod(time, 10.0)));
     return color;
 }
+
+//////////////////////////////////////////////////////////////////
+//
+
+struct PushBuffer<T> {
+    T* base;
+    Atomic<uint> offset;
+    uint capacity;
+
+    [mutating]
+    void push(T value) {
+        let off = offset.add(1);
+        if (off < capacity) {
+            base[off] = value;
+        }
+    }
+
+    [mutating]
+    T* reserve(uint count) {
+        let off = offset.add(count);
+        if (off + count <= capacity) {
+            return base + off;
+        } else {
+            return nullptr;
+        }
+    }
+};
+

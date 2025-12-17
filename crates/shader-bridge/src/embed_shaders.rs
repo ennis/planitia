@@ -1,5 +1,5 @@
 use crate::library::{convert_spirv_u8_to_u32, get_push_constants_size};
-use crate::session::create_session;
+use crate::session::{create_session, SessionOptions};
 use crate::SHADER_PROFILE;
 use heck::ToShoutySnakeCase;
 use proc_macro2::TokenStream;
@@ -66,7 +66,13 @@ pub fn compile_and_embed_shaders(
     _output_directory: &Path,
     bindings_output: &mut dyn io::Write,
 ) {
-    let session = create_session(SHADER_PROFILE, include_search_paths, &[]);
+    let session = create_session(
+        &SessionOptions {
+            profile_id: SHADER_PROFILE,
+            module_search_paths: include_search_paths,
+            macro_definitions: &[],
+            debug: false,
+        });
     let modules = load_shader_modules_in_directory(&session, Path::new(shaders_directory)).unwrap();
 
     // now compile all entry points, and generate bindings

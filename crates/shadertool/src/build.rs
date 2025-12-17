@@ -1,5 +1,5 @@
-use crate::BuildOptions;
-use crate::manifest::{BuildManifest, Configuration, Error, Input, PipelineType, Variant};
+use crate::manifest::{BuildManifest, Error, Input, PipelineState, PipelineType, Variant};
+use crate::{BuildOptions, Target};
 use anyhow::anyhow;
 use color_print::{ceprintln, cprintln};
 use log::warn;
@@ -11,7 +11,7 @@ use shader_bridge::{ShaderLibrary, ShaderLibraryLoadOptions};
 use std::fmt::{Debug, Display, Pointer};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
-use std::{env, fmt};
+use std::{env, fmt, fs, slice};
 
 fn make_file_dependency(path: &Path, archive: &mut ArchiveWriter) -> anyhow::Result<FileDependency> {
     let canonical_path = path.canonicalize()?;
@@ -156,24 +156,26 @@ impl BuildManifest {
         let mut build_errors = BuildErrors(Vec::new());
         let mut entries = Vec::new();
 
-        for input in &self.inputs {
-            let mut config = self.base_configuration.clone();
-            if let Some(ref overrides) = input.overrides {
-                config.apply_overrides(overrides)?;
-            }
-
-            if !options.quiet {
-                cprintln!("<g,bold>Compiling</> {} (<i>{}</>)", input.file_path, input.name);
-            }
-
-            match self.compile_input(archive, input, &config, options) {
-                Ok(entry) => {
-                    entries.push(entry);
+        for target in &self.targets {
+            for input in &target.inputs {
+                let mut pipeline_state = target.base_pipeline_state.clone();
+                if let Some(ref overrides) = input.overrides {
+                    pipeline_state.apply_overrides(overrides)?;
                 }
-                Err(err) => {
-                    ceprintln!("<r,bold>Error(s)</>: {:#}", err);
-                    build_errors.0.push(err);
-                    eprintln!();
+
+                if !options.quiet {
+                    cprintln!("<g,bold>Compiling</> {} (<i>{}</>)", input.file_path, input.name);
+                }
+
+                match self.compile_input(archive, target, input, &pipeline_state, options) {
+                    Ok(entry) => {
+                        entries.push(entry);
+                    }
+                    Err(err) => {
+                        ceprintln!("<r,bold>Error(s)</>: {:#}", err);
+                        build_errors.0.push(err);
+                        eprintln!();
+                    }
                 }
             }
         }
@@ -204,11 +206,39 @@ impl BuildManifest {
         }
     }
 
+    fn dump_spirv(&self, name: &str, stage: ShaderStage, spirv: &[u32]) -> anyhow::Result<()> {
+        let output_dir = self
+            .resolve_path(&self.output)
+            .parent()
+            .unwrap()
+            .to_path_buf()
+            .join("spirv");
+        if !output_dir.exists() {
+            fs::create_dir(&output_dir)?;
+        }
+
+        let stage = match stage {
+            ShaderStage::Vertex => "vert",
+            ShaderStage::Fragment => "frag",
+            ShaderStage::Compute => "comp",
+            ShaderStage::Mesh => "mesh",
+            ShaderStage::Task => "task",
+            _ => "unknown",
+        };
+
+        let output_path = output_dir.join(format!("{name}.{stage}.spv"));
+        fs::write(output_path, unsafe {
+            slice::from_raw_parts(spirv.as_ptr() as *const u8, spirv.len() * 4)
+        })?;
+        Ok(())
+    }
+
     fn compile_input(
         &self,
         archive: &mut ArchiveWriter,
+        target: &Target,
         input: &Input,
-        config: &Configuration,
+        ps: &PipelineState,
         options: &BuildOptions,
     ) -> Result<PipelineEntryData, BuildError> {
         let resolved_shader_path = self.resolve_path(&input.file_path);
@@ -220,6 +250,7 @@ impl BuildManifest {
                     module_search_paths: self.module_search_paths.clone(),
                     macro_definitions: vec![],
                     shader_profile: None,
+                    debug: options.emit_debug_information,
                 },
             );
             match r {
@@ -238,7 +269,7 @@ impl BuildManifest {
         let mut push_constants_size = 0;
         let pipeline_kind;
 
-        match self.type_ {
+        match target.type_ {
             PipelineType::Graphics => {
                 let mut vertex_shader_offset = Offset::INVALID;
                 let mut fragment_shader_offset = Offset::INVALID;
@@ -257,6 +288,9 @@ impl BuildManifest {
                     let entry_point_info = lib
                         .get_compiled_entry_point(entry_point_name)
                         .map_err(|err| BuildError::CompilationError(err.to_string()))?;
+                    if options.emit_spirv_binaries {
+                        self.dump_spirv(entry_point_name, ty, &entry_point_info.spirv)?;
+                    }
                     push_constants_size = push_constants_size.max(entry_point_info.push_constants_size);
                     let offset = {
                         let spirv = archive.write_slice(entry_point_info.spirv.as_slice());
@@ -293,15 +327,15 @@ impl BuildManifest {
                 };
 
                 let mut color_targets = Vec::new();
-                for ct in config.color_targets.iter() {
+                for ct in ps.color_targets.iter() {
                     color_targets.push(archive.write(*ct));
                 }
                 let color_targets = archive.write_slice(color_targets.as_slice());
                 pipeline_kind = shader_archive::PipelineKind::Graphics(shader_archive::GraphicsPipelineData {
                     push_constants_size: push_constants_size as u16,
                     vertex_or_mesh_shaders,
-                    rasterization: config.rasterization_state,
-                    depth_stencil: config.depth_stencil_state,
+                    rasterization: ps.rasterization_state,
+                    depth_stencil: ps.depth_stencil_state,
                     color_targets,
                     fragment_shader: fragment_shader_offset,
                 });
@@ -311,6 +345,9 @@ impl BuildManifest {
                 let entry_point_info = lib
                     .get_compiled_entry_point(entry_point_name)
                     .map_err(|err| BuildError::CompilationError(err.to_string()))?;
+                if options.emit_spirv_binaries {
+                    self.dump_spirv(entry_point_name, ShaderStage::Compute, &entry_point_info.spirv)?;
+                }
                 push_constants_size = entry_point_info.push_constants_size;
                 let compute_shader_offset = {
                     let spirv = archive.write_slice(entry_point_info.spirv.as_slice());

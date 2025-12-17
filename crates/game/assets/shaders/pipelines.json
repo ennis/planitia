@@ -1,56 +1,86 @@
 {
-    "type": "graphics",
     "output": "pipelines.parc",
     "module_search_paths": [
         "../../../gamelib/assets/gamelib/shaders"
     ],
-    "inputs": [
+    "targets": [
         {
-            "file_path": "lines.slang",
-            "name": "lines",
-            "vertex_entry_point": "line_drawing_vertex",
-            "fragment_entry_point": "line_drawing_fragment"
-        },
-        {
-            "file_path": "grid.slang",
-            "name": "grid",
-            "vertex_entry_point": "grid_vertex_main",
-            "fragment_entry_point": "grid_fragment_main"
-        },
-        {
-            "file_path": "background.slang",
-            "name": "background",
-            "vertex_entry_point": "background_vertex_main",
-            "fragment_entry_point": "background_fragment_main",
-            "overrides": {
-                "depth_stencil_state": {
-                    "depth_write_enable": false
+            "type": "graphics",
+            "inputs": [
+                {
+                    "file_path": "lines.slang",
+                    "name": "lines",
+                    "vertex_entry_point": "line_drawing_vertex",
+                    "fragment_entry_point": "line_drawing_fragment",
+                    "overrides": {
+                        "depth_stencil_state": {
+                            "depth_write_enable": false
+                        }
+                    }
+                },
+                {
+                    "file_path": "grid.slang",
+                    "name": "grid",
+                    "vertex_entry_point": "grid_vertex_main",
+                    "fragment_entry_point": "grid_fragment_main"
+                },
+                {
+                    "file_path": "coat_rendering.slang",
+                    "name": "debug_strokes",
+                    "vertex_entry_point": "debug_strokes_vertex",
+                    "fragment_entry_point": "debug_strokes_fragment"
+                },
+                {
+                    "file_path": "background.slang",
+                    "name": "background",
+                    "vertex_entry_point": "background_vertex_main",
+                    "fragment_entry_point": "background_fragment_main",
+                    "overrides": {
+                        "depth_stencil_state": {
+                            "depth_write_enable": false
+                        }
+                    }
                 }
-            }
-        }
-    ],
-    "compilation_options": {
-        "optimize": true,
-        "debug_info": false
-    },
-    "rasterizer_state": {
-        "cull_mode": "none",
-        "polygon_mode": "fill"
-    },
-    "depth_stencil_state": {
-        "format": "D32F_S8UI",
-        "depth_compare_op": "less",
-        "depth_write_enable": true
-    },
-    "color_targets": [
+            ],
+            "compilation_options": {
+                "optimize": true,
+                "debug_info": false
+            },
+            "rasterizer_state": {
+                "cull_mode": "none",
+                "polygon_mode": "fill"
+            },
+            "depth_stencil_state": {
+                "format": "D32F_S8UI",
+                "depth_compare_op": "less",
+                "depth_write_enable": true
+            },
+            "color_targets": [
+                {
+                    "format": "RGBA8",
+                    "src_color_blend_factor": "src_alpha",
+                    "dst_color_blend_factor": "one_minus_src_alpha",
+                    "color_blend_op": "add",
+                    "src_alpha_blend_factor": "one",
+                    "dst_alpha_blend_factor": "zero",
+                    "alpha_blend_op": "add"
+                }
+            ]
+        },
         {
-            "format": "RGBA8",
-            "src_color_blend_factor": "src_alpha",
-            "dst_color_blend_factor": "one_minus_src_alpha",
-            "color_blend_op": "add",
-            "src_alpha_blend_factor": "one",
-            "dst_alpha_blend_factor": "zero",
-            "alpha_blend_op": "add"
+            "type": "compute",
+            "inputs": [
+                {
+                    "file_path": "coat_rendering.slang",
+                    "name": "expand_strokes",
+                    "compute_entry_point": "expand_strokes_main"
+                },
+                {
+                    "file_path": "coat_rendering.slang",
+                    "name": "sweep_stroke",
+                    "compute_entry_point": "sweep_stroke_main"
+                }
+            ]
         }
     ]
 }

@@ -1,7 +1,7 @@
 //! Terrain mesh generation from heightmaps.
 mod triangulation;
 
-use crate::Config;
+use crate::{cfg, Config, CONFIG};
 use crate::terrain::triangulation::{TriangulationOptions, tessellate_heightmap};
 use image::ImageReader;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -13,15 +13,17 @@ pub struct TerrainConfig {
     pub triangle_count_target: Option<usize>,
 }
 
-pub fn generate_terrain_meshes(heightmap_file: impl AsRef<Path>, terrain_cfg: &TerrainConfig, global_cfg: &Config) {
-    generate_terrain_meshes_inner(heightmap_file.as_ref(), terrain_cfg, global_cfg).unwrap();
+pub fn generate_terrain_meshes(heightmap_file: impl AsRef<Path>, terrain_cfg: &TerrainConfig) {
+    generate_terrain_meshes_inner(heightmap_file.as_ref(), terrain_cfg).unwrap();
 }
 
 fn generate_terrain_meshes_inner(
     heightmap_file: &Path,
     terrain_cfg: &TerrainConfig,
-    global_cfg: &Config,
 ) -> anyhow::Result<()> {
+    
+    let quiet = cfg().quiet;
+    
     // load heightmap image to float array
     let (heightmap, width, height) = {
         let reader = ImageReader::open(heightmap_file)?;
@@ -29,11 +31,11 @@ fn generate_terrain_meshes_inner(
         (image.to_luma32f(), image.width(), image.height())
     };
 
-    if !global_cfg.quiet {
+    if !quiet {
         cprintln!("Generating terrain mesh from heightmap: {heightmap_file:?}, size: {width}×{height}");
     }
 
-    let bar = if global_cfg.quiet {
+    let bar = if quiet {
         ProgressBar::hidden()
     } else {
         if let Some(triangle_count) = terrain_cfg.triangle_count_target {

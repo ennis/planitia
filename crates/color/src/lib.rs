@@ -1,6 +1,8 @@
 //! Color types and related functions.
 
-pub fn linear_to_srgb(c: f32) -> f32 {
+
+/// Converts a linear sRGB component to non-linear sRGB.
+pub fn srgb_linear_to_encoded_f32(c: f32) -> f32 {
     if c <= 0.0031308 {
         c * 12.92
     } else {
@@ -8,11 +10,11 @@ pub fn linear_to_srgb(c: f32) -> f32 {
     }
 }
 
-pub fn linear_to_srgb_u8(c: f32) -> u8 {
-    (linear_to_srgb(c).clamp(0.0, 1.0) * 255.0).round() as u8
+pub fn srgb_linear_to_encoded(c: f32) -> u8 {
+    (srgb_linear_to_encoded_f32(c).clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
-pub fn srgb_to_linear(c: f32) -> f32 {
+pub fn srgb_encoded_f32_to_linear(c: f32) -> f32 {
     if c <= 0.04045 {
         c / 12.92
     } else {
@@ -20,62 +22,72 @@ pub fn srgb_to_linear(c: f32) -> f32 {
     }
 }
 
-pub fn srgb_u8_to_linear(c: u8) -> f32 {
-    srgb_to_linear(c as f32 / 255.0)
+pub fn srgb_encoded_to_linear(c: u8) -> f32 {
+    srgb_encoded_f32_to_linear(c as f32 / 255.0)
 }
 
-/// RGBA color with linear components in the range [0.0, 1.0]
+/// Linear sRGB color with components in the range [0.0, 1.0]
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[repr(C)]
-pub struct Rgba {
+pub struct LinSrgba {
     pub r: f32,
     pub g: f32,
     pub b: f32,
     pub a: f32,
 }
 
-impl Rgba {
-    pub fn to_srgba32(self) -> Srgba32 {
-        Srgba32 {
-            r: linear_to_srgb_u8(self.r),
-            g: linear_to_srgb_u8(self.g),
-            b: linear_to_srgb_u8(self.b),
+impl LinSrgba {
+    pub fn to_srgba8(self) -> Srgba8 {
+        Srgba8 {
+            r: srgb_linear_to_encoded(self.r),
+            g: srgb_linear_to_encoded(self.g),
+            b: srgb_linear_to_encoded(self.b),
             a: (self.a.clamp(0.0, 1.0) * 255.0).round() as u8,
         }
     }
 }
 
-/// RGBA color with sRGB components in the range `[0, 255]` packed into 4 bytes.
+/// Encoded sRGB color with components in the range `[0, 255]` packed into 4 bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 #[repr(C)]
-pub struct Srgba32 {
+pub struct Srgba8 {
     pub r: u8,
     pub g: u8,
     pub b: u8,
     pub a: u8,
 }
 
-impl Srgba32 {
+impl Srgba8 {
     /// Transparent color (rgb = 0).
-    pub const TRANSPARENT: Self = srgba32(0, 0, 0, 0);
+    pub const TRANSPARENT: Self = srgba8(0, 0, 0, 0);
     /// Opaque black color.
-    pub const BLACK: Self = srgba32(0, 0, 0, 255);
+    pub const BLACK: Self = srgba8(0, 0, 0, 255);
     /// Opaque white color.
-    pub const WHITE: Self = srgba32(255, 255, 255, 255);
+    pub const WHITE: Self = srgba8(255, 255, 255, 255);
 
-    pub fn to_rgba(self) -> Rgba {
-        Rgba {
-            r: srgb_u8_to_linear(self.r),
-            g: srgb_u8_to_linear(self.g),
-            b: srgb_u8_to_linear(self.b),
+    pub fn to_linear(self) -> LinSrgba {
+        LinSrgba {
+            r: srgb_encoded_to_linear(self.r),
+            g: srgb_encoded_to_linear(self.g),
+            b: srgb_encoded_to_linear(self.b),
             a: self.a as f32 / 255.0,
+        }
+    }
+
+    /// Constructs a `Srgba32` color from linear sRGB components.
+    pub fn from_linear(r: f32, g: f32, b: f32, a: f32) -> Srgba8 {
+        Srgba8 {
+            r: srgb_linear_to_encoded(r),
+            g: srgb_linear_to_encoded(g),
+            b: srgb_linear_to_encoded(b),
+            a: (a.clamp(0.0, 1.0) * 255.0).round() as u8,
         }
     }
 }
 
-impl From<[u8;4]> for Srgba32 {
+impl From<[u8;4]> for Srgba8 {
     fn from(arr: [u8; 4]) -> Self {
-        Srgba32 {
+        Srgba8 {
             r: arr[0],
             g: arr[1],
             b: arr[2],
@@ -84,12 +96,12 @@ impl From<[u8;4]> for Srgba32 {
     }
 }
 
-/// Short-hand constructor for `Srgba32`.
-pub const fn srgba32(r: u8, g: u8, b: u8, a: u8) -> Srgba32 {
-    Srgba32 { r, g, b, a }
+/// Short-hand constructor for `Srgba32`, from encoded sRGB components.
+pub const fn srgba8(r: u8, g: u8, b: u8, a: u8) -> Srgba8 {
+    Srgba8 { r, g, b, a }
 }
 
 #[cfg(feature = "gpu-support")]
-unsafe impl gpu::VertexAttribute for Srgba32 {
+unsafe impl gpu::VertexAttribute for Srgba8 {
     const FORMAT: gpu::Format = gpu::Format::R8G8B8A8_UNORM;
 }

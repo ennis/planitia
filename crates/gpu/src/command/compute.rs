@@ -75,6 +75,8 @@ impl<'a> ComputeEncoder<'a> {
     /// Binds push constants.
     ///
     /// Push constants stay valid until the bound pipeline is changed.
+    /// 
+    /// FIXME: this assumes that `bind_compute_pipeline` has been called. 
     pub fn push_constants<P>(&mut self, data: &P)
     where
         P: Copy,

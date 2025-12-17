@@ -5,7 +5,7 @@ mod shape;
 mod tessellation;
 mod text;
 
-use color::Srgba32;
+use color::Srgba8;
 use crate::paint::shape::RectShape;
 use crate::paint::tessellation::{Mesh, Tessellator};
 use crate::paint::text::GlyphCache;
@@ -35,7 +35,7 @@ pub struct FeatherVertex {
     #[normalized]
     pub uv: U16Vec2,
     /// Color
-    pub color: Srgba32,
+    pub color: Srgba8,
     /// Feather factor
     pub feather: f32,
 }
@@ -43,7 +43,7 @@ pub struct FeatherVertex {
 impl FeatherVertex {
     const SIZE_CHECK: () = assert!(size_of::<Self>() == 16);
 
-    pub const fn new(p: Vec2, uv: U16Vec2, feather: f32, color: Srgba32) -> Self {
+    pub const fn new(p: Vec2, uv: U16Vec2, feather: f32, color: Srgba8) -> Self {
         Self { p, feather, color, uv }
     }
 }
@@ -165,7 +165,7 @@ fn init_atlas() -> (Atlas, U16Vec2) {
     let mut atlas = Atlas::new(1024, 1024);
     // Add a white pixel at (0,0) for drawing solid colors without needing additional logic in the
     // shaders
-    let rect = atlas.write(1, 1, &[Srgba32::WHITE], 1, 1);
+    let rect = atlas.write(1, 1, &[Srgba8::WHITE], 1, 1);
     let pos = texel_to_normalized_texcoord(
         vec2(rect.min.x as f32 + 0.5, rect.min.y as f32 + 0.5),
         uvec2(atlas.width, atlas.height),
@@ -231,7 +231,7 @@ enum PrimKind {
 /// Options passed to `PaintScene::draw_glyph_run`.
 #[derive(Clone, Debug, Default)]
 pub struct DrawGlyphRunOptions {
-    pub color: Srgba32,
+    pub color: Srgba8,
     pub size: f32,
 }
 
@@ -266,7 +266,7 @@ impl<'a> PaintScene<'a> {
     }
 
     /// Draws a rounded rectangle at the specified position with the given size and corner radius.
-    pub fn fill_rrect(&mut self, rect: Rect, radius: f32, color: impl Into<Srgba32>) {
+    pub fn fill_rrect(&mut self, rect: Rect, radius: f32, color: impl Into<Srgba8>) {
         let color = color.into();
         self.tess.fill_rrect(
             RectShape {
@@ -333,7 +333,7 @@ impl<'a> PaintScene<'a> {
             let uv0 = entry.normalized_texcoords[0];
             let uv1 = entry.normalized_texcoords[1];
             //eprintln!("    glyph {:?} quad={:?} uv0={:?} uv1={:?} tex={:?}", glyph.id, quad, uv0, uv1, self.painter.glyph_cache.texture_handle());
-            self.tess.quad(quad.min, quad.max, uv0, uv1, Srgba32::WHITE);
+            self.tess.quad(quad.min, quad.max, uv0, uv1, Srgba8::WHITE);
         }
 
         self.end_prim(None);

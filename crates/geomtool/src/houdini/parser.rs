@@ -3,18 +3,18 @@ mod json;
 
 use super::Error::Malformed;
 use super::{
-    Attribute, AttributeStorage, BezierBasis, BezierRun, Error, Geo, Group, PolygonCurveRun, PolygonRun, PrimRuns,
+    Attribute, AttributeStorage, BezierBasis, BezierRun, Error, Geo, Group, PolygonRun, PrimRun, PrimRunKind,
     StorageKind, Var,
 };
 use fixedbitset::FixedBitSet;
 use json::ParserImpl;
+use log::warn;
 use smol_str::SmolStr;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::path::Path;
 use std::{fs, ptr};
-use log::warn;
 
 #[derive(Clone, Debug)]
 struct PackedArray<'a, T: Copy> {
@@ -66,6 +66,19 @@ impl<'a> Event<'a> {
         match self {
             Event::Integer(i) => Some(*i),
             Event::Float(f) => Some(*f as i64),
+            _ => None,
+        }
+    }
+
+    fn as_byte(&self) -> Option<u8> {
+        match self {
+            Event::Integer(i) => {
+                if *i >= 0 && *i <= u8::MAX as i64 {
+                    Some(*i as u8)
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }
@@ -178,6 +191,47 @@ trait Parser<'a> {
         }
         Ok(i as u32)
     }
+
+    fn uint8(&mut self) -> Result<u8, Error> {
+        let i = self.integer()?;
+        if i < 0 || i > u8::MAX as i64 {
+            return Err(Error::Malformed("integer out of range for u8"));
+        }
+        Ok(i as u8)
+    }
+}
+
+fn read_array<T>(
+    p: &mut dyn Parser,
+    mut elem_parser: impl FnMut(&mut dyn Parser) -> Result<T, Error>,
+) -> Result<Vec<T>, Error> {
+    let mut v = Vec::new();
+    expect!(p, Event::BeginArray);
+    while !p.eos() {
+        v.push(elem_parser(p)?);
+    }
+    expect!(p, Event::EndArray);
+    Ok(v)
+}
+
+fn read_byte_array(p: &mut dyn Parser) -> Result<Vec<u8>, Error> {
+    read_array(p, |p| p.uint8())
+}
+
+fn read_int32_array(p: &mut dyn Parser) -> Result<Vec<i32>, Error> {
+    read_array(p, |p| p.int32())
+}
+
+fn read_uint32_array(p: &mut dyn Parser) -> Result<Vec<u32>, Error> {
+    read_array(p, |p| p.uint32())
+}
+
+fn read_float32_array(p: &mut dyn Parser) -> Result<Vec<f32>, Error> {
+    read_array(p, |p| match p.next_no_eof()? {
+        Event::Float(f) => Ok(f as f32),
+        Event::Integer(i) => Ok(i as f32),
+        _ => Err(Error::Malformed("expected float")),
+    })
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -257,34 +311,6 @@ impl AttributeStorage {
             StorageKind::Int64 => AttributeStorage::Int64(Vec::new()),
         }
     }
-}
-
-fn read_int32_array(p: &mut dyn Parser) -> Result<Vec<i32>, Error> {
-    let mut v = Vec::new();
-    expect!(p, Event::BeginArray);
-    loop {
-        match p.next_no_eof()? {
-            Event::EndArray => break,
-            e => {
-                v.push(e.as_integer().ok_or(Error::Malformed("expected integer"))? as i32);
-            }
-        }
-    }
-    Ok(v)
-}
-
-fn read_fp32_array(p: &mut dyn Parser) -> Result<Vec<f32>, Error> {
-    let mut v = Vec::new();
-    expect!(p, Event::BeginArray);
-    loop {
-        match p.next_no_eof()? {
-            Event::EndArray => break,
-            e => {
-                v.push(e.as_float().ok_or(Error::Malformed("expected float"))? as f32);
-            }
-        }
-    }
-    Ok(v)
 }
 
 macro_rules! read_kv_array {
@@ -623,7 +649,7 @@ fn read_bezier_basis(p: &mut dyn Parser) -> Result<BezierBasis, Error> {
             order = p.integer()? as u32;
         }
         "knots" => {
-            knots = read_fp32_array(p)?;
+            knots = read_float32_array(p)?;
         }
     }
     Ok(BezierBasis { order, knots })
@@ -740,12 +766,11 @@ fn decode_rle_array(p: &mut dyn Parser) -> Result<Var<i32>, Error> {
     }
 }
 
-fn read_group(p: &mut dyn Parser, prim_count_hint: usize) -> Result<(SmolStr, Group), Error> {
+fn read_group(p: &mut dyn Parser, _prim_count_hint: usize) -> Result<(SmolStr, Group), Error> {
     expect!(p, Event::BeginArray);
 
     let mut name = SmolStr::default();
-    let mut bool_rle = Vec::new();
-    //let mut bitset = FixedBitSet::with_capacity(prim_count_hint);
+    let mut group = Group::default();
 
     read_kv_array! {p,
         "name" => {
@@ -760,6 +785,7 @@ fn read_group(p: &mut dyn Parser, prim_count_hint: usize) -> Result<(SmolStr, Gr
                     read_kv_array!{p,
                         "boolRLE" => {
                             let mut index = 0;
+                            let mut bool_rle = Vec::new();
                             read_array!{p =>
                                 {
                                     let run_length = p.uint32()?;
@@ -770,6 +796,20 @@ fn read_group(p: &mut dyn Parser, prim_count_hint: usize) -> Result<(SmolStr, Gr
                                     index += run_length;
                                 }
                             }
+                            group = Group::RunLengthEncoded(bool_rle);
+                        }
+                        "i8" => {
+                            let bitmap = read_byte_array(p)?;
+                            let mut bitset = FixedBitSet::with_capacity(bitmap.len() * 8);
+                            for (i, byte) in bitmap.iter().enumerate() {
+                                for bit in 0..8 {
+                                    let prim_index = i * 8 + bit;
+                                    if (byte & (1 << bit)) != 0 {
+                                        bitset.insert(prim_index);
+                                    }
+                                }
+                            }
+                            group = Group::Bitset(bitset);
                         }
                     }
                 }
@@ -779,19 +819,13 @@ fn read_group(p: &mut dyn Parser, prim_count_hint: usize) -> Result<(SmolStr, Gr
 
     expect!(p, Event::EndArray);
 
-    let group = if !bool_rle.is_empty() {
-        Group::RunLengthEncoded(bool_rle)
-    } else {
-        todo!("group bitsets")
-    };
-
     Ok((name, group))
 }
 
 #[derive(Default)]
 struct PolyRunData {
     start_vertex: u32,
-    count: usize,
+    count: u32,
     vertex_counts: Var<i32>,
 }
 
@@ -802,7 +836,7 @@ fn read_poly_run_data(p: &mut dyn Parser) -> Result<PolyRunData, Error> {
             r.start_vertex = p.integer()? as u32;
         }
         "nprimitives" | "n_p" => {
-            r.count = p.integer()? as usize;
+            r.count = p.uint32()?;
         }
         "nvertices" | "n_v" => {
             r.vertex_counts = Var::Varying(read_int32_array(p)?);
@@ -841,6 +875,8 @@ fn read_uniform_fields(p: &mut dyn Parser) -> Result<UniformFields, Error> {
 }
 
 fn read_primitives(p: &mut dyn Parser, geo: &mut Geo) -> Result<(), Error> {
+    let mut base_prim_index: u32 = 0;
+
     read_array! {p => {
         expect!(p, Event::BeginArray);
         let mut prim_type = None;
@@ -876,22 +912,39 @@ fn read_primitives(p: &mut dyn Parser, geo: &mut Geo) -> Result<(), Error> {
         match prim_type {
             Some(PrimType::PolygonRun) => {
                 let rundata = read_poly_run_data(p)?;
-                geo.prim_runs.push(PrimRuns::PolygonRun(PolygonRun {
-                    start_vertex: rundata.start_vertex,
+                geo.prim_runs.push(PrimRun {
                     count: rundata.count,
-                    vertex_counts: rundata.vertex_counts,
-                }));
+                    base_index: base_prim_index,
+                    kind: PrimRunKind::PolygonRun(PolygonRun {
+                        start_vertex: rundata.start_vertex,
+                        vertex_counts: rundata.vertex_counts,
+                        count: rundata.count,
+                        base_prim_index,
+                        closed: true,
+                    })
+                });
             }
             Some(PrimType::PolygonCurveRun) => {
                 let rundata = read_poly_run_data(p)?;
-                geo.prim_runs.push(PrimRuns::PolygonCurveRun(PolygonCurveRun {
-                    start_vertex: rundata.start_vertex,
+                geo.prim_runs.push(PrimRun {
                     count: rundata.count,
-                    vertex_counts: rundata.vertex_counts,
-                }));
+                    base_index: base_prim_index,
+                    kind: PrimRunKind::PolygonRun(PolygonRun {
+                        start_vertex: rundata.start_vertex,
+                        vertex_counts: rundata.vertex_counts,
+                        count: rundata.count,
+                        base_prim_index,
+                        closed: false,
+                    })
+                });
             }
             Some(PrimType::BezierRun) => {
-                geo.prim_runs.push(PrimRuns::BezierRun(read_bezier_run_data(p, &varyingfields, &uniformfields)?));
+                let rundata = read_bezier_run_data(p, &varyingfields, &uniformfields)?;
+                geo.prim_runs.push(PrimRun {
+                    count: rundata.count,
+                    base_index: base_prim_index,
+                    kind: PrimRunKind::BezierRun(rundata),
+                });
             }
             Some(PrimType::Unknown(ty)) => {
                 warn!("not loading unknown primitive type: {ty}");
@@ -912,6 +965,11 @@ fn read_attributes(p: &mut dyn Parser, geo: &mut Geo) -> Result<(), Error> {
         "pointattributes" => {
             read_array!(p => {
                 geo.point_attributes.push(read_point_attribute(p)?);
+            })
+        }
+        "vertexattributes" => {
+            read_array!(p => {
+                geo.vertex_attributes.push(read_point_attribute(p)?);
             })
         }
         "primitiveattributes" => {

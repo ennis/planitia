@@ -13,6 +13,10 @@ pub struct BuildOptions {
     pub quiet: bool,
     /// Emit cargo dependency information.
     pub emit_cargo_deps: bool,
+    /// Emit shader debug information.
+    pub emit_debug_information: bool,
+    /// Dumps SPIR-V binaries to disk alongside the archive.
+    pub emit_spirv_binaries: bool,
 }
 
 #[derive(Error, Debug)]

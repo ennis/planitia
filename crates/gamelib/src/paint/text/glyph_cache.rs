@@ -5,7 +5,7 @@ use ab_glyph::{Font as FontTrait, ScaleFont};
 use math::geom::IRect;
 use math::{IVec2, U16Vec2, Vec2, ivec2, u16vec2, uvec2, vec2};
 use std::collections::HashMap;
-use color::srgba32;
+use color::srgba8;
 
 const SUBPIXEL_X_GRID_SIZE: u32 = 8;
 const SUBPIXEL_Y_GRID_SIZE: u32 = 8;
@@ -132,7 +132,7 @@ impl GlyphCache {
             // v is a coverage, convert to alpha
             // TODO: maybe there's some correction to do
             let alpha = (v * 255.0) as u8;
-            atlas_mut.write(x, y, srgba32(255, 255, 255, alpha));
+            atlas_mut.write(x, y, srgba8(255, 255, 255, alpha));
         });
 
         let atlas_rect = atlas_mut.rect;

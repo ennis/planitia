@@ -64,14 +64,14 @@ impl CameraControl {
     /// - `height` initial height of the screen in physical pixels
     pub fn new(screen_width: u32, screen_height: u32) -> CameraControl {
         CameraControl {
-            fov_y_radians: std::f64::consts::PI / 2.0,
+            fov_y_radians: std::f64::consts::PI / 10.0,
             z_near: 0.1,
-            z_far: 10.0,
+            z_far: 100.0,
             zoom: 1.0,
             screen_size: dvec2(screen_width as f64, screen_height as f64),
             cursor_pos: None,
             frame: CameraFrame {
-                eye: dvec3(0.0, 0.0, 2.0),
+                eye: dvec3(0.0, 0.0, 10.0),
                 up: dvec3(0.0, 1.0, 0.0),
                 center: dvec3(0.0, 0.0, 0.0),
             },
@@ -96,8 +96,8 @@ impl CameraControl {
         let dir = orig.center - orig.eye;
         let right = dir.normalize().cross(orig.up);
         let dist = dir.length();
-        self.frame.eye = orig.eye + dist * (-delta.x * right - delta.y * orig.up);
-        self.frame.center = orig.center + dist * (-delta.x * right - delta.y * orig.up);
+        self.frame.eye = orig.eye + dist * (-delta.x * right + delta.y * orig.up);
+        self.frame.center = orig.center + dist * (-delta.x * right + delta.y * orig.up);
         self.last_cam.set(None);
     }
 
@@ -109,7 +109,7 @@ impl CameraControl {
         let delta = (to - from) / self.screen_size;
         let eye_dir = orig.eye - orig.center;
         let right = eye_dir.normalize().cross(orig.up);
-        let r = DQuat::from_rotation_y(-delta.x * TAU) * DQuat::from_axis_angle(right, -delta.y * TAU);
+        let r = DQuat::from_rotation_y(-delta.x * TAU) * DQuat::from_axis_angle(right, delta.y * TAU);
         let new_eye = orig.center + r * eye_dir;
         let new_up = r * orig.up;
         self.frame.eye = new_eye;
@@ -185,7 +185,7 @@ impl CameraControl {
     /// Returns whether the event was handled by the camera controller.
     fn mouse_wheel(&mut self, delta: f64) -> bool {
         // TODO orthographic projection
-        let delta = -0.1 * delta / 120.0;
+        let delta = - delta / 120.0;
         self.frame.eye = self.frame.center + (1.0 + delta) * (self.frame.eye - self.frame.center);
         self.last_cam.set(None);
         true
@@ -260,12 +260,14 @@ impl CameraControl {
         let aspect_ratio = self.screen_size.x / self.screen_size.y;
         let view = self.look_at();
         let view_inverse = view.inverse();
+
+        let flip_y = Mat4::from_scale(Vec3::new(1.0, -1.0, 1.0));
         let projection = Mat4::perspective_rh(
             self.fov_y_radians as f32,
             aspect_ratio as f32,
             self.z_near as f32,
             self.z_far as f32,
-        );
+        ) * flip_y;
         let projection_inverse = projection.inverse();
         let cam = Camera {
             frustum: Frustum {

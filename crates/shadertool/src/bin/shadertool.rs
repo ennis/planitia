@@ -100,6 +100,12 @@ struct Args {
     /// Print cargo dependency directives.
     #[clap(long)]
     emit_cargo_deps: bool,
+    /// Emit shader debug information.
+    #[clap(short, long)]
+    debug: bool,
+    /// Dump SPIR-V binaries to disk alongside the archive.
+    #[clap(long)]
+    dump_spirv: bool,
     /// Open graphical editor.
     #[clap(long)]
     editor: bool,
@@ -115,6 +121,8 @@ fn main() {
         let build_options = shadertool::BuildOptions {
             quiet: args.quiet,
             emit_cargo_deps: args.emit_cargo_deps,
+            emit_debug_information: args.debug,
+            emit_spirv_binaries: args.dump_spirv,
         };
         match shadertool::build_pipeline(&manifest_path, &build_options) {
             Ok(()) => {}

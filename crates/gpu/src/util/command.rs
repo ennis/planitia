@@ -1,5 +1,5 @@
 use crate::{
-    vk, Buffer, BufferUsage, CommandStream, Device, DeviceAddress, Image, ImageAspect, ImageCopyBuffer, ImageCopyView,
+    vk, Buffer, BufferUsage, CommandStream, Device, Ptr, Image, ImageAspect, ImageCopyBuffer, ImageCopyView,
     ImageCreateInfo, ImageDataLayout, ImageSubresourceLayers, ImageUsage, Offset3D, Rect3D, Size3D,
 };
 
@@ -74,15 +74,15 @@ impl CommandStream {
         );
     }
 
-    pub fn upload_temporary<T: Copy>(&mut self, data: &T) -> DeviceAddress<T> {
+    pub fn upload_temporary<T: Copy>(&mut self, data: &T) -> Ptr<T> {
         let buffer = Buffer::upload(BufferUsage::STORAGE, data, "");
         self.reference_resource(&buffer);
-        buffer.device_address()
+        buffer.ptr()
     }
 
-    pub fn upload_temporary_slice<T: Copy>(&mut self, data: &[T]) -> DeviceAddress<[T]> {
+    pub fn upload_temporary_slice<T: Copy>(&mut self, data: &[T]) -> Ptr<[T]> {
         let buffer = Buffer::upload_slice(BufferUsage::STORAGE, data, "");
         self.reference_resource(&buffer);
-        buffer.device_address()
+        buffer.ptr()
     }
 }

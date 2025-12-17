@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::session::create_session;
+use crate::session::{create_session, SessionOptions};
 use crate::SHADER_PROFILE;
 use slang::Downcast;
 use std::path::{Path, PathBuf};
@@ -15,6 +15,8 @@ pub struct ShaderLibraryLoadOptions {
     ///
     /// Defaults to "glsl_460" if unspecified.
     pub shader_profile: Option<String>,
+    /// Emits debug information during shader compilation.
+    pub debug: bool,
 }
 
 /// Represents information about a compiled shader entry point.
@@ -70,7 +72,13 @@ impl ShaderLibrary {
             .expect("path is not valid UTF-8")
             .to_string();
         let profile = options.shader_profile.as_deref().unwrap_or(SHADER_PROFILE);
-        let session = create_session(profile, &options.module_search_paths, &options.macro_definitions);
+        let session = create_session(
+            &SessionOptions {
+                profile_id: profile,
+                module_search_paths: &options.module_search_paths,
+                macro_definitions: &options.macro_definitions,
+                debug: options.debug,
+            });
         let module = session.load_module(&path)?;
 
         Ok(Self {

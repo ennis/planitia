@@ -208,6 +208,7 @@ impl<'a, T: Asset> Deref for AssetReadGuard<'a, T> {
     }
 }
 
+/*
 impl<'a, T: Asset> AssetReadGuard<'a, T> {
     pub fn try_get(&self) -> Result<&T, AssetLoadError> {
         match self.guard.as_ref() {
@@ -215,7 +216,7 @@ impl<'a, T: Asset> AssetReadGuard<'a, T> {
             Err(_err) => Err(AssetLoadError::NotLoaded),
         }
     }
-}
+}*/
 
 /// A reference to a loaded asset.
 pub struct Handle<T: Asset>(Arc<Entry<AssetStorage<T>>>);
@@ -225,9 +226,13 @@ impl<T: Asset> Handle<T> {
         Self(entry)
     }
 
-    pub fn read(&self) -> AssetReadGuard<'_, T> {
-        AssetReadGuard {
-            guard: self.0.asset.read().unwrap(),
+    pub fn read(&self) -> Result<AssetReadGuard<'_, T>, AssetLoadError> {
+        let guard = self.0.asset.read().unwrap();
+        match guard.as_ref() {
+            Ok(_asset) => {
+                Ok(AssetReadGuard { guard })
+            },
+            Err(_err) => Err(AssetLoadError::NotLoaded),
         }
     }
 }

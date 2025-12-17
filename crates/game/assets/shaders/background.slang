@@ -1,19 +1,10 @@
-// TODO: that's a sorry path that we need to use
 import common;
+import scene_info;
 
 struct VSOut
 {
     float4 pos : SV_Position;
     float2 uv;
-};
-
-struct SceneInfo
-{
-    float4x4 view_matrix;
-    float4x4 proj_matrix;
-    float2 screen_size;
-    float time;
-    uint frame;
 };
 
 struct PushConstants {
@@ -44,8 +35,8 @@ VSOut background_vertex_main(uint vertex_id : SV_VertexID, uniform PushConstants
 float4 background_fragment_main(VSOut v, uint2 frag_pos: SV_Position, uniform PushConstants u) {
     float t = v.uv.y * 0.5 + 0.5;
     float4 color = lerp(
-        color32_to_float4(u.bottom_color),
-        color32_to_float4(u.top_color),
+        srgba8_to_float4(u.bottom_color),
+        srgba8_to_float4(u.top_color),
         t);
     color = dither(color, frag_pos, u.scene.time);
     return color;

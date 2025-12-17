@@ -11,6 +11,8 @@ fn main() {
         &shadertool::BuildOptions {
             quiet: true,
             emit_cargo_deps: true,
+            emit_debug_information: true,
+            emit_spirv_binaries: true,
         },
     ) {
         err.print_cargo_error();

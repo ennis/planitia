@@ -399,7 +399,7 @@ bitflags! {
             | Self::DEPTH_STENCIL_WRITE.bits()
             | Self::PRESENT.bits();
 
-        /// The combination of all usages that the are guaranteed to be be ordered by the hardware.
+        /// The combination of all usages that are guaranteed to be ordered by the hardware.
         /// If a usage is ordered, then if the texture state doesn't change between draw calls, there
         /// are no barriers needed for synchronization.
         const ORDERED =

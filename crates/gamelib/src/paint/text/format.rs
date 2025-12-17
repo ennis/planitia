@@ -1,4 +1,4 @@
-use crate::paint::Srgba32;
+use crate::paint::Srgba8;
 use crate::paint::text::Font;
 
 /// Default font size.
@@ -12,7 +12,7 @@ pub enum FormatProperty {
     /// Size of the font in pixels.
     FontSize(f32),
     /// Text color.
-    Color(Srgba32),
+    Color(Srgba8),
     Underline,
     //FontStyle(FontStyle),
     //FontStretch(FontStretch),
@@ -23,7 +23,7 @@ pub enum FormatProperty {
 pub struct TextFormat {
     pub font: Font,
     pub size: f32,
-    pub color: Srgba32,
+    pub color: Srgba8,
 }
 
 impl Default for TextFormat {
@@ -31,7 +31,7 @@ impl Default for TextFormat {
         Self {
             font: Font::default_regular().clone(),
             size: DEFAULT_SIZE as f32,
-            color: Srgba32::BLACK,
+            color: Srgba8::BLACK,
         }
     }
 }

@@ -7,7 +7,7 @@ use std::ffi::{c_char, c_void, CString};
 use std::mem::{ManuallyDrop, MaybeUninit};
 use std::sync::atomic::Ordering::Relaxed;
 use std::{mem, ptr};
-
+use log::trace;
 use crate::device::ActiveSubmission;
 use crate::{
     aspects_for_format, vk, vk_ext_debug_utils, CommandPool, Descriptor, Device, Image, MemoryAccess, 
@@ -235,6 +235,7 @@ impl CommandStream {
         let device = Device::global();
         let submission_index = device.next_submission_index.fetch_add(1, Relaxed);
         let command_pool = device.get_or_create_command_pool(device.queue_family);
+        trace!("GPU: begin CommandStream {}", submission_index);
 
         CommandStream {
             command_pool: ManuallyDrop::new(command_pool),
@@ -573,7 +574,7 @@ impl CommandStream {
                     },
                 )
                 .unwrap();
-            Device::global().set_object_name(cb, &format!("command buffer at submission {}", self.submission_index));
+            //Device::global().set_object_name(cb, &format!("submission_{}", self.submission_index));
         }
         cb
     }
@@ -859,6 +860,7 @@ impl CommandStream {
             // SAFETY: apart from Vulkan handles being valid, Vulkan specifies that access to the
             //         queue object should be externally synchronized, which is realized here by the
             //         lock on submission_state.
+            trace!("GPU: QueueSubmit");
             result = device
                 .raw
                 .queue_submit(submission_state.queue, &[submit_info], vk::Fence::null());

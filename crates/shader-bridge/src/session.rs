@@ -1,5 +1,7 @@
 use std::cell::OnceCell;
 use std::ffi::CString;
+use slang::CompilerOptionName::DebugInformation;
+use slang::DebugInfoLevel;
 
 fn get_slang_global_session() -> slang::GlobalSession {
     thread_local! {
@@ -12,28 +14,33 @@ fn get_slang_global_session() -> slang::GlobalSession {
     })
 }
 
-pub(crate) fn create_session(
-    profile_id: &str,
-    module_search_paths: &[String],
-    macro_definitions: &[(String, String)],
+pub(crate) struct SessionOptions<'a> {
+    pub profile_id: &'a str,
+    pub module_search_paths: &'a [String],
+    pub macro_definitions: &'a [(String, String)],
+    pub debug: bool,
+}
+
+pub(crate) fn create_session(options: &SessionOptions,
 ) -> slang::Session {
     let global_session = get_slang_global_session();
 
     let mut search_paths_cstr = vec![];
-    for path in module_search_paths {
+    for path in options.module_search_paths {
         search_paths_cstr.push(CString::new(&**path).unwrap());
     }
     let search_path_ptrs = search_paths_cstr.iter().map(|p| p.as_ptr()).collect::<Vec<_>>();
 
-    let profile = global_session.find_profile(profile_id);
+    let profile = global_session.find_profile(options.profile_id);
     let mut compiler_options = slang::CompilerOptions::default()
         .glsl_force_scalar_layout(true)
         .matrix_layout_column(true)
         .optimization(slang::OptimizationLevel::Default)
         .vulkan_use_entry_point_name(true)
+        .debug_information(if options.debug { DebugInfoLevel::Maximal } else { DebugInfoLevel::None })
         .profile(profile);
 
-    for (k, v) in macro_definitions {
+    for (k, v) in options.macro_definitions {
         compiler_options = compiler_options.macro_define(k, v);
     }
 

@@ -4,19 +4,21 @@
 use gamelib::asset::{AssetCache, Handle};
 use gamelib::camera_control::{CameraControl, CameraControlInput};
 use gamelib::context::{App, AppHandler, LoopHandler};
-use gamelib::egui::Color32;
 use gamelib::egui;
+use gamelib::egui::{Color32, Scene};
 use gamelib::input::{InputEvent, PointerButton};
 use gamelib::paint::{DrawGlyphRunOptions, PaintRenderParams, PaintScene, Painter, TextFormat, TextLayout};
 use gamelib::pipeline_cache::get_graphics_pipeline;
 use gamelib::platform::{EventToken, InitOptions, RenderTargetImage, UserEvent};
+use std::ops::Deref;
 
-use color::{Srgba32, srgba32};
+use color::{Srgba8, srgba8};
 use egui_demo_lib::{View, WidgetGallery};
 use gpu::PrimitiveTopology::TriangleList;
-use gpu::{DeviceAddress, Image, RenderPassInfo, push_constants};
+use gpu::{Ptr, Image, RenderPassInfo, push_constants};
 use log::debug;
 use math::geom::Camera;
+use math::{Mat4, Vec2};
 
 mod experiments;
 
@@ -28,12 +30,27 @@ const HEIGHT: u32 = 720;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct SceneUniforms {
-    view_matrix: [[f32; 4]; 4],
-    proj_matrix: [[f32; 4]; 4],
-    screen_size: [f32; 2],
+pub struct SceneInfoUniforms {
+    view_matrix: Mat4,
+    proj_matrix: Mat4,
+    view_proj_matrix: Mat4,
+    screen_size: Vec2,
     time: f32,
     frame: u32,
+}
+
+/// Scene info and GPU buffer containing it.
+pub struct SceneInfo {
+    info: SceneInfoUniforms,
+    pub gpu: Ptr<SceneInfoUniforms>,
+}
+
+impl Deref for SceneInfo {
+    type Target = SceneInfoUniforms;
+
+    fn deref(&self) -> &Self::Target {
+        &self.info
+    }
 }
 
 struct Game {
@@ -48,6 +65,7 @@ struct Game {
     background_shader: Handle<gpu::GraphicsPipeline>,
     frame_count: u32,
     start_time: std::time::Instant,
+    coat_experiment: experiments::coat::CoatExperiment,
 }
 
 fn create_depth_buffer(width: u32, height: u32) -> Image {
@@ -74,27 +92,22 @@ impl Default for Game {
             width: WIDTH,
             height: HEIGHT,
             start_time: std::time::Instant::now(),
+            coat_experiment: experiments::coat::CoatExperiment::new(),
         }
     }
 }
 
 impl Game {
-    fn render_scene(
-        &mut self,
-        encoder: &mut gpu::RenderEncoder,
-        _camera: &Camera,
-        scene_uniforms: DeviceAddress<SceneUniforms>,
-    ) {
+    fn render_scene(&mut self, encoder: &mut gpu::RenderEncoder, _camera: &Camera, scene_info: &SceneInfo) {
         //----------------------------------
         // Draw background
         {
-            let background_shader = self.background_shader.read();
-            if let Ok(background_shader) = background_shader.try_get() {
-                encoder.bind_graphics_pipeline(background_shader);
+            if let Ok(background_shader) = self.background_shader.read() {
+                encoder.bind_graphics_pipeline(&*background_shader);
                 encoder.push_constants(push_constants! {
-                    scene_uniforms: DeviceAddress<SceneUniforms> = scene_uniforms,
-                    bottom_color: Srgba32 = srgba32(20, 20, 40, 255),
-                    top_color: Srgba32 = srgba32(100, 150, 255, 255)
+                    scene_uniforms: Ptr<SceneInfoUniforms> = scene_info.gpu,
+                    bottom_color: Srgba8 = srgba8(20, 20, 40, 255),
+                    top_color: Srgba8 = srgba8(100, 150, 255, 255)
                 });
                 encoder.draw(TriangleList, 0..6, 0..1);
             }
@@ -103,11 +116,10 @@ impl Game {
         //----------------------------------
         // Draw grid
         {
-            let grid_shader = self.grid_shader.read();
-            if let Ok(grid_shader) = grid_shader.try_get() {
-                encoder.bind_graphics_pipeline(grid_shader);
+            if let Ok(grid_shader) = self.grid_shader.read() {
+                encoder.bind_graphics_pipeline(&*grid_shader);
                 encoder.push_constants(push_constants! {
-                    scene_uniforms: DeviceAddress<SceneUniforms> = scene_uniforms,
+                    scene_uniforms: Ptr<SceneInfoUniforms> = scene_info.gpu,
                     grid_scale: f32 = 100.0
                 });
                 encoder.draw(TriangleList, 0..6, 0..1);
@@ -123,7 +135,7 @@ impl Game {
             &mut self.painter,
             cmd,
             target,
-            Srgba32::from(self.color.to_srgba_unmultiplied()),
+            Srgba8::from(self.color.to_srgba_unmultiplied()),
         );
     }
 }
@@ -145,7 +157,12 @@ impl AppHandler for Game {
         }
 
         // --- CAMERA ---
-        self.camera_control.handle_input(&input_event);
+        if self.camera_control.handle_input(&input_event) {
+            return;
+        }
+
+        // --- experiments ---
+        self.coat_experiment.input(&input_event);
     }
 
     fn event(&mut self, event: UserEvent) {}
@@ -174,13 +191,19 @@ impl AppHandler for Game {
         // Render 3D scene
         {
             let camera = self.camera_control.camera();
-            let scene_info = cmd.upload_temporary(&SceneUniforms {
-                view_matrix: camera.view.to_cols_array_2d(),
-                proj_matrix: camera.projection.to_cols_array_2d(),
-                screen_size: camera.screen_size.as_vec2().to_array(),
-                time,
-                frame,
-            });
+            let mut scene_info = SceneInfo {
+                info: SceneInfoUniforms {
+                    view_matrix: camera.view,
+                    proj_matrix: camera.projection,
+                    view_proj_matrix: camera.view_projection(),
+                    screen_size: camera.screen_size.as_vec2(),
+                    time,
+                    frame,
+                },
+                gpu: Ptr::NULL,
+            };
+            scene_info.gpu = cmd.upload_temporary(&scene_info.info);
+
 
             let mut encoder = cmd.begin_rendering(RenderPassInfo {
                 color_attachments: &[gpu::ColorAttachment {
@@ -194,8 +217,11 @@ impl AppHandler for Game {
                 }),
             });
 
-            self.render_scene(&mut encoder, &camera, scene_info);
+            self.render_scene(&mut encoder, &camera, &scene_info);
             encoder.finish();
+
+            self.coat_experiment
+                .render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
         }
 
         //-------------------------------

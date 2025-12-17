@@ -31,10 +31,34 @@
  ☐ async asset reloading
  ☐ move egui shaders to shader-archive
  ☐ Deprecate shader-bridge? Move functionality to shadertool
+ ☐ buffer pool for uploading stuff to the GPU on each frame (use case: immediate / line rendering)
+ ☐ find a better API than indexing with `Offset<>` to read archives
+ ☐ "viewport" module/object that bundles the render target (the screen) with utilities to paint things on it (upload buffer, line drawing, etc.)
+ ☐ GPU: avoid mistake of calling `push_constants` before setting a pipeline
+ ✔ shadertool: emit debug-info (dump spirv) @done (25-12-01 23:33)
+ ☐ Framework to emit/manipulate geometry from compute shaders in a unified way (polylines, meshes)
+ ☐ Geometry format: make a generic file format for geometry instead of hard-coding all the different vertex and primitive types
+     There are too many types of vertex formats to track, and they must be hard-coded into the file format. 
+     New ones are added regularly, which requires changing the file format in a non-backwards-compatible way.
+     Replace with a format agnostic geometry container, like houdini geo files, and have usage-specific schemas on top.
+ ☐ Generic geometry debugging shader
+     Input: geometry in any space (object, world, clip, screen), any format, any primitive kind (mesh, polyline)
+     Output: flat shaded, viewport shaded, or wireframe geometry
+     This will replace `draw_lines`
+ ☐ @high Figure out a way to not need `reference_resource` anymore.
+     Possibly: make it the user responsibility to track which frames are using the resource.
+     User would call `resource.delete_later(frame_number)`. 
+     Emit warning when resource is dropped without waiting for a frame first.
+     Advantage: no more tracking of frame numbers per-resource.
+     Drawbacks: each system needs to keep track of how their resources are used. This means
+         * one more field for the last frame number
+         * replacing/reallocating resources is not a simple assignment anymore; for example, if a struct field contains a resource, must move from it first, then call delete_later, then replace;
+           this means that resource fields should be "Option<Resource>" to represent the intermediate state between delete_later and the reallocation. This is inacceptable.
+
 
 
 Terrain rendering:
-    ☐ Find out how to do the initial adaptive meshing
+    ✔ Find out how to do the initial adaptive meshing @done (25-12-15 15:55)
     ☐ Draw the initial meshing
     ☐ use meshoptimizer to create clusters
     ☐ build the cluster hierarchy

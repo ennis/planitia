@@ -1,4 +1,4 @@
-use crate::paint::Srgba32;
+use crate::paint::Srgba8;
 use gpu::{Barrier, ImageAspect, ImageCopyView, ImageCreateInfo, MemoryLocation, Size3D, vk};
 use log::debug;
 use math::geom::{IRect, irect_xywh};
@@ -11,7 +11,7 @@ use math::{u16vec2, U16Vec2};
 pub struct Atlas {
     pub width: u32,
     pub height: u32,
-    pub data: Vec<Srgba32>,
+    pub data: Vec<Srgba8>,
     // TODO allocate more textures if needed
     pub texture: gpu::Image,
     pub cursor_x: u32,
@@ -35,7 +35,7 @@ impl Atlas {
         Atlas {
             width,
             height,
-            data: vec![Srgba32::TRANSPARENT; width as usize * height as usize],
+            data: vec![Srgba8::TRANSPARENT; width as usize * height as usize],
             texture: gpu::Image::new(ImageCreateInfo {
                 memory_location: MemoryLocation::GpuOnly,
                 width,
@@ -95,7 +95,7 @@ impl Atlas {
     }
 
     /// Writes the specified image in the atlas and returns the rectangle.
-    pub fn write(&mut self, width: u32, height: u32, data: &[Srgba32], gap_after_x: u32, gap_after_y: u32) -> IRect {
+    pub fn write(&mut self, width: u32, height: u32, data: &[Srgba8], gap_after_x: u32, gap_after_y: u32) -> IRect {
         assert_eq!(
             data.len(),
             width as usize * height as usize,
@@ -141,7 +141,7 @@ impl Atlas {
         unsafe fn slice_to_u8<T: Copy>(slice: &[T]) -> &[u8] {
             unsafe {
                 use std::mem::size_of;
-                let len = size_of::<Srgba32>() * slice.len();
+                let len = size_of::<Srgba8>() * slice.len();
                 slice::from_raw_parts_mut(slice.as_ptr() as *mut u8, len)
             }
         }
@@ -194,20 +194,20 @@ impl Atlas {
 
 pub struct AtlasSliceMut<'a> {
     pub rect: IRect,
-    data: &'a mut [Srgba32],
+    data: &'a mut [Srgba8],
     stride: u32,
 }
 
 impl<'a> AtlasSliceMut<'a> {
     /// Writes a pixel at the specified coordinates within the region.
-    pub fn write(&mut self, x: u32, y: u32, color: Srgba32) {
+    pub fn write(&mut self, x: u32, y: u32, color: Srgba8) {
         assert!(x < self.rect.width() as u32 && y < self.rect.height() as u32);
         let index = (y * self.stride + x) as usize;
         self.data[index] = color;
     }
 
     /// Returns a mutable slice for the specified row within the region.
-    pub fn row_mut(&mut self, y: u32) -> &mut [Srgba32] {
+    pub fn row_mut(&mut self, y: u32) -> &mut [Srgba8] {
         assert!(y < self.rect.height() as u32);
         let start = (y * self.stride) as usize;
         let end = start + self.rect.width() as usize;

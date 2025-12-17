@@ -86,6 +86,8 @@ pub fn load_pipeline_archive(path: impl AsRef<VfsPath>) -> Handle<PipelineArchiv
                     &shadertool::BuildOptions {
                         quiet: false,
                         emit_cargo_deps: false,
+                        emit_debug_information: true,  // TODO
+                        emit_spirv_binaries: true,
                     },
                 )?;
             }
@@ -218,8 +220,23 @@ pub fn get_graphics_pipeline(path: impl AsRef<VfsPath>) -> Handle<gpu::GraphicsP
         let archive_handle = load_pipeline_archive(archive_file);
         dependencies.add(&archive_handle);
 
-        let archive = archive_handle.read();
-        Ok(create_graphics_pipeline_from_archive(archive.try_get()?, name)?)
+        let archive = archive_handle.read()?;
+        Ok(create_graphics_pipeline_from_archive(&*archive, name)?)
+    }
+
+    let path = path.as_ref();
+    AssetCache::instance().insert_with_dependencies(path, load)
+}
+
+pub fn get_compute_pipeline(path: impl AsRef<VfsPath>) -> Handle<gpu::ComputePipeline> {
+    fn load(path: &VfsPath, dependencies: &mut Dependencies) -> LoadResult<gpu::ComputePipeline> {
+        let archive_file = path.path_without_fragment();
+        let name = path.fragment().expect("pipeline name missing in path");
+        let archive_handle = load_pipeline_archive(archive_file);
+        dependencies.add(&archive_handle);
+
+        let archive = archive_handle.read()?;
+        Ok(create_compute_pipeline_from_archive(&*archive, name)?)
     }
 
     let path = path.as_ref();

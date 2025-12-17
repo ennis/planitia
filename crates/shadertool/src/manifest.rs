@@ -1,4 +1,5 @@
 //! Pipeline build manifest
+use crate::manifest::Error::MissingField;
 use anyhow::{Context, anyhow};
 use log::error;
 use serde_json::Value as Json;
@@ -6,7 +7,6 @@ use shader_archive::gpu::vk;
 use shader_archive::gpu::vk::PolygonMode;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use crate::manifest::Error::MissingField;
 
 const MAX_COLOR_TARGETS: usize = 8;
 
@@ -58,8 +58,9 @@ impl Default for Variant {
     }
 }
 
+///
 #[derive(Clone)]
-pub struct Configuration {
+pub struct PipelineState {
     pub defines: BTreeMap<String, String>,
     pub rasterization_state: shader_archive::RasterizerStateData,
     pub depth_stencil_state: shader_archive::DepthStencilStateData,
@@ -75,18 +76,25 @@ pub struct Input {
     pub compute_entry_point: String,
     pub task_entry_point: String,
     pub mesh_entry_point: String,
+    /// Pipeline state overrides for this input.
     pub overrides: Option<Json>,
+}
+
+/// Represents one set of pipelines to build that share the same base pipeline state.
+#[derive(Clone)]
+pub struct Target {
+    pub type_: PipelineType,
+    pub inputs: Vec<Input>,
+    pub base_pipeline_state: PipelineState,
 }
 
 #[derive(Clone)]
 pub struct BuildManifest {
-    pub type_: PipelineType,
     pub manifest_path: PathBuf,
     pub module_search_paths: Vec<String>,
-    pub inputs: Vec<Input>,
     /// Output archive path.
     pub output: String,
-    pub base_configuration: Configuration,
+    pub targets: Vec<Target>,
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -276,7 +284,7 @@ fn read_color_targets(json: &Json, out: &mut Vec<shader_archive::ColorTarget>) -
     }
 }
 
-impl Configuration {
+impl PipelineState {
     pub fn apply_overrides(&mut self, overrides: &Json) -> Result<(), Error> {
         if let Some(rasterizer_obj) = read_object(overrides, "rasterizer_state")? {
             read_rasterizer_state(rasterizer_obj, &mut self.rasterization_state)?;
@@ -346,6 +354,62 @@ impl Input {
     }
 }
 
+fn read_target(json: &Json) -> anyhow::Result<Target> {
+    let type_str = read_str(json, "type")?.ok_or(MissingField("type"))?;
+    let type_ = match type_str {
+        "graphics" => PipelineType::Graphics,
+        "compute" => PipelineType::Compute,
+        _ => {
+            return Err(anyhow!("Unknown pipeline type: {}", type_str));
+        }
+    };
+    let inputs = if let Some(inputs_array) = read_array(json, "inputs")? {
+        let mut inputs = Vec::new();
+        for (i, input_json) in inputs_array.iter().enumerate() {
+            let input = Input::from_json(input_json, type_).with_context(|| format!("in inputs[{i}]"))?;
+            inputs.push(input);
+        }
+        inputs
+    } else {
+        return Err(MissingField("inputs").into());
+    };
+
+    let rasterization_state =
+        if let Some(rasterizer_obj) = read_object(json, "rasterizer_state").context("in rasterizer_state")? {
+            let mut rasterization_state = shader_archive::RasterizerStateData::default();
+            read_rasterizer_state(rasterizer_obj, &mut rasterization_state)?;
+            rasterization_state
+        } else {
+            shader_archive::RasterizerStateData::default()
+        };
+    let depth_stencil_state =
+        if let Some(depth_stencil_obj) = read_object(json, "depth_stencil_state").context("in depth_stencil_state")? {
+            let mut depth_stencil_state = shader_archive::DepthStencilStateData::default();
+            read_depth_stencil_state(depth_stencil_obj, &mut depth_stencil_state)?;
+            depth_stencil_state
+        } else {
+            shader_archive::DepthStencilStateData::default()
+        };
+
+    let mut color_targets = Vec::new();
+    // color targets array is mandatory if type_ is graphics
+    if type_ == PipelineType::Graphics {
+        let color_targets_json = json.get("color_targets").ok_or(MissingField("color_targets"))?;
+        read_color_targets(color_targets_json, &mut color_targets)?;
+    }
+
+    Ok(Target {
+        type_,
+        inputs,
+        base_pipeline_state: PipelineState {
+            defines: Default::default(),
+            rasterization_state,
+            depth_stencil_state,
+            color_targets,
+        },
+    })
+}
+
 impl BuildManifest {
     pub(crate) fn load(path: impl AsRef<Path>) -> Result<BuildManifest, anyhow::Error> {
         fn load_inner(path: &Path) -> Result<BuildManifest, anyhow::Error> {
@@ -357,25 +421,6 @@ impl BuildManifest {
     }
 
     fn from_json(manifest_path: &Path, json: &Json) -> Result<BuildManifest, anyhow::Error> {
-        let type_str = read_str(json, "type")?.ok_or(MissingField("type"))?;
-        let type_ = match type_str {
-            "graphics" => PipelineType::Graphics,
-            "compute" => PipelineType::Compute,
-            _ => {
-                return Err(anyhow!("Unknown pipeline type: {}", type_str));
-            }
-        };
-        let inputs = if let Some(inputs_array) = read_array(json, "inputs")? {
-            let mut inputs = Vec::new();
-            for (i, input_json) in inputs_array.iter().enumerate() {
-                let input = Input::from_json(input_json, type_).with_context(|| format!("in inputs[{i}]"))?;
-                inputs.push(input);
-            }
-            inputs
-        } else {
-            return Err(MissingField("inputs").into());
-        };
-
         let module_search_paths = if let Some(paths_array) = read_array(json, "module_search_paths")? {
             let mut paths = Vec::new();
             for path_json in paths_array {
@@ -389,41 +434,22 @@ impl BuildManifest {
 
         let output = read_str(json, "output")?.ok_or(MissingField("output"))?.to_string();
 
-        let rasterizer_state =
-            if let Some(rasterizer_obj) = read_object(json, "rasterizer_state").context("in rasterizer_state")? {
-                let mut rasterization_state = shader_archive::RasterizerStateData::default();
-                read_rasterizer_state(rasterizer_obj, &mut rasterization_state)?;
-                rasterization_state
-            } else {
-                shader_archive::RasterizerStateData::default()
-            };
-        let depth_stencil_state = if let Some(depth_stencil_obj) =
-            read_object(json, "depth_stencil_state").context("in depth_stencil_state")?
-        {
-            let mut depth_stencil_state = shader_archive::DepthStencilStateData::default();
-            read_depth_stencil_state(depth_stencil_obj, &mut depth_stencil_state)?;
-            depth_stencil_state
+        let targets = if let Some(targets_array) = read_array(json, "targets")? {
+            let mut targets = Vec::new();
+            for (i, config_json) in targets_array.iter().enumerate() {
+                let target = read_target(config_json).with_context(|| format!("in targets[{i}]"))?;
+                targets.push(target);
+            }
+            targets
         } else {
-            shader_archive::DepthStencilStateData::default()
+            return Err(MissingField("targets").into());
         };
 
-        let mut color_targets = Vec::new();
-        // color targets array is mandatory
-        let color_targets_json = json.get("color_targets").ok_or(MissingField("color_targets"))?;
-        read_color_targets(color_targets_json, &mut color_targets)?;
-
         Ok(BuildManifest {
-            type_,
             output,
             manifest_path: manifest_path.to_path_buf(),
             module_search_paths,
-            inputs,
-            base_configuration: Configuration {
-                defines: Default::default(),
-                rasterization_state: rasterizer_state,
-                depth_stencil_state,
-                color_targets,
-            },
+            targets,
         })
     }
 }
