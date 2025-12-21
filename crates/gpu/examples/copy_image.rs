@@ -50,7 +50,7 @@ fn load_image(cmd: &mut CommandStream, path: impl AsRef<Path>, usage: ImageUsage
     // create a staging buffer
     let staging_buffer = BufferUntyped::new(BufferCreateInfo {
         len: byte_size,
-        usage: BufferUsage::TRANSFER_SRC,
+        usage: BufferUsage::default(),
         memory_location: MemoryLocation::CpuToGpu,
         ..
     });

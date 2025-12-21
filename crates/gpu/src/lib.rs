@@ -34,7 +34,7 @@ pub use gpu_macros::Vertex;
 
 pub mod prelude {
     pub use crate::{
-        vk, Buffer, BufferUsage, ClearColorValue, ColorBlendEquation, ColorTargetState, CommandStream, ComputeEncoder,
+        vk, Buffer, BufferUsage, ClearColorValue, ColorBlendEquation, ColorTargetState, CommandStream,
         DepthStencilState, Format, FragmentState, GraphicsPipeline, GraphicsPipelineCreateInfo, Image, ImageCreateInfo,
         ImageType, ImageUsage, MemoryLocation, PipelineBindPoint, PipelineLayoutDescriptor, Point2D,
         PreRasterizationShaders, RasterizationState, Rect2D, RenderEncoder, Sampler, SamplerCreateInfo,

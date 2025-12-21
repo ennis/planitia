@@ -3,7 +3,7 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("malformed .geo file")]
+    #[error("malformed .geo file: {0}")]
     Malformed(&'static str),
     #[error("unsupported .geo file")]
     Unsupported,

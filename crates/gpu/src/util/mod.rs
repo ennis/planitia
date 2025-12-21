@@ -71,18 +71,18 @@ pub unsafe fn blit_images(
 }
 */
 
-/// Returns a reference to a temporary instance of an anonymous repr(C) struct to be used as push constants.
+/// Returns a reference to a temporary instance of an anonymous repr(C) struct to be used as shader root parameters.
 ///
 /// # Example
 ///
 ///```rust
-/// encoder.push_constants(push_constants! {
+/// encoder.push_constants(root_params! {
 ///     time: f32 = 1.0,
 ///     resolution: [f32; 2] = [800.0, 600.0],
 /// });
 ///```
 #[macro_export]
-macro_rules! push_constants {
+macro_rules! root_params {
     ( $( $field:ident : $ty:ty = $val:expr ),* ) => {
         {
             #[repr(C)]
@@ -97,4 +97,4 @@ macro_rules! push_constants {
     };
 }
 
-pub use push_constants;
+pub use root_params;

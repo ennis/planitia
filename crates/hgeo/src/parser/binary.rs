@@ -1,8 +1,8 @@
 //! Binary geometry format
 
-use crate::houdini::error::Error;
-use crate::houdini::parser::binary::State::{Complete, UniformArray};
-use crate::houdini::parser::{Event, PackedArray, Parser};
+use crate::error::Error;
+use crate::parser::binary::State::{Complete, UniformArray};
+use crate::parser::{Event, Parser};
 use std::borrow::Cow;
 use std::collections::HashMap;
 

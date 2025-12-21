@@ -15,6 +15,7 @@ Attribute syntax:
 
 	@P  			// current point position
 	@ptnum 			// index of the current point (when iterating over points)
+	@primnum			// index of the current primitive (when iterating over primitives)
 
 
 `geoself()`: handle to current geometry
@@ -37,7 +38,10 @@ To set only a component of a point attrib:
 	value.component = ...;
 	setpointattrib(geohandle, name, point_num, value);
 
-
+Foreach vertex point in primitive: 
+	int[] vertices = primvertices();
+	foreach (int vtx; vertices) {
+	}
 
 
 where `type_string` can be `"polyline"`, ... 

@@ -1,6 +1,6 @@
-use color::srgba8;
 use crate::experiments::lines::{Line, LineVertex, draw_lines};
 use crate::{SceneInfo, SceneInfoUniforms};
+use color::srgba8;
 use gamelib::asset::{AssetCache, Handle};
 use gamelib::input::InputEvent;
 use gamelib::pipeline_cache::{get_compute_pipeline, get_graphics_pipeline};
@@ -54,13 +54,13 @@ struct ExpandStrokesPushConstants {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct PushBuffer<T: Copy+'static> {
+struct PushBuffer<T: Copy + 'static> {
     base: gpu::Ptr<[T]>,
     offset: u32,
     capacity: u32,
 }
 
-impl<T: Copy+'static> PushBuffer<T> {
+impl<T: Copy + 'static> PushBuffer<T> {
     fn new(buffer: &gpu::Buffer<[T]>) -> Self {
         Self {
             base: buffer.ptr(),
@@ -69,7 +69,6 @@ impl<T: Copy+'static> PushBuffer<T> {
         }
     }
 }
-
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -86,7 +85,7 @@ struct ExpandStrokesData {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct ExpandStrokesPushConstants {
+struct ExpandStrokesRootParams {
     scene_info: gpu::Ptr<SceneInfoUniforms>,
     data: gpu::Ptr<ExpandStrokesData>,
 }
@@ -100,7 +99,7 @@ struct DebugStrokesPushConstants {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct DebugStrokesPushConstants {
+struct DebugStrokesRootParams {
     scene_info: gpu::Ptr<SceneInfoUniforms>,
     vertices: gpu::Ptr<[ExpandedVertex]>,
     indices: gpu::Ptr<[u32]>,
@@ -157,30 +156,19 @@ impl CoatExperiment {
         self.gpu_data = None;
 
         let header = geometry.header();
-        let strokes = gpu::Buffer::upload_slice(BufferUsage::STORAGE, &geometry[header.strokes], "strokes");
-        let stroke_vertices = gpu::Buffer::upload_slice(
-            BufferUsage::STORAGE,
-            &geometry[header.stroke_vertices],
-            "stroke_vertices",
-        );
-        let mesh_vertices = gpu::Buffer::upload_slice(
-            BufferUsage::STORAGE | BufferUsage::VERTEX,
-            &geometry[header.mesh_vertices],
-            "mesh_vertices",
-        );
-        let mesh_indices =
-            gpu::Buffer::upload_slice(BufferUsage::INDEX, &geometry[header.mesh_indices], "mesh_indices");
+        let strokes = gpu::Buffer::from_slice(geometry.strokes(), "strokes");
+        let stroke_vertices = gpu::Buffer::from_slice(geometry.stroke_vertices(), "stroke_vertices");
+        let mesh_vertices = gpu::Buffer::from_slice(geometry.mesh_vertices(), "mesh_vertices");
+        let mesh_indices = gpu::Buffer::from_slice(geometry.indices(), "mesh_indices");
 
         let expansion_buffer_size = stroke_vertices.len() * NVERTEX;
         let expansion_vertices = gpu::Buffer::new(gpu::BufferCreateInfo {
             len: expansion_buffer_size,
-            usage: BufferUsage::STORAGE | BufferUsage::VERTEX,
             label: "expansion_buffer",
             ..
         });
         let expansion_indices = gpu::Buffer::new(gpu::BufferCreateInfo {
             len: stroke_vertices.len() * (NVERTEX - 1) * 6,
-            usage: BufferUsage::STORAGE | BufferUsage::INDEX,
             label: "expansion_indices",
             ..
         });
@@ -209,18 +197,19 @@ impl CoatExperiment {
         let Some(geometry) = &self.geometry else {
             return;
         };
-        let header = geometry.header();
+        //let header = geometry.header();
 
         let Some(gpu_data) = &self.gpu_data else {
             return;
         };
 
-        let strokes = &geometry[header.strokes];
-        let stroke_vertices = &geometry[header.stroke_vertices];
+        let strokes = geometry.strokes();
+        let stroke_vertices = geometry.stroke_vertices();
+        let coats = geometry.coats();
 
         let mut line_vertices = Vec::new();
         let mut lines = Vec::new();
-        for coat in &geometry[header.coats] {
+        for coat in coats {
             let stroke_range = coat.start_stroke as usize..(coat.start_stroke + coat.stroke_count) as usize;
             for stroke in &strokes[stroke_range] {
                 let vertex_range = stroke.start_vertex as usize..(stroke.start_vertex + stroke.vertex_count) as usize;
@@ -246,7 +235,6 @@ impl CoatExperiment {
             }
         }
 
-
         ///////////////////////////////////////////////////////////////////////////////////////////
 
         let Ok(expand_stroke_pipeline) = self.expand_stroke_pipeline.read() else {
@@ -265,19 +253,16 @@ impl CoatExperiment {
             border_width: 5.0,
         });
 
-        let mut encoder = cmd.begin_compute();
-        encoder.reference_resource(&gpu_data.stroke_buffer);
-        encoder.reference_resource(&gpu_data.stroke_vertex_buffer);
-        encoder.reference_resource(&gpu_data.expansion_vertices);
-        encoder.reference_resource(&gpu_data.expansion_indices);
-        encoder.bind_compute_pipeline(&*expand_stroke_pipeline);
-        encoder.push_constants(&ExpandStrokesPushConstants {
+        cmd.reference_resource(&gpu_data.stroke_buffer);
+        cmd.reference_resource(&gpu_data.stroke_vertex_buffer);
+        cmd.reference_resource(&gpu_data.expansion_vertices);
+        cmd.reference_resource(&gpu_data.expansion_indices);
+        cmd.bind_compute_pipeline(&*expand_stroke_pipeline);
+        let workgroup_count = gpu_data.stroke_buffer.len() as u32;
+        cmd.dispatch(workgroup_count, 1, 1, &ExpandStrokesRootParams {
             scene_info: scene_info.gpu,
             data: params,
         });
-        let workgroup_count = gpu_data.stroke_buffer.len() as u32;
-        encoder.dispatch(workgroup_count, 1, 1);
-        encoder.finish();
 
         //////////////////////////////////////////////////////////////////////////////////////////
         let Ok(debug_stroke_pipeline) = self.debug_stroke_pipeline.read() else {
@@ -297,27 +282,24 @@ impl CoatExperiment {
         encoder.reference_resource(&gpu_data.expansion_vertices);
         encoder.reference_resource(&gpu_data.expansion_indices);
         encoder.bind_graphics_pipeline(&*debug_stroke_pipeline);
-        encoder.push_constants(&DebugStrokesPushConstants {
-            scene_info: scene_info.gpu,
-            vertices: gpu_data.expansion_vertices.ptr(),
-            indices: gpu_data.expansion_indices.ptr(),
-        });
-
         let index_count = strokes
             .iter()
             .map(|s| (s.vertex_count - 1) * (NVERTEX as u32 - 1) * 6)
             .sum::<u32>();
 
-        let vertex_count = strokes.iter() .map(|s| s.vertex_count).sum::<u32>();
+        let vertex_count = strokes.iter().map(|s| s.vertex_count).sum::<u32>();
         let stroke_count = strokes.len() as u32;
         //eprintln!("vertex_count={}", vertex_count);
         //eprintln!("stroke_count={}", stroke_count);
         //eprintln!("index_count={}", index_count);
-        encoder.draw(TriangleList, 0..index_count, 0..1);
+        encoder.draw(TriangleList, 0..index_count, 0..1, &DebugStrokesRootParams {
+            scene_info: scene_info.gpu,
+            vertices: gpu_data.expansion_vertices.ptr(),
+            indices: gpu_data.expansion_indices.ptr(),
+        });
 
         //draw_lines(&mut encoder, &line_vertices, &lines, scene_info);
 
         encoder.finish();
-
     }
 }

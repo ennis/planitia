@@ -5,7 +5,7 @@ use crate::{
 
 impl CommandStream {
     pub fn upload_image_data(&mut self, image: ImageCopyView, size: Size3D, data: &[u8]) {
-        let staging_buffer = Buffer::upload_slice(BufferUsage::TRANSFER_SRC, data, "");
+        let staging_buffer = Buffer::from_slice(data, "");
 
         self.copy_buffer_to_image(
             ImageCopyBuffer {
@@ -75,13 +75,14 @@ impl CommandStream {
     }
 
     pub fn upload_temporary<T: Copy>(&mut self, data: &T) -> Ptr<T> {
-        let buffer = Buffer::upload(BufferUsage::STORAGE, data, "");
+        // TODO: we should have a ring buffer for temporary uploads instead of creating a new buffer each time
+        let buffer = Buffer::from_data(data, "");
         self.reference_resource(&buffer);
         buffer.ptr()
     }
 
     pub fn upload_temporary_slice<T: Copy>(&mut self, data: &[T]) -> Ptr<[T]> {
-        let buffer = Buffer::upload_slice(BufferUsage::STORAGE, data, "");
+        let buffer = Buffer::from_slice(data, "");
         self.reference_resource(&buffer);
         buffer.ptr()
     }

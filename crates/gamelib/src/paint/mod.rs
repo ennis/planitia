@@ -50,7 +50,7 @@ impl FeatherVertex {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct PushConstants {
+struct RootParams {
     matrix: Mat4,
     screen_size: [f32; 2],
     line_width: f32,
@@ -103,7 +103,7 @@ impl Pipelines {
         // Polygon pipeline
         let create_info = gpu::GraphicsPipelineCreateInfo {
             set_layouts: &[],
-            push_constants_size: size_of::<PushConstants>(),
+            push_constants_size: size_of::<RootParams>(),
             vertex_input: FeatherVertex::vertex_input_state(),
             pre_rasterization_shaders: gpu::PreRasterizationShaders::PrimitiveShading {
                 vertex: vertex.as_gpu_entry_point(),
@@ -385,14 +385,14 @@ impl<'a> PaintScene<'a> {
 
             match &prim.kind {
                 PrimKind::Geometry(mesh) => {
-                    encoder.push_constants(&PushConstants {
+                    let root_params = &RootParams {
                         matrix: params.camera.view_projection(),
                         screen_size: [width as f32, height as f32],
                         line_width: 1.0,
                         texture: prim.texture,
                         sampler: self.painter.sampler.device_handle(),
-                    });
-                    draw_mesh(&mut encoder, params, mesh, prim.clip);
+                    };
+                    draw_mesh(&mut encoder, params, mesh, prim.clip, root_params);
                 }
             }
         }
@@ -426,16 +426,16 @@ fn draw_glyph_run(
     encoder.draw(0..vertices.len() as u32, 0..1);
 }*/
 
-fn draw_mesh(encoder: &mut gpu::RenderEncoder, params: &PaintRenderParams, mesh: &Mesh, clip: Rect) {
+fn draw_mesh(encoder: &mut gpu::RenderEncoder, params: &PaintRenderParams, mesh: &Mesh, clip: Rect, root_params: &RootParams) {
     if mesh.vertices.is_empty() || mesh.indices.is_empty() {
         return;
     }
-    let vertex_buffer = gpu::Buffer::upload_slice(gpu::BufferUsage::VERTEX, &mesh.vertices, "");
-    let index_buffer = gpu::Buffer::upload_slice(gpu::BufferUsage::INDEX, &mesh.indices, "");
+    let vertex_buffer = gpu::Buffer::from_slice(&mesh.vertices, "");
+    let index_buffer = gpu::Buffer::from_slice(&mesh.indices, "");
     encoder.bind_vertex_buffer(0, vertex_buffer.as_bytes().into());
     encoder.bind_index_buffer(vk::IndexType::UINT32, index_buffer.as_bytes().into());
     set_scissor(encoder, params, clip);
-    encoder.draw_indexed(TriangleList, 0..mesh.indices.len() as u32, 0, 0..1);
+    encoder.draw_indexed(TriangleList, 0..mesh.indices.len() as u32, 0, 0..1, root_params);
 }
 
 #[cfg(test)]

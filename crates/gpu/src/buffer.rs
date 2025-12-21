@@ -31,7 +31,7 @@ pub struct BufferCreateInfo<'a> {
     /// Length in number of elements.
     pub len: usize,
     /// Usage flags. Must include all intended uses of the buffer.
-    pub usage: BufferUsage,
+    pub usage: BufferUsage = BufferUsage::empty(),
     pub memory_location: MemoryLocation = MemoryLocation::Unknown,
     /// Debug label.
     pub label: &'a str = "",
@@ -61,7 +61,12 @@ impl<T: Copy> Buffer<[T]> {
     }
 
     /// Creates a CpuToGpu buffer and copies data into it.
-    pub fn upload_slice(usage: BufferUsage, data: &[T], label: &str) -> Buffer<[T]> {
+    pub fn from_slice(data: &[T], label: &str) -> Buffer<[T]> {
+        Buffer::from_slice_with_usage(BufferUsage::default(), data, label)
+    }
+
+    /// Creates a CpuToGpu buffer and copies data into it.
+    pub fn from_slice_with_usage(usage: BufferUsage, data: &[T], label: &str) -> Buffer<[T]> {
         let buffer = Buffer::new(BufferCreateInfo {
             len: data.len(),
             usage,
@@ -78,8 +83,13 @@ impl<T: Copy> Buffer<[T]> {
 
 impl<T: Copy> Buffer<T> {
     /// Creates a CpuToGpu buffer and copies data into it.
-    pub fn upload(usage: BufferUsage, data: &T, label: &str) -> Buffer<T> {
-        let buffer = Buffer::upload_slice(usage, slice::from_ref(data), label);
+    pub fn from_data(data: &T, label: &str) -> Buffer<T> {
+        Buffer::from_data_with_usage(BufferUsage::default(), data, label)
+    }
+
+    /// Creates a CpuToGpu buffer and copies data into it.
+    pub fn from_data_with_usage(usage: BufferUsage, data: &T, label: &str) -> Buffer<T> {
+        let buffer = Buffer::from_slice_with_usage(usage, slice::from_ref(data), label);
         buffer.single()
     }
 }
@@ -325,7 +335,9 @@ impl Device {
         //assert!(create_info.len > 0, "buffer size must be greater than zero");
 
         if create_info.len == 0 || elem_size == 0 {
-            warn!("creating zero-sized buffer; this is not supported by Vulkan and a minimum size of 1 byte will be used");
+            warn!(
+                "creating zero-sized buffer; this is not supported by Vulkan and a minimum size of 1 byte will be used"
+            );
         }
         let byte_size = elem_size as u64 * create_info.len as u64;
 
@@ -334,7 +346,28 @@ impl Device {
         const MINIMUM_BUFFER_SIZE: u64 = 1;
         let nonzero_byte_size = byte_size.max(MINIMUM_BUFFER_SIZE);
 
-        
+        // The following flags have no specific logic associated to them in Mesa drivers (at least for desktop GPUs):
+        // - VERTEX_BUFFER
+        // - INDEX_BUFFER
+        // - TRANSFER_SRC
+        // - TRANSFER_DST
+        // - INDIRECT_BUFFER
+        // - SHADER_DEVICE_ADDRESS
+        // So we include them by default, that's one less thing for the user to worry about.
+        //
+        // STORAGE_BUFFER and UNIFORM_BUFFER are only used to impose additional alignment requirements:
+        // usually 16 bytes for STORAGE and 64 bytes for UNIFORM.
+        // We include STORAGE_BUFFER in the default usage flags, as the impact should be minimal,
+        // but we leave out UNIFORM_BUFFER for now (it's not commonly used anymore since we mostly use
+        // push constants + BDA with storage buffers).
+        let default_flags = vk::BufferUsageFlags::VERTEX_BUFFER
+            | vk::BufferUsageFlags::INDEX_BUFFER
+            | vk::BufferUsageFlags::TRANSFER_SRC
+            | vk::BufferUsageFlags::TRANSFER_DST
+            | vk::BufferUsageFlags::INDIRECT_BUFFER
+            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
+            | vk::BufferUsageFlags::STORAGE_BUFFER;
+
         unsafe {
             let handle = self
                 .raw
@@ -342,8 +375,7 @@ impl Device {
                     &vk::BufferCreateInfo {
                         flags: Default::default(),
                         size: nonzero_byte_size,
-                        usage: create_info.usage.to_vk_buffer_usage_flags()
-                            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+                        usage: default_flags | create_info.usage.to_vk_buffer_usage_flags(),
                         sharing_mode: vk::SharingMode::EXCLUSIVE,
                         queue_family_index_count: 0,
                         p_queue_family_indices: ptr::null(),
@@ -352,7 +384,6 @@ impl Device {
                     None,
                 )
                 .expect("failed to create buffer");
-
 
             let mem_req = self.raw.get_buffer_memory_requirements(handle);
             let allocation = self.allocate_memory_or_panic(&AllocationCreateDesc {
@@ -378,7 +409,7 @@ impl Device {
                 // SAFETY: no concurrent access possible
                 self.set_object_name(handle, create_info.label);
             }
-            
+
             let id = self.allocate_resource_id();
             trace!("GPU: create buffer {:?} {} {id:?}", handle, create_info.label);
 

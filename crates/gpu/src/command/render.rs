@@ -150,12 +150,6 @@ impl<'a> RenderEncoder<'a> {
         P: Copy,
     {
         unsafe {
-            self.stream.do_cmd_push_constants(
-                self.command_buffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline_layout,
-                slice::from_raw_parts(data as *const P as *const MaybeUninit<u8>, size_of_val(data)),
-            );
         }
     }
     /// Binds push constants.
@@ -304,8 +298,14 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
-    pub fn draw(&mut self, topology: PrimitiveTopology, vertices: Range<u32>, instances: Range<u32>) {
+    pub fn draw<RootParams: Copy>(&mut self, topology: PrimitiveTopology, vertices: Range<u32>, instances: Range<u32>, root_params: &RootParams) {
         unsafe {
+            self.stream.do_cmd_push_constants(
+                self.command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline_layout,
+                slice::from_raw_parts(root_params as *const RootParams as *const MaybeUninit<u8>, size_of_val(root_params)),
+            );
             let device = &Device::global().raw;
             device.cmd_set_primitive_topology(
                 self.command_buffer,
@@ -321,8 +321,14 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
-    pub fn draw_indexed(&mut self, topology: PrimitiveTopology, indices: Range<u32>, base_vertex: i32, instances: Range<u32>) {
+    pub fn draw_indexed<RootParams: Copy>(&mut self, topology: PrimitiveTopology, indices: Range<u32>, base_vertex: i32, instances: Range<u32>, root_params: &RootParams) {
         unsafe {
+            self.stream.do_cmd_push_constants(
+                self.command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline_layout,
+                slice::from_raw_parts(root_params as *const RootParams as *const MaybeUninit<u8>, size_of_val(root_params)),
+            );
             let device = &Device::global().raw;
             device.cmd_set_primitive_topology(
                 self.command_buffer,

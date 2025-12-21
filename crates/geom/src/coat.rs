@@ -1,4 +1,4 @@
-use math::Vec3;
+use math::{Vec2, Vec3};
 use color::Srgba8;
 use utils::archive::Offset;
 
@@ -29,6 +29,20 @@ pub struct StrokeVertex {
     //pub falloff: u8,
     //pub stamp_texture: u8,
 }
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct SweptStrokeVertex {
+    pub position: Vec3,
+    pub color: Srgba8,
+    pub normal: Vec3,
+    pub up: Vec3,
+    //pub width: u8,
+    //pub noise: u8,
+    //pub falloff: u8,
+    //pub stamp_texture: u8,
+}
+
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -69,7 +83,7 @@ pub struct SweptStroke {
 
 #[repr(C)]
 #[derive(Copy, Clone)]
-pub struct CrossSectionVertex {
-    pub position: Vec3,
-    pub normal: Vec3,
+pub struct PosNorm2DVertex {
+    pub position: Vec2,
+    pub normal: Vec2,
 }

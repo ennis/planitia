@@ -8,7 +8,7 @@ use std::borrow::Cow;
 use std::io;
 use std::ops::Deref;
 use std::path::Path;
-use utils::archive::{ArchiveData, ArchiveReader, ArchiveReaderOwned, Offset};
+use utils::archive::{ArchiveData, ArchiveReader, ArchiveReaderOwned, Offset, OffsetUntyped};
 
 pub use mesh::*;
 pub use coat::*;
@@ -22,23 +22,49 @@ pub struct GeoArchiveHeader {
     /// Version of the geometry archive format.
     pub version: u32,
 
-    pub stroke_vertices: Offset<[StrokeVertex]> = Offset::INVALID,
-    pub mesh_vertices: Offset<[MeshVertex]> = Offset::INVALID,
-    /// Indices into `mesh_vertices`, relative to `mesh_part.base_vertex`.
-    pub mesh_indices: Offset<[u32]> = Offset::INVALID,
+    pub vertex_arrays: Offset<[VertexArray]> = Offset::INVALID,
+    pub primitives: Offset<[Primitive]> = Offset::INVALID,
+    pub indices: Offset<[u32]> = Offset::INVALID,
 
-    pub strokes: Offset<[Stroke]> = Offset::INVALID,
-    pub coats: Offset<[Coat]> = Offset::INVALID,
-    pub meshes: Offset<[Mesh]> = Offset::INVALID,
+    //pub stroke_vertices: Offset<[StrokeVertex]> = Offset::INVALID,
+    //pub mesh_vertices: Offset<[MeshVertex]> = Offset::INVALID,
+    ///// Indices into `mesh_vertices`, relative to `mesh_part.base_vertex`.
+    //pub mesh_indices: Offset<[u32]> = Offset::INVALID,
+    //pub strokes: Offset<[Stroke]> = Offset::INVALID,
+    //pub coats: Offset<[Coat]> = Offset::INVALID,
+    //pub meshes: Offset<[Mesh]> = Offset::INVALID,
+}
+
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+#[non_exhaustive]
+pub enum VertexArray {
+    /// Vertices of paint strokes (polylines).
+    Stroke(Offset<[StrokeVertex]>),
+    SweptStroke(Offset<[SweptStrokeVertex]>),
+    /// Generic 3D surface mesh vertex.
+    Mesh(Offset<[MeshVertex]>),
+    /// 2D position+normal vertex
+    PosNorm2D(Offset<[PosNorm2DVertex]>),
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+#[non_exhaustive]
+pub enum Primitive {
+    Stroke(Offset<[Stroke]>),
+    SweptStroke(Offset<[SweptStroke]>),
+    Mesh(Offset<[Mesh]>),
+    Coat(Offset<[Coat]>),
 }
 
 impl GeoArchiveHeader {
     /// Magic number for geometry archive files.
     pub const MAGIC: [u8; 4] = *b"GEOM";
     /// Current version of the geometry archive format.
-    pub const VERSION: u32 = 1;
+    pub const VERSION: u32 = 2;
 }
-
 
 pub struct GeoArchive(Cow<'static, ArchiveReader>);
 
@@ -67,13 +93,13 @@ impl GeoArchive {
         if header.magic != GeoArchiveHeader::MAGIC {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                "Invalid pipeline archive magic",
+                "Invalid archive magic",
             ));
         }
-        if header.version != 1 {
+        if header.version != GeoArchiveHeader::VERSION {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                "Unsupported pipeline archive version",
+                "Unsupported archive version",
             ));
         }
         Ok(())
@@ -82,6 +108,80 @@ impl GeoArchive {
     pub fn header(&self) -> &GeoArchiveHeader {
         let header: &GeoArchiveHeader = self.0.header().unwrap();
         header
+    }
+
+
+    /// Returns a slice of all stroke primitives in the archive.
+    // TODO this API and all below are dumb
+    pub fn strokes(&self) -> &[Stroke] {
+        let header = self.header();
+        let primitives = &self[header.primitives];
+        for prim in primitives {
+            if let Primitive::Stroke(offset) = prim {
+                return &self[*offset];
+            }
+        }
+        &[]
+    }
+
+    pub fn stroke_vertices(&self) -> &[StrokeVertex] {
+        let header = self.header();
+        let vertex_arrays = &self[header.vertex_arrays];
+        for va in vertex_arrays {
+            if let VertexArray::Stroke(offset) = va {
+                return &self[*offset];
+            }
+        }
+        &[]
+    }
+
+    pub fn swept_strokes(&self) -> &[SweptStroke] {
+        let header = self.header();
+        let primitives = &self[header.primitives];
+        for prim in primitives {
+            if let Primitive::SweptStroke(offset) = prim {
+                return &self[*offset];
+            }
+        }
+        &[]
+    }
+
+    pub fn swept_stroke_vertices(&self) -> &[SweptStrokeVertex] {
+        let header = self.header();
+        let vertex_arrays = &self[header.vertex_arrays];
+        for va in vertex_arrays {
+            if let VertexArray::SweptStroke(offset) = va {
+                return &self[*offset];
+            }
+        }
+        &[]
+    }
+
+    pub fn coats(&self) -> &[Coat] {
+        let header = self.header();
+        let primitives = &self[header.primitives];
+        for prim in primitives {
+            if let Primitive::Coat(offset) = prim {
+                return &self[*offset];
+            }
+        }
+        &[]
+    }
+
+    pub fn mesh_vertices(&self) -> &[MeshVertex] {
+        let header = self.header();
+        let vertex_arrays = &self[header.vertex_arrays];
+        for va in vertex_arrays {
+            if let VertexArray::Mesh(offset) = va {
+                return &self[*offset];
+            }
+        }
+        &[]
+    }
+
+    pub fn indices(&self) -> &[u32] {
+        let header = self.header();
+        &self[header.indices]
     }
 }
 
@@ -94,25 +194,4 @@ impl Deref for GeoArchive {
     }
 }
 
-/*
-/// Generic vertex/data format descriptor.
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub enum TypeDesc {
-    /// 8-bit unsigned normalized integer.
-    U8Norm(u16),
-    /// 8-bit signed normalized integer.
-    S8Norm,
-    /// 16-bit unsigned normalized integer.
-    U16Norm,
-    /// 16-bit signed normalized integer.
-    S16Norm,
-    /// 32-bit unsigned normalized integer.
-    U32Norm,
-    /// 32-bit signed normalized integer.
-    S32Norm,
-    /// 32-bit floating point.
-    F32,
-    /// String
-    Str,
-}*/
+

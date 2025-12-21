@@ -425,16 +425,12 @@ bitflags! {
     #[repr(transparent)]
     #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
     pub struct BufferUsage: u32 {
-        const TRANSFER_SRC = 0b1;
-        const TRANSFER_DST = 0b10;
         const UNIFORM_TEXEL_BUFFER = 0b100;
         const STORAGE_TEXEL_BUFFER = 0b1000;
         const UNIFORM = 0b1_0000;
-        const STORAGE = 0b10_0000;
-        const INDEX = 0b100_0000;
-        const VERTEX = 0b1000_0000;
-        const INDIRECT = 0b1_0000_0000;
-        const ARGUMENT = 0b10_0000_0000;
+        // Included by default for all buffers; on most GPUs this only adds a 16-byte alignment
+        // requirement to the buffer.
+        //const STORAGE = 0b10_0000;
     }
 }
 

@@ -45,6 +45,19 @@
      Input: geometry in any space (object, world, clip, screen), any format, any primitive kind (mesh, polyline)
      Output: flat shaded, viewport shaded, or wireframe geometry
      This will replace `draw_lines`
+ ✔ Simplify buffer and image usages @done (25-12-19 14:23)
+     For buffers, in nvk: SSBOs and uniforms have different alignment requirements; as do: device generated commands buffers
+     no desktop driver in Mesa has special logic the following buffer bits
+         * VK_BUFFER_USAGE_2_VERTEX_BUFFER_BIT / VK_BUFFER_USAGE_VERTEX_BUFFER_BIT 
+         * VK_BUFFER_USAGE_2_INDEX_BUFFER_BIT  / VK_BUFFER_USAGE_INDEX_BUFFER_BIT 
+         * VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT / VK_BUFFER_USAGE_TRANSFER_SRC_BIT (except one broadcom driver) 
+         * VK_BUFFER_USAGE_2_TRANSFER_DST_BIT / VK_BUFFER_USAGE_TRANSFER_DST_BIT
+         * VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT
+         * VK_BUFFER_USAGE_2_INDIRECT_BUFFER_BIT
+     nvk uses the STORAGE and UNIFORM bits to determine the minimum alignment (STORAGE is 16, UNIFORM is 64); STORAGE is not used meaningfully anywhere else
+     Image usages are harder to simplify
+         
+
  ☐ @high Figure out a way to not need `reference_resource` anymore.
      Possibly: make it the user responsibility to track which frames are using the resource.
      User would call `resource.delete_later(frame_number)`. 
@@ -54,7 +67,11 @@
          * one more field for the last frame number
          * replacing/reallocating resources is not a simple assignment anymore; for example, if a struct field contains a resource, must move from it first, then call delete_later, then replace;
            this means that resource fields should be "Option<Resource>" to represent the intermediate state between delete_later and the reallocation. This is inacceptable.
-
+     Alternative: make resources entirely unsafe
+         i.e. they are `Copy` structs that are nothing more than vulkan handle + some useful metadata
+              no destructors, actually no RAII at all; they must be destroyed explicitly. 
+ ✔ Do away with encoders @done (25-12-19 17:01)
+     ComputeEncoder is strictly useless
 
 
 Terrain rendering:

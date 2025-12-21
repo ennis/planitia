@@ -1,5 +1,6 @@
 pub mod coat;
 pub mod lines;
+mod sweep;
 
 use gamelib::paint::{DrawGlyphRunOptions, PaintRenderParams, Painter, TextFormat, TextLayout};
 use color::Srgba8;

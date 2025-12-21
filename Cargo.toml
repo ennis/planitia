@@ -1,18 +1,19 @@
 [workspace]
 members = [
-    "crates/gamelib",        # Game support library
-    "crates/game",           # Game binary
-    "crates/gpu",            # GPU API
-    "crates/gpu/gpu-macros", # Derive macros for `gpu`
-    "crates/math",           # Common math types
-    "crates/color",          # Color types and related functions
-    "crates/utils",          # Shared utility types and functions
-    "crates/shader-bridge",  # Compile Slang shaders and extract/generate reflection data
-    "crates/shader-archive", # Archive file format for precompiled shaders
-    "crates/shadertool",     # Binary/library for building shader archives from a JSON manifest
-    "crates/geomtool",       # Tool for generating geometry files, like terrain meshes
-    "crates/terrain-file",   # Terrain file format and related functions
-    "crates/geom"            # Common geometry types and definition of various geometry file formats
+    "crates/gamelib",         # Game support library
+    "crates/game",            # Game binary
+    "crates/gpu",             # GPU API
+    "crates/gpu/gpu-macros",  # Derive macros for `gpu`
+    "crates/math",            # Common math types
+    "crates/color",           # Color types and related functions
+    "crates/utils",           # Shared utility types and functions
+    "crates/shader-bridge",   # Compile Slang shaders and extract/generate reflection data
+    "crates/shader-archive",  # Archive file format for precompiled shaders
+    "crates/shadertool",      # Binary/library for building shader archives from a JSON manifest
+    "crates/geomtool",        # Tool for generating geometry files, like terrain meshes
+    "crates/terrain-file",    # Terrain file format and related functions
+    "crates/geom",            # Common geometry types and definition of various geometry file formats
+    "crates/hgeo",            # Reads houdini JSON-based .geo/.bgeo files
 ]
 resolver = "2"
 
@@ -29,6 +30,7 @@ color = { path = "crates/color" }
 geomtool = { path = "crates/geomtool" }
 terrain-file = { path = "crates/terrain-file" }
 geom = { path = "crates/geom" }
+hgeo = { path = "crates/hgeo" }
 
 [profile.release]
 debug = true

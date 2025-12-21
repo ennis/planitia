@@ -15,7 +15,7 @@ use std::ops::Deref;
 use color::{Srgba8, srgba8};
 use egui_demo_lib::{View, WidgetGallery};
 use gpu::PrimitiveTopology::TriangleList;
-use gpu::{Ptr, Image, RenderPassInfo, push_constants};
+use gpu::{Image, Ptr, RenderPassInfo, root_params};
 use log::debug;
 use math::geom::Camera;
 use math::{Mat4, Vec2};
@@ -104,12 +104,16 @@ impl Game {
         {
             if let Ok(background_shader) = self.background_shader.read() {
                 encoder.bind_graphics_pipeline(&*background_shader);
-                encoder.push_constants(push_constants! {
-                    scene_uniforms: Ptr<SceneInfoUniforms> = scene_info.gpu,
-                    bottom_color: Srgba8 = srgba8(20, 20, 40, 255),
-                    top_color: Srgba8 = srgba8(100, 150, 255, 255)
-                });
-                encoder.draw(TriangleList, 0..6, 0..1);
+                encoder.draw(
+                    TriangleList,
+                    0..6,
+                    0..1,
+                    root_params! {
+                        scene_uniforms: Ptr<SceneInfoUniforms> = scene_info.gpu,
+                        bottom_color: Srgba8 = srgba8(20, 20, 40, 255),
+                        top_color: Srgba8 = srgba8(100, 150, 255, 255)
+                    },
+                );
             }
         }
 
@@ -118,11 +122,15 @@ impl Game {
         {
             if let Ok(grid_shader) = self.grid_shader.read() {
                 encoder.bind_graphics_pipeline(&*grid_shader);
-                encoder.push_constants(push_constants! {
-                    scene_uniforms: Ptr<SceneInfoUniforms> = scene_info.gpu,
-                    grid_scale: f32 = 100.0
-                });
-                encoder.draw(TriangleList, 0..6, 0..1);
+                encoder.draw(
+                    TriangleList,
+                    0..6,
+                    0..1,
+                    root_params! {
+                        scene_uniforms: Ptr<SceneInfoUniforms> = scene_info.gpu,
+                        grid_scale: f32 = 100.0
+                    },
+                );
             }
         }
 
@@ -203,7 +211,6 @@ impl AppHandler for Game {
                 gpu: Ptr::NULL,
             };
             scene_info.gpu = cmd.upload_temporary(&scene_info.info);
-
 
             let mut encoder = cmd.begin_rendering(RenderPassInfo {
                 color_attachments: &[gpu::ColorAttachment {

@@ -4,9 +4,9 @@ use std::slice;
 use crate::shaders::{EGUI_FRAG_MAIN, EGUI_VERTEX_MAIN};
 use egui::epaint::Primitive;
 use egui::{ClippedPrimitive, ImageData};
+use gpu::PrimitiveTopology::TriangleList;
 use gpu::prelude::*;
 use gpu::{Barrier, ColorAttachment, Device, ImageCopyView, Offset3D, RenderPassInfo, Size3D, Vertex};
-use gpu::PrimitiveTopology::TriangleList;
 
 #[derive(Copy, Clone, Vertex)]
 #[repr(C)]
@@ -161,8 +161,8 @@ impl Renderer {
         for (_, mesh) in meshes.iter() {
             let vertex_data: &[EguiVertex] =
                 unsafe { slice::from_raw_parts(mesh.vertices.as_ptr().cast(), mesh.vertices.len()) };
-            let vertex_buffer = Buffer::upload_slice(BufferUsage::VERTEX, vertex_data, "egui vertex buffer");
-            let index_buffer = Buffer::upload_slice(BufferUsage::INDEX, &mesh.indices, "egui index buffer");
+            let vertex_buffer = Buffer::from_slice(vertex_data, "egui vertex buffer");
+            let index_buffer = Buffer::from_slice(&mesh.indices, "egui index buffer");
             mesh_vertex_buffers.push(vertex_buffer);
             mesh_index_buffers.push(index_buffer);
         }
@@ -197,10 +197,6 @@ impl Renderer {
 
             enc.bind_vertex_buffer(0, vertex_buffer.slice(..).as_bytes());
             enc.bind_index_buffer(vk::IndexType::UINT32, index_buffer.slice(..).as_bytes());
-
-            enc.push_constants(&EguiPushConstants {
-                screen_size: [width as f32, height as f32],
-            });
             enc.set_scissor(
                 clip_min_x,
                 clip_min_y,
@@ -223,7 +219,15 @@ impl Renderer {
                 ],
             );
 
-            enc.draw_indexed(TriangleList,0..(index_buffer.len() as u32), 0, 0..1);
+            enc.draw_indexed(
+                TriangleList,
+                0..(index_buffer.len() as u32),
+                0,
+                0..1,
+                &EguiPushConstants {
+                    screen_size: [width as f32, height as f32],
+                },
+            );
         }
 
         enc.finish();

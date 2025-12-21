@@ -168,6 +168,12 @@ trait Parser<'a> {
         Ok(s.clone())
     }
 
+    /// Reads an owned string value.
+    fn owned_str(&mut self) -> Result<String, Error> {
+        expect!(self, Event::String(s));
+        Ok(s.into_owned())
+    }
+
     /// Reads an integer value.
     fn integer(&mut self) -> Result<i64, Error> {
         expect!(self, e);
@@ -309,6 +315,10 @@ impl AttributeStorage {
             StorageKind::FpReal64 => AttributeStorage::FpReal64(Vec::new()),
             StorageKind::Int32 => AttributeStorage::Int32(Vec::new()),
             StorageKind::Int64 => AttributeStorage::Int64(Vec::new()),
+            StorageKind::String => AttributeStorage::Strings {
+                values: Vec::new(),
+                indices: Vec::new(),
+            }
         }
     }
 }
@@ -517,6 +527,9 @@ fn read_rawpagedata(
             v.resize(size, 0);
             read_rawpagedata_generic::<i64>(p, v, pagesize, packing, constantpageflags)?;
         }
+        AttributeStorage::Strings { .. } => {
+            panic!("string attributes cannot use rawpagedata");
+        }
     }
     Ok(())
 }
@@ -544,6 +557,9 @@ fn read_arrays(p: &mut dyn Parser, storage: &mut AttributeStorage) -> Result<(),
         AttributeStorage::Int64(v) => {
             read_arrays_generic::<i64>(p, v)?;
         }
+        AttributeStorage::Strings { .. } => {
+            panic!("string attributes cannot use arrays");
+        }
     }
     Ok(())
 }
@@ -556,6 +572,14 @@ fn read_point_attribute(p: &mut dyn Parser) -> Result<Attribute, Error> {
     let mut packing = vec![];
     let mut pagesize = 0;
     let mut constantpageflags: Vec<Vec<i32>> = vec![];
+    let mut strings = vec![];
+
+    #[derive(Copy, Clone, Eq, PartialEq)]
+    enum AttributeType {
+        Numeric,
+        String,
+    }
+    let mut attribute_type = AttributeType::Numeric;
 
     //eprintln!("read_point_attribute metadata");
     //eprintln!("read_point_attribute data");
@@ -566,13 +590,30 @@ fn read_point_attribute(p: &mut dyn Parser) -> Result<Attribute, Error> {
         "name" => {
             name = p.str()?.into();
         }
+        "type" => {
+            let ty = p.str()?;
+            match ty.as_ref() {
+                "string" => {
+                    attribute_type = AttributeType::String;
+                }
+                "numeric" => {
+                    attribute_type = AttributeType::Numeric;
+                }
+                _ => {
+                    return Err(Malformed("unknown attribute type"));
+                }
+            }
+        }
     }
 
     read_kv_array! {p,
         "name" => {
             name = p.str()?.into();
         }
-        "values" => {
+        "strings" => {
+            strings = read_array(p, |p| p.str().map(SmolStr::new))?;
+        }
+        "values" | "indices" => {
             read_kv_array!(p,
                 "size" => {
                     size = p.integer()? as usize;
@@ -623,9 +664,23 @@ fn read_point_attribute(p: &mut dyn Parser) -> Result<Attribute, Error> {
 
     expect!(p, Event::EndArray, "expected end of attribute array");
 
-    let Some(storage) = storage else {
+    let Some(mut storage) = storage else {
         return Err(Malformed("no storage data"));
     };
+
+    // handle string attributes, in which case storage contains indices into the strings array
+    if attribute_type == AttributeType::String {
+        let indices = match storage {
+            AttributeStorage::Int32(v) => v,
+            AttributeStorage::Int64(v) => v.iter().map(|&x| x as i32).collect(),
+            _ => return Err(Malformed("invalid storage type for string attribute")),
+        };
+        storage = AttributeStorage::Strings {
+            values: strings,
+            indices,
+        };
+    }
+
     Ok(Attribute { name, size, storage })
 }
 

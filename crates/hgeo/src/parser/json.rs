@@ -1,8 +1,8 @@
 //! JSON geometry format
 
 use std::borrow::Cow;
-use crate::houdini::error::Error;
-use crate::houdini::parser::{Event, Parser};
+use crate::error::Error;
+use crate::parser::{Event, Parser};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum ParserState {

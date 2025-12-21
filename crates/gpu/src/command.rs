@@ -1,21 +1,16 @@
 use ash::prelude::VkResult;
-pub use compute::ComputeEncoder;
 use fxhash::FxHashMap;
 pub use render::{RenderEncoder, RenderPassInfo};
 use slotmap::secondary::Entry;
 use std::ffi::{c_char, c_void, CString};
 use std::mem::{ManuallyDrop, MaybeUninit};
 use std::sync::atomic::Ordering::Relaxed;
-use std::{mem, ptr};
+use std::{mem, ptr, slice};
 use log::trace;
 use crate::device::ActiveSubmission;
-use crate::{
-    aspects_for_format, vk, vk_ext_debug_utils, CommandPool, Descriptor, Device, Image, MemoryAccess, 
-    ResourceId, SwapchainImage, TrackedResource,
-};
+use crate::{aspects_for_format, vk, vk_ext_debug_utils, CommandPool, ComputePipeline, Descriptor, Device, Image, MemoryAccess, ResourceId, SwapchainImage, TrackedResource};
 
 mod blit;
-mod compute;
 mod render;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -133,6 +128,8 @@ pub struct CommandStream {
     //initial_writes: MemoryAccess,
     initial_access: MemoryAccess,
     submitted: bool,
+    /// Last bound compute pipeline layout.
+    pipeline_layout: vk::PipelineLayout,
 }
 
 pub(crate) struct CommandBufferImageState {
@@ -247,6 +244,7 @@ impl CommandStream {
             initial_access: MemoryAccess::empty(),
             tracked_writes: MemoryAccess::empty(),
             submitted: false,
+            pipeline_layout: Default::default(),
         }
     }
 
@@ -522,6 +520,94 @@ impl CommandStream {
 
         self.tracked_writes = barrier.access.write_flags();
     }
+
+    pub unsafe fn bind_descriptor_set(&mut self, index: u32, set: vk::DescriptorSet) {
+        let cb = self.get_or_create_command_buffer();
+        Device::global().raw.cmd_bind_descriptor_sets(
+            cb,
+            vk::PipelineBindPoint::COMPUTE,
+            self.pipeline_layout,
+            index,
+            &[set],
+            &[],
+        )
+    }
+
+    /// Sets push descriptors.
+    pub fn push_descriptors(&mut self, set: u32, bindings: &[(u32, Descriptor)]) {
+        assert!(
+            self.pipeline_layout != vk::PipelineLayout::null(),
+            "must have a pipeline bound before binding arguments"
+        );
+
+        let cb = self.get_or_create_command_buffer();
+        unsafe {
+            self.do_cmd_push_descriptor_set(
+                cb,
+                vk::PipelineBindPoint::COMPUTE,
+                self.pipeline_layout,
+                set,
+                bindings,
+            );
+        }
+    }
+
+    // SAFETY: TBD
+    pub fn bind_compute_pipeline(&mut self, pipeline: &ComputePipeline) {
+        let device = Device::global();
+        let cb = self.get_or_create_command_buffer();
+        unsafe {
+            device
+                .raw
+                .cmd_bind_pipeline(cb, vk::PipelineBindPoint::COMPUTE, pipeline.pipeline);
+            if pipeline.bindless {
+                self.bind_bindless_descriptor_sets(
+                    cb,
+                    vk::PipelineBindPoint::COMPUTE,
+                    pipeline.pipeline_layout,
+                );
+            }
+        }
+        self.pipeline_layout = pipeline.pipeline_layout;
+
+        // TODO: we need to hold a reference to the pipeline until the command buffers are submitted
+    }
+
+    /// Binds push constants.
+    ///
+    /// Push constants stay valid until the bound pipeline is changed.
+    ///
+    /// FIXME: this assumes that `bind_compute_pipeline` has been called.
+    fn push_constants<P>(&mut self, data: &P)
+    where
+        P: Copy,
+    {
+        let cb = self.get_or_create_command_buffer();
+        unsafe {
+            self.do_cmd_push_constants(
+                cb,
+                vk::PipelineBindPoint::COMPUTE,
+                self.pipeline_layout,
+                slice::from_raw_parts(data as *const P as *const MaybeUninit<u8>, mem::size_of_val(data)),
+            );
+        }
+    }
+
+    pub fn dispatch<RootParams: Copy>(&mut self,  group_count_x: u32, group_count_y: u32, group_count_z: u32, root_params: &RootParams) {
+        let cb = self.get_or_create_command_buffer();
+        unsafe {
+            self.do_cmd_push_constants(
+                cb,
+                vk::PipelineBindPoint::COMPUTE,
+                self.pipeline_layout,
+                slice::from_raw_parts(root_params as *const RootParams as *const MaybeUninit<u8>, size_of_val(root_params)),
+            );
+            Device::global()
+                .raw
+                .cmd_dispatch(cb, group_count_x, group_count_y, group_count_z);
+        }
+    }
+
 
     pub fn push_debug_group(&mut self, label: &str) {
         let command_buffer = self.get_or_create_command_buffer();
