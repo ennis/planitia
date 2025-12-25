@@ -1,14 +1,18 @@
+use crate::device::ActiveSubmission;
+use crate::{
+    aspects_for_format, vk, vk_ext_debug_utils, CommandPool, ComputePipeline, Descriptor, Device, Image, MemoryAccess,
+    Ptr, ResourceId, SwapchainImage, TrackedResource,
+};
 use ash::prelude::VkResult;
+use ash::vk::DeviceAddress;
 use fxhash::FxHashMap;
-pub use render::{RenderEncoder, RenderPassInfo};
+use log::trace;
+pub use render::{DrawIndexedIndirectCommand, DrawIndirectCommand, RenderEncoder, RenderPassInfo};
 use slotmap::secondary::Entry;
 use std::ffi::{c_char, c_void, CString};
 use std::mem::{ManuallyDrop, MaybeUninit};
 use std::sync::atomic::Ordering::Relaxed;
 use std::{mem, ptr, slice};
-use log::trace;
-use crate::device::ActiveSubmission;
-use crate::{aspects_for_format, vk, vk_ext_debug_utils, CommandPool, ComputePipeline, Descriptor, Device, Image, MemoryAccess, ResourceId, SwapchainImage, TrackedResource};
 
 mod blit;
 mod render;
@@ -222,7 +226,6 @@ pub enum SemaphoreSignal {
 }
 
 impl CommandStream {
-
     /// Creates a command stream used to submit commands to the GPU.
     ///
     /// Once finished, the command stream should be submitted to the GPU using
@@ -282,7 +285,6 @@ impl CommandStream {
                     image: image_view,
                     layout,
                 } => {
-                    self.reference_resource(image_view);
                     descriptors.push(DescriptorBufferOrImage {
                         image: vk::DescriptorImageInfo {
                             sampler: Default::default(),
@@ -303,7 +305,6 @@ impl CommandStream {
                     image: image_view,
                     layout,
                 } => {
-                    self.reference_resource(image_view);
                     descriptors.push(DescriptorBufferOrImage {
                         image: vk::DescriptorImageInfo {
                             sampler: Default::default(),
@@ -321,7 +322,6 @@ impl CommandStream {
                     });
                 }
                 Descriptor::UniformBuffer { buffer, offset, size } => {
-                    self.reference_resource(buffer);
                     descriptors.push(DescriptorBufferOrImage {
                         buffer: vk::DescriptorBufferInfo {
                             buffer: buffer.handle(),
@@ -339,7 +339,6 @@ impl CommandStream {
                     });
                 }
                 Descriptor::StorageBuffer { buffer, offset, size } => {
-                    self.reference_resource(buffer);
                     descriptors.push(DescriptorBufferOrImage {
                         buffer: vk::DescriptorBufferInfo {
                             buffer: buffer.handle(),
@@ -421,6 +420,37 @@ impl CommandStream {
                 0,
                 size as u32,
                 data as *const _ as *const c_void,
+            );
+        }
+    }
+
+    fn set_root_params<T: 'static>(
+        &mut self,
+        command_buffer: vk::CommandBuffer,
+        bind_point: vk::PipelineBindPoint,
+        pipeline_layout: vk::PipelineLayout,
+        ptr: Ptr<T>,
+    ) {
+        // None of the relevant drivers on desktop care about the actual stages,
+        // only if it's graphics, compute, or ray tracing.
+        let stages = match bind_point {
+            vk::PipelineBindPoint::GRAPHICS => {
+                vk::ShaderStageFlags::ALL_GRAPHICS | vk::ShaderStageFlags::MESH_EXT | vk::ShaderStageFlags::TASK_EXT
+            }
+            vk::PipelineBindPoint::COMPUTE => vk::ShaderStageFlags::COMPUTE,
+            _ => panic!("unsupported bind point"),
+        };
+
+        unsafe {
+            Device::global().raw.cmd_push_constants(
+                command_buffer,
+                pipeline_layout,
+                stages,
+                0,
+                slice::from_raw_parts(
+                    &ptr.raw as *const DeviceAddress as *const u8,
+                    size_of::<DeviceAddress>(),
+                ),
             );
         }
     }
@@ -542,13 +572,7 @@ impl CommandStream {
 
         let cb = self.get_or_create_command_buffer();
         unsafe {
-            self.do_cmd_push_descriptor_set(
-                cb,
-                vk::PipelineBindPoint::COMPUTE,
-                self.pipeline_layout,
-                set,
-                bindings,
-            );
+            self.do_cmd_push_descriptor_set(cb, vk::PipelineBindPoint::COMPUTE, self.pipeline_layout, set, bindings);
         }
     }
 
@@ -561,11 +585,7 @@ impl CommandStream {
                 .raw
                 .cmd_bind_pipeline(cb, vk::PipelineBindPoint::COMPUTE, pipeline.pipeline);
             if pipeline.bindless {
-                self.bind_bindless_descriptor_sets(
-                    cb,
-                    vk::PipelineBindPoint::COMPUTE,
-                    pipeline.pipeline_layout,
-                );
+                self.bind_bindless_descriptor_sets(cb, vk::PipelineBindPoint::COMPUTE, pipeline.pipeline_layout);
             }
         }
         self.pipeline_layout = pipeline.pipeline_layout;
@@ -588,26 +608,26 @@ impl CommandStream {
                 cb,
                 vk::PipelineBindPoint::COMPUTE,
                 self.pipeline_layout,
-                slice::from_raw_parts(data as *const P as *const MaybeUninit<u8>, mem::size_of_val(data)),
+                slice::from_raw_parts(data as *const P as *const MaybeUninit<u8>, size_of_val(data)),
             );
         }
     }
 
-    pub fn dispatch<RootParams: Copy>(&mut self,  group_count_x: u32, group_count_y: u32, group_count_z: u32, root_params: &RootParams) {
+    pub fn dispatch<RootParams: Copy + 'static>(
+        &mut self,
+        group_count_x: u32,
+        group_count_y: u32,
+        group_count_z: u32,
+        root_params: Ptr<RootParams>,
+    ) {
         let cb = self.get_or_create_command_buffer();
         unsafe {
-            self.do_cmd_push_constants(
-                cb,
-                vk::PipelineBindPoint::COMPUTE,
-                self.pipeline_layout,
-                slice::from_raw_parts(root_params as *const RootParams as *const MaybeUninit<u8>, size_of_val(root_params)),
-            );
+            self.set_root_params(cb, vk::PipelineBindPoint::COMPUTE, self.pipeline_layout, root_params);
             Device::global()
                 .raw
                 .cmd_dispatch(cb, group_count_x, group_count_y, group_count_z);
         }
     }
-
 
     pub fn push_debug_group(&mut self, label: &str) {
         let command_buffer = self.get_or_create_command_buffer();
@@ -639,11 +659,12 @@ impl CommandStream {
     }
 
     /// Specifies that the resource will be used in the current submission.
+    #[deprecated]
     pub fn reference_resource<R: TrackedResource>(&mut self, resource: &R) {
         // TODO this should be done during submission because it's possible to drop the command stream
         //      without submitting it
         //      (well, at least it would if we didn't explicitly panic on unsubmitted command streams)
-        Device::global().set_last_submission_index(resource.id(), self.submission_index)
+        //Device::global().set_last_submission_index(resource.id(), self.submission_index)
     }
 
     pub(crate) fn create_command_buffer_raw(&mut self) -> vk::CommandBuffer {

@@ -1,6 +1,13 @@
 import scene_info;
 import common;
 
+struct Line {
+    uint32_t start_vertex;
+    uint32_t vertex_count;
+    float width;
+    float filter_width;
+}
+
 struct LineVertex {
     float3 position;
     Srgba8 color;
@@ -10,28 +17,29 @@ struct VertexOutput {
     float4 pos: SV_Position;
     [[vk::location(0)]] float4 color;
     [[vk::location(1)]] float2 local_pos;
+    [[vk::location(2)]] nointerpolation float width;
+    [[vk::location(3)]] nointerpolation float filter_width;
 };
 
 struct PushConstants {
     SceneInfo* scene_info;
     LineVertex* vertices;
-    uint start_vertex;
-    uint vertex_count;
-    float line_width;
-    float filter_width;
+    Line* lines;
 };
 
 [shader("vertex")]
-VertexOutput line_drawing_vertex(uint vertex_id : SV_VertexID, uniform PushConstants u)
+VertexOutput line_drawing_vertex(uint vertex_id : SV_VertexID, uint draw_index : SV_DrawIndex, uniform PushConstants* u)
 {
+    Line l = u.lines[draw_index];
+
     let line_vtx_id = vertex_id / 2;
 
     bool line_start = line_vtx_id == 0;
-    bool line_end = line_vtx_id == (u.vertex_count - 1);
+    bool line_end = line_vtx_id == (l.vertex_count - 1);
 
-    let v = u.vertices[u.start_vertex + line_vtx_id];
-    let v0 = line_start ? v : u.vertices[u.start_vertex + line_vtx_id - 1];
-    let v1 = line_end ? v : u.vertices[u.start_vertex + line_vtx_id + 1];
+    let v = u.vertices[l.start_vertex + line_vtx_id];
+    let v0 = line_start ? v : u.vertices[l.start_vertex + line_vtx_id - 1];
+    let v1 = line_end ? v : u.vertices[l.start_vertex + line_vtx_id + 1];
 
     // project vertices in clip space
     let p = mul(u.scene_info.view_proj_matrix, float4(v.position, 1.));
@@ -40,7 +48,7 @@ VertexOutput line_drawing_vertex(uint vertex_id : SV_VertexID, uniform PushConst
 
     // half-width + anti-aliasing margin
     // clamp the width to 1.0, below that we just fade out the line
-    float hw_aa = max(u.line_width, 1.) * .5 + u.filter_width * sqrt(2.);
+    float hw_aa = max(l.width, 1.) * .5 + l.filter_width * sqrt(2.);
 
     float4 a = p;
     float4 b = p;
@@ -75,6 +83,8 @@ VertexOutput line_drawing_vertex(uint vertex_id : SV_VertexID, uniform PushConst
     o.pos = (vertex_id % 2 == 0) ? b : a;
     o.color = float4(v.color) / 255.0;
     o.local_pos = (vertex_id % 2 == 0) ? float2(0.0, -hw_aa) : float2(1.0, hw_aa);
+    o.width = l.width;
+    o.filter_width = l.filter_width;
     return o;
 }
 
@@ -87,16 +97,16 @@ struct FragmentOutput
 
 
 [shader("fragment")]
-FragmentOutput line_drawing_fragment(VertexOutput v, uniform PushConstants u) {
+FragmentOutput line_drawing_fragment(VertexOutput v, uniform PushConstants* u) {
     FragmentOutput o;
     // clamped width
-    float width1 = max(u.line_width, 1.0);
+    float width1 = max(v.width, 1.0);
     float h = width1 * 0.5;
     float y = abs(v.local_pos.y);
     //float filter_width = 1.5;
-    float half_filter_width = u.filter_width * 0.5;
-    float alpha = (clamp((y + h + half_filter_width), 0., width1) - clamp((y + h - half_filter_width), 0., width1)) / u.filter_width;
-    alpha *= min(u.line_width, 1.0);
+    float half_filter_width = v.filter_width * 0.5;
+    float alpha = (clamp((y + h + half_filter_width), 0., width1) - clamp((y + h - half_filter_width), 0., width1)) / v.width;
+    alpha *= min(v.width, 1.0);
     o.color = v.color;
     o.color.a *= alpha;
     //o.color = float4(0.0, 1.0, 0.0, 1.0);

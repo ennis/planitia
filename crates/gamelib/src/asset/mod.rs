@@ -35,7 +35,7 @@ mod vfs_path;
 use std::any::{Any, TypeId};
 pub use vfs_path::*;
 
-use log::{debug, info};
+use log::{debug, error, info};
 use notify_debouncer_mini::notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use notify_debouncer_mini::{Debouncer, new_debouncer};
 use slotmap::SlotMap;
@@ -368,7 +368,7 @@ impl Loader {
 
         match result {
             Err(err) => {
-                info!("failed to load asset `{}`: {}", path.as_str(), err);
+                error!("failed to load asset `{}`: {}", path.as_str(), err);
                 Err(err)
             }
             Ok(asset) => Ok(asset),

@@ -187,7 +187,6 @@ impl Atlas {
     pub(crate) fn prepare_texture(&mut self, cmd: &mut gpu::CommandStream) -> gpu::TextureHandle {
         self.upload_to_gpu(cmd);
         cmd.barrier(Barrier::new().sample_read_image(&self.texture));
-        cmd.reference_resource(&self.texture);
         self.texture.texture_descriptor_index()
     }
 }

@@ -79,6 +79,11 @@
                     "file_path": "coat_rendering.slang",
                     "name": "sweep_stroke",
                     "compute_entry_point": "sweep_stroke_main"
+                },
+                {
+                    "file_path": "outline.slang",
+                    "name": "outline",
+                    "compute_entry_point": "outline_main"
                 }
             ]
         }

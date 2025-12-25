@@ -8,4 +8,5 @@ struct SceneInfo
     float2 screen_size;
     float time;
     uint frame;
+    float3 eye;
 };

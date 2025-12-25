@@ -14,7 +14,7 @@ struct PushConstants {
 };
 
 [shader("vertex")]
-VSOut grid_vertex_main(uint vertex_id : SV_VertexID, uniform PushConstants u)
+VSOut grid_vertex_main(uint vertex_id : SV_VertexID, uniform PushConstants* u)
 {
     // unscaled XZ plane quad positions
     float2 positions[6] = {
@@ -63,7 +63,7 @@ float grid(float2 uv, float line_width)
 
 
 [shader("fragment")]
-float4 grid_fragment_main(VSOut i, uint2 frag_pos: SV_Position, uniform PushConstants u)
+float4 grid_fragment_main(VSOut i, uint2 frag_pos: SV_Position, uniform PushConstants* u)
 {
     float2 frag_uv = frag_pos.xy / u.scene.screen_size;
     float2 scaled_uv = i.uv * 8.0;

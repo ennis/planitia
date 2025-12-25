@@ -167,6 +167,12 @@ impl Renderer {
             mesh_index_buffers.push(index_buffer);
         }
 
+        let width = color_target.width();
+        let height = color_target.height();
+        let params = cmd.upload_temporary(&EguiPushConstants {
+            screen_size: [width as f32, height as f32],
+        });
+
         // encode draw commands
         let mut enc = cmd.begin_rendering(RenderPassInfo {
             color_attachments: &[ColorAttachment {
@@ -181,8 +187,6 @@ impl Renderer {
         for (i, (clip_rect, mesh)) in meshes.iter().enumerate() {
             let vertex_buffer = &mesh_vertex_buffers[i];
             let index_buffer = &mesh_index_buffers[i];
-            let width = color_target.width();
-            let height = color_target.height();
 
             // Transform clip rect to physical pixels:
             let clip_min_x = (pixels_per_point * clip_rect.min.x).round() as i32;
@@ -195,8 +199,8 @@ impl Renderer {
             let clip_max_x = clip_max_x.clamp(clip_min_x, width as i32);
             let clip_max_y = clip_max_y.clamp(clip_min_y, height as i32);
 
-            enc.bind_vertex_buffer(0, vertex_buffer.slice(..).as_bytes());
-            enc.bind_index_buffer(vk::IndexType::UINT32, index_buffer.slice(..).as_bytes());
+            //enc.bind_vertex_buffer(0, vertex_buffer.slice(..).as_bytes());
+            //enc.bind_index_buffer(vk::IndexType::UINT32, index_buffer.slice(..).as_bytes());
             enc.set_scissor(
                 clip_min_x,
                 clip_min_y,
@@ -219,14 +223,15 @@ impl Renderer {
                 ],
             );
 
+
             enc.draw_indexed(
                 TriangleList,
+                index_buffer,
                 0..(index_buffer.len() as u32),
+                Some(vertex_buffer.as_bytes()),
                 0,
                 0..1,
-                &EguiPushConstants {
-                    screen_size: [width as f32, height as f32],
-                },
+                params,
             );
         }
 

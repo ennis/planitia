@@ -1,11 +1,15 @@
 //! Render command encoders
+use crate::{
+    is_depth_and_stencil_format, Barrier, Buffer, BufferRangeUntyped, BufferUntyped, ClearColorValue, ColorAttachment,
+    CommandStream, DepthStencilAttachment, Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, Rect2D,
+    TrackedResource,
+};
+use ash::vk;
+use ash::vk::DeviceAddress;
+use std::alloc::Layout;
 use std::mem::MaybeUninit;
 use std::ops::Range;
 use std::{ptr, slice};
-
-use ash::vk;
-
-use crate::{is_depth_and_stencil_format, Barrier, BufferRangeUntyped, ClearColorValue, ColorAttachment, CommandStream, DepthStencilAttachment, Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Rect2D, TrackedResource};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -16,14 +20,40 @@ pub struct RenderEncoder<'a> {
     stream: &'a mut CommandStream,
     command_buffer: vk::CommandBuffer,
     render_area: vk::Rect2D,
+    // TODO: this will be useless once all shaders have the same bindless layout
     pipeline_layout: vk::PipelineLayout,
 }
+
+/// Represents an indirect draw command.
+// This must match the layout of `vk::DrawIndirectCommand` exactly.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DrawIndirectCommand {
+    pub vertex_count: u32,
+    pub instance_count: u32,
+    pub first_vertex: u32,
+    pub first_instance: u32,
+}
+
+/// Represents an indirect draw command.
+// This must match the layout of `vk::DrawIndexedIndirectCommand` exactly.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct DrawIndexedIndirectCommand {
+    pub index_count: u32,
+    pub instance_count: u32,
+    pub first_index: u32,
+    pub vertex_offset: i32,
+    pub first_instance: u32,
+}
+const _: () = assert!(size_of::<DrawIndexedIndirectCommand>() == size_of::<vk::DrawIndexedIndirectCommand>());
 
 impl<'a> RenderEncoder<'a> {
     /// Marks the resource as being in use by the current submission.
     ///
     /// This will prevent the resource from being destroyed until the current submission is
     /// either complete or cancelled.
+    #[deprecated]
     pub fn reference_resource<R: TrackedResource>(&mut self, resource: &R) {
         self.stream.reference_resource(resource);
     }
@@ -105,7 +135,7 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
-    /// Binds a vertex buffer.
+    /*/// Binds a vertex buffer.
     ///
     /// # Arguments
     /// * `binding` vertex buffer binding index
@@ -140,9 +170,9 @@ impl<'a> RenderEncoder<'a> {
                 index_type.into(),
             );
         }
-    }
+    }*/
 
-    /// Binds push constants.
+    /*/// Binds push constants.
     ///
     /// Push constants stay valid until the bound pipeline is changed.
     pub fn push_constants<P>(&mut self, data: &P)
@@ -152,6 +182,7 @@ impl<'a> RenderEncoder<'a> {
         unsafe {
         }
     }
+
     /// Binds push constants.
     ///
     /// Push constants stay valid until the bound pipeline is changed.
@@ -164,7 +195,7 @@ impl<'a> RenderEncoder<'a> {
                 slice::from_raw_parts(data.as_ptr() as *const MaybeUninit<u8>, size_of_val(data)),
             );
         }
-    }
+    }*/
 
     /*/// Sets the primitive topology.
     pub fn set_primitive_topology(&mut self, topology: PrimitiveTopology) {
@@ -298,19 +329,26 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
-    pub fn draw<RootParams: Copy>(&mut self, topology: PrimitiveTopology, vertices: Range<u32>, instances: Range<u32>, root_params: &RootParams) {
+    pub fn draw<RootParams: Copy + 'static>(
+        &mut self,
+        topology: PrimitiveTopology,
+        vertex_buffer: Option<&BufferUntyped>,
+        vertices: Range<u32>,
+        instances: Range<u32>,
+        root_params: Ptr<RootParams>,
+    ) {
         unsafe {
-            self.stream.do_cmd_push_constants(
+            self.stream.set_root_params(
                 self.command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout,
-                slice::from_raw_parts(root_params as *const RootParams as *const MaybeUninit<u8>, size_of_val(root_params)),
+                root_params,
             );
             let device = &Device::global().raw;
-            device.cmd_set_primitive_topology(
-                self.command_buffer,
-                topology.to_vk_primitive_topology(),
-            );
+            if let Some(vb) = vertex_buffer {
+                device.cmd_bind_vertex_buffers(self.command_buffer, 0, &[vb.handle()], &[0]);
+            }
+            device.cmd_set_primitive_topology(self.command_buffer, topology.to_vk_primitive_topology());
             device.cmd_draw(
                 self.command_buffer,
                 vertices.len() as u32,
@@ -321,32 +359,117 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
-    pub fn draw_indexed<RootParams: Copy>(&mut self, topology: PrimitiveTopology, indices: Range<u32>, base_vertex: i32, instances: Range<u32>, root_params: &RootParams) {
+    pub fn draw_indexed<RootParams: Copy + 'static>(
+        &mut self,
+        topology: PrimitiveTopology,
+        index_buffer: &Buffer<[u32]>,
+        index_range: Range<u32>,
+        vertex_buffer: Option<&BufferUntyped>,
+        base_vertex: i32,
+        instances: Range<u32>,
+        root_params: Ptr<RootParams>,
+    ) {
         unsafe {
-            self.stream.do_cmd_push_constants(
+            self.stream.set_root_params(
                 self.command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout,
-                slice::from_raw_parts(root_params as *const RootParams as *const MaybeUninit<u8>, size_of_val(root_params)),
+                root_params,
             );
+
             let device = &Device::global().raw;
-            device.cmd_set_primitive_topology(
-                self.command_buffer,
-                topology.to_vk_primitive_topology(),
-            );
+            if let Some(vb) = vertex_buffer {
+                device.cmd_bind_vertex_buffers(self.command_buffer, 0, &[vb.handle()], &[0]);
+            }
+            device.cmd_bind_index_buffer(self.command_buffer, index_buffer.handle(), 0, vk::IndexType::UINT32);
+            device.cmd_set_primitive_topology(self.command_buffer, topology.to_vk_primitive_topology());
             device.cmd_draw_indexed(
                 self.command_buffer,
-                indices.len() as u32,
+                index_range.len() as u32,
                 instances.len() as u32,
-                indices.start,
+                index_range.start,
                 base_vertex,
                 instances.start,
             );
         }
     }
 
-    pub fn draw_mesh_tasks(&mut self, group_count_x: u32, group_count_y: u32, group_count_z: u32) {
+    pub fn draw_indirect<RootParams: Copy + 'static>(
+        &mut self,
+        topology: PrimitiveTopology,
+        vertex_buffer: Option<&BufferUntyped>,
+        commands: &Buffer<[DrawIndirectCommand]>,
+        draw_range: Range<u32>,
+        root_params: Ptr<RootParams>,
+    ) {
         unsafe {
+            self.stream.set_root_params(
+                self.command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline_layout,
+                root_params,
+            );
+            let device = &Device::global().raw;
+            if let Some(vb) = vertex_buffer {
+                device.cmd_bind_vertex_buffers(self.command_buffer, 0, &[vb.handle()], &[0]);
+            }
+            device.cmd_set_primitive_topology(self.command_buffer, topology.to_vk_primitive_topology());
+            device.cmd_draw_indirect(
+                self.command_buffer,
+                commands.handle(),
+                draw_range.start as u64 * size_of::<DrawIndirectCommand>() as u64,
+                draw_range.len() as u32,
+                size_of::<DrawIndirectCommand>() as u32,
+            );
+        }
+    }
+
+    pub fn draw_indexed_indirect<RootParams: Copy + 'static>(
+        &mut self,
+        topology: PrimitiveTopology,
+        index_buffer: &Buffer<[u32]>,
+        vertex_buffer: Option<&BufferUntyped>,
+        commands: &Buffer<[DrawIndexedIndirectCommand]>,
+        draw_range: Range<u32>,
+        root_params: Ptr<RootParams>,
+    ) {
+        unsafe {
+            self.stream.set_root_params(
+                self.command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline_layout,
+                root_params,
+            );
+            let device = &Device::global().raw;
+            if let Some(vb) = vertex_buffer {
+                device.cmd_bind_vertex_buffers(self.command_buffer, 0, &[vb.handle()], &[0]);
+            }
+            device.cmd_bind_index_buffer(self.command_buffer, index_buffer.handle(), 0, vk::IndexType::UINT32);
+            device.cmd_set_primitive_topology(self.command_buffer, topology.to_vk_primitive_topology());
+            device.cmd_draw_indexed_indirect(
+                self.command_buffer,
+                commands.handle(),
+                draw_range.start as u64 * size_of::<vk::DrawIndexedIndirectCommand>() as u64,
+                draw_range.len() as u32,
+                size_of::<vk::DrawIndexedIndirectCommand>() as u32,
+            );
+        }
+    }
+
+    pub fn draw_mesh_tasks<RootParams: Copy + 'static>(
+        &mut self,
+        group_count_x: u32,
+        group_count_y: u32,
+        group_count_z: u32,
+        root_params: Ptr<RootParams>,
+    ) {
+        unsafe {
+            self.stream.set_root_params(
+                self.command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline_layout,
+                root_params,
+            );
             Device::global().ext_mesh_shader().cmd_draw_mesh_tasks(
                 self.command_buffer,
                 group_count_x,
@@ -354,6 +477,10 @@ impl<'a> RenderEncoder<'a> {
                 group_count_z,
             );
         }
+    }
+
+    pub fn upload_temporary<RootParams: Copy + 'static>(&mut self, data: &RootParams) -> Ptr<RootParams> {
+        self.stream.upload_temporary(data)
     }
 
     pub fn finish(self) {
@@ -493,12 +620,10 @@ impl CommandStream {
         // It doesn't matter much except we can report usage conflicts earlier.
         let mut barrier = Barrier::new();
         for color in desc.color_attachments.iter() {
-            self.reference_resource(color.image);
             barrier = barrier.color_attachment_write(color.image);
         }
         if let Some(ref depth) = desc.depth_stencil_attachment {
             // TODO we don't know whether the depth attachment will be written to
-            self.reference_resource(depth.image);
             barrier = barrier.depth_stencil_attachment_write(depth.image);
         }
 

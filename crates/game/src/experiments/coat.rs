@@ -1,18 +1,19 @@
-use crate::experiments::lines::{Line, LineVertex, draw_lines};
+use crate::experiments::lines::{Line, LineVertex};
 use crate::{SceneInfo, SceneInfoUniforms};
 use color::srgba8;
-use gamelib::asset::{AssetCache, Handle};
+use gamelib::asset::Handle;
 use gamelib::input::InputEvent;
 use gamelib::pipeline_cache::{get_compute_pipeline, get_graphics_pipeline};
 use gpu::PrimitiveTopology::TriangleList;
-use gpu::{BufferUsage, RenderPassInfo};
+use gpu::RenderPassInfo;
+use gpu::util::PushBuffer;
 
 /// Post-stroke expansion vertex, already in clip space.
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct ExpandedVertex {
-    clip_pos: math::Vec4,
-    color: color::Srgba8,
+pub(crate) struct ExpandedVertex {
+    pub(crate) clip_pos: math::Vec4,
+    pub(crate) color: color::Srgba8,
 }
 
 struct CoatData {
@@ -54,30 +55,12 @@ struct ExpandStrokesPushConstants {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct PushBuffer<T: Copy + 'static> {
-    base: gpu::Ptr<[T]>,
-    offset: u32,
-    capacity: u32,
-}
-
-impl<T: Copy + 'static> PushBuffer<T> {
-    fn new(buffer: &gpu::Buffer<[T]>) -> Self {
-        Self {
-            base: buffer.ptr(),
-            offset: 0,
-            capacity: buffer.len() as u32,
-        }
-    }
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
 struct ExpandStrokesData {
     strokes: gpu::Ptr<[geom::Stroke]>,
     vertices: gpu::Ptr<[geom::StrokeVertex]>,
 
-    out_vertices: PushBuffer<ExpandedVertex>,
-    out_indices: PushBuffer<u32>,
+    out_vertices: gpu::util::PushBuffer<ExpandedVertex>,
+    out_indices: gpu::util::PushBuffer<u32>,
 
     main_width: f32,
     border_width: f32,
@@ -99,10 +82,10 @@ struct DebugStrokesPushConstants {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct DebugStrokesRootParams {
-    scene_info: gpu::Ptr<SceneInfoUniforms>,
-    vertices: gpu::Ptr<[ExpandedVertex]>,
-    indices: gpu::Ptr<[u32]>,
+pub(crate) struct DebugStrokesRootParams {
+    pub(crate) scene_info: gpu::Ptr<SceneInfoUniforms>,
+    pub(crate) vertices: gpu::Ptr<[ExpandedVertex]>,
+    pub(crate) indices: gpu::Ptr<[u32]>,
 }
 
 const NVERTEX: usize = 9;
@@ -253,16 +236,13 @@ impl CoatExperiment {
             border_width: 5.0,
         });
 
-        cmd.reference_resource(&gpu_data.stroke_buffer);
-        cmd.reference_resource(&gpu_data.stroke_vertex_buffer);
-        cmd.reference_resource(&gpu_data.expansion_vertices);
-        cmd.reference_resource(&gpu_data.expansion_indices);
         cmd.bind_compute_pipeline(&*expand_stroke_pipeline);
         let workgroup_count = gpu_data.stroke_buffer.len() as u32;
-        cmd.dispatch(workgroup_count, 1, 1, &ExpandStrokesRootParams {
+        let params = cmd.upload_temporary(&ExpandStrokesRootParams {
             scene_info: scene_info.gpu,
             data: params,
         });
+        cmd.dispatch(workgroup_count, 1, 1, params);
 
         //////////////////////////////////////////////////////////////////////////////////////////
         let Ok(debug_stroke_pipeline) = self.debug_stroke_pipeline.read() else {
@@ -279,8 +259,6 @@ impl CoatExperiment {
                 stencil_clear_value: None,
             }),
         });
-        encoder.reference_resource(&gpu_data.expansion_vertices);
-        encoder.reference_resource(&gpu_data.expansion_indices);
         encoder.bind_graphics_pipeline(&*debug_stroke_pipeline);
         let index_count = strokes
             .iter()
@@ -292,11 +270,12 @@ impl CoatExperiment {
         //eprintln!("vertex_count={}", vertex_count);
         //eprintln!("stroke_count={}", stroke_count);
         //eprintln!("index_count={}", index_count);
-        encoder.draw(TriangleList, 0..index_count, 0..1, &DebugStrokesRootParams {
+        let params = encoder.upload_temporary(&DebugStrokesRootParams {
             scene_info: scene_info.gpu,
             vertices: gpu_data.expansion_vertices.ptr(),
             indices: gpu_data.expansion_indices.ptr(),
         });
+        encoder.draw(TriangleList, None, 0..index_count, 0..1, params);
 
         //draw_lines(&mut encoder, &line_vertices, &lines, scene_info);
 

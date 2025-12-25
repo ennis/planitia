@@ -1,1 +1,1 @@
--profile glsl460 -fvk-use-scalar-layout -fvk-use-entrypoint-name
+-profile glsl_460 -fvk-use-scalar-layout -fvk-use-entrypoint-name

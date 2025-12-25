@@ -5,7 +5,6 @@ use crate::{Barrier, BufferRangeUntyped, BufferUntyped, ClearColorValue, Command
 
 impl CommandStream {
     pub fn fill_buffer(&mut self, range: &BufferRangeUntyped, data: u32) {
-        self.reference_resource(range.buffer);
         self.barrier(Barrier::new().transfer_write());
 
         let cb = self.get_or_create_command_buffer();
@@ -19,7 +18,6 @@ impl CommandStream {
 
     // TODO specify subresources
     pub fn clear_image(&mut self, image: &Image, clear_color_value: ClearColorValue) {
-        self.reference_resource(image);
         self.barrier(Barrier::new().transfer_write_image(image));
 
         let cb = self.get_or_create_command_buffer();
@@ -42,7 +40,6 @@ impl CommandStream {
     }
 
     pub fn clear_depth_image(&mut self, image: &Image, depth: f32) {
-        self.reference_resource(image);
         self.barrier(Barrier::new().transfer_write_image(image));
 
         let cb = self.get_or_create_command_buffer();
@@ -72,9 +69,6 @@ impl CommandStream {
     ) {
         // TODO: this is not required for multi-planar formats
         assert_eq!(source.aspect, destination.aspect);
-
-        self.reference_resource(source.image);
-        self.reference_resource(destination.image);
 
         self.barrier(
             Barrier::new()
@@ -126,8 +120,6 @@ impl CommandStream {
         assert!(src_offset + size <= source.byte_size());
         assert!(dst_offset + size <= destination.byte_size());
 
-        self.reference_resource(source);
-        self.reference_resource(destination);
         self.barrier(Barrier::new().transfer_read().transfer_write());
 
         // SAFETY: FFI call and parameters are valid
@@ -155,9 +147,6 @@ impl CommandStream {
         destination: ImageCopyView<'_>,
         copy_size: vk::Extent3D,
     ) {
-        self.reference_resource(source.buffer);
-        self.reference_resource(destination.image);
-
         self.barrier(Barrier::new().transfer_read().transfer_write_image(destination.image));
 
         let regions = [vk::BufferImageCopy {
@@ -198,8 +187,6 @@ impl CommandStream {
         destination: ImageCopyBuffer<'_>,
         _copy_size: vk::Extent3D,
     ) {
-        self.reference_resource(source.image);
-        self.reference_resource(destination.buffer);
         todo!("copy_image_to_buffer");
     }
 
@@ -213,9 +200,6 @@ impl CommandStream {
         dst_region: Rect3D,
         filter: vk::Filter,
     ) {
-        self.reference_resource(src);
-        self.reference_resource(dst);
-
         self.barrier(Barrier::new().transfer_read_image(src).transfer_write_image(dst));
 
         let blits = [vk::ImageBlit {

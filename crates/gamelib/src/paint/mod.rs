@@ -9,7 +9,7 @@ use color::Srgba8;
 use crate::paint::shape::RectShape;
 use crate::paint::tessellation::{Mesh, Tessellator};
 use crate::paint::text::GlyphCache;
-use gpu::{CommandStream, Device, RenderPassInfo, Sampler, Vertex as GpuVertex, vk};
+use gpu::{CommandStream, Device, RenderPassInfo, Sampler, Vertex as GpuVertex, vk, Ptr};
 use math::geom::Camera;
 use math::{Mat4, Rect, U16Vec2, UVec2, Vec2, u16vec2, uvec2, vec2};
 use shader_bridge::ShaderLibrary;
@@ -385,13 +385,13 @@ impl<'a> PaintScene<'a> {
 
             match &prim.kind {
                 PrimKind::Geometry(mesh) => {
-                    let root_params = &RootParams {
+                    let root_params = encoder.upload_temporary(&RootParams {
                         matrix: params.camera.view_projection(),
                         screen_size: [width as f32, height as f32],
                         line_width: 1.0,
                         texture: prim.texture,
                         sampler: self.painter.sampler.device_handle(),
-                    };
+                    });
                     draw_mesh(&mut encoder, params, mesh, prim.clip, root_params);
                 }
             }
@@ -426,16 +426,18 @@ fn draw_glyph_run(
     encoder.draw(0..vertices.len() as u32, 0..1);
 }*/
 
-fn draw_mesh(encoder: &mut gpu::RenderEncoder, params: &PaintRenderParams, mesh: &Mesh, clip: Rect, root_params: &RootParams) {
+fn draw_mesh(encoder: &mut gpu::RenderEncoder, params: &PaintRenderParams, mesh: &Mesh, clip: Rect, root_params: Ptr<RootParams>) {
     if mesh.vertices.is_empty() || mesh.indices.is_empty() {
         return;
     }
     let vertex_buffer = gpu::Buffer::from_slice(&mesh.vertices, "");
     let index_buffer = gpu::Buffer::from_slice(&mesh.indices, "");
-    encoder.bind_vertex_buffer(0, vertex_buffer.as_bytes().into());
-    encoder.bind_index_buffer(vk::IndexType::UINT32, index_buffer.as_bytes().into());
     set_scissor(encoder, params, clip);
-    encoder.draw_indexed(TriangleList, 0..mesh.indices.len() as u32, 0, 0..1, root_params);
+    encoder.draw_indexed(TriangleList,
+                         &index_buffer,
+                         0..mesh.indices.len() as u32,
+                         Some(vertex_buffer.as_bytes()),
+                         0, 0..1, root_params);
 }
 
 #[cfg(test)]

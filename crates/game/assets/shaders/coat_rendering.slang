@@ -289,7 +289,7 @@ struct SweepPushConstants {
 
 [shader("compute")]
 [numthreads(MAX_STROKE_VERTICES, 1, 1)]
-void sweep_stroke_main(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_GroupThreadID, uniform SweepPushConstants u)
+void sweep_stroke_main(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_GroupThreadID, uniform SweepPushConstants* u)
 {
 
 
@@ -313,7 +313,7 @@ struct DebugStrokesPushConstants {
 };
 
 [shader("vertex")]
-DebugStrokesVertexOutput debug_strokes_vertex(uint vertex_id : SV_VertexID, uniform DebugStrokesPushConstants u)
+DebugStrokesVertexOutput debug_strokes_vertex(uint vertex_id : SV_VertexID, uniform DebugStrokesPushConstants* u)
 {
     let index = u.indices[vertex_id];
     let vertex = u.vertices[index];

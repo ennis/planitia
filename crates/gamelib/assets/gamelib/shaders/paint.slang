@@ -22,7 +22,7 @@ struct FragmentOutput
     float4 color;
 };
 
-struct PushConstants
+struct RootParams
 {
     float4x4 matrix;
     float2 screen_size;
@@ -35,7 +35,7 @@ struct PushConstants
 // ---------------------------------------------------------------
 
 [shader("vertex")]
-VertexOutput paint_vertex_main(FeatherVertex v, uniform PushConstants u)
+VertexOutput paint_vertex_main(FeatherVertex v, uniform RootParams* u)
 {
     VertexOutput o;
     o.pos = float4(v.position.xy / u.screen_size * 2.0 - 1.0, 0.0, 1.0);
@@ -46,7 +46,7 @@ VertexOutput paint_vertex_main(FeatherVertex v, uniform PushConstants u)
 }
 
 [shader("fragment")]
-FragmentOutput paint_fragment_main(VertexOutput v, uniform PushConstants u)
+FragmentOutput paint_fragment_main(VertexOutput v, uniform RootParams* u)
 {
     float alpha = (1.0 - abs(v.feather)) * min(u.line_width, 1.0);
     float4 tex_color = u.texture.Sample(u.sampler, v.uv);

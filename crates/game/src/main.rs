@@ -18,7 +18,7 @@ use gpu::PrimitiveTopology::TriangleList;
 use gpu::{Image, Ptr, RenderPassInfo, root_params};
 use log::debug;
 use math::geom::Camera;
-use math::{Mat4, Vec2};
+use math::{Mat4, Vec2, Vec3};
 
 mod experiments;
 
@@ -37,6 +37,7 @@ pub struct SceneInfoUniforms {
     screen_size: Vec2,
     time: f32,
     frame: u32,
+    eye: Vec3,
 }
 
 /// Scene info and GPU buffer containing it.
@@ -66,6 +67,7 @@ struct Game {
     frame_count: u32,
     start_time: std::time::Instant,
     coat_experiment: experiments::coat::CoatExperiment,
+    outline_experiment: experiments::outlines::OutlineExperiment,
 }
 
 fn create_depth_buffer(width: u32, height: u32) -> Image {
@@ -93,6 +95,7 @@ impl Default for Game {
             height: HEIGHT,
             start_time: std::time::Instant::now(),
             coat_experiment: experiments::coat::CoatExperiment::new(),
+            outline_experiment: experiments::outlines::OutlineExperiment::new(),
         }
     }
 }
@@ -104,16 +107,12 @@ impl Game {
         {
             if let Ok(background_shader) = self.background_shader.read() {
                 encoder.bind_graphics_pipeline(&*background_shader);
-                encoder.draw(
-                    TriangleList,
-                    0..6,
-                    0..1,
-                    root_params! {
-                        scene_uniforms: Ptr<SceneInfoUniforms> = scene_info.gpu,
-                        bottom_color: Srgba8 = srgba8(20, 20, 40, 255),
-                        top_color: Srgba8 = srgba8(100, 150, 255, 255)
-                    },
-                );
+                let params = encoder.upload_temporary(root_params! {
+                    scene_uniforms: Ptr<SceneInfoUniforms> = scene_info.gpu,
+                    bottom_color: Srgba8 = srgba8(20, 20, 40, 255),
+                    top_color: Srgba8 = srgba8(100, 150, 255, 255)
+                });
+                encoder.draw(TriangleList, None, 0..6, 0..1, params);
             }
         }
 
@@ -122,15 +121,11 @@ impl Game {
         {
             if let Ok(grid_shader) = self.grid_shader.read() {
                 encoder.bind_graphics_pipeline(&*grid_shader);
-                encoder.draw(
-                    TriangleList,
-                    0..6,
-                    0..1,
-                    root_params! {
-                        scene_uniforms: Ptr<SceneInfoUniforms> = scene_info.gpu,
-                        grid_scale: f32 = 100.0
-                    },
-                );
+                let params = encoder.upload_temporary(root_params! {
+                    scene_uniforms: Ptr<SceneInfoUniforms> = scene_info.gpu,
+                    grid_scale: f32 = 100.0
+                });
+                encoder.draw(TriangleList, None, 0..6, 0..1, params);
             }
         }
 
@@ -170,7 +165,8 @@ impl AppHandler for Game {
         }
 
         // --- experiments ---
-        self.coat_experiment.input(&input_event);
+        //self.coat_experiment.input(&input_event);
+        self.outline_experiment.input(&input_event);
     }
 
     fn event(&mut self, event: UserEvent) {}
@@ -207,6 +203,7 @@ impl AppHandler for Game {
                     screen_size: camera.screen_size.as_vec2(),
                     time,
                     frame,
+                    eye: camera.eye().as_vec3(),
                 },
                 gpu: Ptr::NULL,
             };
@@ -227,7 +224,9 @@ impl AppHandler for Game {
             self.render_scene(&mut encoder, &camera, &scene_info);
             encoder.finish();
 
-            self.coat_experiment
+            //self.coat_experiment
+            //    .render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
+            self.outline_experiment
                 .render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
         }
 

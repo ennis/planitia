@@ -120,12 +120,12 @@ struct PushBuffer<T> {
     }
 
     [mutating]
-    T* reserve(uint count) {
+    uint reserve(uint count) {
         let off = offset.add(count);
         if (off + count <= capacity) {
-            return base + off;
+            return off;
         } else {
-            return nullptr;
+            return 0;   // TODO: handle overflow
         }
     }
 };

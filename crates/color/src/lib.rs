@@ -65,6 +65,10 @@ impl Srgba8 {
     /// Opaque white color.
     pub const WHITE: Self = srgba8(255, 255, 255, 255);
 
+    pub fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Srgba8 { r, g, b, a }
+    }
+
     pub fn to_linear(self) -> LinSrgba {
         LinSrgba {
             r: srgb_encoded_to_linear(self.r),

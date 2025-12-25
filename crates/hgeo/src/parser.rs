@@ -1096,7 +1096,8 @@ impl Geo {
             _binary_parser = binary::ParserImpl::new(data);
             parser = &mut _binary_parser;
         } else {
-            let str = std::str::from_utf8(data).map_err(|_| Malformed("invalid UTF-8"))?;
+            // TODO: "invalid UTF-8" is misleading; maybe it's simply not a .geo file
+            let str = std::str::from_utf8(data).map_err(|_| Malformed("invalid houdini geometry file"))?;
             _json_parser = ParserImpl::new(str);
             parser = &mut _json_parser;
         }

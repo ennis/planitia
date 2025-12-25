@@ -21,7 +21,7 @@ use slotmap::{SecondaryMap, SlotMap};
 use std::ffi::CStr;
 use std::mem;
 use std::sync::atomic::AtomicU64;
-
+use std::sync::atomic::Ordering::Relaxed;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 pub(crate) struct DeviceExtensions {
@@ -60,7 +60,7 @@ pub(crate) struct DeviceSubmissionState {
 }
 
 pub(crate) struct ResourceState {
-    pub(crate) last_submission_index: u64,
+    //pub(crate) last_submission_index: u64,
 }
 
 pub(crate) struct DeviceDescriptorIndexTable {
@@ -649,6 +649,7 @@ impl Device {
                 shader_storage_image_extended_formats: vk::TRUE,
                 fragment_stores_and_atomics: vk::TRUE,
                 depth_clamp: vk::TRUE,
+                multi_draw_indirect: vk::TRUE,
                 ..Default::default()
             },
             ..Default::default()
@@ -697,6 +698,22 @@ impl Device {
     }*/
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct SubmissionIndex(u64);
+
+impl SubmissionIndex {
+    const BATCH_INDEX_BITS: u32 = 8;
+
+    pub fn batch(self) -> u64 {
+        self.0 & (1 << SubmissionIndex::BATCH_INDEX_BITS - 1)
+    }
+
+    /// Returns the frame number.
+    pub fn frame(self) -> u64 {
+        self.0 >> SubmissionIndex::BATCH_INDEX_BITS
+    }
+}
+
 struct ShaderModuleGuard<'a> {
     device: &'a Device,
     module: vk::ShaderModule,
@@ -709,6 +726,7 @@ impl<'a> Drop for ShaderModuleGuard<'a> {
         }
     }
 }
+
 
 /// Helper to create PipelineShaderStageCreateInfo
 fn create_stage<'a>(
@@ -797,6 +815,7 @@ impl Device {
     // COMMAND STREAMS
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
+
     #[deprecated]
     pub fn create_command_stream(&self) -> CommandStream {
         CommandStream::new()
@@ -805,7 +824,7 @@ impl Device {
     /// Allocates a new resource ID for tracking a resource.
     pub(crate) fn allocate_resource_id(&self) -> ResourceId {
         self.resources.lock().unwrap().insert(ResourceState {
-            last_submission_index: 0,
+            //last_submission_index: 0,
         })
     }
 
@@ -828,15 +847,15 @@ impl Device {
         self.sampler_heap.lock().unwrap().remove(index);
     }*/
 
-    pub(crate) fn last_submission_index(&self, resource_id: ResourceId) -> u64 {
+    /*pub(crate) fn last_submission_index(&self, resource_id: ResourceId) -> u64 {
         self.resources.lock().unwrap()[resource_id].last_submission_index
-    }
+    }*/
 
-    pub(crate) fn set_last_submission_index(&self, resource_id: ResourceId, index: u64) {
+    /*pub(crate) fn set_last_submission_index(&self, resource_id: ResourceId, index: u64) {
         let mut resources = self.resources.lock().unwrap();
         let resource = &mut resources[resource_id];
         resource.last_submission_index = resource.last_submission_index.max(index);
-    }
+    }*/
 
     /// Allocates memory, or panic trying.
     ///
@@ -875,7 +894,7 @@ impl Device {
             return;
         }
         if submission_index <= last_completed_submission_index {
-            debug!("GPU: immediate call_later for submission {submission_index} (last_completed_submission_index={last_completed_submission_index})");
+            trace!("GPU: immediate call_later for submission {submission_index} (last_completed_submission_index={last_completed_submission_index})");
             f();
             return;
         }
@@ -895,8 +914,15 @@ impl Device {
         resource_id: ResourceId,
         deleter: impl FnOnce() + Send + Sync + 'static,
     ) {
-        self.call_later(self.last_submission_index(resource_id), move || {
-            trace!("GPU: deleting tracked resource {:?}", resource_id);
+        // All resources may potentially be used by the last opened submission (the last *created*
+        // CommandStream), which has index `next_submission_index - 1`.
+        //
+        // We used to track resource uses per-submission, but this required user input
+        // (`CommandStream::reference_resource`) and was error-prone.
+        // Now we just go with the pessimistic, but reliable, approach.
+        let last_submission = self.next_submission_index.load(Relaxed) - 1;
+        self.call_later(last_submission, move || {
+            //trace!("GPU: deleting tracked resource {:?}", resource_id);
             Self::global().free_resource_id(resource_id);
             deleter();
         })

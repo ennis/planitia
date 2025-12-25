@@ -1,7 +1,7 @@
 use crate::{SceneInfo, SceneInfoUniforms};
 use gamelib::pipeline_cache::get_graphics_pipeline;
 use gpu::PrimitiveTopology::{TriangleList, TriangleStrip};
-use gpu::Ptr;
+use gpu::{BufferCreateInfo, DrawIndirectCommand, MemoryLocation, Ptr, vk};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(C)]
@@ -26,42 +26,50 @@ pub struct Line {
 struct RootParams {
     scene_info: Ptr<SceneInfoUniforms>,
     vertices: Ptr<[LineVertex]>,
-    start_vertex: u32,
-    vertex_count: u32,
-    line_width: f32,
-    filter_width: f32,
+    lines: Ptr<[Line]>,
+    //start_vertex: u32,
+    //vertex_count: u32,
+    //line_width: f32,
+    //filter_width: f32,
 }
 
 /// Draws 3d polylines with given line width in world units.
 pub fn draw_lines<'a>(
     encoder: &mut gpu::RenderEncoder,
     vertices: &[LineVertex],
-    lines: impl IntoIterator<Item = &'a Line>,
+    lines: &[Line],
     scene_info: &SceneInfo,
 ) {
-    let line_vertex_buffer = gpu::Buffer::from_slice(&vertices, "line_vertices");
-
     let pipeline = get_graphics_pipeline("/shaders/pipelines.parc#lines");
     let Ok(pipeline) = pipeline.read() else {
         return;
     };
 
-    encoder.bind_graphics_pipeline(&pipeline);
+    let vertices_buffer = gpu::Buffer::from_slice(vertices, "line_vertices");
+    let lines_buffer = gpu::Buffer::from_slice(lines, "lines");
 
-    for line in lines {
-        encoder.reference_resource(&line_vertex_buffer);
-        encoder.draw(
-            TriangleStrip,
-            0..line.vertex_count * 2,
-            0..1,
-            &RootParams {
-                scene_info: scene_info.gpu,
-                vertices: line_vertex_buffer.ptr(),
-                line_width: line.width,
-                filter_width: line.filter_width,
-                start_vertex: line.start_vertex,
-                vertex_count: line.vertex_count,
-            },
-        );
+    let mut commands = gpu::Buffer::new(BufferCreateInfo {
+        len: lines.len(),
+        memory_location: MemoryLocation::CpuToGpu,
+        ..
+    });
+
+    for (i, line) in lines.iter().enumerate() {
+        unsafe {
+            commands.as_mut_slice()[i].write(DrawIndirectCommand {
+                vertex_count: line.vertex_count * 2,
+                instance_count: 1,
+                first_vertex: line.start_vertex,
+                first_instance: 0,
+            });
+        }
     }
+
+    encoder.bind_graphics_pipeline(&pipeline);
+    let params = encoder.upload_temporary(&RootParams {
+        scene_info: scene_info.gpu,
+        vertices: vertices_buffer.ptr(),
+        lines: lines_buffer.ptr(),
+    });
+    encoder.draw_indirect(TriangleStrip, None, &commands, 0..lines.len() as u32, params);
 }

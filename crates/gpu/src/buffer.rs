@@ -19,8 +19,8 @@ impl<T: ?Sized> Drop for Buffer<T> {
         Device::global().delete_tracked_resource(self.id, move || unsafe {
             let device = Device::global();
             trace!("GPU: deleting buffer: {:?}", handle);
-            device.free_memory(&mut allocation);
             device.raw.destroy_buffer(handle, None);
+            device.free_memory(&mut allocation);
         });
     }
 }
@@ -81,6 +81,8 @@ impl<T: Copy> Buffer<[T]> {
     }
 }
 
+// TODO: non-slice buffers are rarely used. Consider removing them, and have `Buffer<T>` be
+//       analogous to `Vec<T>`.
 impl<T: Copy> Buffer<T> {
     /// Creates a CpuToGpu buffer and copies data into it.
     pub fn from_data(data: &T, label: &str) -> Buffer<T> {
@@ -234,6 +236,7 @@ impl<T: Copy> Buffer<[T]> {
     }
 
     /// If the buffer is mapped in host memory, returns a pointer to the mapped memory.
+    /// TODO: raw slice pointers aren't very ergonomic right now. Maybe return `*mut T` instead?
     pub fn as_mut_ptr(&self) -> *mut [T] {
         ptr::slice_from_raw_parts_mut(self.as_mut_ptr_u8() as *mut T, self.len())
     }
@@ -305,6 +308,8 @@ impl<T: ?Sized> Clone for Buffer<T> {
     }
 }*/
 
+// TODO: impl From<IntoIterator> for Buffer
+
 impl<T: ?Sized> std::fmt::Debug for Buffer<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Buffer")
@@ -336,7 +341,7 @@ impl Device {
 
         if create_info.len == 0 || elem_size == 0 {
             warn!(
-                "creating zero-sized buffer; this is not supported by Vulkan and a minimum size of 1 byte will be used"
+                "creating a zero-sized buffer: this is not supported by Vulkan and a minimum size of 1 byte will be used"
             );
         }
         let byte_size = elem_size as u64 * create_info.len as u64;
@@ -411,7 +416,7 @@ impl Device {
             }
 
             let id = self.allocate_resource_id();
-            trace!("GPU: create buffer {:?} {} {id:?}", handle, create_info.label);
+            trace!("GPU: create buffer {:?} {:?} {id:?}", handle, create_info.label);
 
             BufferUntyped {
                 id,

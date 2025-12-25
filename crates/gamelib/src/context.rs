@@ -7,14 +7,14 @@ pub use crate::platform::LoopHandler;
 use crate::platform::{EventToken, InitOptions, Platform, PlatformHandler, RenderTargetImage, UserEvent};
 use futures::future::AbortHandle;
 use gpu::vk::Handle;
-use keyboard_types::{Key, KeyState, NamedKey};
+use keyboard_types::{Key, KeyState, Modifiers, NamedKey};
 use log::{error, info, warn};
 use mlua::Lua;
 use renderdoc::{RenderDoc, V141};
 use std::cell::{Cell, OnceCell, RefCell};
 use std::ffi::c_void;
 use std::path::Path;
-use std::ptr;
+use std::{mem, ptr};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, OnceLock};
 use threadbound::ThreadBound;
@@ -30,6 +30,7 @@ pub(crate) struct Context {
     quit_requested: Cell<bool>,
     rdoc: Option<RefCell<RenderDoc<V141>>>,
     rdoc_capture_requested: Cell<bool>,
+    rdoc_launch_replay_ui: Cell<bool>,
 }
 
 unsafe fn rdoc_instance_ptr() -> *mut c_void {
@@ -39,12 +40,35 @@ unsafe fn rdoc_instance_ptr() -> *mut c_void {
     }
 }
 
+#[cfg(debug_assertions)]
+fn load_renderdoc_dll() {
+    #[cfg(target_os = "windows")]
+    const DLL_PATH: &[&str] = &[
+        "renderdoc.dll",
+        "C:\\Program Files\\RenderDoc\\renderdoc.dll",
+    ];
+
+    unsafe {
+        for &path in DLL_PATH {
+            match libloading::Library::new(path) {
+                Ok(library) => {
+                    info!("Loaded RenderDoc DLL from {}", path);
+                    mem::forget(library);
+                    return;
+                }
+                Err(_) => {}
+            }
+        }
+    }
+}
+
 impl Context {
     fn new(options: &InitOptions) -> Self {
         let platform = Platform::new(options);
         let lua = mlua::Lua::new();
         let executor = LocalExecutor::new();
         let imgui = RefCell::new(ImguiContext::new());
+
 
         let rdoc = RenderDoc::new().ok();
         if rdoc.is_some() {
@@ -61,6 +85,7 @@ impl Context {
             quit_requested: Cell::new(false),
             rdoc: rdoc.map(RefCell::new),
             rdoc_capture_requested: Cell::new(false),
+            rdoc_launch_replay_ui: Cell::new(false),
         }
     }
 
@@ -82,10 +107,18 @@ impl Context {
 
     fn end_renderdoc_capture(&self) {
         if let Some(rdoc) = &self.rdoc {
-            if rdoc.borrow().is_frame_capturing() {
+            let mut rdoc = rdoc.borrow_mut();
+            if rdoc.is_frame_capturing() {
                 info!("finishing RenderDoc capture");
-                rdoc.borrow_mut()
-                    .end_frame_capture(unsafe { rdoc_instance_ptr() }, std::ptr::null());
+                rdoc.end_frame_capture(unsafe { rdoc_instance_ptr() }, std::ptr::null());
+                if self.rdoc_launch_replay_ui.get() {
+                    let Some((path, _)) = rdoc.get_capture(0) else { return };
+
+                    self.rdoc_launch_replay_ui.set(false);
+                    if let Err(err) = rdoc.launch_replay_ui(true, Some(path.to_string_lossy().as_ref())) {
+                        error!("failed to launch renderdoc UI: {err}");
+                    }
+                }
             }
         }
     }
@@ -136,6 +169,11 @@ impl<H: AppHandler + Default + 'static> App<H> {
     }
 
     pub fn run(&'static self, init_options: &InitOptions) {
+
+        // load the renderdoc DLL asap
+        //#[cfg(debug_assertions)]
+        //load_renderdoc_dll();
+
         env_logger::builder()
             .parse_default_env()
             .format_target(false)
@@ -264,8 +302,11 @@ where
         }
 
         match input_event {
-            InputEvent::KeyboardEvent(ref ke) if ke.key == Key::Named(NamedKey::F12) && ke.state == KeyState::Down => {
+            InputEvent::KeyboardEvent(ref ke) if ke.key == Key::Named(NamedKey::F9) && ke.state == KeyState::Down => {
                 ctx.rdoc_capture_requested.set(true);
+                if ke.modifiers.contains(Modifiers::SHIFT) {
+                    ctx.rdoc_launch_replay_ui.set(true);
+                }
             }
             _ => {}
         }
