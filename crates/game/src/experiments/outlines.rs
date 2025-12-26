@@ -108,7 +108,7 @@ struct Cluster {
     /// All edges (represented by the two faces they connect) in this cluster
     edges: [ClusterEdge; MAX_EDGES_PER_CLUSTER],
     /// All faces in this cluster
-    faces: [ClusterFace; MAX_EDGES_PER_CLUSTER*2],
+    faces: [ClusterFace; MAX_EDGES_PER_CLUSTER * 2],
     normal_cone: NormalCone,
     vertex_count: u16,
     edge_count: u16,
@@ -120,7 +120,7 @@ impl Default for Cluster {
         Self {
             vertices: [ClusterVertex::default(); MAX_EDGES_PER_CLUSTER],
             edges: [ClusterEdge::default(); MAX_EDGES_PER_CLUSTER],
-            faces: [ClusterFace::default(); MAX_EDGES_PER_CLUSTER*2],
+            faces: [ClusterFace::default(); MAX_EDGES_PER_CLUSTER * 2],
             vertex_count: 0,
             edge_count: 0,
             face_count: 0,
@@ -458,15 +458,16 @@ fn cluster_edges(mesh: &mut Mesh, params: &ClusterEdgesParams) -> Buffer<[Cluste
             };
             let v0 = vertex_map[&edge.v0];
             let v1 = vertex_map[&edge.v1];
+
             cluster_gpu.edges[i_edge] = ClusterEdge {
                 face_0: f0,
                 face_1: f1,
                 vertex_0: v0,
                 vertex_1: v1,
             };
-            cluster_gpu.edge_count += 1;
         }
 
+        cluster_gpu.edge_count = cluster.edges.len() as u16;
         cluster_gpu.normal_cone = cluster.cone;
 
         //eprintln!(
@@ -498,8 +499,10 @@ struct OutlineExperimentRootParams {
     scene_info: gpu::Ptr<SceneInfoUniforms>,
     clusters: gpu::Ptr<[Cluster]>,
     cluster_count: u32,
-    out_outline_vertices: gpu::util::PushBuffer<ExpandedVertex>,
-    out_outline_indices: gpu::util::PushBuffer<u32>,
+    vertex_count: u32,
+    out_vertices: gpu::Ptr<[ExpandedVertex]>,
+    out_indices: gpu::Ptr<[u32]>,
+    out_draw_command: gpu::Ptr<[gpu::DrawIndirectCommand]>,
 }
 
 impl OutlineExperiment {
@@ -574,12 +577,12 @@ impl OutlineExperiment {
         };
 
         let outline_buffer = gpu::Buffer::<[ExpandedVertex]>::new(gpu::BufferCreateInfo {
-            len: self.mesh.vertices.len(), // not great
+            len: self.mesh.vertices.len() * 20, // not great
             label: "outline_vertices",
             ..
         });
         let outline_index_buffer = gpu::Buffer::<[u32]>::new(gpu::BufferCreateInfo {
-            len: self.mesh.vertices.len(), // no idea
+            len: self.mesh.vertices.len() * 40, // no idea
             label: "outline_indices",
             ..
         });
@@ -587,38 +590,55 @@ impl OutlineExperiment {
         eprintln!("clusters len: {}", self.clusters.len());
 
         cmd.bind_compute_pipeline(&*outline_pipeline);
+
+        let draw_indirect_command_buffer = gpu::Buffer::from_slice(
+            &[gpu::DrawIndirectCommand {
+                vertex_count: 0,
+                instance_count: 1,
+                first_vertex: 0,
+                first_instance: 0,
+            }],
+            "draw_indirect",
+        );
+
         let params = cmd.upload_temporary(&OutlineExperimentRootParams {
             scene_info: scene_info.gpu,
             clusters: self.clusters.ptr(),
             cluster_count: self.clusters.len() as u32,
-            out_outline_vertices: gpu::util::PushBuffer::new(&outline_buffer),
-            out_outline_indices: gpu::util::PushBuffer::new(&outline_index_buffer),
+            vertex_count: 0,
+            out_vertices: outline_buffer.ptr(),
+            out_indices: outline_index_buffer.ptr(),
+            out_draw_command: draw_indirect_command_buffer.ptr(),
         });
 
         cmd.barrier(Barrier::new().shader_storage_write());
         cmd.dispatch(self.clusters.len() as u32, 1, 1, params);
-        cmd.barrier(Barrier::new().shader_storage_read());
+        cmd.barrier(Barrier::new().shader_storage_read().indirect());
 
         let mut encoder = cmd.begin_rendering(RenderPassInfo {
             color_attachments: &[gpu::ColorAttachment {
                 image: color_target,
-                clear_value: None,
+                ..
             }],
             depth_stencil_attachment: Some(gpu::DepthStencilAttachment {
                 image: &depth_target,
-                depth_clear_value: None,
-                stencil_clear_value: None,
+                ..
             }),
         });
 
         encoder.bind_graphics_pipeline(&*debug_stroke_pipeline);
-        let index_count = 300; // we don't know CPU-side
         let params = encoder.upload_temporary(&crate::experiments::coat::DebugStrokesRootParams {
             scene_info: scene_info.gpu,
             vertices: outline_buffer.ptr(),
             indices: outline_index_buffer.ptr(),
         });
-        encoder.draw(TriangleList, None, 0..index_count, 0..1, params);
+        encoder.draw_indirect(
+            TriangleList,
+            None,
+            &draw_indirect_command_buffer,
+            0..1,
+            params,
+        );
 
         //draw_lines(&mut encoder, &line_vertices, &lines, scene_info);
 

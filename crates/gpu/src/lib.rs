@@ -548,7 +548,7 @@ pub type BufferRangeUntyped<'a> = BufferRange<'a, u8>;
 #[derive(Clone)]
 pub struct ColorAttachment<'a> {
     pub image: &'a Image,
-    pub clear_value: Option<[f64; 4]>,
+    pub clear_value: Option<[f64; 4]> = None,
     /*pub image_view: ImageView,
     pub load_op: vk::AttachmentLoadOp,
     pub store_op: vk::AttachmentStoreOp,
@@ -593,8 +593,8 @@ impl ColorAttachment<'_> {
 #[derive(Clone)]
 pub struct DepthStencilAttachment<'a> {
     pub image: &'a Image,
-    pub depth_clear_value: Option<f64>,
-    pub stencil_clear_value: Option<u32>,
+    pub depth_clear_value: Option<f64> = None,
+    pub stencil_clear_value: Option<u32> = None,
     /*pub depth_load_op: vk::AttachmentLoadOp,
     pub depth_store_op: vk::AttachmentStoreOp,
     pub stencil_load_op: vk::AttachmentLoadOp,

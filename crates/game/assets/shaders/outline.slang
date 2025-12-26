@@ -29,8 +29,8 @@ struct NormalCone {
 
 struct OutlineVertex {
     float4 clip_position;
-    Srgba8 color;
 }
+
 
 struct Cluster {
     /// Vertices in this cluster.
@@ -48,9 +48,11 @@ struct Cluster {
 struct OutlineRootParams {
     SceneInfo* scene_info;
     Cluster* clusters;
-    uint32_t cluster_count;
-    PushBuffer<OutlineVertex> out_vertices;
-    PushBuffer<uint32_t> out_indices;
+    uint cluster_count;
+    uint vertex_count;
+    OutlineVertex* out_vertices;
+    uint* out_indices;
+    DrawIndirectCommand* out_draw_command;
 }
 
 
@@ -77,7 +79,6 @@ void outline_main(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_GroupTh
     var is_contour = false;
 
     if (edge.face_0 == 0xFFFF || edge.face_1 == 0xFFFF) {
-        // boundary edge, skip for now
         is_contour = true;
     } else {
         let n0 = c.faces[edge.face_0].normal;
@@ -92,17 +93,29 @@ void outline_main(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_GroupTh
     if (is_contour) {
         let v0 = mul(u.scene_info.view_proj_matrix, float4(c.vertices[edge.vertex_0].position, 1.));
         let v1 = mul(u.scene_info.view_proj_matrix, float4(c.vertices[edge.vertex_1].position, 1.));
-        let base_vertex = u.out_vertices.reserve(4);
-        let base_index = u.out_indices.reserve(6);
-        u.out_vertices.base[base_vertex] = OutlineVertex(v0, Srgba8(0, 255, 0, 255));
-        u.out_vertices.base[base_vertex+1] = OutlineVertex(v1, Srgba8(0, 255, 0, 255));
-        u.out_vertices.base[base_vertex+2] = OutlineVertex(v1 + float4(0.01, 0., 0., 0.), Srgba8(0, 255, 0, 255));
-        u.out_vertices.base[base_vertex+3] = OutlineVertex(v0 + float4(0., 0.01, 0., 0.), Srgba8(0, 255, 0, 255));
-        u.out_indices.base[base_index] = base_vertex;
-        u.out_indices.base[base_index+1] = base_vertex + 1;
-        u.out_indices.base[base_index+2] = base_vertex + 2;
-        u.out_indices.base[base_index+3] = base_vertex;
-        u.out_indices.base[base_index+4] = base_vertex + 2;
-        u.out_indices.base[base_index+5] = base_vertex + 3;
+        let v0offset = float4(v0.x, v0.y + sign(v0.y) * 0.01, v0.z, v0.w);
+        let v1offset = float4(v1.x, v1.y + sign(v1.y) * 0.01, v1.z, v1.w);
+
+        uint base_vertex;
+        InterlockedAdd(u.vertex_count, 4, base_vertex);
+        uint base_index;
+        InterlockedAdd(u.out_draw_command.vertex_count, 6, base_index);
+
+        //let v0dbg = float4(2.0 * float2(base_index, cli*7) / u.scene_info.screen_size - 1.0, 0.0, 1.0);
+        //let v1dbg = float4(2.0 * float2(base_index + 6, cli*7) / u.scene_info.screen_size - 1.0, 0.0, 1.0);
+        //let v2dbg = float4(2.0 * float2(base_index, cli*7 + 6) / u.scene_info.screen_size - 1.0, 0.0, 1.0);
+        //let v3dbg = float4(2.0 * float2(base_index + 6, cli*7 + 6) / u.scene_info.screen_size - 1.0, 0.0, 1.0);
+
+        u.out_vertices[base_vertex] = OutlineVertex(v0);
+        u.out_vertices[base_vertex+1] = OutlineVertex(v1);
+        u.out_vertices[base_vertex+2] = OutlineVertex(v0offset);
+        u.out_vertices[base_vertex+3] = OutlineVertex(v1offset);
+
+        u.out_indices[base_index] = base_vertex;
+        u.out_indices[base_index+1] = base_vertex + 1;
+        u.out_indices[base_index+2] = base_vertex + 2;
+        u.out_indices[base_index+3] = base_vertex + 1;
+        u.out_indices[base_index+4] = base_vertex + 3;
+        u.out_indices[base_index+5] = base_vertex + 2;
     }
 }

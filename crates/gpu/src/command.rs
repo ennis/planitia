@@ -113,6 +113,11 @@ impl<'a> Barrier<'a> {
         self.access |= MemoryAccess::TRANSFER_WRITE;
         self
     }
+
+    pub fn indirect(mut self) -> Self {
+        self.access |= MemoryAccess::INDIRECT_READ | MemoryAccess::ALL_STAGES;
+        self
+    }
 }
 
 /// TODO rename this, it's not really a stream as it needs to be dropped to submit work to the queue

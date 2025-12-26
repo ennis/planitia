@@ -20,7 +20,7 @@ struct StrokeVertex {
 
 struct ExpandedStrokeVertex {
     float4 clip_position;
-    Srgba8 color;
+    //Srgba8 color;
 };
 
 struct ExpandStrokesData {
@@ -216,16 +216,16 @@ void expand_strokes_main(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_
     }
 
     // write expanded geometry
-    u.data.out_vertices[s_vertex_offset + i*NVERTEX] = ExpandedStrokeVertex(p_l_1, srgba8(0,0,0,255));
-    u.data.out_vertices[s_vertex_offset + i*NVERTEX+1] = ExpandedStrokeVertex(p_l_0_clip, srgba8(0,0,0,255));
-    u.data.out_vertices[s_vertex_offset + i*NVERTEX+2] = ExpandedStrokeVertex(p_l_0_clip, color);
-    u.data.out_vertices[s_vertex_offset + i*NVERTEX+3] = ExpandedStrokeVertex(p_clip, color);
-    u.data.out_vertices[s_vertex_offset + i*NVERTEX+4] = ExpandedStrokeVertex(p_r_0_clip, color);
-    u.data.out_vertices[s_vertex_offset + i*NVERTEX+5] = ExpandedStrokeVertex(p_r_0_clip, srgba8(0,0,0,255));
-    u.data.out_vertices[s_vertex_offset + i*NVERTEX+6] = ExpandedStrokeVertex(p_r_1, srgba8(0,0,0,255));
+    u.data.out_vertices[s_vertex_offset + i*NVERTEX] = ExpandedStrokeVertex(p_l_1);
+    u.data.out_vertices[s_vertex_offset + i*NVERTEX+1] = ExpandedStrokeVertex(p_l_0_clip);
+    u.data.out_vertices[s_vertex_offset + i*NVERTEX+2] = ExpandedStrokeVertex(p_l_0_clip);
+    u.data.out_vertices[s_vertex_offset + i*NVERTEX+3] = ExpandedStrokeVertex(p_clip);
+    u.data.out_vertices[s_vertex_offset + i*NVERTEX+4] = ExpandedStrokeVertex(p_r_0_clip);
+    u.data.out_vertices[s_vertex_offset + i*NVERTEX+5] = ExpandedStrokeVertex(p_r_0_clip);
+    u.data.out_vertices[s_vertex_offset + i*NVERTEX+6] = ExpandedStrokeVertex(p_r_1);
 
-    u.data.out_vertices[s_vertex_offset + i*NVERTEX+7] = ExpandedStrokeVertex(p_r_1, color);
-    u.data.out_vertices[s_vertex_offset + i*NVERTEX+8] = ExpandedStrokeVertex(p_r_1, color);
+    u.data.out_vertices[s_vertex_offset + i*NVERTEX+7] = ExpandedStrokeVertex(p_r_1);
+    u.data.out_vertices[s_vertex_offset + i*NVERTEX+8] = ExpandedStrokeVertex(p_r_1);
 
 
     if (i > 0) {
@@ -319,7 +319,7 @@ DebugStrokesVertexOutput debug_strokes_vertex(uint vertex_id : SV_VertexID, unif
     let vertex = u.vertices[index];
     DebugStrokesVertexOutput o;
     o.pos = vertex.clip_position;
-    o.color = srgba8_to_float4(vertex.color);
+    o.color = srgba8_to_float4(srgba8(0, 255, 0, 255));
     return o;
 }
 
