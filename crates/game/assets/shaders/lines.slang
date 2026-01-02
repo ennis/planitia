@@ -56,14 +56,14 @@ VertexOutput line_drawing_vertex(uint vertex_id : SV_VertexID, uint draw_index :
     float2 px_size = 2. / u.scene_info.screen_size; // pixel size in clip space
 
     if (line_start) {
-        float2 v = p1.xy/p1.w - p.xy/p.w;
-        float2 n = hw_aa * px_size * normalize(float2(-v.y, v.x) / px_size);
+        float2 v = (p1.xy/p1.w - p.xy/p.w) / px_size;
+        float2 n = hw_aa * px_size * normalize(float2(-v.y, v.x));
         a.xy -= n * a.w;
         b.xy += n * b.w;
 
     } else if (line_end) {
-        float2 v = p.xy/p.w - p0.xy/p0.w;
-        float2 n = hw_aa * px_size * normalize(float2(-v.y, v.x) / px_size);
+        float2 v = (p.xy/p.w - p0.xy/p0.w) / px_size;
+        float2 n = hw_aa * px_size * normalize(float2(-v.y, v.x));
         a.xy -= n * a.w;
         b.xy += n * b.w;
     }

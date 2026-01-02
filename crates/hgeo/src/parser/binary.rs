@@ -1,7 +1,7 @@
 //! Binary geometry format
 
 use crate::error::Error;
-use crate::parser::binary::State::{Complete, UniformArray};
+use crate::parser::binary::State::{UniformArray};
 use crate::parser::{Event, Parser};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -32,7 +32,7 @@ const JID_INT8: i8 = 0x11;
 const JID_INT16: i8 = 0x12;
 const JID_INT32: i8 = 0x13;
 const JID_INT64: i8 = 0x14;
-const JID_REAL16: i8 = 0x18;
+//const JID_REAL16: i8 = 0x18;
 const JID_REAL32: i8 = 0x19;
 const JID_REAL64: i8 = 0x1a;
 const JID_UINT8: i8 = 0x21;
@@ -44,22 +44,19 @@ const JID_TOKENDEF: i8 = 0x2b;
 const JID_TOKENREF: i8 = 0x26;
 const JID_TOKENUNDEF: i8 = 0x2d;
 const JID_UNIFORM_ARRAY: i8 = 0x40;
-const JID_KEY_SEPARATOR: i8 = 0x3a;
-const JID_VALUE_SEPARATOR: i8 = 0x2c;
+//const JID_KEY_SEPARATOR: i8 = 0x3a;
+//const JID_VALUE_SEPARATOR: i8 = 0x2c;
 const JID_MAGIC: i8 = 0x7f;
 
 // 0x4e534a62
 const BINARY_MAGIC: [u8; 4] = [b'N', b'S', b'J', b'b'];
 // 0x624a534e
-const BINARY_MAGIC_SWAP: [u8; 4] = [b'b', b'J', b'S', b'N'];
-
-enum Token {}
+//const BINARY_MAGIC_SWAP: [u8; 4] = [b'b', b'J', b'S', b'N'];
 
 pub(crate) struct ParserImpl<'a> {
     data: &'a [u8],
     state: Vec<State>,
     tokens: HashMap<usize, &'a str>,
-    depth: usize,
     uniform_type: i8,
     uniform_count_remaining: usize,
     /// For UniformArray(JID_BOOL), current entry of the bitmap
@@ -74,7 +71,6 @@ impl<'a> ParserImpl<'a> {
             data,
             state: vec![State::Start],
             tokens: HashMap::new(),
-            depth: 0,
             uniform_type: 0,
             uniform_count_remaining: 0,
             cur_bits: 0,
@@ -91,7 +87,7 @@ impl<'a> ParserImpl<'a> {
         Ok(value)
     }
 
-    fn read_items_as_byte_array<T: Sized + Copy>(&mut self, count: usize) -> Result<&[u8], Error> {
+    /*fn read_items_as_byte_array<T: Sized + Copy>(&mut self, count: usize) -> Result<&[u8], Error> {
         let byte_count = count * size_of::<T>();
         if self.data.len() < byte_count {
             return Err(Error::Eof);
@@ -99,7 +95,7 @@ impl<'a> ParserImpl<'a> {
         let bytes = &self.data[0..byte_count];
         self.data = &self.data[byte_count..];
         Ok(bytes)
-    }
+    }*/
 
     fn read_u8(&mut self) -> Result<u8, Error> {
         self.read_fixed_bytes::<1>().map(|bytes| bytes[0])
@@ -122,9 +118,9 @@ impl<'a> ParserImpl<'a> {
             .map(|bytes| f32::from_bits(u32::from_le_bytes(bytes)))
     }
 
-    fn read_u64(&mut self) -> Result<u64, Error> {
+    /*fn read_u64(&mut self) -> Result<u64, Error> {
         self.read_fixed_bytes::<8>().map(|bytes| u64::from_le_bytes(bytes))
-    }
+    }*/
 
     fn read_i64(&mut self) -> Result<i64, Error> {
         self.read_fixed_bytes::<8>().map(|bytes| i64::from_le_bytes(bytes))
@@ -138,7 +134,8 @@ impl<'a> ParserImpl<'a> {
     fn read_len(&mut self) -> Result<usize, Error> {
         let n = self.read_u8()?;
         let len = match n {
-            0..0xf1 => n as usize,
+            // there's a gap at 0xf1 but that's in the official parser too
+            0..=0xf0 => n as usize,
             0xf2 => self.read_u16().map(|v| v as usize)?,
             0xf4 => self.read_u32().map(|v| v as usize)?,
             0xf8 => self.read_i64().map(|v| v as usize)?,

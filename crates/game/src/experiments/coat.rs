@@ -5,8 +5,8 @@ use gamelib::asset::Handle;
 use gamelib::input::InputEvent;
 use gamelib::pipeline_cache::{get_compute_pipeline, get_graphics_pipeline};
 use gpu::PrimitiveTopology::TriangleList;
-use gpu::RenderPassInfo;
 use gpu::util::PushBuffer;
+use gpu::{RenderPassInfo, RootParams};
 
 /// Post-stroke expansion vertex, already in clip space.
 #[repr(C)]
@@ -238,11 +238,15 @@ impl CoatExperiment {
 
         cmd.bind_compute_pipeline(&*expand_stroke_pipeline);
         let workgroup_count = gpu_data.stroke_buffer.len() as u32;
-        let params = cmd.upload_temporary(&ExpandStrokesRootParams {
-            scene_info: scene_info.gpu,
-            data: params,
-        });
-        cmd.dispatch(workgroup_count, 1, 1, params);
+        cmd.dispatch(
+            workgroup_count,
+            1,
+            1,
+            RootParams::Immediate(&ExpandStrokesRootParams {
+                scene_info: scene_info.gpu,
+                data: params,
+            }),
+        );
 
         //////////////////////////////////////////////////////////////////////////////////////////
         let Ok(debug_stroke_pipeline) = self.debug_stroke_pipeline.read() else {
@@ -270,12 +274,17 @@ impl CoatExperiment {
         //eprintln!("vertex_count={}", vertex_count);
         //eprintln!("stroke_count={}", stroke_count);
         //eprintln!("index_count={}", index_count);
-        let params = encoder.upload_temporary(&DebugStrokesRootParams {
-            scene_info: scene_info.gpu,
-            vertices: gpu_data.expansion_vertices.ptr(),
-            indices: gpu_data.expansion_indices.ptr(),
-        });
-        encoder.draw(TriangleList, None, 0..index_count, 0..1, params);
+        encoder.draw(
+            TriangleList,
+            None,
+            0..index_count,
+            0..1,
+            RootParams::Immediate(&DebugStrokesRootParams {
+                scene_info: scene_info.gpu,
+                vertices: gpu_data.expansion_vertices.ptr(),
+                indices: gpu_data.expansion_indices.ptr(),
+            }),
+        );
 
         //draw_lines(&mut encoder, &line_vertices, &lines, scene_info);
 

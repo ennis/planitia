@@ -5,11 +5,11 @@ mod shape;
 mod tessellation;
 mod text;
 
-use color::Srgba8;
 use crate::paint::shape::RectShape;
 use crate::paint::tessellation::{Mesh, Tessellator};
 use crate::paint::text::GlyphCache;
-use gpu::{CommandStream, Device, RenderPassInfo, Sampler, Vertex as GpuVertex, vk, Ptr};
+use color::Srgba8;
+use gpu::{CommandStream, Device, Ptr, RenderPassInfo, RootParams, Sampler, Vertex as GpuVertex, vk};
 use math::geom::Camera;
 use math::{Mat4, Rect, U16Vec2, UVec2, Vec2, u16vec2, uvec2, vec2};
 use shader_bridge::ShaderLibrary;
@@ -50,7 +50,7 @@ impl FeatherVertex {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct RootParams {
+struct PaintRootParams {
     matrix: Mat4,
     screen_size: [f32; 2],
     line_width: f32,
@@ -103,7 +103,7 @@ impl Pipelines {
         // Polygon pipeline
         let create_info = gpu::GraphicsPipelineCreateInfo {
             set_layouts: &[],
-            push_constants_size: size_of::<RootParams>(),
+            push_constants_size: size_of::<PaintRootParams>(),
             vertex_input: FeatherVertex::vertex_input_state(),
             pre_rasterization_shaders: gpu::PreRasterizationShaders::PrimitiveShading {
                 vertex: vertex.as_gpu_entry_point(),
@@ -385,7 +385,7 @@ impl<'a> PaintScene<'a> {
 
             match &prim.kind {
                 PrimKind::Geometry(mesh) => {
-                    let root_params = encoder.upload_temporary(&RootParams {
+                    let root_params = encoder.upload_temporary(&PaintRootParams {
                         matrix: params.camera.view_projection(),
                         screen_size: [width as f32, height as f32],
                         line_width: 1.0,
@@ -426,18 +426,28 @@ fn draw_glyph_run(
     encoder.draw(0..vertices.len() as u32, 0..1);
 }*/
 
-fn draw_mesh(encoder: &mut gpu::RenderEncoder, params: &PaintRenderParams, mesh: &Mesh, clip: Rect, root_params: Ptr<RootParams>) {
+fn draw_mesh(
+    encoder: &mut gpu::RenderEncoder,
+    params: &PaintRenderParams,
+    mesh: &Mesh,
+    clip: Rect,
+    root_params: Ptr<PaintRootParams>,
+) {
     if mesh.vertices.is_empty() || mesh.indices.is_empty() {
         return;
     }
     let vertex_buffer = gpu::Buffer::from_slice(&mesh.vertices, "");
     let index_buffer = gpu::Buffer::from_slice(&mesh.indices, "");
     set_scissor(encoder, params, clip);
-    encoder.draw_indexed(TriangleList,
-                         &index_buffer,
-                         0..mesh.indices.len() as u32,
-                         Some(vertex_buffer.as_bytes()),
-                         0, 0..1, root_params);
+    encoder.draw_indexed(
+        TriangleList,
+        &index_buffer,
+        0..mesh.indices.len() as u32,
+        Some(vertex_buffer.as_bytes()),
+        0,
+        0..1,
+        RootParams::Ptr(root_params),
+    );
 }
 
 #[cfg(test)]

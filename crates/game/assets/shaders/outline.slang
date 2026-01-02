@@ -90,11 +90,23 @@ void outline_main(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_GroupTh
         }
     }
 
+    float2 px_size = 2. / u.scene_info.screen_size;
+    float width = 1.0;
+    float filter_width = 0.7;
+    float hw_aa = max(width, 1.) * .5; //+ filter_width * sqrt(2.);
+
     if (is_contour) {
-        let v0 = mul(u.scene_info.view_proj_matrix, float4(c.vertices[edge.vertex_0].position, 1.));
-        let v1 = mul(u.scene_info.view_proj_matrix, float4(c.vertices[edge.vertex_1].position, 1.));
-        let v0offset = float4(v0.x, v0.y + sign(v0.y) * 0.01, v0.z, v0.w);
-        let v1offset = float4(v1.x, v1.y + sign(v1.y) * 0.01, v1.z, v1.w);
+        var v0 = mul(u.scene_info.view_proj_matrix, float4(c.vertices[edge.vertex_0].position, 1.));
+        var v1 = mul(u.scene_info.view_proj_matrix, float4(c.vertices[edge.vertex_1].position, 1.));
+        var v0offset = v0;
+        var v1offset = v1;
+
+        float2 v = (v0.xy/v0.w - v1.xy/v1.w) / px_size;
+        float2 n = px_size * normalize(float2(-v.y, v.x));
+        v0.xy -= hw_aa * n * v0.w;
+        v1.xy -= hw_aa * n * v1.w;
+        v0offset.xy += hw_aa * n * v0offset.w;
+        v1offset.xy += hw_aa * n * v1offset.w;
 
         uint base_vertex;
         InterlockedAdd(u.vertex_count, 4, base_vertex);
@@ -118,4 +130,35 @@ void outline_main(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_GroupTh
         u.out_indices[base_index+4] = base_vertex + 3;
         u.out_indices[base_index+5] = base_vertex + 2;
     }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Depth pass
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+struct DepthPassVertexOutput {
+    float4 pos: SV_Position;
+    [[vk::location(0)]] float4 color;
+    [[vk::location(1)]] float2 local_pos;
+};
+
+struct DepthPassRootParams {
+    SceneInfo* scene_info;
+    Cluster* clusters;
+    uint cluster_count;
+};
+
+[shader("vertex")]
+DepthPassVertexOutput depth_pass_vertex(uint vertex_id : SV_VertexID, uint draw_id: SV_DrawIndex, uniform DepthPassRootParams* u)
+{
+    let face = u.clusters[draw_id].faces[vertex_id / 3];
+    let vertex = u.clusters[draw_id].vertices[face.vertices[vertex_id % 3]];
+    DepthPassVertexOutput o;
+    o.pos = mul(u.scene_info.view_proj_matrix, float4(vertex.position, 1.0));
+    return o;
+}
+
+[shader("fragment")]
+void depth_pass_fragment(DepthPassVertexOutput i) {
+    // nothing
 }

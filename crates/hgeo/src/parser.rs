@@ -11,32 +11,8 @@ use json::ParserImpl;
 use log::warn;
 use smol_str::SmolStr;
 use std::borrow::Cow;
-use std::collections::HashMap;
-use std::marker::PhantomData;
 use std::path::Path;
-use std::{fs, ptr};
-
-#[derive(Clone, Debug)]
-struct PackedArray<'a, T: Copy> {
-    data: &'a [u8],
-    _phantom: PhantomData<T>,
-}
-
-impl<'a, T: Copy> PackedArray<'a, T> {
-    fn new(data: &'a [u8]) -> Self {
-        Self {
-            data,
-            _phantom: PhantomData,
-        }
-    }
-
-    fn iter(&self) -> impl Iterator<Item = T> + 'a {
-        let size = size_of::<T>();
-        self.data
-            .chunks_exact(size)
-            .map(|chunk| unsafe { ptr::read_unaligned(chunk.as_ptr() as *const T) })
-    }
-}
+use std::{fs};
 
 /// Events produced by the parser implementation.
 #[derive(Clone, Debug)]
@@ -70,7 +46,7 @@ impl<'a> Event<'a> {
         }
     }
 
-    fn as_byte(&self) -> Option<u8> {
+    /*fn as_byte(&self) -> Option<u8> {
         match self {
             Event::Integer(i) => {
                 if *i >= 0 && *i <= u8::MAX as i64 {
@@ -81,31 +57,33 @@ impl<'a> Event<'a> {
             }
             _ => None,
         }
-    }
+    }*/
 
-    fn as_float(&self) -> Option<f64> {
+    /*fn as_float(&self) -> Option<f64> {
         match self {
             Event::Integer(i) => Some(*i as f64),
             Event::Float(f) => Some(*f),
             _ => None,
         }
-    }
+    }*/
 
-    fn as_str(&self) -> Option<&str> {
+    /*fn as_str(&self) -> Option<&str> {
         match self {
             Event::String(s) => Some(s),
             _ => None,
         }
-    }
+    }*/
 }
 
 macro_rules! expect {
     ($p:expr, $pat:pat) => {
+        #[allow(irrefutable_let_patterns)]
         let $pat = $p.next()? else {
             return Err(Error::Malformed(concat!("expected ", stringify!($pat))));
         };
     };
     ($p:expr, $pat:pat, $msg:literal) => {
+        #[allow(irrefutable_let_patterns)]
         let $pat = $p.next()? else {
             return Err(Error::Malformed($msg));
         };
@@ -158,7 +136,7 @@ trait Parser<'a> {
         match self.next()? {
             Event::Integer(i) => Ok(i != 0),
             Event::Boolean(b) => Ok(b),
-            _ => Err(Error::Malformed("expected boolean")),
+            _ => Err(Malformed("expected boolean")),
         }
     }
 
@@ -168,23 +146,23 @@ trait Parser<'a> {
         Ok(s.clone())
     }
 
-    /// Reads an owned string value.
+    /*/// Reads an owned string value.
     fn owned_str(&mut self) -> Result<String, Error> {
         expect!(self, Event::String(s));
         Ok(s.into_owned())
-    }
+    }*/
 
     /// Reads an integer value.
     fn integer(&mut self) -> Result<i64, Error> {
         expect!(self, e);
-        e.as_integer().ok_or(Error::Malformed("expected integer"))
+        e.as_integer().ok_or(Malformed("expected integer"))
     }
 
     /// Reads an integer value, with a maximum value of i32::MAX.
     fn int32(&mut self) -> Result<i32, Error> {
         let i = self.integer()?;
         if i > i32::MAX as i64 {
-            return Err(Error::Malformed("integer out of range for i32"));
+            return Err(Malformed("integer out of range for i32"));
         }
         Ok(i as i32)
     }
@@ -193,7 +171,7 @@ trait Parser<'a> {
     fn uint32(&mut self) -> Result<u32, Error> {
         let i = self.integer()?;
         if i < 0 || i > u32::MAX as i64 {
-            return Err(Error::Malformed("integer out of range for u32"));
+            return Err(Malformed("integer out of range for u32"));
         }
         Ok(i as u32)
     }
@@ -201,7 +179,7 @@ trait Parser<'a> {
     fn uint8(&mut self) -> Result<u8, Error> {
         let i = self.integer()?;
         if i < 0 || i > u8::MAX as i64 {
-            return Err(Error::Malformed("integer out of range for u8"));
+            return Err(Malformed("integer out of range for u8"));
         }
         Ok(i as u8)
     }
@@ -228,9 +206,10 @@ fn read_int32_array(p: &mut dyn Parser) -> Result<Vec<i32>, Error> {
     read_array(p, |p| p.int32())
 }
 
+/*
 fn read_uint32_array(p: &mut dyn Parser) -> Result<Vec<u32>, Error> {
     read_array(p, |p| p.uint32())
-}
+}*/
 
 fn read_float32_array(p: &mut dyn Parser) -> Result<Vec<f32>, Error> {
     read_array(p, |p| match p.next_no_eof()? {
@@ -243,13 +222,13 @@ fn read_float32_array(p: &mut dyn Parser) -> Result<Vec<f32>, Error> {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 trait AttribValue: Copy + 'static {
-    const STORAGE_KIND: StorageKind;
+    //const STORAGE_KIND: StorageKind;
     const ZERO: Self;
     fn read(p: &mut dyn Parser) -> Result<Self, Error>;
 }
 
 impl AttribValue for f32 {
-    const STORAGE_KIND: StorageKind = StorageKind::FpReal32;
+    //const STORAGE_KIND: StorageKind = StorageKind::FpReal32;
     const ZERO: Self = 0.0;
     fn read(p: &mut dyn Parser) -> Result<Self, Error> {
         match p.next_no_eof()? {
@@ -261,7 +240,7 @@ impl AttribValue for f32 {
 }
 
 impl AttribValue for f64 {
-    const STORAGE_KIND: StorageKind = StorageKind::FpReal64;
+    //const STORAGE_KIND: StorageKind = StorageKind::FpReal64;
     const ZERO: Self = 0.0;
     fn read(p: &mut dyn Parser) -> Result<Self, Error> {
         match p.next_no_eof()? {
@@ -273,7 +252,7 @@ impl AttribValue for f64 {
 }
 
 impl AttribValue for i32 {
-    const STORAGE_KIND: StorageKind = StorageKind::Int32;
+    //const STORAGE_KIND: StorageKind = StorageKind::Int32;
     const ZERO: Self = 0;
     fn read(p: &mut dyn Parser) -> Result<Self, Error> {
         match p.next_no_eof()? {
@@ -285,7 +264,7 @@ impl AttribValue for i32 {
 }
 
 impl AttribValue for i64 {
-    const STORAGE_KIND: StorageKind = StorageKind::Int64;
+    //const STORAGE_KIND: StorageKind = StorageKind::Int64;
     const ZERO: Self = 0;
     fn read(p: &mut dyn Parser) -> Result<Self, Error> {
         match p.next_no_eof()? {
@@ -693,12 +672,12 @@ enum PrimType {
 }
 
 fn read_bezier_basis(p: &mut dyn Parser) -> Result<BezierBasis, Error> {
-    let mut ty = None;
+    let mut _ty = None;
     let mut order = 3;
     let mut knots = Vec::new();
     read_kv_array! {p,
         "type" => {
-            ty = Some(p.str()?.to_string());
+            _ty = Some(p.str()?.to_string());
         }
         "order" => {
             order = p.integer()? as u32;
@@ -708,36 +687,6 @@ fn read_bezier_basis(p: &mut dyn Parser) -> Result<BezierBasis, Error> {
         }
     }
     Ok(BezierBasis { order, knots })
-}
-
-enum PrimitiveRun {
-    BezierRun(BezierRun),
-}
-
-impl PrimitiveRun {
-    fn read_uniform_fields(&mut self, p: &mut dyn Parser) -> Result<(), Error> {
-        match self {
-            PrimitiveRun::BezierRun(r) => read_map! {p,
-                "vertex" => {
-                    r.vertices = Var::Uniform(read_int32_array(p)?);
-                }
-                "closed" => {
-                    r.closed = Var::Uniform(p.boolean()?);
-                }
-                "basis" => {
-                    r.basis = Var::Uniform(read_bezier_basis(p)?);
-                }
-            },
-        }
-        Ok(())
-    }
-
-    fn read_varying_fields(&mut self, fields: &[String], p: &mut dyn Parser) -> Result<(), Error> {
-        match self {
-            PrimitiveRun::BezierRun(r) => {}
-        }
-        Ok(())
-    }
 }
 
 fn read_bezier_run_data(
@@ -800,12 +749,12 @@ fn read_bezier_run_data(
 }
 
 fn decode_rle_array(p: &mut dyn Parser) -> Result<Var<i32>, Error> {
-    let mut pairs = read_int32_array(p)?;
+    let pairs = read_int32_array(p)?;
     if pairs.len() % 2 != 0 {
         return Err(Malformed("expected even number of RLE values"));
     }
     if pairs.len() == 2 {
-        return Ok(Var::Uniform(pairs[0]));
+        Ok(Var::Uniform(pairs[0]))
     } else {
         let mut values = Vec::new();
         let mut i = 0;
@@ -929,8 +878,9 @@ fn read_uniform_fields(p: &mut dyn Parser) -> Result<UniformFields, Error> {
     Ok(r)
 }
 
-fn read_primitives(p: &mut dyn Parser, geo: &mut Geo) -> Result<(), Error> {
-    let mut base_prim_index: u32 = 0;
+fn read_primitives(p: &mut dyn Parser, geo: &mut Geo) -> Result<(), Error>
+{
+    let base_prim_index: u32 = 0;
 
     read_array! {p => {
         expect!(p, Event::BeginArray);

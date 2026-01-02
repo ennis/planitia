@@ -1,6 +1,5 @@
 use std::cell::OnceCell;
 use std::ffi::CString;
-use slang::CompilerOptionName::DebugInformation;
 use slang::DebugInfoLevel;
 
 fn get_slang_global_session() -> slang::GlobalSession {

@@ -1,7 +1,7 @@
 use crate::device::ActiveSubmission;
 use crate::{
-    aspects_for_format, vk, vk_ext_debug_utils, CommandPool, ComputePipeline, Descriptor, Device, Image, MemoryAccess,
-    Ptr, ResourceId, SwapchainImage, TrackedResource,
+    aspects_for_format, vk, CommandPool, ComputePipeline, Descriptor, Device, Image, MemoryAccess, Ptr, ResourceId,
+    SwapchainImage, TrackedResource,
 };
 use ash::prelude::VkResult;
 use ash::vk::DeviceAddress;
@@ -171,10 +171,6 @@ impl SignaledSemaphore {
     }
 }
 
-/// A wrapper around an unsignaled binary semaphore.
-#[derive(Debug)]
-pub struct UnsignaledSemaphore(pub(crate) vk::Semaphore);
-
 /// Describes the type of semaphore in a semaphore wait operation.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum SemaphoreWaitKind {
@@ -228,6 +224,15 @@ pub enum SemaphoreSignal {
         /// The value to signal.
         value: u64,
     },
+}
+
+/// Describes root parameters for a command.
+#[derive(Clone, Copy)]
+pub enum RootParams<'a, T: Copy + 'static> {
+    /// Root parameters are provided as a GPU pointer to a structure.
+    Ptr(Ptr<T>),
+    /// Root parameters are provided as immediate data.
+    Immediate(&'a T),
 }
 
 impl CommandStream {
@@ -381,7 +386,7 @@ impl CommandStream {
         }
 
         unsafe {
-            Device::global().khr_push_descriptor().cmd_push_descriptor_set(
+            Device::global().extensions.khr_push_descriptor.cmd_push_descriptor_set(
                 command_buffer,
                 bind_point,
                 pipeline_layout,
@@ -429,12 +434,12 @@ impl CommandStream {
         }
     }
 
-    fn set_root_params<T: 'static>(
+    fn set_root_params<T: Copy + 'static>(
         &mut self,
         command_buffer: vk::CommandBuffer,
         bind_point: vk::PipelineBindPoint,
         pipeline_layout: vk::PipelineLayout,
-        ptr: Ptr<T>,
+        params: RootParams<T>,
     ) {
         // None of the relevant drivers on desktop care about the actual stages,
         // only if it's graphics, compute, or ray tracing.
@@ -446,16 +451,18 @@ impl CommandStream {
             _ => panic!("unsupported bind point"),
         };
 
+        let ptr = match params {
+            RootParams::Ptr(p) => p.raw,
+            RootParams::Immediate(data) => Device::global().upload(slice::from_ref(data)).raw,
+        };
+
         unsafe {
             Device::global().raw.cmd_push_constants(
                 command_buffer,
                 pipeline_layout,
                 stages,
                 0,
-                slice::from_raw_parts(
-                    &ptr.raw as *const DeviceAddress as *const u8,
-                    size_of::<DeviceAddress>(),
-                ),
+                slice::from_raw_parts(&ptr as *const DeviceAddress as *const u8, size_of::<DeviceAddress>()),
             );
         }
     }
@@ -618,12 +625,12 @@ impl CommandStream {
         }
     }
 
-    pub fn dispatch<RootParams: Copy + 'static>(
+    pub fn dispatch<T: Copy + 'static>(
         &mut self,
         group_count_x: u32,
         group_count_y: u32,
         group_count_z: u32,
-        root_params: Ptr<RootParams>,
+        root_params: RootParams<T>,
     ) {
         let cb = self.get_or_create_command_buffer();
         unsafe {
@@ -638,7 +645,7 @@ impl CommandStream {
         let command_buffer = self.get_or_create_command_buffer();
         unsafe {
             let label = CString::new(label).unwrap();
-            vk_ext_debug_utils().cmd_begin_debug_utils_label(
+            Device::global().extensions.ext_debug_utils.cmd_begin_debug_utils_label(
                 command_buffer,
                 &vk::DebugUtilsLabelEXT {
                     p_label_name: label.as_ptr(),
@@ -653,7 +660,10 @@ impl CommandStream {
         // TODO check that push/pop calls are balanced
         let command_buffer = self.get_or_create_command_buffer();
         unsafe {
-            vk_ext_debug_utils().cmd_end_debug_utils_label(command_buffer);
+            Device::global()
+                .extensions
+                .ext_debug_utils
+                .cmd_end_debug_utils_label(command_buffer);
         }
     }
 
@@ -661,15 +671,6 @@ impl CommandStream {
         self.push_debug_group(label);
         f(self);
         self.pop_debug_group();
-    }
-
-    /// Specifies that the resource will be used in the current submission.
-    #[deprecated]
-    pub fn reference_resource<R: TrackedResource>(&mut self, resource: &R) {
-        // TODO this should be done during submission because it's possible to drop the command stream
-        //      without submitting it
-        //      (well, at least it would if we didn't explicitly panic on unsubmitted command streams)
-        //Device::global().set_last_submission_index(resource.id(), self.submission_index)
     }
 
     pub(crate) fn create_command_buffer_raw(&mut self) -> vk::CommandBuffer {
@@ -828,7 +829,7 @@ impl CommandStream {
                             },
                         )
                         .unwrap();
-                    vk_ext_debug_utils().cmd_begin_debug_utils_label(
+                    device.extensions.ext_debug_utils.cmd_begin_debug_utils_label(
                         fixup_cb,
                         &vk::DebugUtilsLabelEXT {
                             p_label_name: b"barrier fixup\0".as_ptr() as *const c_char,
@@ -852,7 +853,7 @@ impl CommandStream {
                             ..Default::default()
                         },
                     );
-                    vk_ext_debug_utils().cmd_end_debug_utils_label(fixup_cb);
+                    device.extensions.ext_debug_utils.cmd_end_debug_utils_label(fixup_cb);
                     device.raw.end_command_buffer(fixup_cb).unwrap();
                 }
                 command_buffers.insert(0, fixup_cb);
@@ -980,7 +981,8 @@ impl CommandStream {
             if result.is_ok() {
                 if let Some(present_image) = present_image {
                     result = Device::global()
-                        .khr_swapchain()
+                        .extensions
+                        .khr_swapchain
                         .queue_present(
                             submission_state.queue,
                             &vk::PresentInfoKHR {

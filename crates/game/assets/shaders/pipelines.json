@@ -31,6 +31,15 @@
                     "fragment_entry_point": "debug_strokes_fragment"
                 },
                 {
+                    "file_path": "outline.slang",
+                    "name": "depth_pass",
+                    "vertex_entry_point": "depth_pass_vertex",
+                    "fragment_entry_point": "depth_pass_fragment",
+                    "overrides": {
+                        "color_targets": []
+                    }
+                },
+                {
                     "file_path": "background.slang",
                     "name": "background",
                     "vertex_entry_point": "background_vertex_main",

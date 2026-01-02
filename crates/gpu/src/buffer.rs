@@ -16,7 +16,7 @@ impl<T: ?Sized> Drop for Buffer<T> {
         let mut allocation = mem::take(&mut self.allocation);
         let handle = self.handle;
 
-        Device::global().delete_tracked_resource(self.id, move || unsafe {
+        Device::global().delete_resource_after_current_submission(self.id, move || unsafe {
             let device = Device::global();
             trace!("GPU: deleting buffer: {:?}", handle);
             device.raw.destroy_buffer(handle, None);
@@ -38,6 +38,11 @@ pub struct BufferCreateInfo<'a> {
 }
 
 /// A buffer of GPU-visible memory, optionally mapped in host memory, without any associated type.
+///
+/// `Buffer` objects themselves are Send+Sync, however access to the buffer contents on the host
+/// (via raw pointers) is not thread-safe.
+/// If the mapped contents are accessed from multiple threads, the caller must
+/// ensure proper synchronization.
 pub struct Buffer<T: ?Sized> {
     pub(crate) id: ResourceId,
     pub(crate) memory_location: MemoryLocation,
@@ -49,6 +54,12 @@ pub struct Buffer<T: ?Sized> {
     pub(crate) mapped_ptr: Option<NonNull<c_void>>,
     _marker: PhantomData<T>,
 }
+
+// Safe to send to another thread (buffers do not have shared reference semantics).
+unsafe impl<T: ?Sized> Send for Buffer<T> {}
+// References can be shared between threads (access to the content of the buffer on the CPU
+// is done via unsafe methods, and the called should ensure proper synchronization).
+unsafe impl<T: ?Sized> Sync for Buffer<T> {}
 
 impl<T: Copy> Buffer<[T]> {
     /// Creates a new buffer with the specified number of elements.
@@ -245,12 +256,9 @@ impl<T: Copy> Buffer<[T]> {
     ///
     /// # Safety
     ///
-    /// - All other slices returned by `as_mut_slice` on aliases of this `Buffer` must have been dropped.
+    /// - ~~All other slices returned by `as_mut_slice` on aliases of this `Buffer` must have been dropped.~~
     /// - The caller must ensure that nothing else is writing to the buffer while the slice is being accessed.
     ///   i.e. all GPU operations on the buffer have completed.
-    ///
-    /// FIXME: the first safety condition is hard to track since `Buffer`s have shared ownership.
-    ///        Maybe `Buffer`s should have unique ownership instead, i.e. don't make them `Clone`.
     pub unsafe fn as_mut_slice(&mut self) -> &mut [MaybeUninit<T>] {
         unsafe { std::slice::from_raw_parts_mut(self.as_mut_ptr() as *mut _, self.len()) }
     }

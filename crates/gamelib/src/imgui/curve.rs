@@ -1,4 +1,4 @@
-use egui::emath::RectTransform;
+use egui::emath::{GuiRounding, RectTransform};
 use egui::{Color32, Pos2, Rect, Response, Sense, Stroke, Ui, Vec2, pos2};
 use uniform_cubic_splines::basis::CatmullRom;
 use uniform_cubic_splines::{spline, spline_inverse};
@@ -25,7 +25,7 @@ pub fn curve_editor(ui: &mut Ui, abscissae: &mut [f64], values: &mut [f64]) -> R
     for x in 1..grid_divisions {
         for y in 1..grid_divisions {
             let mut pos = to_area.transform_pos(pos2(x as f32, y as f32) / grid_divisions as f32);
-            pos = painter.round_pos_to_pixels(pos);
+            pos = pos.round_to_pixels(painter.pixels_per_point());
             painter.line_segment(
                 [Pos2::new(pos.x + 0.5, rect.min.y), Pos2::new(pos.x + 0.5, rect.max.y)],
                 grid_stroke,

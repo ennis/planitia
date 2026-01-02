@@ -13,7 +13,6 @@ enum ParserState {
 pub(crate) struct ParserImpl<'a> {
     data: &'a str,
     state: Vec<ParserState>,
-    depth: usize,
 }
 
 impl<'a> Parser<'a> for ParserImpl<'a> {
@@ -38,7 +37,6 @@ impl<'a> ParserImpl<'a> {
         Self {
             data,
             state: Vec::new(),
-            depth: 0,
         }
     }
 

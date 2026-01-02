@@ -1,4 +1,4 @@
-use crate::manifest::{BuildManifest, Error, Input, PipelineState, PipelineType, Variant};
+use crate::manifest::{BuildManifest, Input, PipelineState, PipelineType};
 use crate::{BuildOptions, Target};
 use anyhow::anyhow;
 use color_print::{ceprintln, cprintln};
@@ -8,7 +8,7 @@ use shader_archive::gpu::ShaderStage;
 use shader_archive::zstring::{ZString32, ZString64};
 use shader_archive::{FileDependency, PIPELINE_ARCHIVE_MAGIC, PipelineEntryData, ShaderData};
 use shader_bridge::{ShaderLibrary, ShaderLibraryLoadOptions};
-use std::fmt::{Debug, Display, Pointer};
+use std::fmt::{Debug, Display};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use std::{env, fmt, fs, slice};

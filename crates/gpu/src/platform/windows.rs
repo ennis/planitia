@@ -33,7 +33,6 @@ pub struct Win32Handle<'a> {
     pub name: &'a str,
 }*/
 
-
 fn handle_name_to_wstr(name: Option<&str>) -> (Vec<u16>, *const u16) {
     use std::os::windows::ffi::OsStrExt;
 
@@ -63,10 +62,11 @@ unsafe fn import_external_memory(
     dedicated: Option<DedicatedAllocation>,
 ) -> vk::DeviceMemory {
     // TODO proper error handling
-    let win32_handle_properties = device
+    let mut win32_handle_properties = vk::MemoryWin32HandlePropertiesKHR::default();
+    device
         .platform_extensions
         .khr_external_memory_win32
-        .get_memory_win32_handle_properties(handle_type, handle)
+        .get_memory_win32_handle_properties(handle_type, handle, &mut win32_handle_properties)
         .expect("vkGetMemoryWin32HandlePropertiesKHR failed");
 
     // find a memory type that both matches the resource requirement and the external handle requirements for importing
@@ -427,8 +427,8 @@ const PLATFORM_DEVICE_EXTENSIONS: &[&str] = &["VK_KHR_external_memory_win32", "V
 
 /// Windows-specific vulkan extensions
 pub struct PlatformExtensions {
-    pub khr_external_memory_win32: ash::extensions::khr::ExternalMemoryWin32,
-    pub khr_external_semaphore_win32: ash::extensions::khr::ExternalSemaphoreWin32,
+    pub khr_external_memory_win32: ash::khr::external_memory_win32::Device,
+    pub khr_external_semaphore_win32: ash::khr::external_semaphore_win32::Device,
 }
 
 impl PlatformExtensions {
@@ -437,8 +437,8 @@ impl PlatformExtensions {
     }
 
     pub(crate) fn load(_entry: &ash::Entry, instance: &ash::Instance, device: &ash::Device) -> PlatformExtensions {
-        let khr_external_memory_win32 = ash::extensions::khr::ExternalMemoryWin32::new(instance, device);
-        let khr_external_semaphore_win32 = ash::extensions::khr::ExternalSemaphoreWin32::new(instance, device);
+        let khr_external_memory_win32 = ash::khr::external_memory_win32::Device::new(instance, device);
+        let khr_external_semaphore_win32 = ash::khr::external_semaphore_win32::Device::new(instance, device);
         PlatformExtensions {
             khr_external_memory_win32,
             khr_external_semaphore_win32,

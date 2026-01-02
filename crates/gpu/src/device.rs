@@ -1,43 +1,141 @@
 //! Abstractions over a vulkan device & queues.
 mod bindless;
 
-use crate::instance::{vk_ext_debug_utils, vk_khr_surface};
-use crate::{
-    get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, CommandPool, CommandStream, ComputePipeline,
-    ComputePipelineCreateInfo, DescriptorSetLayout, Error, GraphicsPipeline, GraphicsPipelineCreateInfo, MemoryAccess,
-    PreRasterizationShaders, Sampler, SamplerCreateInfo, SamplerCreateInfoHashable, SUBGROUP_SIZE,
-};
-use std::collections::{HashMap, VecDeque};
-use std::ffi::{c_void, CString};
-use std::sync::{Arc, LazyLock, Mutex};
-use std::{fmt, ptr};
-
 use crate::device::bindless::BindlessDescriptorTable;
+use crate::instance::vk_khr_surface;
 use crate::platform::PlatformExtensions;
+use crate::{
+    get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, BufferCreateInfo, BufferUntyped, BufferUsage,
+    CommandPool, CommandStream, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error,
+    GraphicsPipeline, GraphicsPipelineCreateInfo, MemoryAccess, PreRasterizationShaders, Ptr, Sampler,
+    SamplerCreateInfo, SamplerCreateInfoHashable, SUBGROUP_SIZE,
+};
 use ash::vk;
 use gpu_allocator::vulkan::AllocationCreateDesc;
+use gpu_allocator::MemoryLocation;
 use log::{debug, error, trace};
 use slotmap::{SecondaryMap, SlotMap};
-use std::ffi::CStr;
-use std::mem;
+use std::alloc::Layout;
+use std::collections::{HashMap, VecDeque};
+use std::ffi::{c_void, CStr, CString};
+use std::marker::PhantomData;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Relaxed;
+use std::sync::{Arc, LazyLock, Mutex};
+use std::{fmt, mem, ptr};
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// Size of the global descriptor heaps (in number of descriptors).
+const DESCRIPTOR_TABLE_SIZE: usize = 4096;
+
+/// Alignment of upload buffer allocations.
+const UPLOAD_BUFFER_ALIGNMENT: usize = 256;
+
+/// Upload buffer chunk size.
+const UPLOAD_BUFFER_CHUNK_SIZE: usize = 1 * 1024 * 1024; // Allocate 1 MB chunks
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+fn align(size: usize) -> usize {
+    (size + UPLOAD_BUFFER_ALIGNMENT - 1) / UPLOAD_BUFFER_ALIGNMENT * UPLOAD_BUFFER_ALIGNMENT
+}
+
+/// Manages chunks of CPU-visible GPU memory for copying data from the host.
+struct UploadBuffer {
+    full: Vec<BufferUntyped>,
+    current: Option<BufferUntyped>,
+    offset: usize,
+    usage: BufferUsage,
+}
+
+impl UploadBuffer {
+    fn new(usage: BufferUsage) -> Self {
+        Self {
+            full: vec![],
+            offset: 0,
+            usage,
+            current: None,
+        }
+    }
+
+    /// Ensures that there is space for an allocation of `size` bytes in the current buffer,
+    /// or creates a new buffer if necessary.
+    ///
+    /// Returns the offset in the current buffer where the allocation can be made.
+    fn allocate_raw(&mut self, layout: Layout) -> (usize, *mut u8, vk::DeviceAddress) {
+        let size = layout.size();
+        assert!(layout.align() <= UPLOAD_BUFFER_ALIGNMENT);
+
+        let aligned_offset = align(self.offset);
+        if let Some(chunk) = self.current.as_ref() {
+            if aligned_offset + size <= chunk.len() {
+                let offset = aligned_offset;
+                self.offset = aligned_offset + size;
+                let addr = unsafe { chunk.as_mut_ptr_u8().add(offset) };
+                let device_address = chunk.ptr().raw + offset as u64;
+                return (offset, addr, device_address);
+            }
+        }
+
+        let new_chunk_size = align(UPLOAD_BUFFER_CHUNK_SIZE.max(size));
+        if let Some(chunk) = self.current.take() {
+            self.full.push(chunk);
+        }
+        let chunk = BufferUntyped::new(BufferCreateInfo {
+            len: new_chunk_size,
+            usage: self.usage,
+            memory_location: MemoryLocation::CpuToGpu,
+            label: "upload_buffer_chunk",
+        });
+        let addr = chunk.as_mut_ptr_u8();
+        let device_address = chunk.ptr().raw;
+        self.current = Some(chunk);
+        self.offset = size;
+        (0, addr, device_address)
+    }
+
+    fn allocate<T: Copy>(&mut self, data: &T) -> Ptr<T> {
+        let (_, ptr, raw_addr) = self.allocate_raw(Layout::new::<T>());
+        unsafe {
+            ptr::copy_nonoverlapping(data as *const T, ptr as *mut T, size_of::<T>());
+        }
+        Ptr {
+            raw: raw_addr,
+            _phantom: PhantomData,
+        }
+    }
+
+    fn allocate_slice<T: Copy>(&mut self, data: &[T]) -> Ptr<[T]> {
+        let (_, ptr, raw_addr) = self.allocate_raw(Layout::for_value(data));
+        unsafe {
+            ptr::copy_nonoverlapping(data.as_ptr(), ptr as *mut T, data.len());
+        }
+        Ptr {
+            raw: raw_addr,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Device extensions.
 pub(crate) struct DeviceExtensions {
-    pub(crate) khr_swapchain: ash::extensions::khr::Swapchain,
-    pub(crate) ext_shader_object: ash::extensions::ext::ShaderObject,
-    pub(crate) khr_push_descriptor: ash::extensions::khr::PushDescriptor,
-    pub(crate) ext_mesh_shader: ash::extensions::ext::MeshShader,
-    pub(crate) ext_extended_dynamic_state3: ash::extensions::ext::ExtendedDynamicState3,
+    pub(crate) khr_swapchain: ash::khr::swapchain::Device,
+    //pub(crate) ext_shader_object: ash::ext::,
+    pub(crate) khr_push_descriptor: ash::khr::push_descriptor::Device,
+    pub(crate) ext_mesh_shader: ash::ext::mesh_shader::Device,
+    pub(crate) ext_extended_dynamic_state3: ash::ext::extended_dynamic_state3::Device,
+    pub(crate) ext_debug_utils: ash::ext::debug_utils::Device,
 }
 
 /// Device state that is unconditionally safe to access from multiple threads, even though
 /// the fields themselves may not be Send or Sync.
 pub(crate) struct DeviceThreadSafeState {
     pub(crate) physical_device_memory_properties: vk::PhysicalDeviceMemoryProperties,
-    _physical_device_descriptor_buffer_properties: vk::PhysicalDeviceDescriptorBufferPropertiesEXT,
-    physical_device_properties: vk::PhysicalDeviceProperties2,
+    _physical_device_descriptor_buffer_properties: vk::PhysicalDeviceDescriptorBufferPropertiesEXT<'static>,
+    physical_device_properties: vk::PhysicalDeviceProperties2<'static>,
 
     // SAFETY: we're never using this as an externally-synchronized command parameter.
     pub(crate) timeline: vk::Semaphore,
@@ -77,6 +175,9 @@ pub struct Device {
     /// Platform-specific extension functions
     pub(crate) platform_extensions: PlatformExtensions,
     pub(crate) allocator: Mutex<gpu_allocator::vulkan::Allocator>,
+
+    /// Global upload buffer.
+    upload_buffer: Mutex<UploadBuffer>,
 
     // main graphics queue
     pub(crate) queue_family: u32,
@@ -287,7 +388,7 @@ unsafe fn select_physical_device(instance: &ash::Instance) -> PhysicalDeviceAndP
 
 unsafe fn find_queue_family(
     phy: vk::PhysicalDevice,
-    vk_khr_surface: &ash::extensions::khr::Surface,
+    vk_khr_surface: &ash::khr::surface::Instance,
     queue_families: &[vk::QueueFamilyProperties],
     flags: vk::QueueFlags,
     present_surface: Option<vk::SurfaceKHR>,
@@ -442,13 +543,13 @@ impl Device {
             gpu_allocator::vulkan::Allocator::new(&allocator_create_desc).expect("failed to create GPU allocator");
 
         // Extensions
-        let khr_swapchain = ash::extensions::khr::Swapchain::new(instance, &device);
-        let ext_shader_object = ash::extensions::ext::ShaderObject::new(instance, &device);
-        let khr_push_descriptor = ash::extensions::khr::PushDescriptor::new(instance, &device);
-        let ext_extended_dynamic_state3 = ash::extensions::ext::ExtendedDynamicState3::new(instance, &device);
-        let ext_mesh_shader = ash::extensions::ext::MeshShader::new(instance, &device);
+        let khr_swapchain = ash::khr::swapchain::Device::new(instance, &device);
+        let khr_push_descriptor = ash::khr::push_descriptor::Device::new(instance, &device);
+        let ext_extended_dynamic_state3 = ash::ext::extended_dynamic_state3::Device::new(instance, &device);
+        let ext_mesh_shader = ash::ext::mesh_shader::Device::new(instance, &device);
         //let vk_ext_descriptor_buffer = ash::extensions::ext::DescriptorBuffer::new(instance, &device);
         let physical_device_memory_properties = instance.get_physical_device_memory_properties(physical_device);
+        let ext_debug_utils = ash::ext::debug_utils::Device::new(instance, &device);
         let platform_extensions = PlatformExtensions::load(entry, instance, &device);
 
         let mut physical_device_descriptor_buffer_properties =
@@ -461,16 +562,16 @@ impl Device {
         instance.get_physical_device_properties2(physical_device, &mut physical_device_properties);
 
         // Create global descriptor tables
-        let descriptor_table = BindlessDescriptorTable::new(&device, 4096);
+        let descriptor_table = BindlessDescriptorTable::new(&device, DESCRIPTOR_TABLE_SIZE);
 
         Ok(Device {
             raw: device,
             extensions: DeviceExtensions {
                 khr_swapchain,
-                ext_shader_object,
                 khr_push_descriptor,
                 ext_mesh_shader,
                 ext_extended_dynamic_state3,
+                ext_debug_utils,
             },
             platform_extensions,
             thread_safe: DeviceThreadSafeState {
@@ -500,6 +601,7 @@ impl Device {
             expected_submission_index: AtomicU64::new(1),
             semaphores: Default::default(),
             deletion_queue: Mutex::new(vec![]),
+            upload_buffer: Mutex::new(UploadBuffer::new(BufferUsage::UNIFORM)),
         })
     }
 
@@ -727,7 +829,6 @@ impl<'a> Drop for ShaderModuleGuard<'a> {
     }
 }
 
-
 /// Helper to create PipelineShaderStageCreateInfo
 fn create_stage<'a>(
     device: &'a Device,
@@ -735,7 +836,7 @@ fn create_stage<'a>(
     stage: vk::ShaderStageFlags,
     code: &[u32],
     entry_point: &CStr,
-) -> Result<(vk::PipelineShaderStageCreateInfo, ShaderModuleGuard<'a>), Error> {
+) -> Result<(vk::PipelineShaderStageCreateInfo<'static>, ShaderModuleGuard<'a>), Error> {
     let create_info = vk::ShaderModuleCreateInfo {
         flags: Default::default(),
         code_size: code.len() * 4,
@@ -760,32 +861,6 @@ impl Device {
         &self.raw
     }
 
-    /// Function pointers for VK_KHR_swapchain.
-    pub fn khr_swapchain(&self) -> &ash::extensions::khr::Swapchain {
-        &self.extensions.khr_swapchain
-    }
-
-    /// Function pointers for VK_KHR_push_descriptor.
-    pub fn khr_push_descriptor(&self) -> &ash::extensions::khr::PushDescriptor {
-        &self.extensions.khr_push_descriptor
-    }
-
-    pub fn ext_extended_dynamic_state3(&self) -> &ash::extensions::ext::ExtendedDynamicState3 {
-        &self.extensions.ext_extended_dynamic_state3
-    }
-
-    pub fn ext_mesh_shader(&self) -> &ash::extensions::ext::MeshShader {
-        &self.extensions.ext_mesh_shader
-    }
-
-    pub fn ext_shader_object(&self) -> &ash::extensions::ext::ShaderObject {
-        &self.extensions.ext_shader_object
-    }
-
-    /*pub fn ext_descriptor_buffer(&self) -> &ash::extensions::ext::DescriptorBuffer {
-        &self.inner.vk_ext_descriptor_buffer
-    }*/
-
     /// Helper function to associate a debug name to a vulkan object.
     ///
     /// # Arguments
@@ -798,9 +873,9 @@ impl Device {
     pub unsafe fn set_object_name<H: vk::Handle>(&self, handle: H, name: &str) {
         let object_name = CString::new(name).unwrap();
         // SAFETY:
-        vk_ext_debug_utils()
+        self.extensions
+            .ext_debug_utils
             .set_debug_utils_object_name(
-                self.raw.handle(),
                 &vk::DebugUtilsObjectNameInfoEXT {
                     object_type: H::TYPE,
                     object_handle: handle.as_raw(),
@@ -814,7 +889,6 @@ impl Device {
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // COMMAND STREAMS
     ////////////////////////////////////////////////////////////////////////////////////////////////
-
 
     #[deprecated]
     pub fn create_command_stream(&self) -> CommandStream {
@@ -906,14 +980,23 @@ impl Device {
         });
     }
 
-    /// Schedules a tracked resource for deletion.
-    ///
-    /// The resource will be deleted once all GPU commands using the resource have finished.
-    pub(crate) fn delete_tracked_resource(
+    /// Schedules a resource for deletion after the current submission is complete.
+    pub(crate) fn delete_resource_after_current_submission(
         &self,
         resource_id: ResourceId,
         deleter: impl FnOnce() + Send + Sync + 'static,
     ) {
+        // See comments in `delete_after_current_submission`.
+        let last_submission = self.next_submission_index.load(Relaxed) - 1;
+        self.call_later(last_submission, move || {
+            //trace!("GPU: deleting tracked resource {:?}", resource_id);
+            Self::global().free_resource_id(resource_id);
+            deleter();
+        })
+    }
+
+    /// Schedules a function (destructor) to be called after the current submission is complete.
+    pub(crate) fn delete_after_current_submission(&self, deleter: impl FnOnce() + Send + Sync + 'static) {
         // All resources may potentially be used by the last opened submission (the last *created*
         // CommandStream), which has index `next_submission_index - 1`.
         //
@@ -922,8 +1005,6 @@ impl Device {
         // Now we just go with the pessimistic, but reliable, approach.
         let last_submission = self.next_submission_index.load(Relaxed) - 1;
         self.call_later(last_submission, move || {
-            //trace!("GPU: deleting tracked resource {:?}", resource_id);
-            Self::global().free_resource_id(resource_id);
             deleter();
         })
     }
@@ -945,11 +1026,36 @@ impl Device {
         }
     }
 
+    /// Uploads data to GPU memory via this device's upload buffer.
+    ///
+    /// The returned pointer is guaranteed to be valid for the current submission.
+    pub fn upload<T: Copy>(&self, data: &[T]) -> Ptr<[T]> {
+        let mut upload_buffer = self.upload_buffer.lock().unwrap();
+        upload_buffer.allocate_slice(data)
+    }
+
+    /// Schedules deletion of full upload buffers.
+    fn retire_upload_buffers(&self) {
+        let mut upload_buffer = self.upload_buffer.lock().unwrap();
+        let full = mem::take(&mut upload_buffer.full);
+        if !full.is_empty() {
+            debug!(
+                "deleting {} full upload buffers ({} MB)",
+                full.len(),
+                full.len() * UPLOAD_BUFFER_CHUNK_SIZE / (1024 * 1024)
+            );
+            for _buffer in full {
+                // nothing to do, the drop impl does what we want
+            }
+        }
+    }
+
     /// Cleanup expired resources.
     ///
     /// This should be called periodically to free resources that are no longer used by the GPU.
     /// Otherwise, tasks scheduled with `call_later` or `delete_later` will never be executed.
     pub fn cleanup(&self) {
+        self.retire_upload_buffers();
         let last_completed_submission_index = unsafe {
             self.raw
                 .get_semaphore_counter_value(self.thread_safe.timeline)

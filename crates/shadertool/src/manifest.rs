@@ -14,7 +14,7 @@ const MAX_COLOR_TARGETS: usize = 8;
 pub enum Error {
     #[error("missing field: {0}")]
     MissingField(&'static str),
-    #[error("invalid field type for field {0}")]
+    #[error("invalid type for field {0}")]
     InvalidType(&'static str),
     #[error("{0}")]
     Other(&'static str),
@@ -131,6 +131,19 @@ fn read_array<'a>(json: &'a Json, field: &'static str) -> Result<Option<&'a Vec<
     match json.get(field) {
         None => Ok(None),
         Some(value) => value.as_array().ok_or(Error::InvalidType(field)).map(|arr| Some(arr)),
+    }
+}
+
+fn read_object_or_array<'a>(json: &'a Json, field: &'static str) -> Result<Option<&'a Json>, Error> {
+    match json.get(field) {
+        None => Ok(None),
+        Some(value) => {
+            if value.is_object() || value.is_array() {
+                Ok(Some(value))
+            } else {
+                Err(Error::InvalidType(field))
+            }
+        }
     }
 }
 
@@ -292,7 +305,7 @@ impl PipelineState {
         if let Some(depth_stencil_obj) = read_object(overrides, "depth_stencil_state")? {
             read_depth_stencil_state(depth_stencil_obj, &mut self.depth_stencil_state)?;
         }
-        if let Some(color_targets_json) = read_object(overrides, "color_targets")? {
+        if let Some(color_targets_json) = read_object_or_array(overrides, "color_targets")? {
             read_color_targets(color_targets_json, &mut self.color_targets)?;
         }
 

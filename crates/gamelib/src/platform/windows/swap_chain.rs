@@ -176,7 +176,7 @@ impl DxgiVulkanInteropSwapChain {
             let fence_semaphore = gpu::Device::global().create_imported_semaphore_win32(
                 vk::SemaphoreImportFlags::empty(),
                 vk::ExternalSemaphoreHandleTypeFlags::D3D12_FENCE,
-                fence_shared_handle.0,
+                fence_shared_handle.0 as vk::HANDLE,
                 None,
             );
             gpu::Device::global().set_object_name(fence_semaphore, "DxgiVulkanSharedFence");

@@ -31,18 +31,20 @@ impl BindlessDescriptorTable {
             // samplers
             vk::DescriptorSetLayoutBinding {
                 binding: 0,
-                descriptor_type: vk::DescriptorType::MUTABLE_EXT,
+                descriptor_type: vk::DescriptorType::SAMPLER,
                 descriptor_count: count as u32,
                 stage_flags: vk::ShaderStageFlags::ALL,
                 p_immutable_samplers: ptr::null(),
+                _marker: Default::default(),
             },
             // combined image samplers (unused)
             vk::DescriptorSetLayoutBinding {
                 binding: 1,
-                descriptor_type: vk::DescriptorType::MUTABLE_EXT,
+                descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                 descriptor_count: 0,
                 stage_flags: vk::ShaderStageFlags::ALL,
                 p_immutable_samplers: ptr::null(),
+                _marker: Default::default(),
             },
             vk::DescriptorSetLayoutBinding {
                 binding: 2,
@@ -50,25 +52,29 @@ impl BindlessDescriptorTable {
                 descriptor_count: count as u32,
                 stage_flags: vk::ShaderStageFlags::ALL,
                 p_immutable_samplers: ptr::null(),
+                _marker: Default::default(),
             },
         ];
 
-        let binding_0_types = [vk::DescriptorType::SAMPLER];
-        let binding_1_types = [vk::DescriptorType::COMBINED_IMAGE_SAMPLER];
+        //let binding_0_types = [vk::DescriptorType::SAMPLER];
+        //let binding_1_types = [vk::DescriptorType::COMBINED_IMAGE_SAMPLER];
         let binding_2_types = [vk::DescriptorType::SAMPLED_IMAGE, vk::DescriptorType::STORAGE_IMAGE];
 
         let mutable_descriptor_type_list = [
             vk::MutableDescriptorTypeListEXT {
-                descriptor_type_count: binding_0_types.len() as u32,
-                p_descriptor_types: binding_0_types.as_ptr(),
+                descriptor_type_count: 0,
+                p_descriptor_types: ptr::null(),
+                _marker: Default::default(),
             },
             vk::MutableDescriptorTypeListEXT {
-                descriptor_type_count: binding_1_types.len() as u32,
-                p_descriptor_types: binding_1_types.as_ptr(),
+                descriptor_type_count: 0,
+                p_descriptor_types: ptr::null(),
+                _marker: Default::default(),
             },
             vk::MutableDescriptorTypeListEXT {
                 descriptor_type_count: binding_2_types.len() as u32,
                 p_descriptor_types: binding_2_types.as_ptr(),
+                _marker: Default::default(),
             },
         ];
 

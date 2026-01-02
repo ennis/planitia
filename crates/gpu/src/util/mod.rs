@@ -1,5 +1,4 @@
 mod command;
-mod upload_buffer;
 mod push_buffer;
 
 pub use push_buffer::*;
@@ -80,7 +79,7 @@ pub unsafe fn blit_images(
 /// # Example
 ///
 ///```rust
-/// encoder.push_constants(root_params! {
+/// cmd.dispatch(1, 1, 1, root_params! {
 ///     time: f32 = 1.0,
 ///     resolution: [f32; 2] = [800.0, 600.0],
 /// });
@@ -91,12 +90,12 @@ macro_rules! root_params {
         {
             #[repr(C)]
             #[derive(Copy, Clone)]
-            struct PushConstants {
+            struct Params {
                 $( $field: $ty, )*
             }
-            &PushConstants {
+            $crate::RootParams::Immediate(&Params {
                 $( $field: $val, )*
-            }
+            })
         }
     };
 }

@@ -6,7 +6,7 @@ use gamelib::asset::Handle;
 use gamelib::input::InputEvent;
 use gamelib::pipeline_cache::get_graphics_pipeline;
 use gpu::PrimitiveTopology::TriangleList;
-use gpu::{Barrier, Buffer, BufferCreateInfo, MemoryLocation, RenderPassInfo};
+use gpu::{Barrier, Buffer, BufferCreateInfo, DrawIndirectCommand, MemoryLocation, RenderPassInfo, RootParams};
 use hgeo::util::polygons_to_triangle_mesh;
 use log::info;
 use math::Vec3;
@@ -20,8 +20,10 @@ use std::path::Path;
 pub struct OutlineExperiment {
     pipeline: Handle<gpu::ComputePipeline>,
     debug_strokes: Handle<gpu::GraphicsPipeline>,
+    depth_pass: Handle<gpu::GraphicsPipeline>,
     mesh: Mesh,
     clusters: Buffer<[Cluster]>,
+    cluster_draw_commands: Buffer<[DrawIndirectCommand]>,
 }
 
 struct Vertex {
@@ -284,7 +286,11 @@ struct ClusterEdgesParams {
     cam_dist: f32,
 }
 
-fn cluster_edges(mesh: &mut Mesh, params: &ClusterEdgesParams) -> Buffer<[Cluster]> {
+fn cluster_edges(
+    mesh: &mut Mesh,
+    params: &ClusterEdgesParams,
+    draw_commands: &mut Vec<DrawIndirectCommand>,
+) -> Buffer<[Cluster]> {
     // start with one cluster per edge
     let mut clusters: Vec<EdgeCluster> = Vec::new();
 
@@ -477,6 +483,13 @@ fn cluster_edges(mesh: &mut Mesh, params: &ClusterEdgesParams) -> Buffer<[Cluste
         //eprintln!("- edges: {:?}", cluster_gpu.edges);
         //eprintln!("- vertices: {:?}", &cluster_gpu.vertices);
 
+        draw_commands.push(DrawIndirectCommand {
+            vertex_count: (cluster_gpu.face_count as u32) * 3,
+            instance_count: 1,
+            first_vertex: 0,
+            first_instance: 0,
+        });
+
         unsafe {
             clusters_gpu.as_mut_slice()[i_cluster].write(cluster_gpu);
         }
@@ -505,11 +518,20 @@ struct OutlineExperimentRootParams {
     out_draw_command: gpu::Ptr<[gpu::DrawIndirectCommand]>,
 }
 
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct DepthPassRootParams {
+    scene_info: gpu::Ptr<SceneInfoUniforms>,
+    clusters: gpu::Ptr<[Cluster]>,
+    cluster_count: u32,
+}
+
 impl OutlineExperiment {
     pub fn new() -> Self {
         Self {
             pipeline: gamelib::pipeline_cache::get_compute_pipeline("/shaders/pipelines.parc#outline"),
             debug_strokes: get_graphics_pipeline("/shaders/pipelines.parc#debug_strokes"),
+            depth_pass: get_graphics_pipeline("/shaders/pipelines.parc#depth_pass"),
             mesh: Mesh {
                 face: vec![],
                 edges: vec![],
@@ -517,6 +539,7 @@ impl OutlineExperiment {
                 incident_edges: vec![],
             },
             clusters: gpu::Buffer::from_slice(&[], "outline_clusters"),
+            cluster_draw_commands: gpu::Buffer::from_slice(&[], "outline_cluster_draw_commands"),
         }
     }
 
@@ -545,7 +568,9 @@ impl OutlineExperiment {
 
         let mut mesh = Mesh::from_triangle_mesh(vertices, &indices);
         let cluster_params = ClusterEdgesParams { cam_dist: 10.0 };
-        self.clusters = cluster_edges(&mut mesh, &cluster_params);
+        let mut draw_commands = Vec::new();
+        self.clusters = cluster_edges(&mut mesh, &cluster_params, &mut draw_commands);
+        self.cluster_draw_commands = gpu::Buffer::from_slice(&draw_commands, "outline_cluster_draw_commands");
         self.mesh = mesh;
     }
 
@@ -575,6 +600,9 @@ impl OutlineExperiment {
         let Ok(debug_stroke_pipeline) = self.debug_strokes.read() else {
             return;
         };
+        let Ok(depth_pass_pipeline) = self.depth_pass.read() else {
+            return;
+        };
 
         let outline_buffer = gpu::Buffer::<[ExpandedVertex]>::new(gpu::BufferCreateInfo {
             len: self.mesh.vertices.len() * 20, // not great
@@ -589,6 +617,31 @@ impl OutlineExperiment {
 
         eprintln!("clusters len: {}", self.clusters.len());
 
+        /////////////////////////////////////////////////////////
+        // depth pass
+        let mut encoder = cmd.begin_rendering(RenderPassInfo {
+            color_attachments: &[],
+            depth_stencil_attachment: Some(gpu::DepthStencilAttachment {
+                image: &depth_target,
+                ..
+            }),
+        });
+        encoder.bind_graphics_pipeline(&*depth_pass_pipeline);
+        encoder.draw_indirect(
+            TriangleList,
+            None,
+            &self.cluster_draw_commands,
+            0..self.cluster_draw_commands.len() as u32,
+            RootParams::Immediate(&DepthPassRootParams {
+                scene_info: scene_info.gpu,
+                clusters: self.clusters.ptr(),
+                cluster_count: self.clusters.len() as u32,
+            }),
+        );
+        drop(encoder);
+
+        /////////////////////////////////////////////////////////
+        // contour extraction
         cmd.bind_compute_pipeline(&*outline_pipeline);
 
         let draw_indirect_command_buffer = gpu::Buffer::from_slice(
@@ -601,20 +654,25 @@ impl OutlineExperiment {
             "draw_indirect",
         );
 
-        let params = cmd.upload_temporary(&OutlineExperimentRootParams {
-            scene_info: scene_info.gpu,
-            clusters: self.clusters.ptr(),
-            cluster_count: self.clusters.len() as u32,
-            vertex_count: 0,
-            out_vertices: outline_buffer.ptr(),
-            out_indices: outline_index_buffer.ptr(),
-            out_draw_command: draw_indirect_command_buffer.ptr(),
-        });
-
         cmd.barrier(Barrier::new().shader_storage_write());
-        cmd.dispatch(self.clusters.len() as u32, 1, 1, params);
+        cmd.dispatch(
+            self.clusters.len() as u32,
+            1,
+            1,
+            RootParams::Immediate(&OutlineExperimentRootParams {
+                scene_info: scene_info.gpu,
+                clusters: self.clusters.ptr(),
+                cluster_count: self.clusters.len() as u32,
+                vertex_count: 0,
+                out_vertices: outline_buffer.ptr(),
+                out_indices: outline_index_buffer.ptr(),
+                out_draw_command: draw_indirect_command_buffer.ptr(),
+            }),
+        );
         cmd.barrier(Barrier::new().shader_storage_read().indirect());
 
+        /////////////////////////////////////////////////////////
+        // render contours
         let mut encoder = cmd.begin_rendering(RenderPassInfo {
             color_attachments: &[gpu::ColorAttachment {
                 image: color_target,
@@ -627,22 +685,19 @@ impl OutlineExperiment {
         });
 
         encoder.bind_graphics_pipeline(&*debug_stroke_pipeline);
-        let params = encoder.upload_temporary(&crate::experiments::coat::DebugStrokesRootParams {
-            scene_info: scene_info.gpu,
-            vertices: outline_buffer.ptr(),
-            indices: outline_index_buffer.ptr(),
-        });
         encoder.draw_indirect(
             TriangleList,
             None,
             &draw_indirect_command_buffer,
             0..1,
-            params,
+            RootParams::Immediate(&crate::experiments::coat::DebugStrokesRootParams {
+                scene_info: scene_info.gpu,
+                vertices: outline_buffer.ptr(),
+                indices: outline_index_buffer.ptr(),
+            }),
         );
 
         //draw_lines(&mut encoder, &line_vertices, &lines, scene_info);
-
-        encoder.finish();
 
         /*fn random_color(index: usize) -> Srgba8 {
             let random_colors = &[

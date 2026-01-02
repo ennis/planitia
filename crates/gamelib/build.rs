@@ -1,8 +1,8 @@
-use shader_bridge::{compile_and_embed_shaders, rustfmt_file, translate_slang_shared_decls};
+use shader_bridge::{compile_and_embed_shaders, rustfmt_file};
 use std::env;
 use std::fs::File;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Path to the shader directory.
 const SHADERS_DIR: &str = "assets/gamelib/shaders/";

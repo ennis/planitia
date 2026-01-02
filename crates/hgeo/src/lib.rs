@@ -298,7 +298,7 @@ impl Geo {
     }*/
 
     /// Iterates over all Bézier curves in the geometry.
-    pub fn beziers(&self) -> impl Iterator<Item = BezierRef> {
+    pub fn beziers(&self) -> impl Iterator<Item = BezierRef<'_>> {
         self.prim_runs
             .iter()
             .filter_map(|run| {
@@ -315,12 +315,12 @@ impl Geo {
     }
 
     /// Iterates over all Bézier curves belonging to the specified primitive group.
-    pub fn beziers_in_group(&self, primitive_group: &Group) -> impl Iterator<Item = BezierRef> {
+    pub fn beziers_in_group(&self, primitive_group: &Group) -> impl Iterator<Item = BezierRef<'_>> {
         self.beziers().filter(|p| primitive_group.contains(p.primnum))
     }
 
     /// Iterates over all polygons in the geometry, including open polygons (polylines).
-    pub fn polygons(&self) -> impl Iterator<Item = PolygonRef> {
+    pub fn polygons(&self) -> impl Iterator<Item = PolygonRef<'_>> {
         self.prim_runs
             .iter()
             .filter_map(|run| {
@@ -339,12 +339,12 @@ impl Geo {
     }
 
     /// Iterates over all polygons belonging to the specified primitive group.
-    pub fn polygons_in_group(&self, primitive_group: &Group) -> impl Iterator<Item = PolygonRef> {
+    pub fn polygons_in_group(&self, primitive_group: &Group) -> impl Iterator<Item = PolygonRef<'_>> {
         self.polygons().filter(|p| primitive_group.contains(p.primitive_index))
     }
 
     /// Iterates over all polylines (open polygons).
-    pub fn polylines(&self) -> impl Iterator<Item = PolygonRef> {
+    pub fn polylines(&self) -> impl Iterator<Item = PolygonRef<'_>> {
         self.prim_runs
             .iter()
             .filter_map(|run| match run.kind {
@@ -360,7 +360,7 @@ impl Geo {
     }
 
     /// Iterates over all polylines (open polygons) belonging to the specified primitive group.
-    pub fn polylines_in_group(&self, primitive_group: &Group) -> impl Iterator<Item = PolygonRef> {
+    pub fn polylines_in_group(&self, primitive_group: &Group) -> impl Iterator<Item = PolygonRef<'_>> {
         self.polylines().filter(|p| primitive_group.contains(p.primitive_index))
     }
 

@@ -159,8 +159,16 @@ impl SamplerHandle {
 pub struct GraphicsPipeline {
     pub(crate) pipeline: vk::Pipeline,
     pub(crate) pipeline_layout: vk::PipelineLayout,
-    // Push descriptors require live VkDescriptorSetLayouts (kill me already)
+    // Push descriptors require live VkDescriptorSetLayouts
     _descriptor_set_layouts: Vec<DescriptorSetLayout>,
+    /// Whether this pipeline uses the standard bindless descriptor set.
+    ///
+    /// The layout of the bindless descriptor set is as follows:
+    /// - set 0, binding 0: array of sampler descriptors
+    /// - set 0, binding 1: array of combined image sampler descriptors (unused)
+    /// - set 0, binding 2: array of storage image descriptors
+    ///
+    /// The descriptor arrays are kept up-to-date automatically as resourcess are created and destroyed.
     pub(crate) bindless: bool,
 }
 
@@ -176,6 +184,22 @@ impl GraphicsPipeline {
     }
 }
 
+impl Drop for GraphicsPipeline {
+    fn drop(&mut self) {
+        let pipeline = self.pipeline;
+        let pipeline_layout = self.pipeline_layout;
+        unsafe {
+            Device::global().delete_after_current_submission(
+                move || {
+                    let device = Device::global();
+                    device.raw.destroy_pipeline(pipeline, None);
+                    device.raw.destroy_pipeline_layout(pipeline_layout, None);
+                },
+            )
+        }
+    }
+}
+
 /// Compute pipelines.
 ///
 /// TODO Drop impl
@@ -184,6 +208,7 @@ pub struct ComputePipeline {
     pub(crate) pipeline: vk::Pipeline,
     pub(crate) pipeline_layout: vk::PipelineLayout,
     _descriptor_set_layouts: Vec<DescriptorSetLayout>,
+    /// See `GraphicsPipeline::bindless` for details.
     pub(crate) bindless: bool,
 }
 

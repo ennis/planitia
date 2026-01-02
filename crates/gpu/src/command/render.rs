@@ -1,15 +1,11 @@
 //! Render command encoders
 use crate::{
-    is_depth_and_stencil_format, Barrier, Buffer, BufferRangeUntyped, BufferUntyped, ClearColorValue, ColorAttachment,
-    CommandStream, DepthStencilAttachment, Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, Rect2D,
-    TrackedResource,
+    is_depth_and_stencil_format, Barrier, Buffer, BufferUntyped, ClearColorValue, ColorAttachment, CommandStream,
+    DepthStencilAttachment, Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, Rect2D, RootParams,
 };
 use ash::vk;
-use ash::vk::DeviceAddress;
-use std::alloc::Layout;
-use std::mem::MaybeUninit;
 use std::ops::Range;
-use std::{ptr, slice};
+use std::ptr;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -49,15 +45,6 @@ pub struct DrawIndexedIndirectCommand {
 const _: () = assert!(size_of::<DrawIndexedIndirectCommand>() == size_of::<vk::DrawIndexedIndirectCommand>());
 
 impl<'a> RenderEncoder<'a> {
-    /// Marks the resource as being in use by the current submission.
-    ///
-    /// This will prevent the resource from being destroyed until the current submission is
-    /// either complete or cancelled.
-    #[deprecated]
-    pub fn reference_resource<R: TrackedResource>(&mut self, resource: &R) {
-        self.stream.reference_resource(resource);
-    }
-
     /// Binds a descriptor set (`vkCmdBindDescriptorSets`).
     ///
     /// # Safety
@@ -329,13 +316,13 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
-    pub fn draw<RootParams: Copy + 'static>(
+    pub fn draw<T: Copy + 'static>(
         &mut self,
         topology: PrimitiveTopology,
         vertex_buffer: Option<&BufferUntyped>,
         vertices: Range<u32>,
         instances: Range<u32>,
-        root_params: Ptr<RootParams>,
+        root_params: RootParams<T>,
     ) {
         unsafe {
             self.stream.set_root_params(
@@ -359,7 +346,7 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
-    pub fn draw_indexed<RootParams: Copy + 'static>(
+    pub fn draw_indexed<T: Copy + 'static>(
         &mut self,
         topology: PrimitiveTopology,
         index_buffer: &Buffer<[u32]>,
@@ -367,7 +354,7 @@ impl<'a> RenderEncoder<'a> {
         vertex_buffer: Option<&BufferUntyped>,
         base_vertex: i32,
         instances: Range<u32>,
-        root_params: Ptr<RootParams>,
+        root_params: RootParams<T>,
     ) {
         unsafe {
             self.stream.set_root_params(
@@ -394,13 +381,13 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
-    pub fn draw_indirect<RootParams: Copy + 'static>(
+    pub fn draw_indirect<T: Copy + 'static>(
         &mut self,
         topology: PrimitiveTopology,
         vertex_buffer: Option<&BufferUntyped>,
         commands: &Buffer<[DrawIndirectCommand]>,
         draw_range: Range<u32>,
-        root_params: Ptr<RootParams>,
+        root_params: RootParams<T>,
     ) {
         unsafe {
             self.stream.set_root_params(
@@ -424,14 +411,14 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
-    pub fn draw_indexed_indirect<RootParams: Copy + 'static>(
+    pub fn draw_indexed_indirect<T: Copy + 'static>(
         &mut self,
         topology: PrimitiveTopology,
         index_buffer: &Buffer<[u32]>,
         vertex_buffer: Option<&BufferUntyped>,
         commands: &Buffer<[DrawIndexedIndirectCommand]>,
         draw_range: Range<u32>,
-        root_params: Ptr<RootParams>,
+        root_params: RootParams<T>,
     ) {
         unsafe {
             self.stream.set_root_params(
@@ -456,12 +443,12 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
-    pub fn draw_mesh_tasks<RootParams: Copy + 'static>(
+    pub fn draw_mesh_tasks<T: Copy + 'static>(
         &mut self,
         group_count_x: u32,
         group_count_y: u32,
         group_count_z: u32,
-        root_params: Ptr<RootParams>,
+        root_params: RootParams<T>,
     ) {
         unsafe {
             self.stream.set_root_params(
@@ -470,7 +457,7 @@ impl<'a> RenderEncoder<'a> {
                 self.pipeline_layout,
                 root_params,
             );
-            Device::global().ext_mesh_shader().cmd_draw_mesh_tasks(
+            Device::global().extensions.ext_mesh_shader.cmd_draw_mesh_tasks(
                 self.command_buffer,
                 group_count_x,
                 group_count_y,

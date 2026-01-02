@@ -38,7 +38,7 @@
  ✔ GPU: avoid mistake of calling `push_constants` before setting a pipeline @done (25-12-21 17:21)
      setting push constants is now done at the same time as the draw call ("root parameters")
  ✔ shadertool: emit debug-info (dump spirv) @done (25-12-01 23:33)
- ☐ PushConstants (Root paramters) should be a single pointer to GPU memory (No Graphics API)
+ ✔ PushConstants (Root paramters) should be a single pointer to GPU memory (No Graphics API) @done (26-01-01 17:12)
      To avoid mistakes like putting an atomic variable in push constants
  ☐ Framework to emit/manipulate geometry from compute shaders in a unified way (polylines, meshes)
  ☐ Geometry format: make a generic file format for geometry instead of hard-coding all the different vertex and primitive types
@@ -60,7 +60,15 @@
          * VK_BUFFER_USAGE_2_INDIRECT_BUFFER_BIT
      nvk uses the STORAGE and UNIFORM bits to determine the minimum alignment (STORAGE is 16, UNIFORM is 64); STORAGE is not used meaningfully anywhere else
      Image usages are harder to simplify
-  ☐ Barriers are misleading
+  ☐ Barriers are misleading: it is expected to call barrier **before** an operation to set the write flags, and then **after** the operation to sync with the next
+  ✔ Inline root constants at draw call site @done (26-01-02 16:22)
+  ☐ Streamline the API even more
+      What we're mostly doing now
+         * allocating or reallocating buffers and images and storing them in structs
+         * pushing root constants
+         * creating (useless) encoders for render passes
+      Maybe allocate buffers declaratively, like how pipelines are specified in json.
+      Not sure if it's worth it at this state, when the render pipeline isn't fully defined
          
 
  ✔ @high Figure out a way to not need `reference_resource` anymore. @done (25-12-21 18:24)

@@ -537,7 +537,7 @@ impl From<ClearColorValue> for vk::ClearColorValue {
 
 #[derive(Debug, Clone)]
 pub struct ArgumentsLayout<'a> {
-    pub bindings: Cow<'a, [vk::DescriptorSetLayoutBinding]>,
+    pub bindings: Cow<'a, [vk::DescriptorSetLayoutBinding<'static>]>,
 }
 
 #[derive(Copy, Clone, Debug)]

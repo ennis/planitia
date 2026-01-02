@@ -104,7 +104,7 @@ impl Device {
             self.raw.create_semaphore(&create_info, None).unwrap()
         };
 
-        let (index, _suboptimal) = match self.khr_swapchain().acquire_next_image(
+        let (index, _suboptimal) = match self.extensions.khr_swapchain.acquire_next_image(
             swap_chain.handle,
             timeout.as_nanos() as u64,
             ready,

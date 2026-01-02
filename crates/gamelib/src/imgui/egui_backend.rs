@@ -6,7 +6,7 @@ use egui::epaint::Primitive;
 use egui::{ClippedPrimitive, ImageData};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::prelude::*;
-use gpu::{Barrier, ColorAttachment, Device, ImageCopyView, Offset3D, RenderPassInfo, Size3D, Vertex};
+use gpu::{Barrier, ColorAttachment, Device, ImageCopyView, Offset3D, RenderPassInfo, RootParams, Size3D, Vertex};
 
 #[derive(Copy, Clone, Vertex)]
 #[repr(C)]
@@ -17,7 +17,7 @@ struct EguiVertex {
 }
 
 #[derive(Copy, Clone)]
-struct EguiPushConstants {
+struct EguiRootParams {
     screen_size: [f32; 2],
 }
 
@@ -169,7 +169,7 @@ impl Renderer {
 
         let width = color_target.width();
         let height = color_target.height();
-        let params = cmd.upload_temporary(&EguiPushConstants {
+        let params = cmd.upload_temporary(&EguiRootParams {
             screen_size: [width as f32, height as f32],
         });
 
@@ -231,7 +231,7 @@ impl Renderer {
                 Some(vertex_buffer.as_bytes()),
                 0,
                 0..1,
-                params,
+                RootParams::Ptr(params),
             );
         }
 
@@ -259,7 +259,7 @@ fn create_pipeline() -> GraphicsPipeline {
 
     let create_info = GraphicsPipelineCreateInfo {
         set_layouts: &[set_layout],
-        push_constants_size: size_of::<EguiPushConstants>(),
+        push_constants_size: size_of::<EguiRootParams>(),
         vertex_input: VertexInputState {
             buffers: &[VertexBufferLayoutDescription {
                 binding: 0,

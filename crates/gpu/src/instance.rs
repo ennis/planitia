@@ -14,7 +14,6 @@ const INSTANCE_EXTENSIONS: &[&str] = &[
 ];
 // TODO other platforms
 
-
 //--------------------------------------------------------------------------------------------------
 
 /// Returns the global `ash::Entry` object.
@@ -32,15 +31,7 @@ pub fn get_instance_extensions() -> &'static [&'static str] {
     INSTANCE_EXTENSIONS
 }
 
-pub fn initialize_debug_messenger() -> &'static vk::DebugUtilsMessengerEXT {
-    &DEBUG_MESSENGER
-}
-
-pub fn vk_ext_debug_utils() -> &'static ash::extensions::ext::DebugUtils {
-    &VULKAN_DEBUG_UTILS
-}
-
-pub fn vk_khr_surface() -> &'static ash::extensions::khr::Surface {
+pub fn vk_khr_surface() -> &'static ash::khr::surface::Instance {
     &VK_KHR_SURFACE
 }
 
@@ -49,12 +40,70 @@ const VALIDATION_LAYERS: &[&str] = &[/*"VK_LAYER_KHRONOS_validation"*/];
 
 /// Vulkan entry points.
 static VULKAN_ENTRY: LazyLock<ash::Entry> = LazyLock::new(initialize_vulkan_entry);
+
 /// Vulkan instance and instance function pointers.
 static VULKAN_INSTANCE: LazyLock<ash::Instance> = LazyLock::new(create_vulkan_instance);
-/// Debug utils function pointers.
-static VULKAN_DEBUG_UTILS: LazyLock<ash::extensions::ext::DebugUtils> = LazyLock::new(create_debug_utils);
-static VK_KHR_SURFACE: LazyLock<ash::extensions::khr::Surface> = LazyLock::new(create_vk_khr_surface);
-static DEBUG_MESSENGER: LazyLock<vk::DebugUtilsMessengerEXT> = LazyLock::new(create_debug_messenger);
+
+static VK_EXT_DEBUG_UTILS_INSTANCE: LazyLock<ash::ext::debug_utils::Instance> =
+    LazyLock::new(|| ash::ext::debug_utils::Instance::new(&*VULKAN_ENTRY, &*VULKAN_INSTANCE));
+
+static VK_KHR_SURFACE: LazyLock<ash::khr::surface::Instance> =
+    LazyLock::new(|| ash::khr::surface::Instance::new(&*VULKAN_ENTRY, &*VULKAN_INSTANCE));
+
+static DEBUG_MESSENGER: LazyLock<vk::DebugUtilsMessengerEXT> = LazyLock::new(|| {
+
+    unsafe extern "system" fn debug_utils_message_callback(
+        message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
+        _message_types: vk::DebugUtilsMessageTypeFlagsEXT,
+        p_callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT,
+        _p_user_data: *mut c_void,
+    ) -> vk::Bool32 {
+        let message = CStr::from_ptr((*p_callback_data).p_message).to_str().unwrap();
+        // translate message severity into tracing's log level
+        match message_severity {
+            vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => {
+                log!(log::Level::Trace, "{}", message);
+            }
+            vk::DebugUtilsMessageSeverityFlagsEXT::INFO => {
+                log!(log::Level::Info, "{}", message);
+            }
+            vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => {
+                log!(log::Level::Warn, "{}", message);
+            }
+            vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => {
+                log!(log::Level::Error, "{}", message);
+            }
+            _ => {
+                panic!("unexpected message severity flags")
+            }
+        };
+
+        vk::FALSE
+    }
+
+
+    let debug_utils_messenger_create_info = vk::DebugUtilsMessengerCreateInfoEXT {
+        flags: vk::DebugUtilsMessengerCreateFlagsEXT::empty(),
+        message_severity: vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
+            | vk::DebugUtilsMessageSeverityFlagsEXT::INFO
+            | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
+            | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
+        message_type: vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
+            | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE
+            | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION,
+        pfn_user_callback: Some(debug_utils_message_callback),
+        p_user_data: ptr::null_mut(),
+        ..Default::default()
+    };
+
+    unsafe {
+        // SAFETY: basic FFI and the create info should be correct
+        let debug_messenger = VK_EXT_DEBUG_UTILS_INSTANCE
+            .create_debug_utils_messenger(&debug_utils_messenger_create_info, None)
+            .expect("failed to create debug messenger");
+        debug_messenger
+    }
+});
 
 fn initialize_vulkan_entry() -> ash::Entry {
     unsafe { ash::Entry::load().expect("failed to initialize vulkan entry points") }
@@ -73,7 +122,6 @@ unsafe fn check_validation_layer_support() -> bool {
             .any(|&layer| CStr::from_ptr(layer.layer_name.as_ptr()) == c_required_layer.as_c_str())
     })
 }
-
 
 fn create_vulkan_instance() -> ash::Instance {
     unsafe {
@@ -122,65 +170,4 @@ fn create_vulkan_instance() -> ash::Instance {
     }
 }
 
-fn create_debug_utils() -> ash::extensions::ext::DebugUtils {
-    ash::extensions::ext::DebugUtils::new(&*VULKAN_ENTRY, &*VULKAN_INSTANCE)
-}
-
-fn create_vk_khr_surface() -> ash::extensions::khr::Surface {
-    ash::extensions::khr::Surface::new(&*VULKAN_ENTRY, &*VULKAN_INSTANCE)
-}
-
 // Vulkan message callback
-unsafe extern "system" fn debug_utils_message_callback(
-    message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
-    _message_types: vk::DebugUtilsMessageTypeFlagsEXT,
-    p_callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT,
-    _p_user_data: *mut c_void,
-) -> vk::Bool32 {
-    let message = CStr::from_ptr((*p_callback_data).p_message).to_str().unwrap();
-    // translate message severity into tracing's log level
-    match message_severity {
-        vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => {
-            log!(log::Level::Trace, "{}", message);
-        }
-        vk::DebugUtilsMessageSeverityFlagsEXT::INFO => {
-            log!(log::Level::Info, "{}", message);
-        }
-        vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => {
-            log!(log::Level::Warn, "{}", message);
-        }
-        vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => {
-            log!(log::Level::Error, "{}", message);
-        }
-        _ => {
-            panic!("unexpected message severity flags")
-        }
-    };
-
-    vk::FALSE
-}
-
-/// Setup the debug messenger.
-fn create_debug_messenger() -> vk::DebugUtilsMessengerEXT {
-    let debug_utils_messenger_create_info = vk::DebugUtilsMessengerCreateInfoEXT {
-        flags: vk::DebugUtilsMessengerCreateFlagsEXT::empty(),
-        message_severity: vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
-            | vk::DebugUtilsMessageSeverityFlagsEXT::INFO
-            | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
-            | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
-        message_type: vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
-            | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE
-            | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION,
-        pfn_user_callback: Some(debug_utils_message_callback),
-        p_user_data: ptr::null_mut(),
-        ..Default::default()
-    };
-
-    unsafe {
-        // SAFETY: basic FFI and the create info should be correct
-        let debug_messenger = vk_ext_debug_utils()
-            .create_debug_utils_messenger(&debug_utils_messenger_create_info, None)
-            .expect("failed to create debug messenger");
-        debug_messenger
-    }
-}

@@ -8,7 +8,7 @@ use std::borrow::Cow;
 use std::io;
 use std::ops::Deref;
 use std::path::Path;
-use utils::archive::{ArchiveData, ArchiveReader, ArchiveReaderOwned, Offset, OffsetUntyped};
+use utils::archive::{ArchiveReader, ArchiveReaderOwned, Offset};
 
 pub use mesh::*;
 pub use coat::*;

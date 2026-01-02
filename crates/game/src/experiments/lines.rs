@@ -66,10 +66,15 @@ pub fn draw_lines<'a>(
     }
 
     encoder.bind_graphics_pipeline(&pipeline);
-    let params = encoder.upload_temporary(&RootParams {
-        scene_info: scene_info.gpu,
-        vertices: vertices_buffer.ptr(),
-        lines: lines_buffer.ptr(),
-    });
-    encoder.draw_indirect(TriangleStrip, None, &commands, 0..lines.len() as u32, params);
+    encoder.draw_indirect(
+        TriangleStrip,
+        None,
+        &commands,
+        0..lines.len() as u32,
+        gpu::RootParams::Immediate(&RootParams {
+            scene_info: scene_info.gpu,
+            vertices: vertices_buffer.ptr(),
+            lines: lines_buffer.ptr(),
+        }),
+    );
 }

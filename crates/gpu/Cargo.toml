@@ -5,13 +5,13 @@ authors = ["Alexandre Bléron <alex.bleron@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-ash = "0.37"
-bitflags = "2.4.1"
-gpu-allocator = "0.24.0"
+ash = "0.38"
+bitflags = "2"
+gpu-allocator = "0.28"
 raw-window-handle = "0.6.0"
-slotmap = "1.0.2"
+slotmap = "1"
 log = "0.4.27"
-thiserror = "1.0.30"
+thiserror = "2"
 gpu-macros = { workspace = true }
 fxhash = "0.2.1"
 math = { workspace = true }

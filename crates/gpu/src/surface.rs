@@ -1,11 +1,11 @@
 #[cfg(windows)]
 mod platform {
     use crate::instance::{get_vulkan_entry, get_vulkan_instance};
-    use ash::extensions::khr::Win32Surface;
+    use ash::khr::win32_surface::Instance as Win32Surface;
     use ash::vk;
     use raw_window_handle::RawWindowHandle;
-    use std::os::raw::c_void;
     use std::sync::LazyLock;
+    use ash::vk::{HINSTANCE, HWND};
 
     static VK_KHR_SURFACE_WIN32: LazyLock<Win32Surface> = LazyLock::new(create_vk_khr_surface);
 
@@ -21,8 +21,8 @@ mod platform {
 
         let create_info = vk::Win32SurfaceCreateInfoKHR {
             flags: Default::default(),
-            hinstance: win32_handle.hinstance.unwrap().get() as *const c_void,
-            hwnd: win32_handle.hwnd.get() as *const c_void,
+            hinstance: win32_handle.hinstance.unwrap().get() as HINSTANCE,
+            hwnd: win32_handle.hwnd.get() as HWND,
             ..Default::default()
         };
         unsafe {
