@@ -38,6 +38,18 @@ impl<const N: usize> ZString<N> {
     }
 }
 
+impl<const N: usize> From<&str> for ZString<N> {
+    fn from(s: &str) -> Self {
+        ZString::new(s)
+    }
+}
+
+impl<const N: usize> From<String> for ZString<N> {
+    fn from(s: String) -> Self {
+        ZString::new(&s)
+    }
+}
+
 impl<const N: usize> std::fmt::Debug for ZString<N> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.as_str())
@@ -73,4 +85,3 @@ impl<const N: usize> std::hash::Hash for ZString<N> {
 pub type ZString16 = ZString<16>;
 pub type ZString32 = ZString<32>;
 pub type ZString64 = ZString<64>;
-

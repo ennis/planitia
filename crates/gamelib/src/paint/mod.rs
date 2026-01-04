@@ -385,7 +385,7 @@ impl<'a> PaintScene<'a> {
 
             match &prim.kind {
                 PrimKind::Geometry(mesh) => {
-                    let root_params = encoder.upload_temporary(&PaintRootParams {
+                    let root_params = encoder.upload(&PaintRootParams {
                         matrix: params.camera.view_projection(),
                         screen_size: [width as f32, height as f32],
                         line_width: 1.0,

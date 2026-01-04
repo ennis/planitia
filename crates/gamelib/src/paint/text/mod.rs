@@ -1,19 +1,18 @@
+mod font;
 mod format;
+mod glyph_cache;
 mod layout;
 mod text_run;
-mod glyph_cache;
-mod font;
 
 use ab_glyph::{Font as FontTrait, ScaleFont};
 use math::geom::IRect;
-use math::{vec2, Vec2};
+use math::{Vec2, vec2};
 use std::ops::Range;
 
 pub use font::{Font, FontId};
 pub use format::TextFormat;
+pub(crate) use glyph_cache::{GlyphCache, GlyphEntry};
 pub use layout::{GlyphRun, TextLayout};
-pub(crate) use glyph_cache::{GlyphEntry, GlyphCache};
-
 
 /// Glyph identifier.
 pub type GlyphId = ab_glyph::GlyphId;

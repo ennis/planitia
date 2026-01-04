@@ -1,4 +1,5 @@
 use clap::Parser;
+use color_print::ceprintln;
 use include_dir::{Dir, include_dir};
 use log::error;
 use std::borrow::Cow;
@@ -126,7 +127,8 @@ fn main() {
         };
         match shadertool::build_pipeline(&manifest_path, &build_options) {
             Ok(()) => {}
-            Err(_err) => {
+            Err(err) => {
+                ceprintln!("<r,bold>error:</> {err}");
                 std::process::exit(1);
             }
         }

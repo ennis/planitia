@@ -1,7 +1,7 @@
 //! Binary geometry format
 
 use crate::error::Error;
-use crate::parser::binary::State::{UniformArray};
+use crate::parser::binary::State::UniformArray;
 use crate::parser::{Event, Parser};
 use std::borrow::Cow;
 use std::collections::HashMap;

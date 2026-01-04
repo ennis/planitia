@@ -2,10 +2,10 @@ use crate::paint::Srgba8;
 use gpu::{Barrier, ImageAspect, ImageCopyView, ImageCreateInfo, MemoryLocation, Size3D, vk};
 use log::debug;
 use math::geom::{IRect, irect_xywh};
+use math::{U16Vec2, u16vec2};
 use std::cell::RefCell;
 use std::ops::{Index, IndexMut, Range};
 use std::slice;
-use math::{u16vec2, U16Vec2};
 
 /// Texture atlas.
 pub struct Atlas {

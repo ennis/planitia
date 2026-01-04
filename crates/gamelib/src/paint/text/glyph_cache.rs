@@ -2,10 +2,10 @@ use crate::paint::atlas::Atlas;
 use crate::paint::texel_to_normalized_texcoord;
 use crate::paint::text::{Font, FontId, GlyphId};
 use ab_glyph::{Font as FontTrait, ScaleFont};
+use color::srgba8;
 use math::geom::IRect;
 use math::{IVec2, U16Vec2, Vec2, ivec2, u16vec2, uvec2, vec2};
 use std::collections::HashMap;
-use color::srgba8;
 
 const SUBPIXEL_X_GRID_SIZE: u32 = 8;
 const SUBPIXEL_Y_GRID_SIZE: u32 = 8;

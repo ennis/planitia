@@ -13,8 +13,10 @@ pub struct SweepExperiment {
 
 impl SweepExperiment {
     pub fn new() -> Self {
-        let sweep_stroke_pipeline = gamelib::pipeline_cache::get_compute_pipeline("/shaders/pipelines.parc#sweep_strokes");
-        let debug_stroke_pipeline = gamelib::pipeline_cache::get_graphics_pipeline("/shaders/pipelines.parc#debug_swept_strokes");
+        let sweep_stroke_pipeline =
+            gamelib::pipeline_cache::get_compute_pipeline("/shaders/pipelines.parc#sweep_strokes");
+        let debug_stroke_pipeline =
+            gamelib::pipeline_cache::get_graphics_pipeline("/shaders/pipelines.parc#debug_swept_strokes");
 
         let strokes = Buffer::from_slice(&[], "swept_strokes");
         let stroke_vertices = Buffer::from_slice(&[], "swept_stroke_vertices");

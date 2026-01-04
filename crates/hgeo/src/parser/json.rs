@@ -1,8 +1,8 @@
 //! JSON geometry format
 
-use std::borrow::Cow;
 use crate::error::Error;
 use crate::parser::{Event, Parser};
+use std::borrow::Cow;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum ParserState {
@@ -28,9 +28,7 @@ impl<'a> Parser<'a> for ParserImpl<'a> {
             _ => false,
         }
     }
-
 }
-
 
 impl<'a> ParserImpl<'a> {
     pub(crate) fn new(data: &'a str) -> Self {

@@ -14,9 +14,9 @@ use renderdoc::{RenderDoc, V141};
 use std::cell::{Cell, OnceCell, RefCell};
 use std::ffi::c_void;
 use std::path::Path;
-use std::{mem, ptr};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, OnceLock};
+use std::{mem, ptr};
 use threadbound::ThreadBound;
 
 /// Holds the application's global objects and services.
@@ -43,10 +43,7 @@ unsafe fn rdoc_instance_ptr() -> *mut c_void {
 #[cfg(debug_assertions)]
 fn load_renderdoc_dll() {
     #[cfg(target_os = "windows")]
-    const DLL_PATH: &[&str] = &[
-        "renderdoc.dll",
-        "C:\\Program Files\\RenderDoc\\renderdoc.dll",
-    ];
+    const DLL_PATH: &[&str] = &["renderdoc.dll", "C:\\Program Files\\RenderDoc\\renderdoc.dll"];
 
     unsafe {
         for &path in DLL_PATH {
@@ -68,7 +65,6 @@ impl Context {
         let lua = mlua::Lua::new();
         let executor = LocalExecutor::new();
         let imgui = RefCell::new(ImguiContext::new());
-
 
         let rdoc = RenderDoc::new().ok();
         if rdoc.is_some() {
@@ -169,10 +165,9 @@ impl<H: AppHandler + Default + 'static> App<H> {
     }
 
     pub fn run(&'static self, init_options: &InitOptions) {
-
         // load the renderdoc DLL asap
-        //#[cfg(debug_assertions)]
-        //load_renderdoc_dll();
+        #[cfg(debug_assertions)]
+        load_renderdoc_dll();
 
         env_logger::builder()
             .parse_default_env()

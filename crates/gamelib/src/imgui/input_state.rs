@@ -122,7 +122,7 @@ impl EguiInputState {
                 false
             }
             &InputEvent::MouseWheel(delta) => {
-                let (x,y,unit) = match delta {
+                let (x, y, unit) = match delta {
                     MouseScrollDelta::LineDelta { x, y } => (x, y, egui::MouseWheelUnit::Line),
                     MouseScrollDelta::PixelDelta { x, y } => (x, y, egui::MouseWheelUnit::Point),
                 };

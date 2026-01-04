@@ -70,7 +70,6 @@ impl Window {
     }
 
     pub(super) fn present(&mut self) {
-
         self.swap_chain.present();
 
         // If this is the first present, the swap chain was just created and not yet

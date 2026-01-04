@@ -14,7 +14,7 @@ mod syntax_bindgen;
 pub const SHADER_PROFILE: &str = "glsl_460";
 
 pub use embed_shaders::compile_and_embed_shaders;
-pub use library::{ShaderEntryPointInfo, ShaderLibrary, ShaderLibraryLoadOptions};
+pub use error::Error;
+pub use library::{CompiledEntryPoint, RootParamInfo, ShaderLibrary, ShaderLibraryLoadOptions};
 pub use rustfmt::rustfmt_file;
 pub use syntax_bindgen::translate_slang_shared_decls;
-pub use error::Error;

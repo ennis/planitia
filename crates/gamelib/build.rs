@@ -37,7 +37,7 @@ fn main() {
 
     // build shaders
     if let Err(err) = shadertool::build_pipeline(
-        "assets/gamelib/shaders/pipelines.json",
+        "assets/gamelib/shaders/shaders.toml",
         &shadertool::BuildOptions {
             quiet: true,
             emit_cargo_deps: true,

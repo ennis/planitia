@@ -1,7 +1,7 @@
 pub use keyboard_types::{Key, KeyState, KeyboardEvent, Location, Modifiers, NamedKey};
+use log::error;
 use std::fmt;
 use std::str::FromStr;
-use log::error;
 
 /// Represents a pointer button.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
@@ -110,7 +110,11 @@ impl InputEvent {
     /// Returns whether the event matches the specified keyboard shortcut.
     ///
     /// Specifically, this looks for key down events (possibly repeated) that match the shortcut.
-    pub fn is_shortcut<S>(&self, shortcut: S) -> bool where S: TryInto<Shortcut>, S::Error: fmt::Display {
+    pub fn is_shortcut<S>(&self, shortcut: S) -> bool
+    where
+        S: TryInto<Shortcut>,
+        S::Error: fmt::Display,
+    {
         let shortcut = match shortcut.try_into() {
             Ok(s) => s,
             Err(err) => {
@@ -194,13 +198,11 @@ impl Shortcut {
     }
 }
 
-
 #[derive(thiserror::Error, Debug)]
 pub enum ParseShortcutError {
     #[error("invalid key in shortcut")]
     UnrecognizedKey,
 }
-
 
 impl FromStr for Shortcut {
     type Err = ParseShortcutError;

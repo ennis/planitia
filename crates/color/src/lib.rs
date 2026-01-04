@@ -1,6 +1,5 @@
 //! Color types and related functions.
 
-
 /// Converts a linear sRGB component to non-linear sRGB.
 pub fn srgb_linear_to_encoded_f32(c: f32) -> f32 {
     if c <= 0.0031308 {
@@ -89,7 +88,7 @@ impl Srgba8 {
     }
 }
 
-impl From<[u8;4]> for Srgba8 {
+impl From<[u8; 4]> for Srgba8 {
     fn from(arr: [u8; 4]) -> Self {
         Srgba8 {
             r: arr[0],

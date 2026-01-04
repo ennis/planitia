@@ -229,9 +229,7 @@ impl<T: Asset> Handle<T> {
     pub fn read(&self) -> Result<AssetReadGuard<'_, T>, AssetLoadError> {
         let guard = self.0.asset.read().unwrap();
         match guard.as_ref() {
-            Ok(_asset) => {
-                Ok(AssetReadGuard { guard })
-            },
+            Ok(_asset) => Ok(AssetReadGuard { guard }),
             Err(_err) => Err(AssetLoadError::NotLoaded),
         }
     }

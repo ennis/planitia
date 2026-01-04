@@ -1,6 +1,7 @@
 #![expect(unused, reason = "noisy")]
 #![feature(default_field_values)]
 
+pub mod asset;
 pub mod camera_control;
 pub mod context;
 mod event;
@@ -9,19 +10,15 @@ pub mod imgui;
 pub mod input;
 mod notifier;
 pub mod paint;
+pub mod pipeline_cache;
 pub mod platform;
 mod shaders;
 mod timer;
 pub mod util;
 mod world;
-pub mod asset;
-pub mod pipeline_cache;
 
 //--- reexports ---
-pub use gpu;
-pub use egui;
-pub use math;
-pub use color;
+pub use {color, egui, gpu, math};
 
 ///////////////////////////////////////////////////////////////////
 

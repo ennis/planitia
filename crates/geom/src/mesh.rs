@@ -14,7 +14,6 @@ pub struct PolylineVertex {
     // TODO the rest
 }
 
-
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct PolylineData(Offset<[PolylineVertex]>);

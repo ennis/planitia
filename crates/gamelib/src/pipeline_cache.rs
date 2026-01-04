@@ -1,10 +1,10 @@
 use crate::asset::{AssetCache, Dependencies, Handle, LoadResult, VfsPath};
 use gpu::{PreRasterizationShaders, ShaderEntryPoint, vk};
 use log::{debug, warn};
-use shader_archive::{GraphicsPipelineShaders, PipelineArchive, ShaderData};
+use shader_archive::{PipelineArchive, ShaderData};
+use std::sync::MutexGuard;
 use std::time::SystemTime;
 use std::{fs, io};
-use std::sync::MutexGuard;
 use utils::archive::Offset;
 
 #[derive(thiserror::Error, Debug)]
@@ -86,7 +86,7 @@ pub fn load_pipeline_archive(path: impl AsRef<VfsPath>) -> Handle<PipelineArchiv
                     &shadertool::BuildOptions {
                         quiet: false,
                         emit_cargo_deps: false,
-                        emit_debug_information: true,  // TODO
+                        emit_debug_information: true, // TODO
                         emit_spirv_binaries: true,
                     },
                 )?;
@@ -102,12 +102,11 @@ pub fn load_pipeline_archive(path: impl AsRef<VfsPath>) -> Handle<PipelineArchiv
     })
 }
 
-fn get_shader_entry_point(
+fn get_shader_entry_point<'a>(
     stage: gpu::ShaderStage,
-    archive: &PipelineArchive,
-    shader: Offset<ShaderData>,
-) -> ShaderEntryPoint<'_> {
-    let shader = &archive[shader];
+    archive: &'a PipelineArchive,
+    shader: &'a ShaderData,
+) -> ShaderEntryPoint<'a> {
     let spirv = &archive[shader.spirv];
     ShaderEntryPoint {
         stage,
@@ -165,27 +164,56 @@ fn create_graphics_pipeline_from_archive(
         ..Default::default()
     };
 
+    let mut vertex_shader = None;
+    let mut fragment_shader = None;
+    let mut mesh_shader = None;
+    let mut task_shader = None;
+    let mut stage_flags = vk::ShaderStageFlags::empty();
+
+    for shader in &archive[entry.shaders] {
+        match shader.stage {
+            vk::ShaderStageFlags::VERTEX => {
+                vertex_shader = Some(get_shader_entry_point(gpu::ShaderStage::Vertex, &archive, shader));
+                stage_flags |= vk::ShaderStageFlags::VERTEX;
+            }
+            vk::ShaderStageFlags::FRAGMENT => {
+                fragment_shader = Some(get_shader_entry_point(gpu::ShaderStage::Fragment, &archive, shader));
+                stage_flags |= vk::ShaderStageFlags::FRAGMENT;
+            }
+            vk::ShaderStageFlags::MESH_EXT => {
+                mesh_shader = Some(get_shader_entry_point(gpu::ShaderStage::Mesh, &archive, shader));
+                stage_flags |= vk::ShaderStageFlags::MESH_EXT;
+            }
+            vk::ShaderStageFlags::TASK_EXT => {
+                task_shader = Some(get_shader_entry_point(gpu::ShaderStage::Task, &archive, shader));
+                stage_flags |= vk::ShaderStageFlags::TASK_EXT;
+            }
+            _ => {
+                panic!("unsupported shader stage in graphics pipeline: {:?}", shader.stage);
+            }
+        }
+    }
+
+    let pre_rasterization_shaders = if stage_flags.contains(vk::ShaderStageFlags::MESH_EXT) {
+        PreRasterizationShaders::MeshShading {
+            task: task_shader,
+            mesh: mesh_shader.expect("mesh shader missing in graphics pipeline"),
+        }
+    } else {
+        PreRasterizationShaders::PrimitiveShading {
+            vertex: vertex_shader.expect("vertex shader missing in graphics pipeline"),
+        }
+    };
+
     let gpci = gpu::GraphicsPipelineCreateInfo {
         set_layouts: &[],
         push_constants_size: entry.push_constants_size as usize,
         vertex_input: Default::default(),
-        pre_rasterization_shaders: match entry.vertex_or_mesh_shaders {
-            GraphicsPipelineShaders::Primitive { vertex } => PreRasterizationShaders::PrimitiveShading {
-                vertex: get_shader_entry_point(gpu::ShaderStage::Vertex, &archive, vertex),
-            },
-            GraphicsPipelineShaders::Mesh { task, mesh } => PreRasterizationShaders::MeshShading {
-                task: if task.is_valid() {
-                    Some(get_shader_entry_point(gpu::ShaderStage::Task, &archive, task))
-                } else {
-                    None
-                },
-                mesh: get_shader_entry_point(gpu::ShaderStage::Mesh, &archive, mesh),
-            },
-        },
+        pre_rasterization_shaders,
         rasterization,
         depth_stencil,
         fragment: gpu::FragmentState {
-            shader: get_shader_entry_point(gpu::ShaderStage::Fragment, &archive, entry.fragment_shader),
+            shader: fragment_shader.unwrap(),
             multisample: Default::default(),
             color_targets: &color_targets[..],
             blend_constants: [0.0, 0.0, 0.0, 0.0],
@@ -202,7 +230,7 @@ fn create_compute_pipeline_from_archive(
     let entry = archive
         .find_compute_pipeline(name)
         .ok_or_else(|| PipelineCreateError::PipelineNotFound(name.to_string()))?;
-    let shader = get_shader_entry_point(gpu::ShaderStage::Compute, &archive, entry.compute_shader);
+    let shader = get_shader_entry_point(gpu::ShaderStage::Compute, &archive, &entry.compute_shader);
     let cpci = gpu::ComputePipelineCreateInfo {
         set_layouts: &[],
         push_constants_size: entry.push_constants_size as usize,

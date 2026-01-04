@@ -1,0 +1,190 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$defs": {
+    "compare_op": {
+      "enum": [
+        "never",
+        "less",
+        "equal",
+        "less_equal",
+        "greater",
+        "not_equal",
+        "greater_equal",
+        "always"
+      ]
+    },
+    "blend_factor": {
+      "enum": [
+        "one",
+        "zero",
+        "src_alpha",
+        "one_minus_src_alpha",
+        "dst_alpha",
+        "one_minus_dst_alpha"
+      ]
+    },
+    "blend_op": {
+      "enum": [
+        "add",
+        "subtract",
+        "reverse_subtract",
+        "min",
+        "max"
+      ]
+    },
+    "depth_format": {
+      "enum": [
+        "D32F",
+        "D32F_S8UI"
+      ]
+    },
+    "color_format": {
+      "enum": [
+        "RGBA8",
+        "RGBA16F",
+        "RGBA32F"
+      ]
+    },
+    "cull_mode": {
+      "enum": [
+        "none",
+        "front",
+        "back"
+      ]
+    },
+    "polygon_mode": {
+      "enum": [
+        "fill",
+        "line",
+        "point"
+      ]
+    }
+  },
+  "title": "Generated schema for Root",
+  "type": "object",
+  "properties": {
+    "input_files": {
+      "type": [
+        "string",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "include_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "output": {
+      "type": "string"
+    },
+    "default": {
+      "type": "object",
+      "properties": {
+        "compilation": {
+          "type": "object",
+          "properties": {
+            "optimize": {
+              "type": "boolean"
+            },
+            "debug_info": {
+              "type": "boolean"
+            }
+          }
+        },
+        "rasterizer": {
+          "type": "object",
+          "properties": {
+            "cull_mode": {
+              "$ref": "#/$defs/cull_mode"
+            },
+            "polygon_mode": {
+              "$ref": "#/$defs/polygon_mode"
+            }
+          }
+        },
+        "depth_stencil": {
+          "type": "object",
+          "properties": {
+            "format": {
+              "$ref": "#/$defs/depth_format"
+            },
+            "compare_op": {
+              "$ref": "#/$defs/compare_op"
+            },
+            "test_enable": {
+              "type": "boolean"
+            },
+            "write_enable": {
+              "type": "boolean"
+            }
+          }
+        },
+        "color_targets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "format": {
+                "enum": [
+                  "RGBA8",
+                  "RGBA16F",
+                  "RGBA32F"
+                ]
+              },
+              "src_color": {
+                "$ref": "#/$defs/blend_factor"
+              },
+              "dst_color": {
+                "$ref": "#/$defs/blend_factor"
+              },
+              "color_op": {
+                "$ref": "#/$defs/blend_op"
+              },
+              "src_alpha": {
+                "$ref": "#/$defs/blend_factor"
+              },
+              "dst_alpha": {
+                "$ref": "#/$defs/blend_factor"
+              },
+              "alpha": {
+                "$ref": "#/$defs/blend_op"
+              }
+            },
+            "required": [
+              "format"
+            ]
+          }
+        }
+      },
+      "required": [
+        "color_targets"
+      ]
+    },
+    "override": {
+      "type": "object",
+      "items": {
+        "type": "object",
+        "properties": {
+          "test": {
+            "type": "string"
+          },
+          "depth_stencil": {
+            "$ref": "#/properties/default/properties/depth_stencil"
+          },
+          "color_targets": {
+            "$ref": "#/properties/default/properties/color_targets"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "default",
+    "input_files",
+    "output_file"
+  ]
+}

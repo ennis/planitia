@@ -1,7 +1,10 @@
 //! Blit command encoders
 use ash::vk;
 
-use crate::{Barrier, BufferRangeUntyped, BufferUntyped, ClearColorValue, CommandStream, Device, Image, ImageCopyBuffer, ImageCopyView, ImageSubresourceLayers, Rect3D};
+use crate::{
+    Barrier, BufferRangeUntyped, BufferUntyped, ClearColorValue, CommandStream, Device, Image, ImageCopyBuffer,
+    ImageCopyView, ImageSubresourceLayers, Rect3D,
+};
 
 impl CommandStream {
     pub fn fill_buffer(&mut self, range: &BufferRangeUntyped, data: u32) {

@@ -1,14 +1,16 @@
-//! Pipeline build manifest
-use crate::manifest::Error::MissingField;
-use anyhow::{Context, anyhow};
+use crate::manifest::Error::{InvalidType, MissingField};
+use anyhow::Context;
 use log::error;
-use serde_json::Value as Json;
 use shader_archive::gpu::vk;
 use shader_archive::gpu::vk::PolygonMode;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use toml::Value as TomlValue;
 
-const MAX_COLOR_TARGETS: usize = 8;
+/// The maximum number of color targets in graphics states.
+pub const MAX_COLOR_TARGETS: usize = 8;
+
+pub const DEFAULT_SHADER_PROFILE: &str = "glsl_460";
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -22,135 +24,282 @@ pub enum Error {
     CompilationError(String),
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum PipelineType {
-    Graphics,
-    Compute,
+#[derive(Clone)]
+pub struct BuildManifest {
+    pub input_files: Vec<String>,
+    pub manifest_path: PathBuf,
+    pub include_paths: Vec<String>,
+    pub output_file: String,
+    pub default: GraphicsState,
+    pub shader_profile: String,
+    pub compiler: CompilerOptions,
+    pub overrides: toml::Table,
 }
 
-#[derive(Clone, Debug, Eq, PartialOrd, PartialEq, Ord)]
-pub struct Tag(pub String);
-
-impl Tag {
-    pub fn set(&self) -> &str {
-        self.0.split_once('=').map(|(key, _value)| key).unwrap_or(&self.0)
+impl BuildManifest {
+    pub(crate) fn load(path: impl AsRef<Path>) -> anyhow::Result<Self> {
+        fn load_inner(path: &Path) -> anyhow::Result<BuildManifest> {
+            let manifest_str = std::fs::read_to_string(&path)?;
+            let manifest_toml: TomlValue = toml::from_str(&manifest_str).context("invalid TOML")?;
+            BuildManifest::from_toml(&manifest_toml, path.to_path_buf()).context("failed to parse manifest")
+        }
+        load_inner(path.as_ref())
     }
 
-    pub fn value(&self) -> Option<&str> {
-        self.0.split_once('=').map(|(_key, value)| value)
+    pub fn from_toml(toml: &TomlValue, manifest_path: PathBuf) -> anyhow::Result<Self> {
+        // input_files = ["file1.slang", "file2.slang", "../*.slang", ...]
+        let input_files = {
+            let input_files_toml = toml.get("input_files").ok_or(MissingField("input_files"))?;
+            if let Some(array) = input_files_toml.as_array() {
+                array
+                    .iter()
+                    .map(|v| {
+                        v.as_str()
+                            .ok_or(InvalidType("input_files array element"))
+                            .map(|s| s.to_string())
+                    })
+                    .collect::<Result<Vec<String>, Error>>()?
+            } else if let Some(s) = input_files_toml.as_str() {
+                vec![s.to_string()]
+            } else {
+                return Err(InvalidType("input_files").into());
+            }
+        };
+
+        // include_paths = ["path1", "path2", ...] (optional)
+        let include_paths = toml
+            .get_optional_array("include_paths")?
+            .unwrap_or(&vec![])
+            .iter()
+            .map(|v| {
+                v.as_str()
+                    .ok_or(InvalidType("include_paths array element"))
+                    .map(|s| s.to_string())
+            })
+            .collect::<Result<Vec<String>, Error>>()?;
+
+        // output file
+        let output_file = toml
+            .get_optional_str("output_file")?
+            .ok_or(MissingField("output_file"))?
+            .to_string();
+
+        // default graphics state
+        let default = {
+            let mut state = GraphicsState::default();
+            state.read(toml.get("default").ok_or(MissingField("default"))?)?;
+            state
+        };
+
+        // shader profile
+        let shader_profile = toml
+            .get_optional_str("shader_profile")?
+            .unwrap_or(DEFAULT_SHADER_PROFILE)
+            .to_string();
+
+        // overrides
+        let mut overrides = toml::Table::new();
+        if let Some(overrides_toml) = toml.get("override") {
+            overrides = overrides_toml.as_table().ok_or(InvalidType("override"))?.clone();
+        }
+
+        let compiler = {
+            let mut compiler = CompilerOptions::default();
+            if let Some(compiler_toml) = toml.get_optional_table("compiler")? {
+                compiler = CompilerOptions::from_toml(compiler_toml)?;
+            }
+            compiler
+        };
+
+        Ok(BuildManifest {
+            input_files,
+            shader_profile,
+            manifest_path,
+            include_paths,
+            output_file,
+            default,
+            overrides,
+            compiler,
+        })
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct Variant {
-    /// TODO remove variant tags, instead put keywords in the name of the pipeline directly
-    pub tag: Tag,
-    pub overrides: Json,
+/// Shader compilation options.
+#[derive(Clone, Default)]
+pub struct CompilerOptions {
+    pub defines: BTreeMap<String, String>,
+    pub profile: String,
+    pub optimize: bool,
+    pub debug: bool,
 }
 
-impl Default for Variant {
+impl CompilerOptions {
+    fn from_toml(toml: &TomlValue) -> Result<Self, Error> {
+        let mut options = CompilerOptions {
+            defines: BTreeMap::new(),
+            profile: DEFAULT_SHADER_PROFILE.to_string(),
+            optimize: false,
+            debug: false,
+        };
+
+        if let Some(defines_array) = toml.get_optional_array("defines")? {
+            for define_value in defines_array {
+                let define_str = define_value.as_str().ok_or(InvalidType("defines array element"))?;
+                let parts: Vec<&str> = define_str.splitn(2, '=').collect();
+                if parts.len() == 2 {
+                    // DEFINE=VALUE
+                    options.defines.insert(parts[0].to_string(), parts[1].to_string());
+                } else {
+                    // DEFINE
+                    options.defines.insert(parts[0].to_string(), String::new());
+                }
+            }
+        }
+
+        if let Some(profile_str) = toml.get_optional_str("profile")? {
+            options.profile = profile_str.to_string();
+        }
+
+        if let Some(optimize) = toml.get_optional_bool("optimize")? {
+            options.optimize = optimize;
+        }
+
+        if let Some(debug) = toml.get_optional_bool("debug")? {
+            options.debug = debug;
+        }
+
+        Ok(options)
+    }
+}
+
+/// Graphics state configuration for a graphics pipeline.
+#[derive(Clone)]
+pub struct GraphicsState {
+    pub rasterizer: shader_archive::RasterizerStateData,
+    pub depth_stencil: shader_archive::DepthStencilStateData,
+    pub color_targets: Vec<shader_archive::ColorTarget>,
+}
+
+impl Default for GraphicsState {
     fn default() -> Self {
-        // dummy variant for convenience when computing permutations
-        Variant {
-            tag: Tag(String::new()),
-            overrides: Json::Object(serde_json::Map::new()),
+        Self {
+            rasterizer: shader_archive::RasterizerStateData::default(),
+            depth_stencil: shader_archive::DepthStencilStateData::default(),
+            color_targets: vec![],
         }
     }
 }
 
-///
-#[derive(Clone)]
-pub struct PipelineState {
-    pub defines: BTreeMap<String, String>,
-    pub rasterization_state: shader_archive::RasterizerStateData,
-    pub depth_stencil_state: shader_archive::DepthStencilStateData,
-    pub color_targets: Vec<shader_archive::ColorTarget>,
-}
+impl GraphicsState {
+    fn read(&mut self, toml: &TomlValue) -> anyhow::Result<()> {
+        if let Some(rasterizer_obj) = toml.get_optional_table("rasterizer").context("in rasterizer")? {
+            read_rasterizer_state(rasterizer_obj, &mut self.rasterizer)?;
+        }
+        if let Some(depth_stencil_obj) = toml.get_optional_table("depth_stencil").context("in depth_stencil")? {
+            read_depth_stencil_state(depth_stencil_obj, &mut self.depth_stencil)?;
+        }
 
-#[derive(Clone)]
-pub struct Input {
-    pub file_path: String,
-    pub name: String,
-    pub vertex_entry_point: String,
-    pub fragment_entry_point: String,
-    pub compute_entry_point: String,
-    pub task_entry_point: String,
-    pub mesh_entry_point: String,
-    /// Pipeline state overrides for this input.
-    pub overrides: Option<Json>,
-}
+        // The color targets array is mandatory: the "default" would be an empty array and this
+        // is too error-prone.
+        let color_targets = toml
+            .get_optional_table_or_array("color_targets")?
+            .ok_or(MissingField("color_targets"))?;
+        read_color_targets(color_targets, &mut self.color_targets)?;
 
-/// Represents one set of pipelines to build that share the same base pipeline state.
-#[derive(Clone)]
-pub struct Target {
-    pub type_: PipelineType,
-    pub inputs: Vec<Input>,
-    pub base_pipeline_state: PipelineState,
-}
+        Ok(())
+    }
 
-#[derive(Clone)]
-pub struct BuildManifest {
-    pub manifest_path: PathBuf,
-    pub module_search_paths: Vec<String>,
-    /// Output archive path.
-    pub output: String,
-    pub targets: Vec<Target>,
-}
+    pub fn apply_overrides(&mut self, overrides: &TomlValue) -> anyhow::Result<()> {
+        if let Some(rasterizer_obj) = overrides.get_optional_table("rasterizer")? {
+            read_rasterizer_state(rasterizer_obj, &mut self.rasterizer)?;
+        }
+        if let Some(depth_stencil_obj) = overrides.get_optional_table("depth_stencil")? {
+            read_depth_stencil_state(depth_stencil_obj, &mut self.depth_stencil)?;
+        }
+        if let Some(color_targets) = overrides.get_optional_table_or_array("color_targets")? {
+            read_color_targets(color_targets, &mut self.color_targets)?;
+        }
 
-//////////////////////////////////////////////////////////////////////////////////////////////////
-fn read_str<'a>(json: &'a Json, field: &'static str) -> Result<Option<&'a str>, Error> {
-    match json.get(field) {
-        None => Ok(None),
-        Some(value) => value.as_str().ok_or(Error::InvalidType(field)).map(Some),
+        Ok(())
     }
 }
 
-/*
-fn read_f32(json: &Json, field: &'static str) -> Result<Option<f32>, Error> {
-    match json.get(field) {
-        None => Ok(None),
-        Some(value) => value.as_f64().ok_or(Error::InvalidType(field)).map(|v| Some(v as f32)),
-    }
-}*/
+////////////////////////////////////////////////////////////////////////////////////////////
 
-fn read_bool(json: &Json, field: &'static str) -> Result<Option<bool>, Error> {
-    match json.get(field) {
-        None => Ok(None),
-        Some(value) => value.as_bool().ok_or(Error::InvalidType(field)).map(Some),
-    }
+trait TomlExt {
+    /// Retrieves an optional string field from a TOML value.
+    ///
+    /// Returns `Ok(None)` if the field is not present.
+    /// Returns `Err(Error::InvalidType)` if the field is present but not a string.
+    fn get_optional_str(&self, field: &'static str) -> Result<Option<&str>, Error>;
+    /// Retrieves an optional boolean field from a TOML value.
+    ///
+    /// Returns `Ok(None)` if the field is not present.
+    /// Returns `Err(Error::InvalidType)` if the field is present but not a boolean
+    fn get_optional_bool(&self, field: &'static str) -> Result<Option<bool>, Error>;
+    /// Retrieves an optional table field from a TOML value.
+    ///
+    /// Returns `Ok(None)` if the field is not present.
+    /// Returns `Err(Error::InvalidType)` if the field is present but not a table
+    fn get_optional_table(&self, field: &'static str) -> Result<Option<&TomlValue>, Error>;
+    /// Retrieves an optional array field from a TOML value.
+    ///
+    /// Returns `Ok(None)` if the field is not present.
+    /// Returns `Err(Error::InvalidType)` if the field is present but not an array
+    fn get_optional_array(&self, field: &'static str) -> Result<Option<&Vec<TomlValue>>, Error>;
+    /// Retrieves an optional field that is either a table or an array from a TOML value.
+    ///
+    /// Returns `Ok(None)` if the field is not present.
+    /// Returns `Err(Error::InvalidType)` if the field is present but neither a table nor an array.
+    fn get_optional_table_or_array(&self, field: &'static str) -> Result<Option<&TomlValue>, Error>;
 }
 
-fn read_object<'a>(json: &'a Json, field: &'static str) -> Result<Option<&'a Json>, Error> {
-    match json.get(field) {
-        None => Ok(None),
-        Some(value) => value.as_object().ok_or(Error::InvalidType(field)).map(|_| Some(value)),
+impl TomlExt for toml::Value {
+    fn get_optional_str(&self, field: &'static str) -> Result<Option<&str>, Error> {
+        match self.get(field) {
+            None => Ok(None),
+            Some(value) => value.as_str().ok_or(InvalidType(field)).map(Some),
+        }
     }
-}
 
-fn read_array<'a>(json: &'a Json, field: &'static str) -> Result<Option<&'a Vec<Json>>, Error> {
-    match json.get(field) {
-        None => Ok(None),
-        Some(value) => value.as_array().ok_or(Error::InvalidType(field)).map(|arr| Some(arr)),
+    fn get_optional_bool(&self, field: &'static str) -> Result<Option<bool>, Error> {
+        match self.get(field) {
+            None => Ok(None),
+            Some(value) => value.as_bool().ok_or(InvalidType(field)).map(Some),
+        }
     }
-}
 
-fn read_object_or_array<'a>(json: &'a Json, field: &'static str) -> Result<Option<&'a Json>, Error> {
-    match json.get(field) {
-        None => Ok(None),
-        Some(value) => {
-            if value.is_object() || value.is_array() {
-                Ok(Some(value))
-            } else {
-                Err(Error::InvalidType(field))
+    fn get_optional_table(&self, field: &'static str) -> Result<Option<&TomlValue>, Error> {
+        match self.get(field) {
+            None => Ok(None),
+            Some(value) => value.as_table().ok_or(InvalidType(field)).map(|_| Some(value)),
+        }
+    }
+
+    fn get_optional_array(&self, field: &'static str) -> Result<Option<&Vec<TomlValue>>, Error> {
+        match self.get(field) {
+            None => Ok(None),
+            Some(value) => value.as_array().ok_or(InvalidType(field)).map(|arr| Some(arr)),
+        }
+    }
+
+    fn get_optional_table_or_array(&self, field: &'static str) -> Result<Option<&TomlValue>, Error> {
+        match self.get(field) {
+            None => Ok(None),
+            Some(value) => {
+                if value.is_table() || value.is_array() {
+                    Ok(Some(value))
+                } else {
+                    Err(InvalidType(field))
+                }
             }
         }
     }
 }
 
-fn read_rasterizer_state(json: &Json, out: &mut shader_archive::RasterizerStateData) -> Result<(), Error> {
+fn read_rasterizer_state(toml: &TomlValue, out: &mut shader_archive::RasterizerStateData) -> Result<(), Error> {
     //let cull_mode = read_str(json, "cull_mode", Some("back"))?;
-
-    if let Some(polygon_mode) = read_str(json, "polygon_mode")? {
+    if let Some(polygon_mode) = toml.get_optional_str("polygon_mode")? {
         out.polygon_mode = match polygon_mode {
             "fill" => PolygonMode::FILL,
             "line" => PolygonMode::LINE,
@@ -162,7 +311,7 @@ fn read_rasterizer_state(json: &Json, out: &mut shader_archive::RasterizerStateD
         };
     }
 
-    if let Some(cull_mode) = read_str(json, "cull_mode")? {
+    if let Some(cull_mode) = toml.get_optional_str("cull_mode")? {
         out.cull_mode = match cull_mode {
             "none" => vk::CullModeFlags::NONE,
             "front" => vk::CullModeFlags::FRONT,
@@ -178,7 +327,7 @@ fn read_rasterizer_state(json: &Json, out: &mut shader_archive::RasterizerStateD
     Ok(())
 }
 
-fn read_format(fmtstr: &str) -> Result<vk::Format, Error> {
+fn get_format(fmtstr: &str) -> Result<vk::Format, Error> {
     match fmtstr {
         "RGBA8" => Ok(vk::Format::R8G8B8A8_UNORM),
         "D32F" => Ok(vk::Format::D32_SFLOAT),
@@ -190,7 +339,7 @@ fn read_format(fmtstr: &str) -> Result<vk::Format, Error> {
     }
 }
 
-fn read_blend_factor(factor_str: &str) -> Result<vk::BlendFactor, Error> {
+fn get_blend_factor(factor_str: &str) -> Result<vk::BlendFactor, Error> {
     match factor_str {
         "zero" => Ok(vk::BlendFactor::ZERO),
         "one" => Ok(vk::BlendFactor::ONE),
@@ -203,7 +352,7 @@ fn read_blend_factor(factor_str: &str) -> Result<vk::BlendFactor, Error> {
     }
 }
 
-fn read_blend_op(op_str: &str) -> Result<vk::BlendOp, Error> {
+fn get_blend_op(op_str: &str) -> Result<vk::BlendOp, Error> {
     match op_str {
         "add" => Ok(vk::BlendOp::ADD),
         "subtract" => Ok(vk::BlendOp::SUBTRACT),
@@ -215,11 +364,11 @@ fn read_blend_op(op_str: &str) -> Result<vk::BlendOp, Error> {
     }
 }
 
-fn read_depth_stencil_state(json: &Json, out: &mut shader_archive::DepthStencilStateData) -> Result<(), Error> {
-    if let Some(format_str) = read_str(json, "format")? {
-        out.format = read_format(format_str)?;
+fn read_depth_stencil_state(toml: &TomlValue, out: &mut shader_archive::DepthStencilStateData) -> Result<(), Error> {
+    if let Some(format_str) = toml.get_optional_str("format")? {
+        out.format = get_format(format_str)?;
     }
-    if let Some(depth_compare_op) = read_str(json, "depth_compare_op")? {
+    if let Some(depth_compare_op) = toml.get_optional_str("compare_op")? {
         out.depth_compare_op = match depth_compare_op {
             "always" => vk::CompareOp::ALWAYS,
             "less" => vk::CompareOp::LESS,
@@ -230,41 +379,43 @@ fn read_depth_stencil_state(json: &Json, out: &mut shader_archive::DepthStencilS
             }
         };
     }
-    if let Some(depth_write_enable) = read_bool(json, "depth_write_enable")? {
+    if let Some(depth_write_enable) = toml.get_optional_bool("write_enable")? {
         out.depth_write_enable = depth_write_enable;
     }
-    out.depth_test_enable = true;
+    if let Some(depth_test_enable) = toml.get_optional_bool("test_enable")? {
+        out.depth_test_enable = depth_test_enable;
+    }
     Ok(())
 }
 
-fn read_color_target(json: &Json, out: &mut shader_archive::ColorTarget) -> Result<(), Error> {
-    if let Some(format_str) = read_str(json, "format")? {
-        out.format = read_format(format_str)?;
+fn read_color_target(toml: &TomlValue, out: &mut shader_archive::ColorTarget) -> Result<(), Error> {
+    if let Some(format_str) = toml.get_optional_str("format")? {
+        out.format = get_format(format_str)?;
     }
-    if let Some(src_color_blend_factor) = read_str(json, "src_color_blend_factor")? {
-        out.blend.src_color_blend_factor = read_blend_factor(src_color_blend_factor)?;
+    if let Some(src_color_blend_factor) = toml.get_optional_str("src_color")? {
+        out.blend.src_color_blend_factor = get_blend_factor(src_color_blend_factor)?;
     }
-    if let Some(dst_color_blend_factor) = read_str(json, "dst_color_blend_factor")? {
-        out.blend.dst_color_blend_factor = read_blend_factor(dst_color_blend_factor)?;
+    if let Some(dst_color_blend_factor) = toml.get_optional_str("dst_color")? {
+        out.blend.dst_color_blend_factor = get_blend_factor(dst_color_blend_factor)?;
     }
-    if let Some(color_blend_op) = read_str(json, "color_blend_op")? {
-        out.blend.color_blend_op = read_blend_op(color_blend_op)?;
+    if let Some(color_blend_op) = toml.get_optional_str("color_op")? {
+        out.blend.color_blend_op = get_blend_op(color_blend_op)?;
     }
-    if let Some(src_alpha_blend_factor) = read_str(json, "src_alpha_blend_factor")? {
-        out.blend.src_alpha_blend_factor = read_blend_factor(src_alpha_blend_factor)?;
+    if let Some(src_alpha_blend_factor) = toml.get_optional_str("src_alpha")? {
+        out.blend.src_alpha_blend_factor = get_blend_factor(src_alpha_blend_factor)?;
     }
-    if let Some(dst_alpha_blend_factor) = read_str(json, "dst_alpha_blend_factor")? {
-        out.blend.dst_alpha_blend_factor = read_blend_factor(dst_alpha_blend_factor)?;
+    if let Some(dst_alpha_blend_factor) = toml.get_optional_str("dst_alpha")? {
+        out.blend.dst_alpha_blend_factor = get_blend_factor(dst_alpha_blend_factor)?;
     }
-    if let Some(alpha_blend_op) = read_str(json, "alpha_blend_op")? {
-        out.blend.alpha_blend_op = read_blend_op(alpha_blend_op)?;
+    if let Some(alpha_blend_op) = toml.get_optional_str("alpha_op")? {
+        out.blend.alpha_blend_op = get_blend_op(alpha_blend_op)?;
     }
 
     Ok(())
 }
 
-fn read_color_targets(json: &Json, out: &mut Vec<shader_archive::ColorTarget>) -> Result<(), Error> {
-    if let Some(array) = json.as_array() {
+fn read_color_targets(toml: &TomlValue, out: &mut Vec<shader_archive::ColorTarget>) -> Result<(), Error> {
+    if let Some(array) = toml.as_array() {
         out.clear();
         for item in array {
             let mut color_target = shader_archive::ColorTarget::default();
@@ -272,7 +423,7 @@ fn read_color_targets(json: &Json, out: &mut Vec<shader_archive::ColorTarget>) -
             out.push(color_target);
         }
         Ok(())
-    } else if let Some(object) = json.as_object() {
+    } else if let Some(object) = toml.as_table() {
         // parse overrides like:
         //
         //      {
@@ -282,7 +433,7 @@ fn read_color_targets(json: &Json, out: &mut Vec<shader_archive::ColorTarget>) -
         for (key, value) in object {
             if let Ok(index) = key.parse::<usize>() {
                 // sanity check index and resize if needed
-                if index >= MAX_COLOR_TARGETS {
+                if index >= crate::manifest::MAX_COLOR_TARGETS {
                     return Err(Error::Other("color target index out of range"));
                 }
                 if index >= out.len() {
@@ -293,176 +444,6 @@ fn read_color_targets(json: &Json, out: &mut Vec<shader_archive::ColorTarget>) -
         }
         Ok(())
     } else {
-        return Err(Error::InvalidType("color_targets"));
-    }
-}
-
-impl PipelineState {
-    pub fn apply_overrides(&mut self, overrides: &Json) -> Result<(), Error> {
-        if let Some(rasterizer_obj) = read_object(overrides, "rasterizer_state")? {
-            read_rasterizer_state(rasterizer_obj, &mut self.rasterization_state)?;
-        }
-        if let Some(depth_stencil_obj) = read_object(overrides, "depth_stencil_state")? {
-            read_depth_stencil_state(depth_stencil_obj, &mut self.depth_stencil_state)?;
-        }
-        if let Some(color_targets_json) = read_object_or_array(overrides, "color_targets")? {
-            read_color_targets(color_targets_json, &mut self.color_targets)?;
-        }
-
-        Ok(())
-    }
-}
-
-impl Input {
-    fn from_json(json: &Json, type_: PipelineType) -> anyhow::Result<Input> {
-        let file_path = read_str(json, "file_path")?
-            .ok_or(MissingField("file_path"))?
-            .to_string();
-        let name = read_str(json, "name")?.ok_or(MissingField("name"))?.to_string();
-        let vertex_entry_point = read_str(json, "vertex_entry_point")?.unwrap_or("").to_string();
-        let fragment_entry_point = read_str(json, "fragment_entry_point")?.unwrap_or("").to_string();
-        let compute_entry_point = read_str(json, "compute_entry_point")?.unwrap_or("").to_string();
-        let task_entry_point = read_str(json, "task_entry_point")?.unwrap_or("").to_string();
-        let mesh_entry_point = read_str(json, "mesh_entry_point")?.unwrap_or("").to_string();
-
-        // check that a valid combination of entry points is specified
-        let vertex = !vertex_entry_point.is_empty();
-        let fragment = !fragment_entry_point.is_empty();
-        let compute = !compute_entry_point.is_empty();
-        let task = !task_entry_point.is_empty();
-        let mesh = !mesh_entry_point.is_empty();
-        match (vertex, task, mesh, fragment, compute) {
-            (true, false, false, true, false) => {
-                if type_ != PipelineType::Graphics {
-                    return Err(anyhow!("mismatch between pipeline type and entry points"));
-                }
-            }
-            (false, _, true, true, false) => {
-                if type_ != PipelineType::Graphics {
-                    return Err(anyhow!("mismatch between pipeline type and entry points"));
-                }
-            }
-            (false, false, false, false, true) => {
-                if type_ != PipelineType::Compute {
-                    return Err(anyhow!("mismatch between pipeline type and entry points"));
-                }
-            }
-            _ => {
-                return Err(anyhow!("invalid combination of entry points specified"));
-            }
-        }
-
-        let overrides = read_object(json, "overrides")?.cloned();
-
-        Ok(Input {
-            file_path,
-            name,
-            vertex_entry_point,
-            fragment_entry_point,
-            compute_entry_point,
-            task_entry_point,
-            mesh_entry_point,
-            overrides,
-        })
-    }
-}
-
-fn read_target(json: &Json) -> anyhow::Result<Target> {
-    let type_str = read_str(json, "type")?.ok_or(MissingField("type"))?;
-    let type_ = match type_str {
-        "graphics" => PipelineType::Graphics,
-        "compute" => PipelineType::Compute,
-        _ => {
-            return Err(anyhow!("Unknown pipeline type: {}", type_str));
-        }
-    };
-    let inputs = if let Some(inputs_array) = read_array(json, "inputs")? {
-        let mut inputs = Vec::new();
-        for (i, input_json) in inputs_array.iter().enumerate() {
-            let input = Input::from_json(input_json, type_).with_context(|| format!("in inputs[{i}]"))?;
-            inputs.push(input);
-        }
-        inputs
-    } else {
-        return Err(MissingField("inputs").into());
-    };
-
-    let rasterization_state =
-        if let Some(rasterizer_obj) = read_object(json, "rasterizer_state").context("in rasterizer_state")? {
-            let mut rasterization_state = shader_archive::RasterizerStateData::default();
-            read_rasterizer_state(rasterizer_obj, &mut rasterization_state)?;
-            rasterization_state
-        } else {
-            shader_archive::RasterizerStateData::default()
-        };
-    let depth_stencil_state =
-        if let Some(depth_stencil_obj) = read_object(json, "depth_stencil_state").context("in depth_stencil_state")? {
-            let mut depth_stencil_state = shader_archive::DepthStencilStateData::default();
-            read_depth_stencil_state(depth_stencil_obj, &mut depth_stencil_state)?;
-            depth_stencil_state
-        } else {
-            shader_archive::DepthStencilStateData::default()
-        };
-
-    let mut color_targets = Vec::new();
-    // color targets array is mandatory if type_ is graphics
-    if type_ == PipelineType::Graphics {
-        let color_targets_json = json.get("color_targets").ok_or(MissingField("color_targets"))?;
-        read_color_targets(color_targets_json, &mut color_targets)?;
-    }
-
-    Ok(Target {
-        type_,
-        inputs,
-        base_pipeline_state: PipelineState {
-            defines: Default::default(),
-            rasterization_state,
-            depth_stencil_state,
-            color_targets,
-        },
-    })
-}
-
-impl BuildManifest {
-    pub(crate) fn load(path: impl AsRef<Path>) -> Result<BuildManifest, anyhow::Error> {
-        fn load_inner(path: &Path) -> Result<BuildManifest, anyhow::Error> {
-            let manifest_str = std::fs::read_to_string(&path)?;
-            let manifest_json: Json = serde_json::from_str(&manifest_str).context("invalid json")?;
-            BuildManifest::from_json(path, &manifest_json).context("failed to parse manifest")
-        }
-        load_inner(path.as_ref())
-    }
-
-    fn from_json(manifest_path: &Path, json: &Json) -> Result<BuildManifest, anyhow::Error> {
-        let module_search_paths = if let Some(paths_array) = read_array(json, "module_search_paths")? {
-            let mut paths = Vec::new();
-            for path_json in paths_array {
-                let path_str = path_json.as_str().ok_or(Error::InvalidType("module_search_paths"))?;
-                paths.push(path_str.to_string());
-            }
-            paths
-        } else {
-            Vec::new()
-        };
-
-        let output = read_str(json, "output")?.ok_or(MissingField("output"))?.to_string();
-
-        let targets = if let Some(targets_array) = read_array(json, "targets")? {
-            let mut targets = Vec::new();
-            for (i, config_json) in targets_array.iter().enumerate() {
-                let target = read_target(config_json).with_context(|| format!("in targets[{i}]"))?;
-                targets.push(target);
-            }
-            targets
-        } else {
-            return Err(MissingField("targets").into());
-        };
-
-        Ok(BuildManifest {
-            output,
-            manifest_path: manifest_path.to_path_buf(),
-            module_search_paths,
-            targets,
-        })
+        return Err(InvalidType("color_targets"));
     }
 }

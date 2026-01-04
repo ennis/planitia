@@ -1,8 +1,8 @@
 //! Representation of meshes and other geometry.
 #![feature(default_field_values)]
 
-pub mod mesh;
 pub mod coat;
+pub mod mesh;
 
 use std::borrow::Cow;
 use std::io;
@@ -10,8 +10,8 @@ use std::ops::Deref;
 use std::path::Path;
 use utils::archive::{ArchiveReader, ArchiveReaderOwned, Offset};
 
-pub use mesh::*;
 pub use coat::*;
+pub use mesh::*;
 
 /// Header for geometry archive files.
 #[repr(C)]
@@ -34,7 +34,6 @@ pub struct GeoArchiveHeader {
     //pub coats: Offset<[Coat]> = Offset::INVALID,
     //pub meshes: Offset<[Mesh]> = Offset::INVALID,
 }
-
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -91,10 +90,7 @@ impl GeoArchive {
     fn check_header(&self) -> io::Result<()> {
         let header: &GeoArchiveHeader = self.0.header().unwrap();
         if header.magic != GeoArchiveHeader::MAGIC {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Invalid archive magic",
-            ));
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid archive magic"));
         }
         if header.version != GeoArchiveHeader::VERSION {
             return Err(io::Error::new(
@@ -109,7 +105,6 @@ impl GeoArchive {
         let header: &GeoArchiveHeader = self.0.header().unwrap();
         header
     }
-
 
     /// Returns a slice of all stroke primitives in the archive.
     // TODO this API and all below are dumb
@@ -193,5 +188,3 @@ impl Deref for GeoArchive {
         &self.0
     }
 }
-
-

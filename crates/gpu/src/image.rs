@@ -4,6 +4,7 @@ use crate::{
     ResourceId, Size3D, StorageImageHandle, TextureHandle, TrackedResource,
 };
 use ash::vk;
+use ash::vk::Handle;
 use bitflags::bitflags;
 use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
 use gpu_allocator::MemoryLocation;
@@ -128,7 +129,14 @@ impl Drop for Image {
                 let device = Device::global();
                 device.free_resource_heap_index(descriptors.texture);
                 device.free_resource_heap_index(descriptors.storage);
-                device.raw.destroy_image_view(descriptors.image_view, None);
+                device.free_resource_heap_index(descriptors.stencil_texture);
+                device.free_resource_heap_index(descriptors.stencil_storage);
+                if !descriptors.stencil_view.is_null() {
+                    device.raw.destroy_image_view(descriptors.stencil_view, None);
+                }
+                if !descriptors.image_view.is_null() {
+                    device.raw.destroy_image_view(descriptors.image_view, None);
+                }
                 device.raw.destroy_image(handle, None);
                 device.free_memory(&mut allocation);
             });
@@ -236,7 +244,10 @@ pub(crate) struct ImageResourceDescriptors {
     pub(crate) texture: ResourceDescriptorIndex,
     /// Index of the storage image descriptor in the global descriptor heap.
     pub(crate) storage: ResourceDescriptorIndex,
+    pub(crate) stencil_texture: ResourceDescriptorIndex,
+    pub(crate) stencil_storage: ResourceDescriptorIndex,
     pub(crate) image_view: vk::ImageView,
+    pub(crate) stencil_view: vk::ImageView,
 }
 
 /// Image creation
@@ -251,9 +262,8 @@ impl Device {
         mip_levels: u32,
         array_layers: u32,
     ) -> ImageResourceDescriptors {
-        unsafe {
-            let image_view = self
-                .raw
+        let create_aspect_view = |aspect: vk::ImageAspectFlags| unsafe {
+            self.raw
                 .create_image_view(
                     &vk::ImageViewCreateInfo {
                         flags: vk::ImageViewCreateFlags::empty(),
@@ -283,7 +293,7 @@ impl Device {
                             a: vk::ComponentSwizzle::IDENTITY,
                         },
                         subresource_range: vk::ImageSubresourceRange {
-                            aspect_mask: aspects_for_format(format),
+                            aspect_mask: aspect,
                             base_mip_level: 0,
                             level_count: mip_levels,
                             base_array_layer: 0,
@@ -293,31 +303,68 @@ impl Device {
                     },
                     None,
                 )
-                .expect("failed to create image view");
+                .expect("failed to create image view")
+        };
 
-            let sampled_index = if usage.contains(vk::ImageUsageFlags::SAMPLED) {
-                self.create_global_image_descriptor(
-                    image_view,
-                    vk::DescriptorType::SAMPLED_IMAGE,
-                    vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                )
-            } else {
-                ResourceDescriptorIndex::default()
+        unsafe {
+            let aspects = aspects_for_format(format);
+            let mut main_view = vk::ImageView::null();
+            let mut stencil_view = vk::ImageView::null();
+            if aspects.contains(vk::ImageAspectFlags::COLOR) {
+                main_view = create_aspect_view(vk::ImageAspectFlags::COLOR);
+            }
+            if aspects.contains(vk::ImageAspectFlags::DEPTH) {
+                main_view = create_aspect_view(vk::ImageAspectFlags::DEPTH);
+            }
+            if aspects.contains(vk::ImageAspectFlags::STENCIL) {
+                stencil_view = create_aspect_view(vk::ImageAspectFlags::STENCIL);
+            }
+
+            let mut texture = ResourceDescriptorIndex::default();
+            let mut storage = ResourceDescriptorIndex::default();
+            let mut stencil_texture = ResourceDescriptorIndex::default();
+            let mut stencil_storage = ResourceDescriptorIndex::default();
+
+            if usage.contains(vk::ImageUsageFlags::SAMPLED) {
+                if !main_view.is_null() {
+                    texture = self.create_global_image_descriptor(
+                        main_view,
+                        vk::DescriptorType::SAMPLED_IMAGE,
+                        vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                    )
+                }
+                if !stencil_view.is_null() {
+                    stencil_texture = self.create_global_image_descriptor(
+                        stencil_view,
+                        vk::DescriptorType::SAMPLED_IMAGE,
+                        vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                    )
+                }
             };
-            let storage_index = if usage.contains(vk::ImageUsageFlags::STORAGE) {
-                self.create_global_image_descriptor(
-                    image_view,
-                    vk::DescriptorType::STORAGE_IMAGE,
-                    vk::ImageLayout::GENERAL,
-                )
-            } else {
-                ResourceDescriptorIndex::default()
+            if usage.contains(vk::ImageUsageFlags::STORAGE) {
+                if !main_view.is_null() {
+                    storage = self.create_global_image_descriptor(
+                        main_view,
+                        vk::DescriptorType::STORAGE_IMAGE,
+                        vk::ImageLayout::GENERAL,
+                    )
+                }
+                if !stencil_view.is_null() {
+                    stencil_storage = self.create_global_image_descriptor(
+                        stencil_view,
+                        vk::DescriptorType::STORAGE_IMAGE,
+                        vk::ImageLayout::GENERAL,
+                    )
+                }
             };
 
             ImageResourceDescriptors {
-                texture: sampled_index,
-                storage: storage_index,
-                image_view,
+                texture,
+                storage,
+                stencil_texture,
+                stencil_storage,
+                image_view: main_view,
+                stencil_view,
             }
         }
     }

@@ -6,7 +6,7 @@ use geom::coat::Coat;
 use geom::mesh::{Mesh, MeshPart};
 use geom::{GeoArchiveHeader, SweptStroke, SweptStrokeVertex};
 use hgeo::{AttributeClass, Geo, Group, StorageKind};
-use math::{vec2, Vec2, Vec3, Vec4};
+use math::{Vec2, Vec3, Vec4, vec2};
 use std::collections::HashMap;
 use std::path::Path;
 use utils::archive::{ArchiveWriter, Offset};
@@ -36,7 +36,7 @@ fn get_output_file_name(geo_file: &Path, config: &ConvertConfig) -> Result<Strin
     }
 }
 
-#[derive(Clone,Default)]
+#[derive(Clone, Default)]
 struct CrossSection {
     name: String,
     start_vertex: u32,

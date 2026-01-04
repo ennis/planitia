@@ -37,8 +37,8 @@ pub mod prelude {
         vk, Buffer, BufferUsage, ClearColorValue, ColorBlendEquation, ColorTargetState, CommandStream,
         DepthStencilState, Format, FragmentState, GraphicsPipeline, GraphicsPipelineCreateInfo, Image, ImageCreateInfo,
         ImageType, ImageUsage, MemoryLocation, PipelineBindPoint, PipelineLayoutDescriptor, Point2D,
-        PreRasterizationShaders, RasterizationState, Rect2D, RenderEncoder, Sampler, SamplerCreateInfo,
-        ShaderCode, ShaderEntryPoint, ShaderSource, Size2D, StencilState, Vertex, VertexBufferDescriptor,
+        PreRasterizationShaders, RasterizationState, Rect2D, RenderEncoder, Sampler, SamplerCreateInfo, ShaderCode,
+        ShaderEntryPoint, ShaderSource, Size2D, StencilState, Vertex, VertexBufferDescriptor,
         VertexBufferLayoutDescription, VertexInputAttributeDescription, VertexInputState,
     };
 }
@@ -50,9 +50,7 @@ pub const SUBGROUP_SIZE: u32 = 32;
 
 /// Waits for the GPU to complete all submitted work.
 pub fn wait_idle() {
-    unsafe {
-        Device::global().raw.device_wait_idle().unwrap()
-    }
+    unsafe { Device::global().raw.device_wait_idle().unwrap() }
 }
 
 /*
@@ -189,13 +187,11 @@ impl Drop for GraphicsPipeline {
         let pipeline = self.pipeline;
         let pipeline_layout = self.pipeline_layout;
         unsafe {
-            Device::global().delete_after_current_submission(
-                move || {
-                    let device = Device::global();
-                    device.raw.destroy_pipeline(pipeline, None);
-                    device.raw.destroy_pipeline_layout(pipeline_layout, None);
-                },
-            )
+            Device::global().delete_after_current_submission(move || {
+                let device = Device::global();
+                device.raw.destroy_pipeline(pipeline, None);
+                device.raw.destroy_pipeline_layout(pipeline_layout, None);
+            })
         }
     }
 }
@@ -331,10 +327,9 @@ impl Drop for DescriptorSetLayout {
     fn drop(&mut self) {
         if let Some(last_submission_index) = Arc::into_inner(self.last_submission_index.take().unwrap()) {
             let handle = self.handle;
-            Device::global()
-                .call_later(last_submission_index.load(Ordering::Relaxed), move || unsafe {
-                    Device::global().raw.destroy_descriptor_set_layout(handle, None);
-                });
+            Device::global().call_later(last_submission_index.load(Ordering::Relaxed), move || unsafe {
+                Device::global().raw.destroy_descriptor_set_layout(handle, None);
+            });
         }
     }
 }

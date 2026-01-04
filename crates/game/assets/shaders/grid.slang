@@ -13,7 +13,18 @@ struct PushConstants {
     float padding;
 };
 
+
+float pulse_train_integral(float x, float period, float duty_cycle)
+{
+    let n = floor(x / period);
+    let pw = period * duty_cycle;
+    return n * pw + min(pw, x - n * period);
+}
+
+
+
 [shader("vertex")]
+[pass("grid")]
 VSOut grid_vertex_main(uint vertex_id : SV_VertexID, uniform PushConstants* u)
 {
     // unscaled XZ plane quad positions
@@ -32,18 +43,10 @@ VSOut grid_vertex_main(uint vertex_id : SV_VertexID, uniform PushConstants* u)
 
     // fill the screen
     //float4 clip_pos = float4(positions[vertex_id], 0.0, 1.0);
-
     VSOut o;
     o.pos = clip_pos;
     o.uv = uv * u.grid_scale;
     return o;
-}
-
-float pulse_train_integral(float x, float period, float duty_cycle)
-{
-    let n = floor(x / period);
-    let pw = period * duty_cycle;
-    return n * pw + min(pw, x - n * period);
 }
 
 // https://bgolus.medium.com/the-best-darn-grid-shader-yet-727f9278b9d8
@@ -61,8 +64,8 @@ float grid(float2 uv, float line_width)
     return grid;
 }
 
-
 [shader("fragment")]
+[pass("grid")]
 float4 grid_fragment_main(VSOut i, uint2 frag_pos: SV_Position, uniform PushConstants* u)
 {
     float2 frag_uv = frag_pos.xy / u.scene.screen_size;

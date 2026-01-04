@@ -98,7 +98,7 @@ impl UploadBuffer {
     fn allocate<T: Copy>(&mut self, data: &T) -> Ptr<T> {
         let (_, ptr, raw_addr) = self.allocate_raw(Layout::new::<T>());
         unsafe {
-            ptr::copy_nonoverlapping(data as *const T, ptr as *mut T, size_of::<T>());
+            ptr::copy_nonoverlapping(data as *const T, ptr as *mut T, 1);
         }
         Ptr {
             raw: raw_addr,
@@ -784,36 +784,6 @@ impl Device {
 
         Self::from_existing(phy.physical_device, device.handle(), graphics_queue_family)
     }
-
-    /// Returns the physical device that this device was created on.
-    pub fn physical_device(&self) -> vk::PhysicalDevice {
-        self.thread_safe.physical_device
-    }
-
-    /// Returns the physical device properties.
-    pub fn physical_device_properties(&self) -> &vk::PhysicalDeviceProperties2 {
-        &self.thread_safe.physical_device_properties
-    }
-
-    /*pub fn create_command_stream(self: &Rc<Self>, queue_index: usize) -> CommandStream {
-        CommandStream::new(self.clone(), command_pool, self.queues[queue_index].clone())
-    }*/
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct SubmissionIndex(u64);
-
-impl SubmissionIndex {
-    const BATCH_INDEX_BITS: u32 = 8;
-
-    pub fn batch(self) -> u64 {
-        self.0 & (1 << SubmissionIndex::BATCH_INDEX_BITS - 1)
-    }
-
-    /// Returns the frame number.
-    pub fn frame(self) -> u64 {
-        self.0 >> SubmissionIndex::BATCH_INDEX_BITS
-    }
 }
 
 struct ShaderModuleGuard<'a> {
@@ -875,14 +845,12 @@ impl Device {
         // SAFETY:
         self.extensions
             .ext_debug_utils
-            .set_debug_utils_object_name(
-                &vk::DebugUtilsObjectNameInfoEXT {
-                    object_type: H::TYPE,
-                    object_handle: handle.as_raw(),
-                    p_object_name: object_name.as_ptr(),
-                    ..Default::default()
-                },
-            )
+            .set_debug_utils_object_name(&vk::DebugUtilsObjectNameInfoEXT {
+                object_type: H::TYPE,
+                object_handle: handle.as_raw(),
+                p_object_name: object_name.as_ptr(),
+                ..Default::default()
+            })
             .unwrap();
     }
 
@@ -1032,6 +1000,14 @@ impl Device {
     pub fn upload<T: Copy>(&self, data: &[T]) -> Ptr<[T]> {
         let mut upload_buffer = self.upload_buffer.lock().unwrap();
         upload_buffer.allocate_slice(data)
+    }
+
+    /// Uploads data to GPU memory via this device's upload buffer.
+    ///
+    /// The returned pointer is guaranteed to be valid for the current submission.
+    pub fn upload_one<T: Copy>(&self, data: &T) -> Ptr<T> {
+        let mut upload_buffer = self.upload_buffer.lock().unwrap();
+        upload_buffer.allocate(data)
     }
 
     /// Schedules deletion of full upload buffers.

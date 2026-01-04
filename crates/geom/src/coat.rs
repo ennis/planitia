@@ -1,5 +1,5 @@
-use math::{Vec2, Vec3};
 use color::Srgba8;
+use math::{Vec2, Vec3};
 use utils::archive::Offset;
 
 #[repr(C)]
@@ -43,7 +43,6 @@ pub struct SweptStrokeVertex {
     //pub stamp_texture: u8,
 }
 
-
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct Coat {
@@ -68,7 +67,6 @@ pub struct ColorRampData {
 pub struct WidthProfileData {
     pub widths: Offset<[u8]>,
 }
-
 
 /// Sweep macro-stroke
 #[repr(C)]

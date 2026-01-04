@@ -24,6 +24,8 @@ pub struct OutlineExperiment {
     mesh: Mesh,
     clusters: Buffer<[Cluster]>,
     cluster_draw_commands: Buffer<[DrawIndirectCommand]>,
+    outline_vertices: Buffer<[ExpandedVertex]>,
+    outline_indices: Buffer<[u32]>,
 }
 
 struct Vertex {
@@ -529,9 +531,9 @@ struct DepthPassRootParams {
 impl OutlineExperiment {
     pub fn new() -> Self {
         Self {
-            pipeline: gamelib::pipeline_cache::get_compute_pipeline("/shaders/pipelines.parc#outline"),
-            debug_strokes: get_graphics_pipeline("/shaders/pipelines.parc#debug_strokes"),
-            depth_pass: get_graphics_pipeline("/shaders/pipelines.parc#depth_pass"),
+            pipeline: gamelib::pipeline_cache::get_compute_pipeline("/shaders/game_shaders.sharc#outline"),
+            debug_strokes: get_graphics_pipeline("/shaders/game_shaders.sharc#debug_strokes"),
+            depth_pass: get_graphics_pipeline("/shaders/game_shaders.sharc#depth_pass"),
             mesh: Mesh {
                 face: vec![],
                 edges: vec![],
@@ -540,6 +542,8 @@ impl OutlineExperiment {
             },
             clusters: gpu::Buffer::from_slice(&[], "outline_clusters"),
             cluster_draw_commands: gpu::Buffer::from_slice(&[], "outline_cluster_draw_commands"),
+            outline_vertices: gpu::Buffer::from_slice(&[], "outline_vertices"),
+            outline_indices: gpu::Buffer::from_slice(&[], "outline_indices"),
         }
     }
 
@@ -572,6 +576,16 @@ impl OutlineExperiment {
         self.clusters = cluster_edges(&mut mesh, &cluster_params, &mut draw_commands);
         self.cluster_draw_commands = gpu::Buffer::from_slice(&draw_commands, "outline_cluster_draw_commands");
         self.mesh = mesh;
+        self.outline_vertices = gpu::Buffer::<[ExpandedVertex]>::new(gpu::BufferCreateInfo {
+            len: self.mesh.vertices.len() * 20, // not great
+            label: "outline_vertices",
+            ..
+        });
+        self.outline_indices = gpu::Buffer::<[u32]>::new(gpu::BufferCreateInfo {
+            len: self.mesh.vertices.len() * 40, // no idea
+            label: "outline_indices",
+            ..
+        });
     }
 
     pub(crate) fn input(&mut self, input_event: &InputEvent) {
@@ -604,21 +618,9 @@ impl OutlineExperiment {
             return;
         };
 
-        let outline_buffer = gpu::Buffer::<[ExpandedVertex]>::new(gpu::BufferCreateInfo {
-            len: self.mesh.vertices.len() * 20, // not great
-            label: "outline_vertices",
-            ..
-        });
-        let outline_index_buffer = gpu::Buffer::<[u32]>::new(gpu::BufferCreateInfo {
-            len: self.mesh.vertices.len() * 40, // no idea
-            label: "outline_indices",
-            ..
-        });
-
-        eprintln!("clusters len: {}", self.clusters.len());
-
         /////////////////////////////////////////////////////////
         // depth pass
+        cmd.barrier(Barrier::new().depth_stencil_attachment_write(&depth_target));
         let mut encoder = cmd.begin_rendering(RenderPassInfo {
             color_attachments: &[],
             depth_stencil_attachment: Some(gpu::DepthStencilAttachment {
@@ -664,11 +666,13 @@ impl OutlineExperiment {
                 clusters: self.clusters.ptr(),
                 cluster_count: self.clusters.len() as u32,
                 vertex_count: 0,
-                out_vertices: outline_buffer.ptr(),
-                out_indices: outline_index_buffer.ptr(),
+                out_vertices: self.outline_vertices.ptr(),
+                out_indices: self.outline_indices.ptr(),
                 out_draw_command: draw_indirect_command_buffer.ptr(),
             }),
         );
+
+        cmd.barrier(Barrier::new().sample_read_image(&depth_target));
         cmd.barrier(Barrier::new().shader_storage_read().indirect());
 
         /////////////////////////////////////////////////////////
@@ -678,10 +682,7 @@ impl OutlineExperiment {
                 image: color_target,
                 ..
             }],
-            depth_stencil_attachment: Some(gpu::DepthStencilAttachment {
-                image: &depth_target,
-                ..
-            }),
+            depth_stencil_attachment: None,
         });
 
         encoder.bind_graphics_pipeline(&*debug_stroke_pipeline);
@@ -692,8 +693,9 @@ impl OutlineExperiment {
             0..1,
             RootParams::Immediate(&crate::experiments::coat::DebugStrokesRootParams {
                 scene_info: scene_info.gpu,
-                vertices: outline_buffer.ptr(),
-                indices: outline_index_buffer.ptr(),
+                vertices: self.outline_vertices.ptr(),
+                indices: self.outline_indices.ptr(),
+                depth_texture: depth_target.texture_descriptor_index(),
             }),
         );
 

@@ -66,13 +66,12 @@ pub fn compile_and_embed_shaders(
     _output_directory: &Path,
     bindings_output: &mut dyn io::Write,
 ) {
-    let session = create_session(
-        &SessionOptions {
-            profile_id: SHADER_PROFILE,
-            module_search_paths: include_search_paths,
-            macro_definitions: &[],
-            debug: false,
-        });
+    let session = create_session(&SessionOptions {
+        profile_id: SHADER_PROFILE,
+        module_search_paths: include_search_paths,
+        macro_definitions: &[],
+        debug: false,
+    });
     let modules = load_shader_modules_in_directory(&session, Path::new(shaders_directory)).unwrap();
 
     // now compile all entry points, and generate bindings

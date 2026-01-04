@@ -129,8 +129,7 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
             WakeReason::VSync => {
                 self.this.window.borrow_mut().as_mut().unwrap().inner.request_redraw();
             }
-            WakeReason::Task => {
-            }
+            WakeReason::Task => {}
             WakeReason::User(event) => {
                 self.inner.event(event);
             }
@@ -142,7 +141,12 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
         let mut event = None;
         match window_event {
             WindowEvent::Resized(size) => {
-                self.this.window.borrow_mut().as_mut().unwrap().resize(size.width, size.height);
+                self.this
+                    .window
+                    .borrow_mut()
+                    .as_mut()
+                    .unwrap()
+                    .resize(size.width, size.height);
                 self.inner.resized(size.width, size.height);
             }
             WindowEvent::CloseRequested => {

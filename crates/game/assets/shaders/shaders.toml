@@ -1,0 +1,55 @@
+# INPUT FILES
+input_files = "*.slang"
+include_paths = ["../../../gamelib/assets/gamelib/shaders"]
+
+# OUTPUT FILE
+output_file = "game_shaders.sharc"
+
+[compiler]
+profile = "glsl_460"
+optimize = true      # Enable SPIR-V optimizations
+debug = false        # No debug info
+
+######################################################################
+# Default shader pipeline states
+######################################################################
+
+[default]
+rasterizer.cull_mode = "none"       # No backface culling
+rasterizer.polygon_mode = "fill"    # Fill polygons
+depth_stencil.format = "D32F_S8UI"  # 32-bit float depth, 8-bit stencil
+depth_stencil.compare_op = "less"
+depth_stencil.test_enable = true
+depth_stencil.write_enable = true
+color_targets = [
+    { format = "RGBA8", src_color = "src_alpha", dst_color = "one_minus_src_alpha", color_op = "add", src_alpha = "one", dst_alpha = "zero", alpha = "add" }
+]
+
+######################################################################
+# Pass overrides
+######################################################################
+
+[override.debug_strokes]
+depth_stencil.write_enable = false
+
+[override.lines]
+depth_stencil.write_enable = false
+
+[override.background]
+depth_stencil.test_enable = false
+depth_stencil.write_enable = false
+
+######################################################################
+# Resources
+######################################################################
+
+[resource]
+color_buffer = { format = "RGBA8" }
+depth_buffer = { format = "D32F_S8UI" }
+outline_vertices = { len = "dynamic" }
+outline_indices = { len = "dynamic", index_type = "uint32" }
+#outline_indirect_command = { len = 1 }
+
+
+
+

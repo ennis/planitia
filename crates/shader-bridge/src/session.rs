@@ -1,6 +1,6 @@
+use slang::DebugInfoLevel;
 use std::cell::OnceCell;
 use std::ffi::CString;
-use slang::DebugInfoLevel;
 
 fn get_slang_global_session() -> slang::GlobalSession {
     thread_local! {
@@ -20,8 +20,7 @@ pub(crate) struct SessionOptions<'a> {
     pub debug: bool,
 }
 
-pub(crate) fn create_session(options: &SessionOptions,
-) -> slang::Session {
+pub(crate) fn create_session(options: &SessionOptions) -> slang::Session {
     let global_session = get_slang_global_session();
 
     let mut search_paths_cstr = vec![];
@@ -36,7 +35,11 @@ pub(crate) fn create_session(options: &SessionOptions,
         .matrix_layout_column(true)
         .optimization(slang::OptimizationLevel::Default)
         .vulkan_use_entry_point_name(true)
-        .debug_information(if options.debug { DebugInfoLevel::Maximal } else { DebugInfoLevel::None })
+        .debug_information(if options.debug {
+            DebugInfoLevel::Maximal
+        } else {
+            DebugInfoLevel::None
+        })
         .profile(profile);
 
     for (k, v) in options.macro_definitions {

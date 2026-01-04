@@ -16,10 +16,7 @@ impl LocalProvider {
     /// Creates a new file system provider rooted at the given directory.
     pub fn new(root_directory: PathBuf) -> Self {
         let name = format!("LocalProvider({})", root_directory.display());
-        Self {
-            root_directory,
-            name,
-        }
+        Self { root_directory, name }
     }
 
     /// Constructs the full path in the file system for the given VFS path.
@@ -54,7 +51,10 @@ impl Provider for LocalProvider {
         let p = self.full_path(path);
         if p.exists() {
             let metadata = std::fs::metadata(&p)?;
-            Ok(FileMetadata { local_path: Some(p), modified: metadata.modified()? })
+            Ok(FileMetadata {
+                local_path: Some(p),
+                modified: metadata.modified()?,
+            })
         } else {
             Err(io::Error::new(io::ErrorKind::NotFound, "File not found"))
         }

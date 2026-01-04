@@ -40,7 +40,7 @@ pub struct HalfEdgeMesh {
 
 impl HalfEdgeMesh {
     /// Creates a PolyMesh from a triangle mesh specified as a position buffer and an index buffer.
-    pub fn from_indexed_triangle_mesh(positions: impl IntoIterator<Item=Vec3>, indices: &[u32]) -> Self {
+    pub fn from_indexed_triangle_mesh(positions: impl IntoIterator<Item = Vec3>, indices: &[u32]) -> Self {
         assert!(
             indices.len() % 3 == 0,
             "invalid number of indices: must be a multiple of 3"

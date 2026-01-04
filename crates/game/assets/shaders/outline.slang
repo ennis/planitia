@@ -31,13 +31,10 @@ struct OutlineVertex {
     float4 clip_position;
 }
 
-
+// See documentation in outlines.rs
 struct Cluster {
-    /// Vertices in this cluster.
     ClusterVertex vertices[MAX_EDGES];
-    /// All edges (represented by the two faces they connect) in this cluster
     ClusterEdge edges[MAX_EDGES];
-    /// All faces in this cluster
     ClusterFace faces[MAX_EDGES*2];
     NormalCone normal_cone;
     uint16_t vertex_count;
@@ -46,18 +43,31 @@ struct Cluster {
 }
 
 struct OutlineRootParams {
+    [bind("scene_info")]
     SceneInfo* scene_info;
+
+    [bind("clusters")]
     Cluster* clusters;
+
+    [bind("cluster_count")]
     uint cluster_count;
+
     uint vertex_count;
+
+    [bind("outline_vertices")]
     OutlineVertex* out_vertices;
+
+    [bind("outline_indices")]
     uint* out_indices;
+
+    [bind("outline_indirect_command")]
+    [len(1)]
     DrawIndirectCommand* out_draw_command;
 }
 
-
 [shader("compute")]
 [numthreads(MAX_EDGES, 1, 1)]
+[pass("outline")]
 void outline_main(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_GroupThreadID, uniform OutlineRootParams* u)
 {
     // we spawn one workgroup per edge cluster, and each thread in the workgroup processes one edge
@@ -149,6 +159,7 @@ struct DepthPassRootParams {
 };
 
 [shader("vertex")]
+[pass("depth_pass")]
 DepthPassVertexOutput depth_pass_vertex(uint vertex_id : SV_VertexID, uint draw_id: SV_DrawIndex, uniform DepthPassRootParams* u)
 {
     let face = u.clusters[draw_id].faces[vertex_id / 3];
@@ -159,6 +170,7 @@ DepthPassVertexOutput depth_pass_vertex(uint vertex_id : SV_VertexID, uint draw_
 }
 
 [shader("fragment")]
+[pass("depth_pass")]
 void depth_pass_fragment(DepthPassVertexOutput i) {
     // nothing
 }

@@ -466,8 +466,12 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
-    pub fn upload_temporary<RootParams: Copy + 'static>(&mut self, data: &RootParams) -> Ptr<RootParams> {
-        self.stream.upload_temporary(data)
+    pub fn upload<T: Copy + 'static>(&mut self, data: &T) -> Ptr<T> {
+        self.stream.upload(data)
+    }
+
+    pub fn upload_slice<T: Copy + 'static>(&mut self, data: &[T]) -> Ptr<[T]> {
+        self.stream.upload_slice(data)
     }
 
     pub fn finish(self) {

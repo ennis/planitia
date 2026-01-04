@@ -230,7 +230,6 @@ pub struct Box3D {
 }
 
 impl Box3D {
-
     pub const NULL: Self = Self {
         min: Vec3::ZERO,
         max: Vec3::ZERO,

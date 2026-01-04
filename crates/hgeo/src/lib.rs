@@ -13,7 +13,6 @@ use std::{fmt, slice};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum AttributeClass {
     Point,
@@ -595,4 +594,3 @@ impl<'a, 'b> Iterator for PolygonRunIter<'a, 'b> {
         })
     }
 }
-

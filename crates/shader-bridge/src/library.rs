@@ -1,6 +1,8 @@
 use crate::error::Error;
 use crate::session::{create_session, SessionOptions};
 use crate::SHADER_PROFILE;
+use gpu::vk;
+use slang::reflection::{Type, TypeLayout};
 use slang::Downcast;
 use std::path::{Path, PathBuf};
 
@@ -19,28 +21,205 @@ pub struct ShaderLibraryLoadOptions {
     pub debug: bool,
 }
 
+/// Information about a root parameter.
+pub struct RootParamInfo {
+    /// Name of the root parameter.
+    pub name: String,
+    pub offset: u32,
+    pub size: u32,
+    /// Vulkan format of the root parameter.
+    pub format: vk::Format,
+    /// Optional render world binding associated with the root parameter.
+    pub render_world_binding: Option<String>,
+}
+
+/// Describes a shader entry point.
+pub struct EntryPoint {
+    /// Name of the entry point function.
+    pub name: String,
+    /// Shader stage.
+    pub stage: gpu::ShaderStage,
+    /// Pass attribute
+    pub pass: Option<String>,
+}
+
 /// Represents information about a compiled shader entry point.
-pub struct ShaderEntryPointInfo {
+pub struct CompiledEntryPoint {
+    /// Name of the entry point function.
+    pub name: String,
     /// SPIR-V bytecode blob as a vector of `u32`.
     pub spirv: Vec<u32>,
     /// Size of push constants used by the entry point, in bytes.
     pub push_constants_size: usize,
+    /// Shader stage.
     pub stage: gpu::ShaderStage,
+    /// Work group size for compute shaders.
     pub work_group_size: [u32; 3],
-    pub entry_point_name: String,
+    /// Source file path of the shader.
     pub path: Option<String>,
+    /// Reflection information.
+    program: slang::ComponentType,
 }
 
-impl ShaderEntryPointInfo {
+impl CompiledEntryPoint {
     pub fn as_gpu_entry_point(&self) -> gpu::ShaderEntryPoint<'_> {
         gpu::ShaderEntryPoint {
             stage: self.stage,
             code: &self.spirv,
-            entry_point: &self.entry_point_name,
+            entry_point: &self.name,
             push_constants_size: self.push_constants_size,
             source_path: self.path.as_deref(),
             workgroup_size: self.work_group_size,
         }
+    }
+
+    /// Returns an iterator over the root parameters of the shader entry point.
+    ///
+    /// # Example
+    ///
+    /// The root parameters are the data that is passed by pointer to the entry point function.
+    /// For example, in the following shader code:
+    ///
+    /// ```slang
+    /// struct RootParams {
+    ///     uniform float4 someValue;
+    ///     uniform float4 anotherValue;
+    /// };
+    ///
+    /// [shader("compute")]
+    /// void main_0(uniform RootParams* params) {
+    ///     // ...
+    /// }
+    ///
+    /// ```
+    ///
+    /// The root parameters are the fields of the `RootParams` struct: `someValue` and `anotherValue`.
+    ///
+    /// If the shader takes a pointer to a non-struct type instead:
+    ///```slang
+    /// [shader("compute")]
+    /// void main_1(uniform float4* param) {
+    ///     // ...
+    /// }
+    ///```
+    /// In this case, there's one root parameter, `param` of type `float4`.
+    ///
+    /// # Return value
+    ///
+    /// An iterator over the fields of the root parameters struct. If the shader interface
+    /// doesn't match the pattern described above, returns an empty iterator.
+    pub fn root_parameters(&self) -> Vec<RootParamInfo> {
+        #[rustfmt::skip]
+        fn convert_root_param_ty(ty: &slang::reflection::Type) -> vk::Format {
+            let mut format = vk::Format::UNDEFINED;
+
+            match ty.kind() {
+                slang::TypeKind::Scalar => {
+                    match ty.scalar_type() {
+                        slang::ScalarType::Bool => { format = vk::Format::R8_UINT; }
+                        slang::ScalarType::Int8 => { format = vk::Format::R8_SINT; }
+                        slang::ScalarType::Int16 => { format = vk::Format::R16_SINT; }
+                        slang::ScalarType::Int32 => { format = vk::Format::R32_SINT; }
+                        slang::ScalarType::Int64 => { format = vk::Format::R64_SINT; }
+                        slang::ScalarType::Uint8 => { format = vk::Format::R8_UINT; }
+                        slang::ScalarType::Uint16 => { format = vk::Format::R16_UINT; }
+                        slang::ScalarType::Uint32 => { format = vk::Format::R32_UINT; }
+                        slang::ScalarType::Uint64 => { format = vk::Format::R64_UINT; }
+                        slang::ScalarType::Float16 => { format = vk::Format::R16_SFLOAT; }
+                        slang::ScalarType::Float32 => { format = vk::Format::R32_SFLOAT; }
+                        slang::ScalarType::Float64 => { format = vk::Format::R64_SFLOAT; }
+                        _ => {}
+                    }
+                }
+                slang::TypeKind::Vector => {
+                    let element_ty = ty.element_type().scalar_type();
+                    let element_count = ty.element_count();
+                    match (element_ty, element_count) {
+                        (slang::ScalarType::Float32, 2) => { format = vk::Format::R32G32_SFLOAT; }
+                        (slang::ScalarType::Float32, 3) => { format = vk::Format::R32G32B32_SFLOAT; }
+                        (slang::ScalarType::Float32, 4) => { format = vk::Format::R32G32B32A32_SFLOAT; }
+                        (slang::ScalarType::Int32, 2) => { format = vk::Format::R32G32_SINT; }
+                        (slang::ScalarType::Int32, 3) => { format = vk::Format::R32G32B32_SINT; }
+                        (slang::ScalarType::Int32, 4) => { format = vk::Format::R32G32B32A32_SINT; }
+                        (slang::ScalarType::Uint32, 2) => { format = vk::Format::R32G32_UINT; }
+                        (slang::ScalarType::Uint32, 3) => { format = vk::Format::R32G32B32_UINT; }
+                        (slang::ScalarType::Uint32, 4) => { format = vk::Format::R32G32B32A32_UINT; }
+                        (slang::ScalarType::Uint8, 2) => { format = vk::Format::R8G8_UINT; }
+                        (slang::ScalarType::Uint8, 3) => { format = vk::Format::R8G8B8_UINT; }
+                        (slang::ScalarType::Uint8, 4) => { format = vk::Format::R8G8B8A8_UINT; }
+                        (slang::ScalarType::Int8, 2) => { format = vk::Format::R8G8_SINT; }
+                        (slang::ScalarType::Int8, 3) => { format = vk::Format::R8G8B8_SINT; }
+                        (slang::ScalarType::Int8, 4) => { format = vk::Format::R8G8B8A8_SINT; }
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
+
+            format
+        }
+
+        fn find_render_world_binding_attr(v: &slang::reflection::Variable) -> Option<String> {
+            for attr in v.user_attributes() {
+                if attr.name() == "render_world" {
+                    return attr.argument_value_string(0).map(String::from);
+                }
+            }
+            None
+        }
+
+        let reflection = self.program.layout(0).expect("failed to get reflection");
+        let entry_point_reflection = reflection.entry_point_by_index(0).unwrap();
+
+        // push constant are entry point function parameters with kind uniform
+        let mut size = 0;
+        // the `params` in `void main(uniform RootParams* params)`
+        let mut root_params_arg_name: Option<&str> = None;
+        // layout for the `RootParams` struct
+        let mut root_params_ty_layout: Option<&TypeLayout> = None;
+
+        for p in entry_point_reflection.parameters() {
+            if p.category() == slang::ParameterCategory::Uniform && p.ty().kind() == slang::TypeKind::Pointer {
+                root_params_ty_layout = Some(p.type_layout().element_type_layout());
+                root_params_arg_name = p.variable().name();
+                break;
+            }
+        }
+
+        let Some(root_params_ty_layout) = root_params_ty_layout else {
+            // no root parameter pointer found
+            return vec![];
+        };
+
+        //eprintln!("root_params_ty: {:?}", root_params_ty.name());
+        //eprintln!("root_params_ty_layout: {:?}", root_params_ty_layout.name());
+
+        let mut infos = Vec::new();
+        if root_params_ty_layout.kind() == slang::TypeKind::Struct {
+            for field in root_params_ty_layout.fields() {
+                let render_world_binding = find_render_world_binding_attr(field.variable());
+                let offset = field.offset(field.category());
+                let size = field.type_layout().size(field.category());
+                let format = convert_root_param_ty(field.ty());
+                infos.push(RootParamInfo {
+                    name: field.variable().name().map(String::from).unwrap_or_default(),
+                    render_world_binding,
+                    offset: offset as u32,
+                    size: size as u32,
+                    format,
+                });
+            }
+        } else {
+            infos.push(RootParamInfo {
+                name: root_params_arg_name.unwrap_or("").to_string(),
+                render_world_binding: None,
+                offset: 0,
+                size: root_params_ty_layout.size(slang::ParameterCategory::Uniform) as u32,
+                format: convert_root_param_ty(root_params_ty_layout.ty()),
+            })
+        }
+
+        infos
     }
 }
 
@@ -72,13 +251,12 @@ impl ShaderLibrary {
             .expect("path is not valid UTF-8")
             .to_string();
         let profile = options.shader_profile.as_deref().unwrap_or(SHADER_PROFILE);
-        let session = create_session(
-            &SessionOptions {
-                profile_id: profile,
-                module_search_paths: &options.module_search_paths,
-                macro_definitions: &options.macro_definitions,
-                debug: options.debug,
-            });
+        let session = create_session(&SessionOptions {
+            profile_id: profile,
+            module_search_paths: &options.module_search_paths,
+            macro_definitions: &options.macro_definitions,
+            debug: options.debug,
+        });
         let module = session.load_module(&path)?;
 
         Ok(Self {
@@ -89,8 +267,33 @@ impl ShaderLibrary {
         })
     }
 
+    /// Returns the list of entry points defined in this shader library.
+    pub fn entry_points(&self) -> Vec<EntryPoint> {
+        let layout = self.module.downcast().layout(0).expect("failed to get layout");
+        let count = layout.entry_point_count();
+        let mut entry_points = Vec::with_capacity(count as usize);
+        for i in 0..count {
+            let ep = layout.entry_point_by_index(i).unwrap();
+
+            // `[pass("...")]` attribute
+            let mut pass = None;
+            for attr in ep.function().user_attributes() {
+                if attr.name() == "pass" {
+                    pass = attr.argument_value_string(0).map(String::from);
+                }
+            }
+
+            entry_points.push(EntryPoint {
+                name: ep.name().to_string(),
+                stage: slang_stage_to_gpu_stage(ep.stage()),
+                pass,
+            });
+        }
+        entry_points
+    }
+
     /// Returns compiled SPIR-V code for the specified entry point in the shader library.
-    pub fn get_compiled_entry_point(&self, entry_point_name: &str) -> Result<ShaderEntryPointInfo, Error> {
+    pub fn get_compiled_entry_point(&self, entry_point_name: &str) -> Result<CompiledEntryPoint, Error> {
         let entry_point = self
             .module
             .find_entry_point_by_name(entry_point_name)
@@ -100,22 +303,16 @@ impl ShaderLibrary {
             .session
             .create_composite_component_type(&[self.module.downcast().clone(), entry_point.downcast().clone()])?;
         let program = program.link()?;
-        let blob = program.entry_point_code(0, 0)?;
 
-        // dump spirv for debugging
-        /*use std::fs::File;
-        use std::io::Write;
-        let mut f = File::create(format!("shader_{entry_point_name}.spv")).unwrap();
-        f.write_all(blob.as_slice()).unwrap();*/
-
-        let blob = convert_spirv_u8_to_u32(blob.as_slice());
+        let blob = {
+            let blob = program.entry_point_code(0, 0)?;
+            convert_spirv_u8_to_u32(blob.as_slice())
+        };
 
         let reflection = program.layout(0).expect("failed to get reflection");
         let ep_refl = reflection.entry_point_by_index(0).unwrap();
 
-
-
-        Ok(ShaderEntryPointInfo {
+        Ok(CompiledEntryPoint {
             spirv: blob,
             push_constants_size: get_push_constants_size(&ep_refl),
             stage: slang_stage_to_gpu_stage(ep_refl.stage()),
@@ -123,8 +320,9 @@ impl ShaderLibrary {
                 let s = ep_refl.compute_thread_group_size();
                 [s[0] as u32, s[1] as u32, s[2] as u32]
             },
-            entry_point_name: entry_point_name.to_string(),
+            name: entry_point_name.to_string(),
             path: self.path.clone(),
+            program,
         })
     }
 

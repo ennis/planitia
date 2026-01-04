@@ -40,7 +40,7 @@ pub fn draw_lines<'a>(
     lines: &[Line],
     scene_info: &SceneInfo,
 ) {
-    let pipeline = get_graphics_pipeline("/shaders/pipelines.parc#lines");
+    let pipeline = get_graphics_pipeline("/shaders/game_shaders.sharc#lines");
     let Ok(pipeline) = pipeline.read() else {
         return;
     };

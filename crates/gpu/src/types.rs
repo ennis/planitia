@@ -452,7 +452,6 @@ impl From<BufferUsage> for vk::BufferUsageFlags {
     }
 }
 
-
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum PrimitiveTopology {
     TriangleList,

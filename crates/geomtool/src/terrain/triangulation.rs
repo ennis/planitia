@@ -1,3 +1,4 @@
+use color_print::cprintln;
 use image::ImageBuffer;
 use math::{Vec2, vec2, vec3};
 use priority_queue::PriorityQueue;
@@ -6,7 +7,6 @@ use spade::{DelaunayTriangulation, HasPosition, HierarchyHintGenerator, Point2, 
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::io::BufWriter;
-use color_print::cprintln;
 
 struct PointWithHeight {
     position: Point2<f32>,

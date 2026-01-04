@@ -1,4 +1,13 @@
 
+// `[pass("...")]` attribute for marking shader pipelines for shadertool
+[__AttributeUsage(_AttributeTargets.Function)]
+struct passAttribute
+{
+    string pass;
+}
+
+/////////////////////////////////////////////////////////////////////
+
 /// SRGB8 color
 typedef uint8_t4 Srgba8;
 
@@ -144,3 +153,4 @@ struct DrawIndexedIndirectCommand {
     int  vertex_offset;
     uint first_instance;
 };
+

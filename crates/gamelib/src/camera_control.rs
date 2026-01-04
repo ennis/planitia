@@ -185,7 +185,7 @@ impl CameraControl {
     /// Returns whether the event was handled by the camera controller.
     fn mouse_wheel(&mut self, delta: f64) -> bool {
         // TODO orthographic projection
-        let delta = - delta / 120.0;
+        let delta = -delta / 120.0;
         self.frame.eye = self.frame.center + (1.0 + delta) * (self.frame.eye - self.frame.center);
         self.last_cam.set(None);
         true

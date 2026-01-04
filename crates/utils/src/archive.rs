@@ -1,12 +1,12 @@
 use aligned_vec::{ABox, AVec};
 use std::alloc::Layout;
+use std::borrow::Borrow;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::marker::PhantomData;
 use std::ops::{Deref, Index, IndexMut};
 use std::path::Path;
 use std::{ptr, slice};
-use std::borrow::Borrow;
 
 /// Boxed byte slice aligned to cache lines.
 type AlignedData = ABox<[u8]>;

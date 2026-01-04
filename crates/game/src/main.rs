@@ -75,7 +75,7 @@ fn create_depth_buffer(width: u32, height: u32) -> Image {
         width,
         height,
         format: gpu::Format::D32_SFLOAT_S8_UINT,
-        usage: gpu::ImageUsage::DEPTH_STENCIL_ATTACHMENT | gpu::ImageUsage::TRANSFER_DST,
+        usage: gpu::ImageUsage::DEPTH_STENCIL_ATTACHMENT | gpu::ImageUsage::TRANSFER_DST | gpu::ImageUsage::SAMPLED,
         ..
     })
 }
@@ -88,8 +88,8 @@ impl Default for Game {
             painter: Painter::new(gpu::Format::R8G8B8A8_UNORM, None),
             depth_stencil_buffer: create_depth_buffer(WIDTH, HEIGHT),
             camera_control: CameraControl::default(),
-            grid_shader: get_graphics_pipeline("/shaders/pipelines.parc#grid"),
-            background_shader: get_graphics_pipeline("/shaders/pipelines.parc#background"),
+            grid_shader: get_graphics_pipeline("/shaders/game_shaders.sharc#grid"),
+            background_shader: get_graphics_pipeline("/shaders/game_shaders.sharc#background"),
             frame_count: 0,
             width: WIDTH,
             height: HEIGHT,
@@ -138,18 +138,15 @@ impl Game {
                 );
             }
         }
-
-        //----------------------------------
-        // Draw editor
     }
 
     fn render_overlay(&mut self, cmd: &mut gpu::CommandStream, target: &gpu::Image) {
-        experiments::painting_test(
-            &mut self.painter,
-            cmd,
-            target,
-            Srgba8::from(self.color.to_srgba_unmultiplied()),
-        );
+        //experiments::painting_test(
+        //    &mut self.painter,
+        //    cmd,
+        //    target,
+        //    Srgba8::from(self.color.to_srgba_unmultiplied()),
+        //);
     }
 }
 
@@ -217,7 +214,7 @@ impl AppHandler for Game {
                 },
                 gpu: Ptr::NULL,
             };
-            scene_info.gpu = cmd.upload_temporary(&scene_info.info);
+            scene_info.gpu = cmd.upload(&scene_info.info);
 
             let mut encoder = cmd.begin_rendering(RenderPassInfo {
                 color_attachments: &[gpu::ColorAttachment {

@@ -8,11 +8,11 @@ use super::{
 };
 use fixedbitset::FixedBitSet;
 use json::ParserImpl;
-use log::warn;
+use log::{trace, warn};
 use smol_str::SmolStr;
 use std::borrow::Cow;
+use std::fs;
 use std::path::Path;
-use std::{fs};
 
 /// Events produced by the parser implementation.
 #[derive(Clone, Debug)]
@@ -297,7 +297,7 @@ impl AttributeStorage {
             StorageKind::String => AttributeStorage::Strings {
                 values: Vec::new(),
                 indices: Vec::new(),
-            }
+            },
         }
     }
 }
@@ -410,7 +410,7 @@ fn read_rawpagedata_generic<T: AttribValue>(
     let mut ptr = 0;
     let len = raw.len();
 
-    eprintln!("constantpageflags {:?}", constantpageflags);
+    trace!("constantpageflags {:?}", constantpageflags);
 
     let mut pageindex = 0;
     loop {
@@ -442,7 +442,7 @@ fn read_rawpagedata_generic<T: AttribValue>(
         } else {
             pagesize
         };
-        eprintln!("tuples_in_page: {tuples_in_page}, ptr={ptr}, len={len}");
+        trace!("tuples_in_page: {tuples_in_page}, ptr={ptr}, len={len}");
 
         // number of elements represented by the current page
         let num_elements_in_page = tuples_in_page * tuplesize;
@@ -559,9 +559,6 @@ fn read_point_attribute(p: &mut dyn Parser) -> Result<Attribute, Error> {
         String,
     }
     let mut attribute_type = AttributeType::Numeric;
-
-    //eprintln!("read_point_attribute metadata");
-    //eprintln!("read_point_attribute data");
 
     expect!(p, Event::BeginArray);
 
@@ -878,8 +875,7 @@ fn read_uniform_fields(p: &mut dyn Parser) -> Result<UniformFields, Error> {
     Ok(r)
 }
 
-fn read_primitives(p: &mut dyn Parser, geo: &mut Geo) -> Result<(), Error>
-{
+fn read_primitives(p: &mut dyn Parser, geo: &mut Geo) -> Result<(), Error> {
     let base_prim_index: u32 = 0;
 
     read_array! {p => {

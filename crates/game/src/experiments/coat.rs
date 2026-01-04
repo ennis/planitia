@@ -86,6 +86,7 @@ pub(crate) struct DebugStrokesRootParams {
     pub(crate) scene_info: gpu::Ptr<SceneInfoUniforms>,
     pub(crate) vertices: gpu::Ptr<[ExpandedVertex]>,
     pub(crate) indices: gpu::Ptr<[u32]>,
+    pub(crate) depth_texture: gpu::TextureHandle,
 }
 
 const NVERTEX: usize = 9;
@@ -227,7 +228,7 @@ impl CoatExperiment {
         cmd.fill_buffer(&gpu_data.expansion_vertices.as_bytes().slice(..), 0);
         cmd.fill_buffer(&gpu_data.expansion_indices.as_bytes().slice(..), 0);
 
-        let params = cmd.upload_temporary(&ExpandStrokesData {
+        let params = cmd.upload(&ExpandStrokesData {
             strokes: gpu_data.stroke_buffer.ptr(),
             vertices: gpu_data.stroke_vertex_buffer.ptr(),
             out_vertices: PushBuffer::new(&gpu_data.expansion_vertices),
@@ -283,6 +284,7 @@ impl CoatExperiment {
                 scene_info: scene_info.gpu,
                 vertices: gpu_data.expansion_vertices.ptr(),
                 indices: gpu_data.expansion_indices.ptr(),
+                depth_texture: gpu::TextureHandle::INVALID,
             }),
         );
 

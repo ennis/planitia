@@ -3,14 +3,14 @@
 //! Handles the generation of terrain meshes.
 #![feature(default_field_values)]
 
-use std::sync::OnceLock;
+use crate::terrain::{TerrainConfig, generate_terrain_meshes};
 use clap::{Parser, Subcommand};
 use color_print::{cprint, cprintln};
 use hgeo::Geo;
-use crate::terrain::{generate_terrain_meshes, TerrainConfig};
+use std::sync::OnceLock;
 
-mod terrain;
 mod convert;
+mod terrain;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -44,14 +44,14 @@ enum Commands {
         /// Path to Houdini .geo/.bgeo file.
         geo_file: String,
         /// Path to output file.
-        #[clap(short='o', long)]
+        #[clap(short = 'o', long)]
         output_file: Option<String>,
     },
     /// Dump information about a geometry file.
     Info {
         /// Path to geometry file.
         geo_file: String,
-    }
+    },
 }
 
 /// Config options common between all tools.
@@ -127,14 +127,21 @@ fn main() {
     let _ = CONFIG.set(Config { quiet: args.quiet });
 
     match args.command {
-        Commands::Terrain { heightmap, error_threshold, triangle_count } => {
-            let terrain_cfg = TerrainConfig { error_threshold, triangle_count_target: triangle_count };
+        Commands::Terrain {
+            heightmap,
+            error_threshold,
+            triangle_count,
+        } => {
+            let terrain_cfg = TerrainConfig {
+                error_threshold,
+                triangle_count_target: triangle_count,
+            };
             generate_terrain_meshes(heightmap, &terrain_cfg);
         }
         Commands::Convert { geo_file, output_file } => {
             let cfg = convert::ConvertConfig { output_file };
             convert::convert_geo_file(geo_file, &cfg);
-        },
+        }
         Commands::Info { geo_file } => {
             let geo = Geo::load(&geo_file).expect("failed to load geometry file");
             print_geometry_summary(&geo);

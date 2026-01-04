@@ -1,8 +1,8 @@
 //! Platform-specific implementations of certain types and functions.
 
+use crate::input::InputEvent;
 use std::any::Any;
 use std::path::Path;
-use crate::input::InputEvent;
 use std::time::Instant;
 
 #[cfg(windows)]

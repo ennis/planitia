@@ -1,4 +1,3 @@
-
 //! Pipeline archive files.
 //!
 //! Pipeline files hold a collection of pipelines (which are variants of the same pipeline).
@@ -59,6 +58,35 @@ impl Default for FileDependency {
     }
 }
 
+/// Layout of the root parameter struct.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct RootParamLayout {
+    /// Size of the root parameter struct in bytes.
+    pub byte_size: u32,
+    pub parameters: Offset<[RootParamInfo]>,
+}
+
+/// Information about a root parameter.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct RootParamInfo {
+    /// Name of the root parameter in the struct (for debugging purposes).
+    pub name: ZString<32>,
+    /// The ID of the render-world value that this root parameter should be bound to.
+    ///
+    /// It can be empty, in which case the parameter is initialized to zero.
+    pub render_world_binding: ZString<32>,
+    /// Offset of the parameter in the root parameter struct.
+    pub offset: u32,
+    /// Size of the parameter in bytes.
+    pub size: u32,
+    /// Type of the root parameter.
+    ///
+    /// For array types, this is the type of array elements.
+    /// For structs (i.e. non-scalar, non-vector, non-array types), this is UNDEFINED.
+    pub format: vk::Format,
+}
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -66,6 +94,7 @@ pub struct PipelineEntryData {
     /// Name of the pipeline.
     pub name: ZString<64>,
     pub kind: PipelineKind,
+    pub root_params: RootParamLayout,
     /// List of source files.
     pub sources: Offset<[FileDependency]>,
 }
@@ -96,20 +125,9 @@ impl PipelineKind {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct ShaderData {
+    pub stage: vk::ShaderStageFlags,
     pub entry_point: ZString<32>,
     pub spirv: Offset<[u32]>,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub enum GraphicsPipelineShaders {
-    Primitive {
-        vertex: Offset<ShaderData>,
-    },
-    Mesh {
-        task: Offset<ShaderData>,
-        mesh: Offset<ShaderData>,
-    },
 }
 
 #[repr(C)]
@@ -123,9 +141,7 @@ pub struct GraphicsPipelineData {
     pub depth_stencil: DepthStencilStateData,
     /// Color targets
     pub color_targets: Offset<[Offset<ColorTarget>]>,
-    pub vertex_or_mesh_shaders: GraphicsPipelineShaders,
-    /// Compiled SPIR-V fragment shader module.
-    pub fragment_shader: Offset<ShaderData>,
+    pub shaders: Offset<[ShaderData]>,
 }
 
 #[repr(C)]
@@ -133,7 +149,7 @@ pub struct GraphicsPipelineData {
 pub struct ComputePipelineData {
     /// Size of push constant block in bytes.
     pub push_constants_size: u16,
-    pub compute_shader: Offset<ShaderData>,
+    pub compute_shader: ShaderData,
     pub workgroup_size: [u32; 3],
 }
 
@@ -217,7 +233,6 @@ impl PipelineArchive {
         let header: &PipelineArchiveData = self.0.header().unwrap();
         header
     }
-
 
     pub fn find_graphics_pipeline(&self, name: &str) -> Option<&GraphicsPipelineData> {
         let data = self.data();
@@ -327,11 +342,12 @@ mod tests {
                         depth_write_enable: true,
                     },
                     color_targets,
-                    vertex_or_mesh_shaders: GraphicsPipelineShaders::Primitive {
-                        vertex: Offset::INVALID,
-                    },
-                    fragment_shader: Offset::INVALID,
+                    shaders: Offset::INVALID,
                 }),
+                root_params: RootParamLayout {
+                    byte_size: 0,
+                    parameters: Offset::INVALID,
+                },
                 sources: Offset::INVALID,
             }],
         );

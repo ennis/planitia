@@ -14,6 +14,7 @@ struct PushConstants {
 };
 
 [shader("vertex")]
+[pass("background")]
 VSOut background_vertex_main(uint vertex_id : SV_VertexID, uniform PushConstants* u)
 {
     float2 positions[6] = {
@@ -32,6 +33,7 @@ VSOut background_vertex_main(uint vertex_id : SV_VertexID, uniform PushConstants
 }
 
 [shader("fragment")]
+[pass("background")]
 float4 background_fragment_main(VSOut v, uint2 frag_pos: SV_Position, uniform PushConstants* u) {
     float t = v.uv.y * 0.5 + 0.5;
     float4 color = lerp(

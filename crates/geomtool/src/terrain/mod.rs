@@ -1,12 +1,12 @@
 //! Terrain mesh generation from heightmaps.
 mod triangulation;
 
-use crate::{cfg, Config, CONFIG};
 use crate::terrain::triangulation::{TriangulationOptions, tessellate_heightmap};
+use crate::{CONFIG, Config, cfg};
+use color_print::cprintln;
 use image::ImageReader;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::path::Path;
-use color_print::cprintln;
 
 pub struct TerrainConfig {
     pub error_threshold: Option<f32>,
@@ -17,13 +17,9 @@ pub fn generate_terrain_meshes(heightmap_file: impl AsRef<Path>, terrain_cfg: &T
     generate_terrain_meshes_inner(heightmap_file.as_ref(), terrain_cfg).unwrap();
 }
 
-fn generate_terrain_meshes_inner(
-    heightmap_file: &Path,
-    terrain_cfg: &TerrainConfig,
-) -> anyhow::Result<()> {
-    
+fn generate_terrain_meshes_inner(heightmap_file: &Path, terrain_cfg: &TerrainConfig) -> anyhow::Result<()> {
     let quiet = cfg().quiet;
-    
+
     // load heightmap image to float array
     let (heightmap, width, height) = {
         let reader = ImageReader::open(heightmap_file)?;

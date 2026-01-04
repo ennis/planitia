@@ -74,17 +74,11 @@ impl CommandStream {
         );
     }
 
-    pub fn upload_temporary<T: Copy>(&mut self, data: &T) -> Ptr<T> {
-        // TODO: we should have a ring buffer for temporary uploads instead of creating a new buffer each time
-        let buffer = Buffer::from_data(data, "");
-        // NOTE: the buffer drops immediately, but since we're calling this from a CommandStream,
-        // (which increased the next_submission_index counter) we know that the underlying buffer
-        // won't be deleted until the submission associated to this CommandStream has completed.
-        buffer.ptr()
+    pub fn upload<T: Copy>(&mut self, data: &T) -> Ptr<T> {
+        Device::global().upload_one(data)
     }
 
-    pub fn upload_temporary_slice<T: Copy>(&mut self, data: &[T]) -> Ptr<[T]> {
-        let buffer = Buffer::from_slice(data, "");
-        buffer.ptr()
+    pub fn upload_slice<T: Copy>(&mut self, data: &[T]) -> Ptr<[T]> {
+        Device::global().upload(data)
     }
 }

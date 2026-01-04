@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use crate::Geo;
+use std::collections::HashMap;
 
 /// Helper function to convert polygons into a triangle mesh.
 ///
@@ -7,7 +7,11 @@ use crate::Geo;
 ///
 /// * `emit_vertex` - called for each output vertex with the houdini point index. Should return the vertex index in the output mesh.
 /// * `emit_triangle` - called for each output triangle with the three vertex indices.
-pub fn polygons_to_triangle_mesh<VertexFn, TriangleFn>(g: &Geo, mut emit_vertex: VertexFn, mut emit_triangle: TriangleFn) where
+pub fn polygons_to_triangle_mesh<VertexFn, TriangleFn>(
+    g: &Geo,
+    mut emit_vertex: VertexFn,
+    mut emit_triangle: TriangleFn,
+) where
     VertexFn: FnMut(&Geo, u32) -> u32,
     TriangleFn: FnMut(u32, u32, u32),
 {
@@ -35,11 +39,7 @@ pub fn polygons_to_triangle_mesh<VertexFn, TriangleFn>(g: &Geo, mut emit_vertex:
 
             if i >= 2 {
                 // emit triangle
-                emit_triangle(
-                    cur_prim_indices[0],
-                    cur_prim_indices[i - 1],
-                    cur_prim_indices[i],
-                );
+                emit_triangle(cur_prim_indices[0], cur_prim_indices[i - 1], cur_prim_indices[i]);
             }
         }
 

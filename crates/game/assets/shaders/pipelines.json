@@ -28,7 +28,12 @@
                     "file_path": "coat_rendering.slang",
                     "name": "debug_strokes",
                     "vertex_entry_point": "debug_strokes_vertex",
-                    "fragment_entry_point": "debug_strokes_fragment"
+                    "fragment_entry_point": "debug_strokes_fragment",
+                    "overrides": {
+                        "depth_stencil_state": {
+                            "depth_write_enable": false
+                        }
+                    }
                 },
                 {
                     "file_path": "outline.slang",
@@ -46,6 +51,7 @@
                     "fragment_entry_point": "background_fragment_main",
                     "overrides": {
                         "depth_stencil_state": {
+                            "depth_test_enable": false,
                             "depth_write_enable": false
                         }
                     }

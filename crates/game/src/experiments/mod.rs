@@ -1,11 +1,11 @@
 pub mod coat;
-pub mod lines;
-mod sweep;
-pub mod outlines;
 mod dcel;
+pub mod lines;
+pub mod outlines;
+mod sweep;
 
-use gamelib::paint::{DrawGlyphRunOptions, PaintRenderParams, Painter, TextFormat, TextLayout};
 use color::Srgba8;
+use gamelib::paint::{DrawGlyphRunOptions, PaintRenderParams, Painter, TextFormat, TextLayout};
 use math::geom::rect_xywh;
 use math::vec2;
 

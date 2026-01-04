@@ -169,7 +169,7 @@ impl Renderer {
 
         let width = color_target.width();
         let height = color_target.height();
-        let params = cmd.upload_temporary(&EguiRootParams {
+        let params = cmd.upload(&EguiRootParams {
             screen_size: [width as f32, height as f32],
         });
 
@@ -222,7 +222,6 @@ impl Renderer {
                     (1, self.sampler.descriptor()),
                 ],
             );
-
 
             enc.draw_indexed(
                 TriangleList,

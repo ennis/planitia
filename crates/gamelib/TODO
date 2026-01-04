@@ -100,6 +100,24 @@
      ComputeEncoder is strictly useless
 
 
+Render world:
+    The "render world" holds all resources, pipelines, and is in charge of running the render passes. It also holds the current scene to draw.
+    The resources and render passes are defined declaratively in a separate file.
+    Draw parameters, like the number of vertices and indices, depend on the scene. They are determined automatically.
+    For some compute passes, which require a number of workgroups to be launched that depend on some block or tile size, this is more complicated, but we can get around it by specifying the tile size.
+    Each object in the "render world" has a name (identifier) and a type. The type can be opaque for now, but it should at least differentiate between geometry buffers & one-off variables.
+    
+
+Models:
+    ☐ Outlines
+    ☐ Salient edges
+    ☐ Convex patch decomposition
+    ☐ Armature
+
+Contours:
+    ☐ Differentiate boundaries from outlines
+    
+
 Terrain rendering:
     ✔ Find out how to do the initial adaptive meshing @done (25-12-15 15:55)
     ☐ Draw the initial meshing
