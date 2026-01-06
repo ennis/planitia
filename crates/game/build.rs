@@ -1,6 +1,10 @@
 fn main() {
     //let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 
+    eprintln!(
+        "HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!HELLO!"
+    );
+
     // build shaders
     if let Err(err) = shadertool::build_pipeline(
         "assets/shaders/shaders.toml",

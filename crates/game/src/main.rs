@@ -244,8 +244,7 @@ impl AppHandler for Game {
         //-------------------------------
         // Render GUI
         APP.render_imgui(&mut cmd, &target.image);
-
-        cmd.flush(&[target.ready], &[target.rendering_finished], None).unwrap();
+        gpu::submit(cmd).unwrap();
     }
 
     fn close_requested(&mut self) {

@@ -19,7 +19,6 @@ rasterizer.cull_mode = "none"       # No backface culling
 rasterizer.polygon_mode = "fill"    # Fill polygons
 depth_stencil.format = "D32F_S8UI"  # 32-bit float depth, 8-bit stencil
 depth_stencil.compare_op = "less"
-depth_stencil.test_enable = true
 depth_stencil.write_enable = true
 color_targets = [
     { format = "RGBA8", src_color = "src_alpha", dst_color = "one_minus_src_alpha", color_op = "add", src_alpha = "one", dst_alpha = "zero", alpha = "add" }
@@ -29,6 +28,9 @@ color_targets = [
 # Pass overrides
 ######################################################################
 
+[override.depth_pass]
+color_targets = []
+
 [override.debug_strokes]
 depth_stencil.write_enable = false
 
@@ -36,7 +38,7 @@ depth_stencil.write_enable = false
 depth_stencil.write_enable = false
 
 [override.background]
-depth_stencil.test_enable = false
+depth_stencil.compare_op = "always"
 depth_stencil.write_enable = false
 
 ######################################################################

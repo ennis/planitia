@@ -19,27 +19,11 @@ pub type Platform = windows::Win32Platform;
 #[derive(Clone)]
 pub struct RenderTargetImage<'a> {
     pub image: &'a gpu::Image,
-    /// Semaphore that should be waited on before rendering to the image.
-    pub ready: gpu::SemaphoreWait,
-    /// Should be signaled after rendering to the image.
-    pub rendering_finished: gpu::SemaphoreSignal,
 }
 
 /// A token that uniquely identifies a non-input event.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct EventToken(pub u64);
-
-/*
-/// A request to wake up the event loop at a particular time.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum WakeupRequest {
-    /// Wake up the event loop on the next vsync.
-    VSync,
-    /// Wake up the event loop at the specified time.
-    At(Instant),
-    /// Wake up the event loop immediately after the current event loop iteration.
-    Poll,
-}*/
 
 /// Platform initialization options.
 #[derive(Debug, Clone, Copy)]

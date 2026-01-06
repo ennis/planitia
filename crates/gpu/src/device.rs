@@ -5,24 +5,28 @@ use crate::device::bindless::BindlessDescriptorTable;
 use crate::instance::vk_khr_surface;
 use crate::platform::PlatformExtensions;
 use crate::{
-    get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, BufferCreateInfo, BufferUntyped, BufferUsage,
-    CommandPool, CommandStream, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error,
-    GraphicsPipeline, GraphicsPipelineCreateInfo, MemoryAccess, PreRasterizationShaders, Ptr, Sampler,
-    SamplerCreateInfo, SamplerCreateInfoHashable, SUBGROUP_SIZE,
+    aspects_for_format, get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, Barrier, BufferCreateInfo,
+    BufferUntyped, BufferUsage, CommandPool, CommandStream, ComputePipeline, ComputePipelineCreateInfo,
+    DescriptorSetLayout, Error, GraphicsPipeline, GraphicsPipelineCreateInfo, MemoryAccess, PreRasterizationShaders,
+    Ptr, Sampler, SamplerCreateInfo, SamplerCreateInfoHashable, SyncWait,
+    SUBGROUP_SIZE,
 };
 use ash::vk;
 use gpu_allocator::vulkan::AllocationCreateDesc;
 use gpu_allocator::MemoryLocation;
 use log::{debug, error, trace};
+use slotmap::secondary::Entry;
 use slotmap::{SecondaryMap, SlotMap};
 use std::alloc::Layout;
 use std::collections::{HashMap, VecDeque};
-use std::ffi::{c_void, CStr, CString};
+use std::ffi::{c_char, c_void, CStr, CString};
 use std::marker::PhantomData;
+use std::mem::ManuallyDrop;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::{fmt, mem, ptr};
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -219,7 +223,7 @@ pub(crate) struct ActiveSubmission {
 
 struct DeleteQueueEntry {
     submission: u64,
-    deleter: Option<Box<dyn FnOnce() + Send + Sync>>,
+    deleter: Option<Box<dyn FnOnce(&Device) + Send + Sync>>,
 }
 
 /// Errors during device creation.
@@ -441,6 +445,10 @@ const DEVICE_EXTENSIONS: &[&str] = &[
     "VK_EXT_mutable_descriptor_type", //"VK_EXT_descriptor_buffer",
 ];
 
+////////////////////////////////////////////////////////////////////////////////////////////////
+// INITIALIZATION
+////////////////////////////////////////////////////////////////////////////////////////////////
+
 impl Device {
     /// Returns the global device.
     pub fn global() -> &'static Device {
@@ -608,6 +616,19 @@ impl Device {
     /// Creates a new `Device`, automatically choosing a suitable physical device.
     pub fn new() -> Result<Device, DeviceCreateError> {
         unsafe { Self::with_surface(None) }
+    }
+
+    /// Returns the list of supported swapchain formats for the given surface.
+    pub unsafe fn get_surface_formats(&self, surface: vk::SurfaceKHR) -> Vec<vk::SurfaceFormatKHR> {
+        vk_khr_surface()
+            .get_physical_device_surface_formats(self.thread_safe.physical_device, surface)
+            .unwrap()
+    }
+
+    /// Returns one supported surface format. Use if you don't care about the format of your swapchain.
+    pub unsafe fn get_preferred_surface_format(&self, surface: vk::SurfaceKHR) -> vk::SurfaceFormatKHR {
+        let surface_formats = self.get_surface_formats(surface);
+        get_preferred_swapchain_surface_format(&surface_formats)
     }
 
     /// Creates a new `Device` that can render to the specified `present_surface` if one is specified.
@@ -786,47 +807,12 @@ impl Device {
     }
 }
 
-struct ShaderModuleGuard<'a> {
-    device: &'a Device,
-    module: vk::ShaderModule,
-}
-
-impl<'a> Drop for ShaderModuleGuard<'a> {
-    fn drop(&mut self) {
-        unsafe {
-            self.device.raw.destroy_shader_module(self.module, None);
-        }
-    }
-}
-
-/// Helper to create PipelineShaderStageCreateInfo
-fn create_stage<'a>(
-    device: &'a Device,
-    p_next: *const c_void,
-    stage: vk::ShaderStageFlags,
-    code: &[u32],
-    entry_point: &CStr,
-) -> Result<(vk::PipelineShaderStageCreateInfo<'static>, ShaderModuleGuard<'a>), Error> {
-    let create_info = vk::ShaderModuleCreateInfo {
-        flags: Default::default(),
-        code_size: code.len() * 4,
-        p_code: code.as_ptr(),
-        ..Default::default()
-    };
-    let module = unsafe { device.raw.create_shader_module(&create_info, None)? };
-    let stage_create_info = vk::PipelineShaderStageCreateInfo {
-        p_next,
-        flags: Default::default(),
-        stage,
-        module,
-        p_name: entry_point.as_ptr(),
-        p_specialization_info: ptr::null(),
-        ..Default::default()
-    };
-    Ok((stage_create_info, ShaderModuleGuard { device, module }))
-}
+////////////////////////////////////////////////////////////////////////////////////////////////
+// MISC
+////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl Device {
+    /// Returns the underlying raw vulkan device (via `ash::Device`).
     pub fn raw(&self) -> &ash::Device {
         &self.raw
     }
@@ -854,15 +840,6 @@ impl Device {
             .unwrap();
     }
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    // COMMAND STREAMS
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-
-    #[deprecated]
-    pub fn create_command_stream(&self) -> CommandStream {
-        CommandStream::new()
-    }
-
     /// Allocates a new resource ID for tracking a resource.
     pub(crate) fn allocate_resource_id(&self) -> ResourceId {
         self.resources.lock().unwrap().insert(ResourceState {
@@ -884,21 +861,6 @@ impl Device {
             .remove(index);
     }
 
-    /*/// Releases a sampler heap index that is no longer used.
-    pub(crate) fn free_sampler_heap_index(&self, index: SamplerHeapIndex) {
-        self.sampler_heap.lock().unwrap().remove(index);
-    }*/
-
-    /*pub(crate) fn last_submission_index(&self, resource_id: ResourceId) -> u64 {
-        self.resources.lock().unwrap()[resource_id].last_submission_index
-    }*/
-
-    /*pub(crate) fn set_last_submission_index(&self, resource_id: ResourceId, index: u64) {
-        let mut resources = self.resources.lock().unwrap();
-        let resource = &mut resources[resource_id];
-        resource.last_submission_index = resource.last_submission_index.max(index);
-    }*/
-
     /// Allocates memory, or panic trying.
     ///
     /// This is used internally for resource creation since we don't expose memory allocation errors to the user.
@@ -913,21 +875,11 @@ impl Device {
             .expect("failed to allocate device memory")
     }
 
-    /// Schedules an object for deletion.
-    ///
-    /// The object will be deleted once the GPU has finished processing commands up to and
-    /// including the specified submission index.
-    pub fn delete_later<T: Send + Sync + 'static>(&self, submission_index: u64, object: T) {
-        self.call_later(submission_index, move || {
-            drop(object);
-        });
-    }
-
     /// Schedules a function call.
     ///
     /// The function will be called once the GPU has finished processing commands up to and
     /// including the specified submission index.
-    pub fn call_later(&self, submission_index: u64, f: impl FnOnce() + Send + Sync + 'static) {
+    pub fn call_later(&self, submission_index: u64, f: impl FnOnce(&Self) + Send + Sync + 'static) {
         // if the submission is already completed, call the function right away
         let last_completed_submission_index =
             unsafe { self.raw.get_semaphore_counter_value(self.thread_safe.timeline).unwrap() };
@@ -937,7 +889,7 @@ impl Device {
         }
         if submission_index <= last_completed_submission_index {
             trace!("GPU: immediate call_later for submission {submission_index} (last_completed_submission_index={last_completed_submission_index})");
-            f();
+            f(self);
             return;
         }
 
@@ -952,19 +904,19 @@ impl Device {
     pub(crate) fn delete_resource_after_current_submission(
         &self,
         resource_id: ResourceId,
-        deleter: impl FnOnce() + Send + Sync + 'static,
+        deleter: impl FnOnce(&Self) + Send + Sync + 'static,
     ) {
         // See comments in `delete_after_current_submission`.
         let last_submission = self.next_submission_index.load(Relaxed) - 1;
-        self.call_later(last_submission, move || {
+        self.call_later(last_submission, move |device| {
             //trace!("GPU: deleting tracked resource {:?}", resource_id);
             Self::global().free_resource_id(resource_id);
-            deleter();
+            deleter(device);
         })
     }
 
     /// Schedules a function (destructor) to be called after the current submission is complete.
-    pub(crate) fn delete_after_current_submission(&self, deleter: impl FnOnce() + Send + Sync + 'static) {
+    pub(crate) fn delete_after_current_submission(&self, deleter: impl FnOnce(&Self) + Send + Sync + 'static) {
         // All resources may potentially be used by the last opened submission (the last *created*
         // CommandStream), which has index `next_submission_index - 1`.
         //
@@ -972,8 +924,8 @@ impl Device {
         // (`CommandStream::reference_resource`) and was error-prone.
         // Now we just go with the pessimistic, but reliable, approach.
         let last_submission = self.next_submission_index.load(Relaxed) - 1;
-        self.call_later(last_submission, move || {
-            deleter();
+        self.call_later(last_submission, move |device| {
+            deleter(device);
         })
     }
 
@@ -1026,11 +978,7 @@ impl Device {
         }
     }
 
-    /// Cleanup expired resources.
-    ///
-    /// This should be called periodically to free resources that are no longer used by the GPU.
-    /// Otherwise, tasks scheduled with `call_later` or `delete_later` will never be executed.
-    pub fn cleanup(&self) {
+    fn maintain(&self) {
         self.retire_upload_buffers();
         let last_completed_submission_index = unsafe {
             self.raw
@@ -1052,7 +1000,7 @@ impl Device {
                 return true;
             }
             let deleter = deleter.take().unwrap();
-            deleter();
+            deleter(self);
             false
         });
 
@@ -1097,19 +1045,6 @@ impl Device {
     /// There must be a pending wait operation on the semaphore, or it must be in the unsignaled state.
     pub(crate) unsafe fn recycle_binary_semaphore(&self, binary_semaphore: vk::Semaphore) {
         self.semaphores.lock().unwrap().push(binary_semaphore);
-    }
-
-    /// Returns the list of supported swapchain formats for the given surface.
-    pub unsafe fn get_surface_formats(&self, surface: vk::SurfaceKHR) -> Vec<vk::SurfaceFormatKHR> {
-        vk_khr_surface()
-            .get_physical_device_surface_formats(self.thread_safe.physical_device, surface)
-            .unwrap()
-    }
-
-    /// Returns one supported surface format. Use if you don't care about the format of your swapchain.
-    pub unsafe fn get_preferred_surface_format(&self, surface: vk::SurfaceKHR) -> vk::SurfaceFormatKHR {
-        let surface_formats = self.get_surface_formats(surface);
-        get_preferred_swapchain_surface_format(&surface_formats)
     }
 
     pub(crate) fn create_sampler(&self, info: &SamplerCreateInfo) -> Sampler {
@@ -1166,7 +1101,53 @@ impl Device {
             unsafe { CommandPool::new(&self.raw, queue_family) }
         }
     }
+}
 
+////////////////////////////////////////////////////////////////////////////////////////////////
+// SHADERS, PIPELINES & LAYOUTS
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+struct ShaderModuleGuard<'a> {
+    device: &'a Device,
+    module: vk::ShaderModule,
+}
+
+impl<'a> Drop for ShaderModuleGuard<'a> {
+    fn drop(&mut self) {
+        unsafe {
+            self.device.raw.destroy_shader_module(self.module, None);
+        }
+    }
+}
+
+/// Helper to create PipelineShaderStageCreateInfo
+fn create_stage<'a>(
+    device: &'a Device,
+    p_next: *const c_void,
+    stage: vk::ShaderStageFlags,
+    code: &[u32],
+    entry_point: &CStr,
+) -> Result<(vk::PipelineShaderStageCreateInfo<'static>, ShaderModuleGuard<'a>), Error> {
+    let create_info = vk::ShaderModuleCreateInfo {
+        flags: Default::default(),
+        code_size: code.len() * 4,
+        p_code: code.as_ptr(),
+        ..Default::default()
+    };
+    let module = unsafe { device.raw.create_shader_module(&create_info, None)? };
+    let stage_create_info = vk::PipelineShaderStageCreateInfo {
+        p_next,
+        flags: Default::default(),
+        stage,
+        module,
+        p_name: entry_point.as_ptr(),
+        p_specialization_info: ptr::null(),
+        ..Default::default()
+    };
+    Ok((stage_create_info, ShaderModuleGuard { device, module }))
+}
+
+impl Device {
     /// FIXME: this should be a constructor of `DescriptorSetLayout`, because now we have two
     /// functions with very similar names (`create_descriptor_set_layout` and `create_descriptor_set_layout_from_handle`)
     /// that have totally different semantics (one returns a raw vulkan handle, the other returns a RAII wrapper `DescriptorSetLayout`).
@@ -1596,4 +1577,18 @@ impl Device {
             bindless,
         })
     }
+}
+
+/// Waits for the GPU to complete all submitted work.
+pub fn wait_idle() {
+    unsafe { Device::global().raw.device_wait_idle().unwrap() }
+}
+
+/// Cleanup expired resources.
+///
+/// This should be called periodically (e.g. per-frame) to free resources that are no longer
+/// used by the GPU.
+/// Otherwise, tasks scheduled with `call_later` or `delete_later` will never be executed.
+pub fn maintain() {
+    unsafe { Device::global().maintain() }
 }

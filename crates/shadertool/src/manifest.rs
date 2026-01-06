@@ -33,7 +33,7 @@ pub struct BuildManifest {
     pub default: GraphicsState,
     pub shader_profile: String,
     pub compiler: CompilerOptions,
-    pub overrides: toml::Table,
+    pub override_: toml::Table,
 }
 
 impl BuildManifest {
@@ -85,11 +85,8 @@ impl BuildManifest {
             .to_string();
 
         // default graphics state
-        let default = {
-            let mut state = GraphicsState::default();
-            state.read(toml.get("default").ok_or(MissingField("default"))?)?;
-            state
-        };
+        let mut default = GraphicsState::default();
+        default.read(toml.get("default").ok_or(MissingField("default"))?)?;
 
         // shader profile
         let shader_profile = toml
@@ -98,9 +95,9 @@ impl BuildManifest {
             .to_string();
 
         // overrides
-        let mut overrides = toml::Table::new();
+        let mut override_ = toml::Table::new();
         if let Some(overrides_toml) = toml.get("override") {
-            overrides = overrides_toml.as_table().ok_or(InvalidType("override"))?.clone();
+            override_ = overrides_toml.as_table().ok_or(InvalidType("override"))?.clone();
         }
 
         let compiler = {
@@ -118,7 +115,7 @@ impl BuildManifest {
             include_paths,
             output_file,
             default,
-            overrides,
+            override_,
             compiler,
         })
     }
@@ -127,9 +124,13 @@ impl BuildManifest {
 /// Shader compilation options.
 #[derive(Clone, Default)]
 pub struct CompilerOptions {
+    /// Preprocessor definitions
     pub defines: BTreeMap<String, String>,
+    /// Shader profile
     pub profile: String,
+    /// Enable optimizations
     pub optimize: bool,
+    /// Enable debug information
     pub debug: bool,
 }
 
@@ -365,8 +366,10 @@ fn get_blend_op(op_str: &str) -> Result<vk::BlendOp, Error> {
 }
 
 fn read_depth_stencil_state(toml: &TomlValue, out: &mut shader_archive::DepthStencilStateData) -> Result<(), Error> {
+    // any depth-stencil field automatically enables depth testing
     if let Some(format_str) = toml.get_optional_str("format")? {
         out.format = get_format(format_str)?;
+        out.enable = true;
     }
     if let Some(depth_compare_op) = toml.get_optional_str("compare_op")? {
         out.depth_compare_op = match depth_compare_op {
@@ -378,12 +381,15 @@ fn read_depth_stencil_state(toml: &TomlValue, out: &mut shader_archive::DepthSte
                 vk::CompareOp::ALWAYS
             }
         };
+        out.enable = true;
     }
     if let Some(depth_write_enable) = toml.get_optional_bool("write_enable")? {
         out.depth_write_enable = depth_write_enable;
+        out.enable = true;
     }
-    if let Some(depth_test_enable) = toml.get_optional_bool("test_enable")? {
-        out.depth_test_enable = depth_test_enable;
+    // ... but if "enable" is explicitly set, it overrides everything
+    if let Some(enable) = toml.get_optional_bool("enable")? {
+        out.enable = enable;
     }
     Ok(())
 }

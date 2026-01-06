@@ -80,7 +80,7 @@ impl Window {
             gfx.wait_gpu_idle();
             self.first_present = false;
             unsafe {
-                self.root_visual.SetContent(&self.swap_chain.dxgi).unwrap();
+                self.root_visual.SetContent(&self.swap_chain.dxgi_swap_chain).unwrap();
                 gfx.compositor.Commit().unwrap();
             }
         }

@@ -626,7 +626,14 @@ impl BuildManifest {
             match self.load_module(&file, &include_paths, options, &mut entry_points) {
                 Ok(_) => {}
                 Err(err) => {
-                    ceprintln!("<r,bold>error</>: {err}");
+                    if options.emit_cargo_deps {
+                        // use cargo::error when running in a build script, otherwise absolutely
+                        // nothing is reported to the user even through stderr, unless running
+                        // `cargo -vv`
+                        println!("cargo::error={}", err);
+                    } else {
+                        ceprintln!("<r,bold>error</>: {err}");
+                    }
                     got_errors = true;
                 }
             }
@@ -686,11 +693,12 @@ impl BuildManifest {
         }
 
         if pipelines.is_empty() {
-            cprintln!("<y,bold>warning</>: no pipelines found in the input files (possibly missing `pass(\"...\")` attributes?)");
+            cprintln!(
+                "<y,bold>warning</>: no pipelines found in the input files (possibly missing `pass(\"...\")` attributes?)"
+            );
         }
 
         // write archive
-
         if !options.quiet {
             cprintln!("<g,bold>Writing</> {}", output_file.display());
         }
@@ -707,10 +715,10 @@ impl BuildManifest {
         let mut entries = Vec::new();
         for (&pipeline_name, entry_points) in pipelines.iter() {
             let mut state = self.default.clone();
-            if let Some(ref overrides) = self.overrides.get(pipeline_name) {
+            if let Some(ref overrides) = self.override_.get(pipeline_name) {
                 state.apply_overrides(overrides)?;
             }
-           entries.push(self.write_pipeline(&mut archive, pipeline_name, &state, entry_points, options)?);
+            entries.push(self.write_pipeline(&mut archive, pipeline_name, &state, entry_points, options)?);
         }
         let entries_offset = archive.write_slice(&entries[..]);
         archive[header].entries = entries_offset;

@@ -6,7 +6,7 @@ use crate::{
 use ash::prelude::VkResult;
 use ash::vk::DeviceAddress;
 use fxhash::FxHashMap;
-use log::trace;
+use log::{error, trace};
 pub use render::{DrawIndexedIndirectCommand, DrawIndirectCommand, RenderEncoder, RenderPassInfo};
 use slotmap::secondary::Entry;
 use std::ffi::{c_char, c_void, CString};
@@ -149,6 +149,7 @@ pub(crate) struct CommandBufferImageState {
     pub last_access: MemoryAccess,
 }
 
+/*
 /// A wrapper around a signaled binary semaphore.
 ///
 /// This should be used in a wait operation, otherwise the semaphore will be leaked.
@@ -162,18 +163,19 @@ impl SignaledSemaphore {
 
     pub fn wait_dst_stage(self, dst_stage: vk::PipelineStageFlags) -> SemaphoreWait {
         SemaphoreWait {
-            kind: SemaphoreWaitKind::Binary {
+            kind: SyncWait::Binary {
                 semaphore: self.0,
                 transfer_ownership: true,
             },
             dst_stage,
         }
     }
-}
+}*/
 
+/*
 /// Describes the type of semaphore in a semaphore wait operation.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum SemaphoreWaitKind {
+pub enum SyncWait {
     /// Binary semaphore wait.
     Binary {
         /// The semaphore to wait on.
@@ -189,18 +191,9 @@ pub enum SemaphoreWaitKind {
         fence: vk::Fence,
         value: u64,
     },
-}
+}*/
 
-/// Describes a semaphore wait operation.
-#[derive(Clone, Debug)]
-pub struct SemaphoreWait {
-    /// The kind of wait operation.
-    pub kind: SemaphoreWaitKind,
-    /// Destination stage
-    pub dst_stage: vk::PipelineStageFlags,
-}
-
-/// Describes the kind of semaphore signal operation.
+/*/// Describes the kind of semaphore signal operation.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum SemaphoreSignal {
     /// Binary semaphore signal.
@@ -224,7 +217,7 @@ pub enum SemaphoreSignal {
         /// The value to signal.
         value: u64,
     },
-}
+}*/
 
 /// Describes root parameters for a command.
 #[derive(Clone, Copy)]
@@ -716,300 +709,6 @@ impl CommandStream {
             self.command_buffers_to_submit.push(cb);
         }
     }
-
-    /// FIXME: this should acquire ownership of semaphores in `waits`
-    ///        but then we won't be able to pass a slice
-    pub fn flush(
-        mut self,
-        waits: &[SemaphoreWait],
-        signals: &[SemaphoreSignal],
-        present_image: Option<&SwapchainImage>,
-    ) -> VkResult<()> {
-        let device = Device::global();
-
-        if let Some(present_image) = present_image {
-            self.barrier(Barrier::new().present(&present_image.image));
-        }
-
-        //----------------------
-        // /!\ Lock the device for command submission.
-        // This effectively synchronizes submissions on the device.
-        //----------------------
-        let mut submission_state = device.submission_state.lock().unwrap();
-
-        // Verify that the command streams are submitted in the order in which they were created.
-        // Timeline semaphore values depend on this.
-        assert!(!self.submitted);
-        assert_eq!(
-            device.expected_submission_index.load(Relaxed),
-            self.submission_index,
-            "CommandStream submitted out of order"
-        );
-        // Increment now so that this doesn't block other submissions if this one fails somehow.
-        device
-            .expected_submission_index
-            .store(self.submission_index + 1, Relaxed);
-
-        // finish recording the current command buffer if not already done
-        self.close_command_buffer();
-
-        // The complete list of command buffers to submit, including fixup command buffers between the ones passed to this function.
-        let mut command_buffers = mem::take(&mut self.command_buffers_to_submit);
-
-        //----------------------
-        // Update tracked resources:
-        //
-        // Update the tracked state of each resource used in the command buffer,
-        // and insert pipeline barriers if necessary.
-        {
-            let (src_stage_mask, src_access_mask) = submission_state.writes.to_vk_scope_flags();
-            let (dst_stage_mask, dst_access_mask) = self.initial_access.to_vk_scope_flags();
-            // TODO: verify that a barrier is necessary
-            let global_memory_barrier = Some(vk::MemoryBarrier2 {
-                src_stage_mask,
-                src_access_mask,
-                dst_stage_mask,
-                dst_access_mask,
-                ..Default::default()
-            });
-
-            let mut image_barriers = Vec::new();
-            for (_, state) in self.tracked_images.drain() {
-                let prev_access = match submission_state.access_per_resource.entry(state.id) {
-                    Some(entry) => {
-                        match entry {
-                            Entry::Occupied(res) => mem::replace(res.into_mut(), state.last_access),
-                            Entry::Vacant(res) => {
-                                res.insert(state.last_access);
-                                // if the image was not previously tracked, the contents are undefined
-                                MemoryAccess::UNINITIALIZED
-                            }
-                        }
-                    }
-                    // if the image was not previously tracked, the contents are undefined
-                    None => MemoryAccess::UNINITIALIZED,
-                };
-                if prev_access != state.first_access {
-                    let format = state.format;
-                    image_barriers.push(vk::ImageMemoryBarrier2 {
-                        src_stage_mask,
-                        src_access_mask,
-                        dst_stage_mask,
-                        dst_access_mask,
-                        old_layout: prev_access.to_vk_image_layout(format),
-                        new_layout: state.first_access.to_vk_image_layout(format),
-                        image: state.image,
-                        subresource_range: vk::ImageSubresourceRange {
-                            aspect_mask: aspects_for_format(format),
-                            base_mip_level: 0,
-                            level_count: vk::REMAINING_MIP_LEVELS,
-                            base_array_layer: 0,
-                            layer_count: vk::REMAINING_ARRAY_LAYERS,
-                        },
-                        ..Default::default()
-                    });
-                }
-            }
-
-            // update tracked writes across submissions
-            submission_state.writes = self.tracked_writes;
-
-            // If we need a pipeline barrier before submitting the command buffers, we insert a "fixup" command buffer
-            // containing the pipeline barrier, before the others.
-            if global_memory_barrier.is_some() || !image_barriers.is_empty() {
-                let fixup_cb = self.command_pool.alloc(&device.raw);
-                unsafe {
-                    device
-                        .raw
-                        .begin_command_buffer(
-                            fixup_cb,
-                            &vk::CommandBufferBeginInfo {
-                                flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
-                                ..Default::default()
-                            },
-                        )
-                        .unwrap();
-                    device.extensions.ext_debug_utils.cmd_begin_debug_utils_label(
-                        fixup_cb,
-                        &vk::DebugUtilsLabelEXT {
-                            p_label_name: b"barrier fixup\0".as_ptr() as *const c_char,
-                            color: [0.0, 0.0, 0.0, 0.0],
-                            ..Default::default()
-                        },
-                    );
-                    device.raw.cmd_pipeline_barrier2(
-                        fixup_cb,
-                        &vk::DependencyInfo {
-                            dependency_flags: Default::default(),
-                            memory_barrier_count: global_memory_barrier.iter().len() as u32,
-                            p_memory_barriers: global_memory_barrier
-                                .as_ref()
-                                .map(|b| b as *const vk::MemoryBarrier2)
-                                .unwrap_or(ptr::null()),
-                            buffer_memory_barrier_count: 0,
-                            p_buffer_memory_barriers: ptr::null(),
-                            image_memory_barrier_count: image_barriers.len() as u32,
-                            p_image_memory_barriers: image_barriers.as_ptr(),
-                            ..Default::default()
-                        },
-                    );
-                    device.extensions.ext_debug_utils.cmd_end_debug_utils_label(fixup_cb);
-                    device.raw.end_command_buffer(fixup_cb).unwrap();
-                }
-                command_buffers.insert(0, fixup_cb);
-            }
-        }
-
-        // Build submission
-        let mut signal_semaphores = Vec::new();
-        let mut signal_semaphore_values = Vec::new();
-        let mut wait_semaphores = Vec::new();
-        let mut wait_semaphore_values = Vec::new();
-        let mut wait_semaphore_dst_stages = Vec::new();
-        let mut d3d12_fence_submit = false;
-
-        // update the timeline semaphore with the submission index
-        signal_semaphores.push(device.thread_safe.timeline);
-        signal_semaphore_values.push(self.submission_index);
-
-        // If presenting, signal the "render finished" semaphore associated with the swapchain image
-        if let Some(present_image) = present_image {
-            signal_semaphores.push(present_image.render_finished);
-            signal_semaphore_values.push(0); // dummy
-        }
-
-        // setup semaphore signal operations
-        for signal in signals.iter() {
-            match signal {
-                SemaphoreSignal::Binary { semaphore } => {
-                    signal_semaphores.push(*semaphore);
-                    signal_semaphore_values.push(0);
-                }
-                SemaphoreSignal::Timeline { semaphore, value } => {
-                    signal_semaphores.push(*semaphore);
-                    signal_semaphore_values.push(*value);
-                }
-                SemaphoreSignal::D3D12Fence {
-                    semaphore,
-                    fence: _,
-                    value,
-                } => {
-                    signal_semaphores.push(*semaphore);
-                    signal_semaphore_values.push(*value);
-                    d3d12_fence_submit = true;
-                }
-            }
-        }
-
-        // setup semaphore wait operations
-        for (_i, w) in waits.iter().enumerate() {
-            wait_semaphore_dst_stages.push(w.dst_stage);
-            match w.kind {
-                SemaphoreWaitKind::Binary {
-                    semaphore,
-                    transfer_ownership,
-                } => {
-                    wait_semaphores.push(semaphore);
-                    wait_semaphore_values.push(0);
-                    if transfer_ownership {
-                        // we own the semaphore and need to delete it
-                        device.call_later(self.submission_index, move || unsafe {
-                            Device::global().raw.destroy_semaphore(semaphore, None);
-                        });
-                    }
-                }
-                SemaphoreWaitKind::Timeline { semaphore, value } => {
-                    wait_semaphores.push(semaphore);
-                    wait_semaphore_values.push(value);
-                }
-                SemaphoreWaitKind::D3D12Fence { semaphore, value, .. } => {
-                    wait_semaphores.push(semaphore);
-                    wait_semaphore_values.push(value);
-                    d3d12_fence_submit = true;
-                }
-            }
-        }
-
-        // setup D3D12 fence submissions
-        let d3d12_fence_submit_info_ptr;
-        let d3d12_fence_submit_info;
-
-        if d3d12_fence_submit {
-            d3d12_fence_submit_info = vk::D3D12FenceSubmitInfoKHR {
-                wait_semaphore_values_count: wait_semaphore_values.len() as u32,
-                p_wait_semaphore_values: wait_semaphore_values.as_ptr(),
-                signal_semaphore_values_count: signal_semaphore_values.len() as u32,
-                p_signal_semaphore_values: signal_semaphore_values.as_ptr(),
-                ..Default::default()
-            };
-            d3d12_fence_submit_info_ptr = &d3d12_fence_submit_info as *const _ as *const c_void;
-        } else {
-            d3d12_fence_submit_info_ptr = ptr::null();
-        }
-
-        let timeline_submit_info = vk::TimelineSemaphoreSubmitInfo {
-            p_next: d3d12_fence_submit_info_ptr,
-            wait_semaphore_value_count: wait_semaphore_values.len() as u32,
-            p_wait_semaphore_values: wait_semaphore_values.as_ptr(),
-            signal_semaphore_value_count: signal_semaphore_values.len() as u32,
-            p_signal_semaphore_values: signal_semaphore_values.as_ptr(),
-            ..Default::default()
-        };
-
-        let submit_info = vk::SubmitInfo {
-            p_next: &timeline_submit_info as *const _ as *const c_void,
-            wait_semaphore_count: wait_semaphores.len() as u32,
-            p_wait_semaphores: wait_semaphores.as_ptr(),
-            p_wait_dst_stage_mask: wait_semaphore_dst_stages.as_ptr(),
-            command_buffer_count: command_buffers.len() as u32,
-            p_command_buffers: command_buffers.as_ptr(),
-            signal_semaphore_count: signal_semaphores.len() as u32,
-            p_signal_semaphores: signal_semaphores.as_ptr(),
-            ..Default::default()
-        };
-
-        let mut result;
-        unsafe {
-            // SAFETY: apart from Vulkan handles being valid, Vulkan specifies that access to the
-            //         queue object should be externally synchronized, which is realized here by the
-            //         lock on submission_state.
-            trace!("GPU: QueueSubmit");
-            result = device
-                .raw
-                .queue_submit(submission_state.queue, &[submit_info], vk::Fence::null());
-
-            if result.is_ok() {
-                if let Some(present_image) = present_image {
-                    result = Device::global()
-                        .extensions
-                        .khr_swapchain
-                        .queue_present(
-                            submission_state.queue,
-                            &vk::PresentInfoKHR {
-                                wait_semaphore_count: 1,
-                                p_wait_semaphores: &present_image.render_finished,
-                                swapchain_count: 1,
-                                p_swapchains: &present_image.swapchain,
-                                p_image_indices: &present_image.index,
-                                p_results: ptr::null_mut(),
-                                ..Default::default()
-                            },
-                        )
-                        .map(|_| ());
-                }
-            }
-
-            submission_state.active_submissions.push_back(ActiveSubmission {
-                index: self.submission_index,
-                // SAFETY: submitted = false so the command pool is valid
-                command_pools: vec![ManuallyDrop::take(&mut self.command_pool)],
-            });
-        };
-
-        self.submitted = true;
-
-        result
-    }
 }
 
 impl Drop for CommandStream {
@@ -1017,5 +716,290 @@ impl Drop for CommandStream {
         if !self.submitted {
             panic!("CommandStream was not submitted before being dropped");
         }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#[derive(Copy, Clone)]
+pub struct SyncWait {
+    pub sync: vk::Semaphore,
+    pub value: u64,
+}
+
+#[derive(Copy, Clone)]
+pub struct SyncSignal {
+    pub sync: vk::Semaphore,
+    pub value: u64,
+}
+
+///
+fn sync(waits: &[SyncWait], signals: &[SyncSignal]) {
+    let device = Device::global();
+
+    // /!\ Lock the device for command submission.
+    let submission_state = device.submission_state.lock().unwrap();
+
+    let wait_count = waits.len();
+    let mut wait_semaphores = Vec::with_capacity(wait_count);
+    let mut wait_semaphore_values = Vec::with_capacity(wait_count);
+    let mut wait_semaphore_dst_stages = Vec::with_capacity(wait_count);
+
+    let signal_count = signals.len();
+    let mut signal_semaphores = Vec::with_capacity(signal_count);
+    let mut signal_semaphore_values = Vec::with_capacity(signal_count);
+
+    for signal in signals.iter() {
+        signal_semaphores.push(signal.sync);
+        signal_semaphore_values.push(signal.value);
+    }
+
+    for (_i, w) in waits.iter().enumerate() {
+        wait_semaphore_dst_stages.push(vk::PipelineStageFlags::ALL_COMMANDS);
+        wait_semaphores.push(w.sync);
+        wait_semaphore_values.push(w.value);
+    }
+
+    let timeline_submit_info = vk::TimelineSemaphoreSubmitInfo {
+        wait_semaphore_value_count: wait_semaphore_values.len() as u32,
+        p_wait_semaphore_values: wait_semaphore_values.as_ptr(),
+        signal_semaphore_value_count: signal_semaphore_values.len() as u32,
+        p_signal_semaphore_values: signal_semaphore_values.as_ptr(),
+        ..Default::default()
+    };
+
+    let submit_info = vk::SubmitInfo {
+        p_next: &timeline_submit_info as *const _ as *const c_void,
+        wait_semaphore_count: wait_semaphores.len() as u32,
+        p_wait_semaphores: wait_semaphores.as_ptr(),
+        p_wait_dst_stage_mask: wait_semaphore_dst_stages.as_ptr(),
+        command_buffer_count: 0,
+        p_command_buffers: ptr::null(),
+        signal_semaphore_count: signal_semaphores.len() as u32,
+        p_signal_semaphores: signal_semaphores.as_ptr(),
+        ..Default::default()
+    };
+
+    unsafe {
+        trace!("GPU: QueueSubmit (synchronization)");
+        match device
+            .raw
+            .queue_submit(submission_state.queue, &[submit_info], vk::Fence::null())
+        {
+            Ok(()) => {}
+            Err(e) => {
+                error!("QueueSubmit (synchronization) failed: {:?}", e);
+            }
+        }
+    }
+}
+
+pub fn sync_wait(semaphore: vk::Semaphore, value: u64) {
+    sync(&[SyncWait { sync: semaphore, value }], &[]);
+}
+
+pub fn sync_signal(semaphore: vk::Semaphore, value: u64) {
+    sync(&[], &[SyncSignal { sync: semaphore, value }]);
+}
+
+pub fn submit(mut cmd: CommandStream) -> VkResult<()> {
+    let device = Device::global();
+
+    //----------------------
+    // /!\ Lock the device for command submission.
+    // This effectively synchronizes submissions on the device.
+    //----------------------
+    let mut submission_state = device.submission_state.lock().unwrap();
+
+    // Verify that the command streams are submitted in the order in which they were created.
+    // Timeline semaphore values depend on this.
+    assert!(!cmd.submitted);
+    assert_eq!(
+        device.expected_submission_index.load(Relaxed),
+        cmd.submission_index,
+        "CommandStream submitted out of order"
+    );
+    // Increment now so that this doesn't block other submissions if this one fails somehow.
+    device
+        .expected_submission_index
+        .store(cmd.submission_index + 1, Relaxed);
+
+    // finish recording the current command buffer if not already done
+    cmd.close_command_buffer();
+
+    let mut command_buffers = mem::take(&mut cmd.command_buffers_to_submit);
+
+    //----------------------
+    // Update tracked resources:
+    //
+    // Update the tracked state of each resource used in the command buffer,
+    // and insert pipeline barriers if necessary.
+    {
+        let (src_stage_mask, src_access_mask) = submission_state.writes.to_vk_scope_flags();
+        let (dst_stage_mask, dst_access_mask) = cmd.initial_access.to_vk_scope_flags();
+        // TODO: verify that a barrier is necessary
+        let global_memory_barrier = Some(vk::MemoryBarrier2 {
+            src_stage_mask,
+            src_access_mask,
+            dst_stage_mask,
+            dst_access_mask,
+            ..Default::default()
+        });
+
+        let mut image_barriers = Vec::new();
+        for (_, state) in cmd.tracked_images.drain() {
+            let prev_access = match submission_state.access_per_resource.entry(state.id) {
+                Some(entry) => {
+                    match entry {
+                        Entry::Occupied(res) => mem::replace(res.into_mut(), state.last_access),
+                        Entry::Vacant(res) => {
+                            res.insert(state.last_access);
+                            // if the image was not previously tracked, the contents are undefined
+                            MemoryAccess::UNINITIALIZED
+                        }
+                    }
+                }
+                // if the image was not previously tracked, the contents are undefined
+                None => MemoryAccess::UNINITIALIZED,
+            };
+            if prev_access != state.first_access {
+                let format = state.format;
+                image_barriers.push(vk::ImageMemoryBarrier2 {
+                    src_stage_mask,
+                    src_access_mask,
+                    dst_stage_mask,
+                    dst_access_mask,
+                    old_layout: prev_access.to_vk_image_layout(format),
+                    new_layout: state.first_access.to_vk_image_layout(format),
+                    image: state.image,
+                    subresource_range: vk::ImageSubresourceRange {
+                        aspect_mask: aspects_for_format(format),
+                        base_mip_level: 0,
+                        level_count: vk::REMAINING_MIP_LEVELS,
+                        base_array_layer: 0,
+                        layer_count: vk::REMAINING_ARRAY_LAYERS,
+                    },
+                    ..Default::default()
+                });
+            }
+        }
+
+        // update tracked writes across submissions
+        submission_state.writes = cmd.tracked_writes;
+
+        // If we need a pipeline barrier before submitting the command buffers, we insert a "fixup" command buffer
+        // containing the pipeline barrier, before the others.
+        if global_memory_barrier.is_some() || !image_barriers.is_empty() {
+            let fixup_cb = cmd.command_pool.alloc(&device.raw);
+            unsafe {
+                device
+                    .raw
+                    .begin_command_buffer(
+                        fixup_cb,
+                        &vk::CommandBufferBeginInfo {
+                            flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap();
+                device.extensions.ext_debug_utils.cmd_begin_debug_utils_label(
+                    fixup_cb,
+                    &vk::DebugUtilsLabelEXT {
+                        p_label_name: b"barrier fixup\0".as_ptr() as *const c_char,
+                        color: [0.0, 0.0, 0.0, 0.0],
+                        ..Default::default()
+                    },
+                );
+                device.raw.cmd_pipeline_barrier2(
+                    fixup_cb,
+                    &vk::DependencyInfo {
+                        dependency_flags: Default::default(),
+                        memory_barrier_count: global_memory_barrier.iter().len() as u32,
+                        p_memory_barriers: global_memory_barrier
+                            .as_ref()
+                            .map(|b| b as *const vk::MemoryBarrier2)
+                            .unwrap_or(ptr::null()),
+                        buffer_memory_barrier_count: 0,
+                        p_buffer_memory_barriers: ptr::null(),
+                        image_memory_barrier_count: image_barriers.len() as u32,
+                        p_image_memory_barriers: image_barriers.as_ptr(),
+                        ..Default::default()
+                    },
+                );
+                device.extensions.ext_debug_utils.cmd_end_debug_utils_label(fixup_cb);
+                device.raw.end_command_buffer(fixup_cb).unwrap();
+            }
+            command_buffers.insert(0, fixup_cb);
+        }
+    }
+
+    //----------------------
+    // submit
+    let signal_semaphores = vec![device.thread_safe.timeline];
+    let signal_semaphore_values = vec![cmd.submission_index];
+    let timeline_submit_info = vk::TimelineSemaphoreSubmitInfo {
+        signal_semaphore_value_count: signal_semaphore_values.len() as u32,
+        p_signal_semaphore_values: signal_semaphore_values.as_ptr(),
+        ..Default::default()
+    };
+    let submit_info = vk::SubmitInfo {
+        p_next: &timeline_submit_info as *const _ as *const c_void,
+        command_buffer_count: command_buffers.len() as u32,
+        p_command_buffers: command_buffers.as_ptr(),
+        signal_semaphore_count: signal_semaphores.len() as u32,
+        p_signal_semaphores: signal_semaphores.as_ptr(),
+        ..Default::default()
+    };
+
+    let result;
+    unsafe {
+        // SAFETY: apart from Vulkan handles being valid, Vulkan specifies that access to the
+        //         queue object should be externally synchronized, which is realized here by the
+        //         lock on submission_state.
+        trace!("GPU: QueueSubmit");
+        result = device
+            .raw
+            .queue_submit(submission_state.queue, &[submit_info], vk::Fence::null());
+
+        submission_state.active_submissions.push_back(ActiveSubmission {
+            index: cmd.submission_index,
+            // SAFETY: submitted = false so the command pool is valid
+            command_pools: vec![ManuallyDrop::take(&mut cmd.command_pool)],
+        });
+    };
+
+    cmd.submitted = true;
+    result
+}
+
+pub fn present(image: &SwapchainImage) -> VkResult<()> {
+    let mut cmd = CommandStream::new();
+    cmd.barrier(Barrier::new().present(&image.image));
+    submit(cmd)?;
+
+    let device = Device::global();
+    let render_finished = device.get_or_create_semaphore();
+    sync_signal(render_finished, 0);
+
+    unsafe {
+        let submission_state = device.submission_state.lock().unwrap();
+        let result = Device::global()
+            .extensions
+            .khr_swapchain
+            .queue_present(
+                submission_state.queue,
+                &vk::PresentInfoKHR {
+                    wait_semaphore_count: 1,
+                    p_wait_semaphores: &render_finished,
+                    swapchain_count: 1,
+                    p_swapchains: &image.swapchain,
+                    p_image_indices: &image.index,
+                    p_results: ptr::null_mut(),
+                    ..Default::default()
+                },
+            )
+            .map(|_| ());
+        device.recycle_binary_semaphore(render_finished);
+        result
     }
 }

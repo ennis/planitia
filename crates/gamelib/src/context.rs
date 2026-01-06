@@ -351,7 +351,7 @@ where
         tracy_client::frame_mark();
 
         // cleanup expired GPU resources
-        gpu::Device::global().cleanup();
+        gpu::maintain();
 
         // ask for a re-render on the next vsync
         ctx.platform.wake_at_next_vsync();

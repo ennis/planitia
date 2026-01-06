@@ -1,5 +1,5 @@
 use crate::device::{get_preferred_present_mode, get_preferred_swap_extent};
-use crate::{vk_khr_surface, Device, Image, ImageType, ImageUsage, ResourceAllocation, SignaledSemaphore, Size3D};
+use crate::{vk_khr_surface, Device, Image, ImageType, ImageUsage, ResourceAllocation, Size3D};
 use ash::vk;
 use std::ptr;
 use std::time::Duration;
@@ -29,8 +29,6 @@ pub struct SwapchainImage<'a> {
     /// Index of the image in the swap chain.
     pub index: u32,
     pub image: &'a Image,
-    /// Used internally by `present` to synchronize rendering to presentation.
-    pub(crate) render_finished: vk::Semaphore,
 }
 
 /// Swap chains
@@ -94,7 +92,7 @@ impl Device {
         &self,
         swap_chain: &'a SwapChain,
         timeout: Duration,
-    ) -> Result<(SwapchainImage<'a>, SignaledSemaphore), vk::Result> {
+    ) -> Result<SwapchainImage<'a>, vk::Result> {
         // We can't use `get_or_create_semaphore` because according to the spec the semaphore
         // passed to `vkAcquireNextImage` must not have any pending operations, whereas
         // `get_or_create_semaphore` only guarantees that a wait operation has been submitted
@@ -122,10 +120,16 @@ impl Device {
             swapchain: swap_chain.handle,
             image: &swap_chain.images[index as usize].image,
             index,
-            render_finished: swap_chain.images[index as usize].render_finished.clone(),
         };
 
-        Ok((img, SignaledSemaphore(ready)))
+        // wait (GPU side) for the image to be ready
+        crate::sync_wait(ready, 0);
+
+        self.delete_after_current_submission(move |this| {
+            this.raw.destroy_semaphore(ready, None);
+        });
+
+        Ok(img)
     }
 
     /// Resizes a swap chain.

@@ -147,7 +147,7 @@ fn create_graphics_pipeline_from_archive(
             .collect()
     };
 
-    let depth_stencil = if entry.depth_stencil.depth_test_enable {
+    let depth_stencil = if entry.depth_stencil.enable {
         Some(gpu::DepthStencilState {
             format: entry.depth_stencil.format,
             depth_write_enable: entry.depth_stencil.depth_write_enable,

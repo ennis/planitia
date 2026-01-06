@@ -1,7 +1,7 @@
 use crate::platform::RenderTargetImage;
 use crate::platform::windows::SWAP_CHAIN_BUFFER_COUNT;
 use crate::platform::windows::graphics::GraphicsContext;
-use gpu::{Device, SemaphoreWaitKind, vk};
+use gpu::{Device, SyncWait, vk};
 use log::warn;
 use std::cell::Cell;
 use windows::Win32::Foundation::{CloseHandle, GENERIC_ALL, HANDLE};
@@ -25,7 +25,7 @@ use windows::core::{Interface, Owned};
 /// This holds a composition DXGI swap chain, whose images are imported as Vulkan images.
 /// This uses VK_EXT_external_memory_win32 to import the swap chain images.
 pub(super) struct DxgiVulkanInteropSwapChain {
-    pub(super) dxgi: IDXGISwapChain3,
+    pub(super) dxgi_swap_chain: IDXGISwapChain3,
     /// Imported vulkan images for the swap chain buffers.
     pub(super) images: Vec<VulkanInteropImage>,
     /// Whether a swap chain surface has been acquired and not released yet.
@@ -50,15 +50,17 @@ pub(super) struct VulkanInteropImage {
     pub(super) shared_handle: HANDLE,
     /// Imported DXGI swap chain buffer.
     pub(super) image: gpu::Image,
-    /// Dummy command list for synchronization with vulkan.
-    ///
-    /// We need to push some commands to the D3D12 queue after acquiring a buffer from the swap chain and before signalling the DXGI/VK fence,
-    /// to force some implicit synchronization with the presentation engine.
-    ///
-    /// Suggested by a user on the DirectX discord.
-    ///
-    /// Don't remove it, we get artifacts otherwise.
-    pub(super) discard_cmd_list: ID3D12GraphicsCommandList,
+    // Dummy command list for synchronization with vulkan.
+    //
+    // We need to push some commands to the D3D12 queue after acquiring a buffer from the swap chain and before signalling the DXGI/VK fence,
+    // to force some implicit synchronization with the presentation engine.
+    //
+    // Suggested by a user on the DirectX discord.
+    //
+    // Don't remove it, we get artifacts otherwise.
+    //
+    // TODO: remove it, the artifacts seem to be gone?
+    //pub(super) dummy_cmd_list: ID3D12GraphicsCommandList,
 }
 
 impl Drop for DxgiVulkanInteropSwapChain {
@@ -72,7 +74,7 @@ impl Drop for DxgiVulkanInteropSwapChain {
         unsafe {
             // Release the swap chain resources
             // FIXME: there should be a RAII wrapper for semaphores probably
-            gpu::Device::global().raw().device_wait_idle().unwrap();
+            gpu::wait_idle();
             gpu::Device::global()
                 .raw()
                 .destroy_semaphore(self.fence_semaphore, None);
@@ -148,22 +150,26 @@ impl DxgiVulkanInteropSwapChain {
                 // the presentation engine.
                 // In our case we just call DiscardResource on the swap chain buffer.
                 // A barrier would also work if contents need to be preserved.
-                let discard_cmd_list: ID3D12GraphicsCommandList = gfx
-                    .d3d_device
-                    .CreateCommandList(
-                        0,
-                        D3D12_COMMAND_LIST_TYPE_DIRECT,
-                        gfx.cmd_alloc.get_ref().unwrap(),
-                        None,
-                    )
-                    .unwrap();
-                discard_cmd_list.DiscardResource(&swap_chain_buffer, None);
-                discard_cmd_list.Close().unwrap();
+                //
+                // NOTE: this doesn't seem to be needed anymore. Also, DiscardResource was wrong
+                //       because it expects a resource in the RENDER_TARGET state, whereas the
+                //       swap chain buffers are in the COMMON state by default.
+                //let discard_cmd_list: ID3D12GraphicsCommandList = gfx
+                //    .d3d_device
+                //    .CreateCommandList(
+                //        0,
+                //        D3D12_COMMAND_LIST_TYPE_DIRECT,
+                //        gfx.cmd_alloc.get_ref().unwrap(),
+                //        None,
+                //    )
+                //    .unwrap();
+                ////discard_cmd_list.DiscardResource(&swap_chain_buffer, None);
+                //discard_cmd_list.Close().unwrap();
 
                 images.push(VulkanInteropImage {
                     shared_handle,
                     image: imported_image,
-                    discard_cmd_list,
+                    //dummy_cmd_list: discard_cmd_list,
                 });
             }
 
@@ -182,7 +188,7 @@ impl DxgiVulkanInteropSwapChain {
             gpu::Device::global().set_object_name(fence_semaphore, "DxgiVulkanSharedFence");
 
             DxgiVulkanInteropSwapChain {
-                dxgi: swap_chain,
+                dxgi_swap_chain: swap_chain,
                 images,
                 fence_value: Cell::new(1),
                 fence_semaphore,
@@ -201,7 +207,7 @@ impl DxgiVulkanInteropSwapChain {
         assert!(!self.acquired.get(), "surface already acquired");
 
         let gfx = GraphicsContext::current();
-        let index = unsafe { self.dxgi.GetCurrentBackBufferIndex() };
+        let index = unsafe { self.dxgi_swap_chain.GetCurrentBackBufferIndex() };
         let image = &self.images[index as usize];
 
         let fence_value = self.fence_value.get();
@@ -211,30 +217,18 @@ impl DxgiVulkanInteropSwapChain {
         unsafe {
             // dummy rendering to synchronize with the presentation engine before signalling the fence
             // needed! there's some implicit synchronization being done here
-            gfx.cmd_queue
-                .ExecuteCommandLists(&[Some(image.discard_cmd_list.cast().unwrap())]);
+            // NOTE: this doesn't seem to be needed anymore?
+            //gfx.cmd_queue
+            //    .ExecuteCommandLists(&[Some(image.discard_cmd_list.cast().unwrap())]);
+
             gfx.cmd_queue.Signal(&self.fence, fence_value).unwrap();
+            gpu::sync_wait(self.fence_semaphore, fence_value);
         }
 
         self.acquired.set(true);
 
         // FIXME: SemaphoreWait is not the correct type because the caller should choose the dst_stage
-        RenderTargetImage {
-            image: &image.image,
-            ready: gpu::SemaphoreWait {
-                kind: SemaphoreWaitKind::D3D12Fence {
-                    semaphore: self.fence_semaphore,
-                    fence: Default::default(),
-                    value: fence_value,
-                },
-                dst_stage: vk::PipelineStageFlags::ALL_COMMANDS,
-            },
-            rendering_finished: gpu::SemaphoreSignal::D3D12Fence {
-                semaphore: self.fence_semaphore,
-                fence: Default::default(),
-                value: fence_value + 1,
-            },
-        }
+        RenderTargetImage { image: &image.image }
     }
 
     /// Presents the image that was last acquired with `get_image()`.
@@ -245,13 +239,26 @@ impl DxgiVulkanInteropSwapChain {
 
         // Synchronization: Vulkan -> D3D12
         unsafe {
-            // synchronize with vulkan rendering before presenting
+            // Synchronize with vulkan rendering before presenting
+            gpu::sync_signal(self.fence_semaphore, fence_value);
             gfx.cmd_queue.Wait(&self.fence, fence_value).unwrap();
-            // present the image
-            //self.dxgi_swap_chain.Present(0, DXGI_PRESENT::default()).unwrap();
-            let r = self.dxgi.Present(0, DXGI_PRESENT_DO_NOT_WAIT);
+
+            // Present the image.
+            //
+            // NOTE: the Vulkan layout of the image should be GENERAL before being handed off to
+            // D3D12 via external memory objects, according to VK_KHR_external_memory spec:
+            //
+            //       [...] Other APIs will fall into two categories: Those that are
+            //       Vulkan-compatible, and those that are Vulkan-incompatible.
+            //       Vulkan-incompatible APIs will require the image to be in the GENERAL layout
+            //       whenever they are accessing them.
+            //
+            // FIXME: Make sure that the Vulkan layout is GENERAL before the handoff.
+            //        This won't be a problem once we get rid of layout transitions and use GENERAL
+            //        everywhere.
+            let r = self.dxgi_swap_chain.Present(0, DXGI_PRESENT_DO_NOT_WAIT);
             if r == DXGI_ERROR_WAS_STILL_DRAWING {
-                warn!("[IDXGISwapChain::Present] DXGI_ERROR_WAS_STILL_DRAWING");
+                //warn!("[IDXGISwapChain::Present] DXGI_ERROR_WAS_STILL_DRAWING");
             }
         }
 

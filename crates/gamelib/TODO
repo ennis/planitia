@@ -69,6 +69,8 @@
          * creating (useless) encoders for render passes
       Maybe allocate buffers declaratively, like how pipelines are specified in json.
       Not sure if it's worth it at this state, when the render pipeline isn't fully defined
+  ☐ GPU: split wait, submits, signals and presents into separate free functions (`gpu::wait`, `gpu::submit`, `gpu::signal` ...)
+      This generates more calls to `vkQueueSubmit` than necessary, but the overhead is insignificant and this makes the API more flexible and readable.
          
 
  ✔ @high Figure out a way to not need `reference_resource` anymore. @done (25-12-21 18:24)
@@ -85,14 +87,6 @@
      Alternative: make resources entirely unsafe
          i.e. they are `Copy` structs that are nothing more than vulkan handle + some useful metadata
               no destructors, actually no RAII at all; they must be destroyed explicitly. 
-     Alternative: `Ptr` as a borrow of the underlying buffer. This would require an object representing the current submission that `Ptr` can borrow from.
-         Sounds impractical
-     Alternative: automatic tracking of `Ptr` inside data passed in GPU buffers (need some kind of reflection)
-         Impractical, unreliable
-     Alternative: always wait for submission N-m (where m=1,2,3... aka "submissions in flight") before actually deleting the resource.
-         This ensures that all dropped resources (that were dropped a few frames ago) are not in use anymore.
-         Issue: submission numbers progress is not always "steady", i.e. the number of submissions in different frames can vary, leading to excessive wait.
-             Solution: max number of submissions per frame (e.g. 256), then the higher order bits define the "frame number".
      Solution: on drop, just assume that the dropped resource may be used by pending command streams
 
 
@@ -106,7 +100,7 @@ Render world:
     Draw parameters, like the number of vertices and indices, depend on the scene. They are determined automatically.
     For some compute passes, which require a number of workgroups to be launched that depend on some block or tile size, this is more complicated, but we can get around it by specifying the tile size.
     Each object in the "render world" has a name (identifier) and a type. The type can be opaque for now, but it should at least differentiate between geometry buffers & one-off variables.
-    
+
 
 Models:
     ☐ Outlines

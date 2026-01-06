@@ -16,8 +16,7 @@ impl<T: ?Sized> Drop for Buffer<T> {
         let mut allocation = mem::take(&mut self.allocation);
         let handle = self.handle;
 
-        Device::global().delete_resource_after_current_submission(self.id, move || unsafe {
-            let device = Device::global();
+        Device::global().delete_resource_after_current_submission(self.id, move |device| unsafe {
             trace!("GPU: deleting buffer: {:?}", handle);
             device.raw.destroy_buffer(handle, None);
             device.free_memory(&mut allocation);

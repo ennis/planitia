@@ -163,9 +163,9 @@ pub struct RasterizerStateData {
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct DepthStencilStateData {
+    pub enable: bool,
     pub format: vk::Format,
     pub depth_compare_op: vk::CompareOp,
-    pub depth_test_enable: bool,
     pub depth_write_enable: bool,
 }
 
@@ -338,7 +338,7 @@ mod tests {
                     depth_stencil: DepthStencilStateData {
                         format: vk::Format::D32_SFLOAT,
                         depth_compare_op: vk::CompareOp::ALWAYS,
-                        depth_test_enable: true,
+                        enable: true,
                         depth_write_enable: true,
                     },
                     color_targets,
