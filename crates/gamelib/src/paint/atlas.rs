@@ -1,5 +1,5 @@
 use crate::paint::Srgba8;
-use gpu::{Barrier, ImageAspect, ImageCopyView, ImageCreateInfo, MemoryLocation, Size3D, vk};
+use gpu::{Barrier, ImageAspect, ImageCopyView, ImageCreateInfo, MemoryLocation, Size3D, vk, BarrierFlags};
 use log::debug;
 use math::geom::{IRect, irect_xywh};
 use math::{U16Vec2, u16vec2};
@@ -85,6 +85,7 @@ impl Atlas {
         let start = rect.min.y as usize * self.width as usize + rect.min.x as usize;
 
         // mark dirty
+        self.dirty.start = (rect.min.y as u32).min(self.dirty.start);
         self.dirty.end = (rect.max.y as u32).max(self.dirty.end);
 
         AtlasSliceMut {
@@ -186,7 +187,7 @@ impl Atlas {
     /// The image is prepared for shader read access.
     pub(crate) fn prepare_texture(&mut self, cmd: &mut gpu::CommandStream) -> gpu::TextureHandle {
         self.upload_to_gpu(cmd);
-        cmd.barrier(Barrier::new().sample_read_image(&self.texture));
+        cmd.barrier(BarrierFlags::ALL_SHADER_STAGES | BarrierFlags::SAMPLED_READ);
         self.texture.texture_descriptor_index()
     }
 }

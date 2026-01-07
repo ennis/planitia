@@ -1,8 +1,5 @@
 //! Render command encoders
-use crate::{
-    is_depth_and_stencil_format, Barrier, Buffer, BufferUntyped, ClearColorValue, ColorAttachment, CommandStream,
-    DepthStencilAttachment, Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, Rect2D, RootParams,
-};
+use crate::{is_depth_and_stencil_format, Barrier, BarrierFlags, Buffer, BufferUntyped, ClearColorValue, ColorAttachment, CommandStream, DepthStencilAttachment, Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, Rect2D, RootParams};
 use ash::vk;
 use std::ops::Range;
 use std::ptr;
@@ -609,16 +606,16 @@ impl CommandStream {
         // Register resource uses.
         // We could also do that after encoding the pass.
         // It doesn't matter much except we can report usage conflicts earlier.
-        let mut barrier = Barrier::new();
-        for color in desc.color_attachments.iter() {
-            barrier = barrier.color_attachment_write(color.image);
-        }
-        if let Some(ref depth) = desc.depth_stencil_attachment {
-            // TODO we don't know whether the depth attachment will be written to
-            barrier = barrier.depth_stencil_attachment_write(depth.image);
-        }
+        //let mut barrier = BarrierFlags::empty();
+        //for color in desc.color_attachments.iter() {
+        //    barrier |= BarrierFlags::COLOR_ATTACHMENT;
+        //}
+        //if let Some(ref depth) = desc.depth_stencil_attachment {
+        //    // TODO we don't know whether the depth attachment will be written to
+        //    barrier = barrier.depth_stencil_attachment_write(depth.image);
+        //}
 
-        self.barrier(barrier);
+        //self.barrier(barrier);
 
         let rendering_info = vk::RenderingInfo {
             flags: Default::default(),

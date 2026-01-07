@@ -1,5 +1,5 @@
 use crate::device::{get_preferred_present_mode, get_preferred_swap_extent};
-use crate::{vk_khr_surface, Device, Image, ImageType, ImageUsage, ResourceAllocation, Size3D};
+use crate::{vk_khr_surface, CommandStream, Device, Image, ImageType, ImageUsage, ResourceAllocation, Size3D};
 use ash::vk;
 use std::ptr;
 use std::time::Duration;
@@ -124,6 +124,23 @@ impl Device {
 
         // wait (GPU side) for the image to be ready
         crate::sync_wait(ready, 0);
+
+        // transition image to GENERAL
+        {
+            let mut cmd = CommandStream::new();
+            unsafe {
+                cmd.transition_image_layout(
+                    img.image.handle,
+                    vk::PipelineStageFlags2::NONE,
+                    vk::AccessFlags2::NONE,
+                    vk::PipelineStageFlags2::NONE,
+                    vk::AccessFlags2::NONE,
+                    vk::ImageLayout::UNDEFINED,
+                    vk::ImageLayout::GENERAL,
+                );
+            }
+            crate::submit(cmd)?;
+        }
 
         self.delete_after_current_submission(move |this| {
             this.raw.destroy_semaphore(ready, None);

@@ -1,15 +1,11 @@
 //! Blit command encoders
 use ash::vk;
 
-use crate::{
-    Barrier, BufferRangeUntyped, BufferUntyped, ClearColorValue, CommandStream, Device, Image, ImageCopyBuffer,
-    ImageCopyView, ImageSubresourceLayers, Rect3D,
-};
+use crate::{Barrier, BarrierFlags, BufferRangeUntyped, BufferUntyped, ClearColorValue, CommandStream, Device, Image, ImageCopyBuffer, ImageCopyView, ImageSubresourceLayers, Rect3D};
 
 impl CommandStream {
     pub fn fill_buffer(&mut self, range: &BufferRangeUntyped, data: u32) {
-        self.barrier(Barrier::new().transfer_write());
-
+        self.barrier(BarrierFlags::TRANSFER);
         let cb = self.get_or_create_command_buffer();
         unsafe {
             // SAFETY: FFI call and parameters are valid
@@ -17,12 +13,12 @@ impl CommandStream {
                 .raw
                 .cmd_fill_buffer(cb, range.buffer.handle(), range.byte_offset, range.byte_size, data);
         }
+        self.barrier_source(BarrierFlags::TRANSFER_WRITE)
     }
 
     // TODO specify subresources
     pub fn clear_image(&mut self, image: &Image, clear_color_value: ClearColorValue) {
-        self.barrier(Barrier::new().transfer_write_image(image));
-
+        self.barrier(BarrierFlags::TRANSFER);
         let cb = self.get_or_create_command_buffer();
         unsafe {
             // SAFETY: FFI call and parameters are valid
@@ -40,11 +36,12 @@ impl CommandStream {
                 }],
             );
         }
+        self.barrier_source(BarrierFlags::TRANSFER)
     }
 
-    pub fn clear_depth_image(&mut self, image: &Image, depth: f32) {
-        self.barrier(Barrier::new().transfer_write_image(image));
-
+    pub fn clear_depth_image(&mut self, image: &Image, depth: f32)
+    {
+        self.barrier(BarrierFlags::TRANSFER);
         let cb = self.get_or_create_command_buffer();
         unsafe {
             // SAFETY: FFI call and parameters are valid
@@ -62,6 +59,7 @@ impl CommandStream {
                 }],
             );
         }
+        self.barrier_source(BarrierFlags::TRANSFER)
     }
 
     pub fn copy_image_to_image(
@@ -73,11 +71,7 @@ impl CommandStream {
         // TODO: this is not required for multi-planar formats
         assert_eq!(source.aspect, destination.aspect);
 
-        self.barrier(
-            Barrier::new()
-                .transfer_read_image(source.image)
-                .transfer_write_image(destination.image),
-        );
+        self.barrier(BarrierFlags::TRANSFER_READ);
 
         let regions = [vk::ImageCopy {
             src_subresource: vk::ImageSubresourceLayers {
@@ -109,6 +103,8 @@ impl CommandStream {
                 &regions,
             );
         }
+
+        self.barrier_source(BarrierFlags::TRANSFER_WRITE)
     }
 
     /// Copies data from one buffer to another.
@@ -123,7 +119,7 @@ impl CommandStream {
         assert!(src_offset + size <= source.byte_size());
         assert!(dst_offset + size <= destination.byte_size());
 
-        self.barrier(Barrier::new().transfer_read().transfer_write());
+        self.barrier(BarrierFlags::TRANSFER_READ);
 
         // SAFETY: FFI call and parameters are valid
         let cb = self.get_or_create_command_buffer();
@@ -139,6 +135,8 @@ impl CommandStream {
                 }],
             );
         }
+
+        self.barrier_source(BarrierFlags::TRANSFER_WRITE);
     }
 
     /// Copies data from a buffer to an image.
@@ -150,7 +148,7 @@ impl CommandStream {
         destination: ImageCopyView<'_>,
         copy_size: vk::Extent3D,
     ) {
-        self.barrier(Barrier::new().transfer_read().transfer_write_image(destination.image));
+        self.barrier(BarrierFlags::TRANSFER_READ);
 
         let regions = [vk::BufferImageCopy {
             buffer_offset: source.layout.offset,
@@ -181,6 +179,8 @@ impl CommandStream {
                 &regions,
             );
         }
+
+        self.barrier_source(BarrierFlags::TRANSFER_WRITE);
     }
 
     /// Copies data from an image to a buffer.
@@ -203,7 +203,7 @@ impl CommandStream {
         dst_region: Rect3D,
         filter: vk::Filter,
     ) {
-        self.barrier(Barrier::new().transfer_read_image(src).transfer_write_image(dst));
+        self.barrier(BarrierFlags::TRANSFER_READ);
 
         let blits = [vk::ImageBlit {
             src_subresource: vk::ImageSubresourceLayers {
@@ -257,5 +257,7 @@ impl CommandStream {
                 filter,
             );
         }
+
+        self.barrier_source(BarrierFlags::TRANSFER_WRITE);
     }
 }

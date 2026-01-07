@@ -17,8 +17,8 @@ use egui_demo_lib::{View, WidgetGallery};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::{Image, Ptr, RenderPassInfo, RootParams, root_params};
 use log::debug;
-use math::geom::Camera;
-use math::{Mat4, Vec2, Vec3};
+use math::geom::{Camera, rect_xywh};
+use math::{Mat4, Vec2, Vec3, vec2};
 
 mod experiments;
 
@@ -68,6 +68,10 @@ struct Game {
     start_time: std::time::Instant,
     coat_experiment: experiments::coat::CoatExperiment,
     outline_experiment: experiments::outlines::OutlineExperiment,
+    show_grid: bool,
+    show_painting_demo: bool,
+    show_background: bool,
+    show_imgui: bool,
 }
 
 fn create_depth_buffer(width: u32, height: u32) -> Image {
@@ -96,6 +100,10 @@ impl Default for Game {
             start_time: std::time::Instant::now(),
             coat_experiment: experiments::coat::CoatExperiment::new(),
             outline_experiment: experiments::outlines::OutlineExperiment::new(),
+            show_grid: true,
+            show_painting_demo: false,
+            show_background: true,
+            show_imgui: false,
         }
     }
 }
@@ -104,7 +112,7 @@ impl Game {
     fn render_scene(&mut self, encoder: &mut gpu::RenderEncoder, _camera: &Camera, scene_info: &SceneInfo) {
         //----------------------------------
         // Draw background
-        {
+        if self.show_background {
             if let Ok(background_shader) = self.background_shader.read() {
                 encoder.bind_graphics_pipeline(&*background_shader);
                 encoder.draw(
@@ -123,7 +131,7 @@ impl Game {
 
         //----------------------------------
         // Draw grid
-        {
+        if self.show_grid {
             if let Ok(grid_shader) = self.grid_shader.read() {
                 encoder.bind_graphics_pipeline(&*grid_shader);
                 encoder.draw(
@@ -141,12 +149,44 @@ impl Game {
     }
 
     fn render_overlay(&mut self, cmd: &mut gpu::CommandStream, target: &gpu::Image) {
-        //experiments::painting_test(
-        //    &mut self.painter,
-        //    cmd,
-        //    target,
-        //    Srgba8::from(self.color.to_srgba_unmultiplied()),
-        //);
+        let mut scene = self.painter.build_scene();
+
+        let mut text = TextLayout::new(
+            &TextFormat {
+                size: 20.0,
+                ..Default::default()
+            },
+            concat!(
+                "[Home] Home camera\n",
+                "[G] Toggle grid\n",
+                "[H] Toggle background\n",
+                "[P] Toggle painting demo\n",
+                "[I] Toggle imgui\n"
+            ),
+        );
+        text.layout(1000.0);
+
+        for glyph_run in text.glyph_runs() {
+            scene.draw_glyph_run(vec2(0.0, 0.0), &glyph_run, &DrawGlyphRunOptions::default());
+        }
+
+        scene.finish(
+            cmd,
+            &PaintRenderParams {
+                camera: Default::default(),
+                color_target: target,
+                depth_target: None,
+            },
+        );
+
+        if self.show_painting_demo {
+            experiments::painting_test(
+                &mut self.painter,
+                cmd,
+                target,
+                Srgba8::from(self.color.to_srgba_unmultiplied()),
+            );
+        }
     }
 }
 
@@ -164,6 +204,19 @@ impl AppHandler for Game {
         if input_event.is_shortcut("Home") {
             debug!("Home camera");
             //self.camera_control.home();
+        }
+
+        if input_event.is_shortcut("G") {
+            self.show_grid = !self.show_grid;
+        }
+        if input_event.is_shortcut("H") {
+            self.show_background = !self.show_background;
+        }
+        if input_event.is_shortcut("P") {
+            self.show_painting_demo = !self.show_painting_demo;
+        }
+        if input_event.is_shortcut("I") {
+            self.show_imgui = !self.show_imgui;
         }
 
         // --- CAMERA ---
@@ -243,7 +296,10 @@ impl AppHandler for Game {
 
         //-------------------------------
         // Render GUI
-        APP.render_imgui(&mut cmd, &target.image);
+        if self.show_imgui {
+            APP.render_imgui(&mut cmd, &target.image);
+        }
+
         gpu::submit(cmd).unwrap();
     }
 

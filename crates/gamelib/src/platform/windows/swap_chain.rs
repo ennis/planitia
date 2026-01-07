@@ -4,10 +4,13 @@ use crate::platform::windows::graphics::GraphicsContext;
 use gpu::{Device, SyncWait, vk};
 use log::warn;
 use std::cell::Cell;
+use std::mem::ManuallyDrop;
 use windows::Win32::Foundation::{CloseHandle, GENERIC_ALL, HANDLE};
 use windows::Win32::Graphics::Direct3D12::{
-    D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_FENCE_FLAG_SHARED, ID3D12CommandQueue, ID3D12Fence,
-    ID3D12GraphicsCommandList, ID3D12Resource,
+    D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_FENCE_FLAG_SHARED, D3D12_RESOURCE_BARRIER, D3D12_RESOURCE_BARRIER_0,
+    D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_BARRIER_TYPE, D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
+    D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_TRANSITION_BARRIER,
+    ID3D12CommandQueue, ID3D12Fence, ID3D12GraphicsCommandList, ID3D12Resource,
 };
 use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_ALPHA_MODE_IGNORE, DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_TYPELESS,
@@ -57,10 +60,8 @@ pub(super) struct VulkanInteropImage {
     //
     // Suggested by a user on the DirectX discord.
     //
-    // Don't remove it, we get artifacts otherwise.
-    //
-    // TODO: remove it, the artifacts seem to be gone?
-    //pub(super) dummy_cmd_list: ID3D12GraphicsCommandList,
+    // Don't remove it, we get artifacts otherwise, especially when moving the window.
+    pub(super) dummy_cmd_list: ID3D12GraphicsCommandList,
 }
 
 impl Drop for DxgiVulkanInteropSwapChain {
@@ -149,27 +150,50 @@ impl DxgiVulkanInteropSwapChain {
                 // before signalling the fence is necessary to properly synchronize with
                 // the presentation engine.
                 // In our case we just call DiscardResource on the swap chain buffer.
-                // A barrier would also work if contents need to be preserved.
-                //
-                // NOTE: this doesn't seem to be needed anymore. Also, DiscardResource was wrong
-                //       because it expects a resource in the RENDER_TARGET state, whereas the
-                //       swap chain buffers are in the COMMON state by default.
-                //let discard_cmd_list: ID3D12GraphicsCommandList = gfx
-                //    .d3d_device
-                //    .CreateCommandList(
-                //        0,
-                //        D3D12_COMMAND_LIST_TYPE_DIRECT,
-                //        gfx.cmd_alloc.get_ref().unwrap(),
-                //        None,
-                //    )
-                //    .unwrap();
-                ////discard_cmd_list.DiscardResource(&swap_chain_buffer, None);
-                //discard_cmd_list.Close().unwrap();
+                let discard_cmd_list: ID3D12GraphicsCommandList = gfx
+                    .d3d_device
+                    .CreateCommandList(
+                        0,
+                        D3D12_COMMAND_LIST_TYPE_DIRECT,
+                        gfx.cmd_alloc.get_ref().unwrap(),
+                        None,
+                    )
+                    .unwrap();
+
+                discard_cmd_list.ResourceBarrier(&[D3D12_RESOURCE_BARRIER {
+                    Type: D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
+                    Flags: Default::default(),
+                    Anonymous: D3D12_RESOURCE_BARRIER_0 {
+                        Transition: ManuallyDrop::new(D3D12_RESOURCE_TRANSITION_BARRIER {
+                            // This transmute_copy and ManuallyDrop is messed up but apparently
+                            // that's the intended way. God forbid using an actual raw pointer in the API,
+                            // gotta use the RAII wrappers everywhere, even where it makes no sense.
+                            pResource: std::mem::transmute_copy(&swap_chain_buffer),
+                            Subresource: D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+                            StateBefore: D3D12_RESOURCE_STATE_COMMON,
+                            StateAfter: D3D12_RESOURCE_STATE_RENDER_TARGET,
+                        }),
+                    },
+                }]);
+                discard_cmd_list.DiscardResource(&swap_chain_buffer, None);
+                discard_cmd_list.ResourceBarrier(&[D3D12_RESOURCE_BARRIER {
+                    Type: D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
+                    Flags: Default::default(),
+                    Anonymous: D3D12_RESOURCE_BARRIER_0 {
+                        Transition: ManuallyDrop::new(D3D12_RESOURCE_TRANSITION_BARRIER {
+                            pResource: std::mem::transmute_copy(&swap_chain_buffer),
+                            Subresource: D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+                            StateBefore: D3D12_RESOURCE_STATE_RENDER_TARGET,
+                            StateAfter: D3D12_RESOURCE_STATE_COMMON,
+                        }),
+                    },
+                }]);
+                discard_cmd_list.Close().unwrap();
 
                 images.push(VulkanInteropImage {
                     shared_handle,
                     image: imported_image,
-                    //dummy_cmd_list: discard_cmd_list,
+                    dummy_cmd_list: discard_cmd_list,
                 });
             }
 
@@ -217,9 +241,8 @@ impl DxgiVulkanInteropSwapChain {
         unsafe {
             // dummy rendering to synchronize with the presentation engine before signalling the fence
             // needed! there's some implicit synchronization being done here
-            // NOTE: this doesn't seem to be needed anymore?
-            //gfx.cmd_queue
-            //    .ExecuteCommandLists(&[Some(image.discard_cmd_list.cast().unwrap())]);
+            gfx.cmd_queue
+                .ExecuteCommandLists(&[Some(image.dummy_cmd_list.cast().unwrap())]);
 
             gfx.cmd_queue.Signal(&self.fence, fence_value).unwrap();
             gpu::sync_wait(self.fence_semaphore, fence_value);

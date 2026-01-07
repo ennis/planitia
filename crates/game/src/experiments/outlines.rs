@@ -6,7 +6,7 @@ use gamelib::asset::Handle;
 use gamelib::input::InputEvent;
 use gamelib::pipeline_cache::get_graphics_pipeline;
 use gpu::PrimitiveTopology::TriangleList;
-use gpu::{Barrier, Buffer, BufferCreateInfo, DrawIndirectCommand, MemoryLocation, RenderPassInfo, RootParams};
+use gpu::{Barrier, BarrierFlags, Buffer, BufferCreateInfo, DrawIndirectCommand, MemoryLocation, RenderPassInfo, RootParams};
 use hgeo::util::polygons_to_triangle_mesh;
 use log::info;
 use math::Vec3;
@@ -620,7 +620,7 @@ impl OutlineExperiment {
 
         /////////////////////////////////////////////////////////
         // depth pass
-        cmd.barrier(Barrier::new().depth_stencil_attachment_write(&depth_target));
+        cmd.barrier(BarrierFlags::DEPTH_STENCIL);
         let mut encoder = cmd.begin_rendering(RenderPassInfo {
             color_attachments: &[],
             depth_stencil_attachment: Some(gpu::DepthStencilAttachment {
@@ -656,7 +656,6 @@ impl OutlineExperiment {
             "draw_indirect",
         );
 
-        cmd.barrier(Barrier::new().shader_storage_write());
         cmd.dispatch(
             self.clusters.len() as u32,
             1,
@@ -672,8 +671,9 @@ impl OutlineExperiment {
             }),
         );
 
-        cmd.barrier(Barrier::new().sample_read_image(&depth_target));
-        cmd.barrier(Barrier::new().shader_storage_read().indirect());
+
+        cmd.barrier_source(BarrierFlags::COMPUTE_SHADER | BarrierFlags::STORAGE | BarrierFlags::DEPTH_STENCIL);
+        cmd.barrier(BarrierFlags::FRAGMENT_SHADER | BarrierFlags::SAMPLED_READ | BarrierFlags::STORAGE | BarrierFlags::INDIRECT_READ);
 
         /////////////////////////////////////////////////////////
         // render contours

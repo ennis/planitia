@@ -8,8 +8,7 @@ use crate::{
     aspects_for_format, get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, Barrier, BufferCreateInfo,
     BufferUntyped, BufferUsage, CommandPool, CommandStream, ComputePipeline, ComputePipelineCreateInfo,
     DescriptorSetLayout, Error, GraphicsPipeline, GraphicsPipelineCreateInfo, MemoryAccess, PreRasterizationShaders,
-    Ptr, Sampler, SamplerCreateInfo, SamplerCreateInfoHashable, SyncWait,
-    SUBGROUP_SIZE,
+    Ptr, Sampler, SamplerCreateInfo, SamplerCreateInfoHashable, SyncWait, SUBGROUP_SIZE,
 };
 use ash::vk;
 use gpu_allocator::vulkan::AllocationCreateDesc;
@@ -26,7 +25,6 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::{fmt, mem, ptr};
-
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
