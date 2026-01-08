@@ -20,8 +20,6 @@ pub enum Error {
     InvalidType(&'static str),
     #[error("{0}")]
     Other(&'static str),
-    #[error("{0}")]
-    CompilationError(String),
 }
 
 #[derive(Clone)]

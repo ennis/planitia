@@ -1,26 +1,26 @@
-use crate::{BuildManifest, BuildOptions, CompilerOptions, GraphicsState};
+use crate::{BuildManifest, BuildOptions, GraphicsState};
 use anyhow::{Context, anyhow, bail};
 use color_print::{ceprintln, cprintln};
-use log::{debug, warn};
+use log::warn;
 use shader_archive::archive::{ArchiveWriter, Offset};
-use shader_archive::gpu::{ShaderStage, vk};
-use shader_archive::zstring::{ZString32, ZString64};
+use shader_archive::gpu::vk;
+use shader_archive::zstring::ZString64;
 use shader_archive::{
-    FileDependency, PIPELINE_ARCHIVE_MAGIC, PipelineEntryData, RootParamInfo, RootParamLayout, ShaderData, gpu,
+    FileDependency, PIPELINE_ARCHIVE_MAGIC, PipelineEntryData, RootParamInfo, RootParamLayout, ShaderData,
 };
 use slang::reflection::TypeLayout;
 use slang::{DebugInfoLevel, Downcast};
 use std::cell::OnceCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::CString;
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
-use std::{env, fmt, fs, slice};
+use std::{env, fs, slice};
 
 fn make_file_dependency(path: &Path, archive: &mut ArchiveWriter) -> anyhow::Result<FileDependency> {
     let canonical_path = path.canonicalize()?;
-    let modified_time = std::fs::metadata(&canonical_path)?.modified()?;
+    let modified_time = fs::metadata(&canonical_path)?.modified()?;
     let mtime = match modified_time.duration_since(SystemTime::UNIX_EPOCH) {
         Ok(duration) => duration.as_secs(),
         Err(_) => {
@@ -190,7 +190,7 @@ fn get_root_param_info(entry_point: &slang::reflection::EntryPoint) -> Vec<RootP
     }
 
     // push constant are entry point function parameters with kind uniform
-    let mut size = 0;
+    //let mut size = 0;
     // the `params` in `void main(uniform RootParams* params)`
     let mut root_params_arg_name: Option<&str> = None;
     // layout for the `RootParams` struct
@@ -303,13 +303,9 @@ fn link_entry_point(
     Ok(program)
 }
 
-fn dump_spirv(output_file: &Path, name: &str, stage: vk::ShaderStageFlags, spirv: &[u32]) -> anyhow::Result<()> {
-    Ok(())
-}
-
 /// Represents a shader entry point
 struct EntryPoint {
-    module: slang::Module,
+    _module: slang::Module,
     file: PathBuf,
     file_mtime: u64,
     name: String,
@@ -329,7 +325,7 @@ impl BuildManifest {
         file: &Path,
         file_mtime: u64,
         index: u32,
-        options: &BuildOptions,
+        _options: &BuildOptions,
     ) -> anyhow::Result<EntryPoint> {
         let mut pass = None;
         {
@@ -366,7 +362,7 @@ impl BuildManifest {
         let root_params = get_root_param_info(&entry_point);
 
         Ok(EntryPoint {
-            module: module.clone(),
+            _module: module.clone(),
             name: entry_point.name().to_string(),
             file: file.to_path_buf(),
             file_mtime,
@@ -430,7 +426,7 @@ impl BuildManifest {
         entry_points: &mut Vec<EntryPoint>,
     ) -> anyhow::Result<()> {
         let session = self.create_slang_session(include_paths);
-        let (canonical_path, file_mtime) = get_file_mtime(file)?;
+        let (_canonical_path, file_mtime) = get_file_mtime(file)?;
 
         // load slang module file
         let module = session.load_module(&file.to_string_lossy()).map_err(SlangError::from)?;
@@ -465,7 +461,7 @@ impl BuildManifest {
         pipeline_name: &str,
         gs: &GraphicsState,
         entry_points: &[&EntryPoint],
-        options: &BuildOptions,
+        _options: &BuildOptions,
     ) -> anyhow::Result<PipelineEntryData> {
         let mut push_constants_size = 0;
         let mut workgroup_size = [1u32; 3];

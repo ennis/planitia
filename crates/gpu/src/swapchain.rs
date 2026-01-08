@@ -1,5 +1,7 @@
 use crate::device::{get_preferred_present_mode, get_preferred_swap_extent};
-use crate::{vk_khr_surface, CommandStream, Device, Image, ImageType, ImageUsage, ResourceAllocation, Size3D};
+use crate::{
+    aspects_for_format, vk_khr_surface, CommandStream, Device, Image, ImageType, ImageUsage, ResourceAllocation, Size3D,
+};
 use ash::vk;
 use std::ptr;
 use std::time::Duration;
@@ -29,6 +31,7 @@ pub struct SwapchainImage<'a> {
     /// Index of the image in the swap chain.
     pub index: u32,
     pub image: &'a Image,
+    pub(crate) render_finished: vk::Semaphore,
 }
 
 /// Swap chains
@@ -120,6 +123,7 @@ impl Device {
             swapchain: swap_chain.handle,
             image: &swap_chain.images[index as usize].image,
             index,
+            render_finished: swap_chain.images[index as usize].render_finished,
         };
 
         // wait (GPU side) for the image to be ready
@@ -129,22 +133,32 @@ impl Device {
         {
             let mut cmd = CommandStream::new();
             unsafe {
-                cmd.transition_image_layout(
-                    img.image.handle,
-                    vk::PipelineStageFlags2::NONE,
-                    vk::AccessFlags2::NONE,
-                    vk::PipelineStageFlags2::NONE,
-                    vk::AccessFlags2::NONE,
-                    vk::ImageLayout::UNDEFINED,
-                    vk::ImageLayout::GENERAL,
-                );
+                cmd.image_barrier(&vk::ImageMemoryBarrier2 {
+                    src_stage_mask: vk::PipelineStageFlags2::NONE,
+                    src_access_mask: vk::AccessFlags2::NONE,
+                    dst_stage_mask: vk::PipelineStageFlags2::NONE,
+                    dst_access_mask: vk::AccessFlags2::NONE,
+                    old_layout: vk::ImageLayout::UNDEFINED,
+                    new_layout: vk::ImageLayout::GENERAL,
+                    src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+                    dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+                    image: img.image.handle,
+                    subresource_range: vk::ImageSubresourceRange {
+                        aspect_mask: vk::ImageAspectFlags::COLOR,
+                        base_mip_level: 0,
+                        level_count: 1,
+                        base_array_layer: 0,
+                        layer_count: 1,
+                    },
+                    ..Default::default()
+                });
             }
             crate::submit(cmd)?;
         }
 
-        self.delete_after_current_submission(move |this| {
-            this.raw.destroy_semaphore(ready, None);
-        });
+        //self.delete_after_current_submission(move |this| {
+        //    this.raw.destroy_semaphore(ready, None);
+        //});
 
         Ok(img)
     }

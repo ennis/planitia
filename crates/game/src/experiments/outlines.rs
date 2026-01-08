@@ -6,7 +6,7 @@ use gamelib::asset::Handle;
 use gamelib::input::InputEvent;
 use gamelib::pipeline_cache::get_graphics_pipeline;
 use gpu::PrimitiveTopology::TriangleList;
-use gpu::{Barrier, BarrierFlags, Buffer, BufferCreateInfo, DrawIndirectCommand, MemoryLocation, RenderPassInfo, RootParams};
+use gpu::{BarrierFlags, Buffer, BufferCreateInfo, DrawIndirectCommand, MemoryLocation, Ptr, RenderPassInfo, RootParams};
 use hgeo::util::polygons_to_triangle_mesh;
 use log::info;
 use math::Vec3;
@@ -22,10 +22,10 @@ pub struct OutlineExperiment {
     debug_strokes: Handle<gpu::GraphicsPipeline>,
     depth_pass: Handle<gpu::GraphicsPipeline>,
     mesh: Mesh,
-    clusters: Buffer<[Cluster]>,
-    cluster_draw_commands: Buffer<[DrawIndirectCommand]>,
-    outline_vertices: Buffer<[ExpandedVertex]>,
-    outline_indices: Buffer<[u32]>,
+    clusters: Buffer<Cluster>,
+    cluster_draw_commands: Buffer<DrawIndirectCommand>,
+    outline_vertices: Buffer<ExpandedVertex>,
+    outline_indices: Buffer<u32>,
 }
 
 struct Vertex {
@@ -292,7 +292,7 @@ fn cluster_edges(
     mesh: &mut Mesh,
     params: &ClusterEdgesParams,
     draw_commands: &mut Vec<DrawIndirectCommand>,
-) -> Buffer<[Cluster]> {
+) -> Buffer<Cluster> {
     // start with one cluster per edge
     let mut clusters: Vec<EdgeCluster> = Vec::new();
 
@@ -511,20 +511,20 @@ struct OutlineRootParams {
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct OutlineExperimentRootParams {
-    scene_info: gpu::Ptr<SceneInfoUniforms>,
-    clusters: gpu::Ptr<[Cluster]>,
+    scene_info: Ptr<SceneInfoUniforms>,
+    clusters: Ptr<Cluster>,
     cluster_count: u32,
     vertex_count: u32,
-    out_vertices: gpu::Ptr<[ExpandedVertex]>,
-    out_indices: gpu::Ptr<[u32]>,
-    out_draw_command: gpu::Ptr<[gpu::DrawIndirectCommand]>,
+    out_vertices: Ptr<ExpandedVertex>,
+    out_indices: Ptr<u32>,
+    out_draw_command: Ptr<DrawIndirectCommand>,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct DepthPassRootParams {
-    scene_info: gpu::Ptr<SceneInfoUniforms>,
-    clusters: gpu::Ptr<[Cluster]>,
+    scene_info: Ptr<SceneInfoUniforms>,
+    clusters: Ptr<Cluster>,
     cluster_count: u32,
 }
 
@@ -576,12 +576,12 @@ impl OutlineExperiment {
         self.clusters = cluster_edges(&mut mesh, &cluster_params, &mut draw_commands);
         self.cluster_draw_commands = gpu::Buffer::from_slice(&draw_commands, "outline_cluster_draw_commands");
         self.mesh = mesh;
-        self.outline_vertices = gpu::Buffer::<[ExpandedVertex]>::new(gpu::BufferCreateInfo {
+        self.outline_vertices = gpu::Buffer::<ExpandedVertex>::new(gpu::BufferCreateInfo {
             len: self.mesh.vertices.len() * 20, // not great
             label: "outline_vertices",
             ..
         });
-        self.outline_indices = gpu::Buffer::<[u32]>::new(gpu::BufferCreateInfo {
+        self.outline_indices = gpu::Buffer::<u32>::new(gpu::BufferCreateInfo {
             len: self.mesh.vertices.len() * 40, // no idea
             label: "outline_indices",
             ..
@@ -671,9 +671,13 @@ impl OutlineExperiment {
             }),
         );
 
-
         cmd.barrier_source(BarrierFlags::COMPUTE_SHADER | BarrierFlags::STORAGE | BarrierFlags::DEPTH_STENCIL);
-        cmd.barrier(BarrierFlags::FRAGMENT_SHADER | BarrierFlags::SAMPLED_READ | BarrierFlags::STORAGE | BarrierFlags::INDIRECT_READ);
+        cmd.barrier(
+            BarrierFlags::FRAGMENT_SHADER
+                | BarrierFlags::SAMPLED_READ
+                | BarrierFlags::STORAGE
+                | BarrierFlags::INDIRECT_READ,
+        );
 
         /////////////////////////////////////////////////////////
         // render contours

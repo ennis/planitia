@@ -60,7 +60,7 @@ unsafe impl<T: ?Sized> Send for Buffer<T> {}
 // is done via unsafe methods, and the called should ensure proper synchronization).
 unsafe impl<T: ?Sized> Sync for Buffer<T> {}
 
-impl<T: Copy> Buffer<[T]> {
+impl<T: Copy> Buffer<T> {
     /// Creates a new buffer with the specified number of elements.
     pub fn new(create_info: BufferCreateInfo) -> Self {
         let buffer = Device::global().create_buffer(size_of::<T>(), create_info);
@@ -71,12 +71,12 @@ impl<T: Copy> Buffer<[T]> {
     }
 
     /// Creates a CpuToGpu buffer and copies data into it.
-    pub fn from_slice(data: &[T], label: &str) -> Buffer<[T]> {
+    pub fn from_slice(data: &[T], label: &str) -> Buffer<T> {
         Buffer::from_slice_with_usage(BufferUsage::default(), data, label)
     }
 
     /// Creates a CpuToGpu buffer and copies data into it.
-    pub fn from_slice_with_usage(usage: BufferUsage, data: &[T], label: &str) -> Buffer<[T]> {
+    pub fn from_slice_with_usage(usage: BufferUsage, data: &[T], label: &str) -> Buffer<T> {
         let buffer = Buffer::new(BufferCreateInfo {
             len: data.len(),
             usage,
@@ -85,28 +85,11 @@ impl<T: Copy> Buffer<[T]> {
         });
         unsafe {
             // copy data to mapped buffer
-            ptr::copy_nonoverlapping(data.as_ptr(), buffer.as_mut_ptr() as *mut T, data.len());
+            ptr::copy_nonoverlapping(data.as_ptr(), buffer.as_mut_ptr(), data.len());
         }
         buffer
     }
-}
 
-// TODO: non-slice buffers are rarely used. Consider removing them, and have `Buffer<T>` be
-//       analogous to `Vec<T>`.
-impl<T: Copy> Buffer<T> {
-    /// Creates a CpuToGpu buffer and copies data into it.
-    pub fn from_data(data: &T, label: &str) -> Buffer<T> {
-        Buffer::from_data_with_usage(BufferUsage::default(), data, label)
-    }
-
-    /// Creates a CpuToGpu buffer and copies data into it.
-    pub fn from_data_with_usage(usage: BufferUsage, data: &T, label: &str) -> Buffer<T> {
-        let buffer = Buffer::from_slice_with_usage(usage, slice::from_ref(data), label);
-        buffer.single()
-    }
-}
-
-impl<T: ?Sized> Buffer<T> {
     /// Returns the device address of the buffer, for use in shaders.
     pub fn ptr(&self) -> Ptr<T> {
         Ptr {
@@ -160,9 +143,7 @@ impl<T: Copy> Buffer<T> {
     pub fn as_mut_ptr(&self) -> *mut T {
         self.as_mut_ptr_u8() as *mut T
     }
-}
 
-impl<T: Copy> Buffer<[T]> {
     /// Returns the number of elements in the buffer.
     pub fn len(&self) -> usize {
         (self.byte_size() / size_of::<T>() as u64) as usize
@@ -174,7 +155,7 @@ impl<T: Copy> Buffer<[T]> {
             "buffer size is not a multiple of the element size"
         );
 
-        // Check that the host pointer is correctly aligned for T.
+        // Check that the host pointer is correctly aligned for U.
         if let Some(ptr) = self.mapped_ptr {
             assert!(
                 ptr.addr().get() & (align_of::<U>() - 1) == 0,
@@ -183,28 +164,6 @@ impl<T: Copy> Buffer<[T]> {
         }
     }
 
-    /// Re-interprets this buffer as a single value of type `T`. Only valid if `self.len() == 1`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `self.len() != 1`.
-    pub fn as_single(&self) -> &Buffer<T> {
-        assert!(self.len() == 1, "buffer does not contain exactly one element");
-        // SAFETY: Buffer<[T]> and Buffer<T> have the same layout if the size matches
-        unsafe { mem::transmute(self) }
-    }
-
-    /// Re-interprets this buffer as a single value of type `T`. Only valid if `self.len() == 1`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `self.len() != 1`.
-    pub fn single(self) -> Buffer<T> {
-        assert!(self.len() == 1, "buffer does not contain exactly one element");
-        // SAFETY: Buffer<[T]> and Buffer<T> have the same layout if the size matches
-        unsafe { mem::transmute(self) }
-    }
-
     /// Casts the buffer to another element type.
     ///
     /// # Safety
@@ -219,9 +178,9 @@ impl<T: Copy> Buffer<[T]> {
     ///
     /// Panics if the buffer size is not a multiple of the element size,
     /// or if the host pointer is not correctly aligned for the element type.
-    pub unsafe fn as_cast<U: Copy>(&self) -> &Buffer<[U]> {
+    pub unsafe fn as_cast<U: Copy>(&self) -> &Buffer<U> {
         self.check_valid_cast::<U>();
-        // SAFETY: Buffer<[T]> and Buffer<[U]> have the same layout for all T and U
+        // SAFETY: Buffer<T> and Buffer<U> have the same layout for all T and U
         mem::transmute(self)
     }
 
@@ -239,16 +198,10 @@ impl<T: Copy> Buffer<[T]> {
     ///
     /// Panics if the buffer size is not a multiple of the element size,
     /// or if the host pointer is not correctly aligned for the element type.
-    pub unsafe fn cast<U: Copy>(self) -> Buffer<[U]> {
+    pub unsafe fn cast<U: Copy>(self) -> Buffer<U> {
         self.check_valid_cast::<U>();
-        // SAFETY: Buffer<[T]> and Buffer<[U]> have the same layout for all T and U
+        // SAFETY: Buffer<T> and Buffer<U> have the same layout for all T and U
         mem::transmute(self)
-    }
-
-    /// If the buffer is mapped in host memory, returns a pointer to the mapped memory.
-    /// TODO: raw slice pointers aren't very ergonomic right now. Maybe return `*mut T` instead?
-    pub fn as_mut_ptr(&self) -> *mut [T] {
-        ptr::slice_from_raw_parts_mut(self.as_mut_ptr_u8() as *mut T, self.len())
     }
 
     /// If the buffer is mapped in host memory, returns an uninitialized slice of the buffer's elements.
@@ -259,7 +212,7 @@ impl<T: Copy> Buffer<[T]> {
     /// - The caller must ensure that nothing else is writing to the buffer while the slice is being accessed.
     ///   i.e. all GPU operations on the buffer have completed.
     pub unsafe fn as_mut_slice(&mut self) -> &mut [MaybeUninit<T>] {
-        unsafe { std::slice::from_raw_parts_mut(self.as_mut_ptr() as *mut _, self.len()) }
+        unsafe { slice::from_raw_parts_mut(self.as_mut_ptr() as *mut _, self.len()) }
     }
 
     /// Element range.
@@ -287,36 +240,7 @@ impl<T: Copy> Buffer<[T]> {
     }
 }
 
-/*
-impl Buffer<[u8]> {
-    /// Re-interprets this buffer as a single value of type `T`.
-    ///
-    /// # Safety
-    ///
-    /// This has the same requirements as `cast<U>()`.
-    pub unsafe fn as_cast_from_bytes<T: Copy>(&self) -> &Buffer<T> {
-        self.check_valid_cast::<T>();
-        // SAFETY: Buffer<[u8]> and Buffer<T> have the same layout if the size matches
-        unsafe { mem::transmute(self) }
-    }
-}*/
-
-/*
-impl<T: ?Sized> Clone for Buffer<T> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-            handle: self.handle,
-            size: self.size,
-            usage: self.usage,
-            mapped_ptr: self.mapped_ptr,
-            _marker: PhantomData,
-        }
-    }
-}*/
-
 // TODO: impl From<IntoIterator> for Buffer
-
 impl<T: ?Sized> std::fmt::Debug for Buffer<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Buffer")
@@ -332,10 +256,10 @@ impl<T: ?Sized> TrackedResource for Buffer<T> {
     }
 }
 
-pub type BufferUntyped = Buffer<[u8]>;
+pub type BufferUntyped = Buffer<u8>;
 
-impl<'a, T: Copy> From<&'a Buffer<[T]>> for BufferRange<'a, T> {
-    fn from(buffer: &'a Buffer<[T]>) -> Self {
+impl<'a, T: Copy> From<&'a Buffer<T>> for BufferRange<'a, T> {
+    fn from(buffer: &'a Buffer<T>) -> Self {
         buffer.slice(..)
     }
 }

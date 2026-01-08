@@ -78,7 +78,7 @@ impl CommandStream {
         Device::global().upload_one(data)
     }
 
-    pub fn upload_slice<T: Copy>(&mut self, data: &[T]) -> Ptr<[T]> {
+    pub fn upload_slice<T: Copy>(&mut self, data: &[T]) -> Ptr<T> {
         Device::global().upload(data)
     }
 }

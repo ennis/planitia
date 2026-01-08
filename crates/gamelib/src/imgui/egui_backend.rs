@@ -4,9 +4,12 @@ use std::slice;
 use crate::shaders::{EGUI_FRAG_MAIN, EGUI_VERTEX_MAIN};
 use egui::epaint::Primitive;
 use egui::{ClippedPrimitive, ImageData};
+use log::debug;
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::prelude::*;
-use gpu::{Barrier, BarrierFlags, ColorAttachment, Device, ImageCopyView, Offset3D, RenderPassInfo, RootParams, Size3D, Vertex};
+use gpu::{
+    BarrierFlags, ColorAttachment, Device, ImageCopyView, Offset3D, RenderPassInfo, RootParams, Size3D, Vertex,
+};
 
 #[derive(Copy, Clone, Vertex)]
 #[repr(C)]
@@ -56,7 +59,7 @@ impl Renderer {
         }
     }
 
-    fn update_textures(&mut self, cmd: &mut CommandStream, textures_delta: egui::TexturesDelta) {
+    pub fn update_textures(&mut self, cmd: &mut CommandStream, textures_delta: egui::TexturesDelta) {
         let convert_filter = |min_filter: egui::TextureFilter| -> vk::Filter {
             match min_filter {
                 egui::TextureFilter::Nearest => vk::Filter::NEAREST,
@@ -110,10 +113,10 @@ impl Renderer {
                 (0, 0)
             };
 
-            /*debug!(
+            debug!(
                 "upload_image_data {id:?} origin {x},{y} size {width}x{height} data {} bytes",
                 data.len()
-            );*/
+            );
             cmd.upload_image_data(
                 ImageCopyView {
                     image: &texture.image,
@@ -141,7 +144,6 @@ impl Renderer {
         shapes: Vec<egui::epaint::ClippedShape>,
         pixels_per_point: f32,
     ) {
-        self.update_textures(cmd, textures_delta);
 
         let clipped_primitives = ctx.tessellate(shapes, pixels_per_point);
 
@@ -217,7 +219,7 @@ impl Renderer {
                         0,
                         texture
                             .image
-                            .texture_descriptor(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
+                            .texture_descriptor(vk::ImageLayout::GENERAL),
                     ),
                     (1, self.sampler.descriptor()),
                 ],

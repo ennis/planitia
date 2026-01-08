@@ -76,11 +76,13 @@ impl ImguiContext {
         self.input.update(&self.ctx, event)
     }
 
-    pub(crate) fn run(&mut self, f: impl FnMut(&egui::Context)) {
+    pub(crate) fn run(&mut self, cmd: &mut CommandStream, f: impl FnMut(&egui::Context)) {
         let raw_input = self.input.raw.take();
         let output = self.ctx.run(raw_input, f);
         self.input.handle_platform_output(&output.platform_output);
         self.output = output;
+        let textures_delta = mem::take(&mut self.output.textures_delta);
+        self.renderer.update_textures(cmd, textures_delta);
     }
 
     pub(crate) fn render(&mut self, cmd: &mut CommandStream, image: &gpu::Image) {

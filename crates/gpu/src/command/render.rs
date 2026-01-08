@@ -1,5 +1,9 @@
 //! Render command encoders
-use crate::{is_depth_and_stencil_format, Barrier, BarrierFlags, Buffer, BufferUntyped, ClearColorValue, ColorAttachment, CommandStream, DepthStencilAttachment, Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, Rect2D, RootParams};
+use crate::{
+    is_depth_and_stencil_format, Buffer, BufferUntyped, ClearColorValue, ColorAttachment,
+    CommandStream, DepthStencilAttachment, Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, Rect2D,
+    RootParams,
+};
 use ash::vk;
 use std::ops::Range;
 use std::ptr;
@@ -346,7 +350,7 @@ impl<'a> RenderEncoder<'a> {
     pub fn draw_indexed<T: Copy + 'static>(
         &mut self,
         topology: PrimitiveTopology,
-        index_buffer: &Buffer<[u32]>,
+        index_buffer: &Buffer<u32>,
         index_range: Range<u32>,
         vertex_buffer: Option<&BufferUntyped>,
         base_vertex: i32,
@@ -382,7 +386,7 @@ impl<'a> RenderEncoder<'a> {
         &mut self,
         topology: PrimitiveTopology,
         vertex_buffer: Option<&BufferUntyped>,
-        commands: &Buffer<[DrawIndirectCommand]>,
+        commands: &Buffer<DrawIndirectCommand>,
         draw_range: Range<u32>,
         root_params: RootParams<T>,
     ) {
@@ -411,9 +415,9 @@ impl<'a> RenderEncoder<'a> {
     pub fn draw_indexed_indirect<T: Copy + 'static>(
         &mut self,
         topology: PrimitiveTopology,
-        index_buffer: &Buffer<[u32]>,
+        index_buffer: &Buffer<u32>,
         vertex_buffer: Option<&BufferUntyped>,
-        commands: &Buffer<[DrawIndexedIndirectCommand]>,
+        commands: &Buffer<DrawIndexedIndirectCommand>,
         draw_range: Range<u32>,
         root_params: RootParams<T>,
     ) {
@@ -467,7 +471,7 @@ impl<'a> RenderEncoder<'a> {
         self.stream.upload(data)
     }
 
-    pub fn upload_slice<T: Copy + 'static>(&mut self, data: &[T]) -> Ptr<[T]> {
+    pub fn upload_slice<T: Copy + 'static>(&mut self, data: &[T]) -> Ptr<T> {
         self.stream.upload_slice(data)
     }
 
@@ -559,8 +563,7 @@ impl CommandStream {
         if let Some(ref depth) = desc.depth_stencil_attachment {
             depth_attachment = vk::RenderingAttachmentInfo {
                 image_view: depth.image.view_handle(),
-                // TODO different layouts
-                image_layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                image_layout: vk::ImageLayout::GENERAL,
                 resolve_mode: vk::ResolveModeFlags::NONE,
                 load_op: if depth.depth_clear_value.is_some() {
                     vk::AttachmentLoadOp::CLEAR
@@ -579,8 +582,7 @@ impl CommandStream {
             if is_depth_and_stencil_format(depth.image.format()) {
                 stencil_attachment = vk::RenderingAttachmentInfo {
                     image_view: depth.image.view_handle(),
-                    // TODO different layouts
-                    image_layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                    image_layout: vk::ImageLayout::GENERAL,
                     resolve_mode: vk::ResolveModeFlags::NONE,
                     load_op: if depth.stencil_clear_value.is_some() {
                         vk::AttachmentLoadOp::CLEAR

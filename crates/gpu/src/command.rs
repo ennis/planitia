@@ -1,156 +1,41 @@
 use crate::device::ActiveSubmission;
-use crate::{
-    aspects_for_format, vk, CommandPool, ComputePipeline, Descriptor, Device, Image, MemoryAccess, Ptr, ResourceId,
-    SwapchainImage, TrackedResource,
-};
+use crate::{aspects_for_format, vk, CommandPool, ComputePipeline, Descriptor, Device, Ptr, SwapchainImage};
 use ash::prelude::VkResult;
 use ash::vk::DeviceAddress;
 use bitflags::bitflags;
-use fxhash::FxHashMap;
 use log::{error, trace};
 pub use render::{DrawIndexedIndirectCommand, DrawIndirectCommand, RenderEncoder, RenderPassInfo};
-use slotmap::secondary::Entry;
-use std::ffi::{c_char, c_void, CString};
-use std::mem::{ManuallyDrop, MaybeUninit};
+use std::ffi::{c_void, CString};
+use std::mem::{ManuallyDrop};
 use std::sync::atomic::Ordering::Relaxed;
 use std::{mem, ptr, slice};
 
 mod blit;
 mod render;
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
 union DescriptorBufferOrImage {
     image: vk::DescriptorImageInfo,
     buffer: vk::DescriptorBufferInfo,
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/// Describes a pipeline barrier.
-///
-/// TODO: This should be refactored so that it doesn't need to allocate a vec on each layout transition.
-pub struct Barrier<'a> {
-    access: MemoryAccess,
-    transitions: Vec<(&'a Image, MemoryAccess)>,
-}
-
-impl<'a> Barrier<'a> {
-    pub fn new() -> Self {
-        Barrier {
-            access: MemoryAccess::empty(),
-            transitions: vec![],
-        }
-    }
-
-    pub fn color_attachment_write(mut self, image: &'a Image) -> Self {
-        self.transitions.push((image, MemoryAccess::COLOR_ATTACHMENT_WRITE));
-        self.access |= MemoryAccess::COLOR_ATTACHMENT_WRITE;
-        self
-    }
-
-    pub fn depth_stencil_attachment_write(mut self, image: &'a Image) -> Self {
-        self.transitions
-            .push((image, MemoryAccess::DEPTH_STENCIL_ATTACHMENT_WRITE));
-        self.access |= MemoryAccess::DEPTH_STENCIL_ATTACHMENT_WRITE;
-        self
-    }
-
-    pub fn shader_storage_read(mut self) -> Self {
-        self.access |= MemoryAccess::SHADER_STORAGE_READ | MemoryAccess::ALL_STAGES;
-        self
-    }
-
-    pub fn shader_storage_write(mut self) -> Self {
-        self.access |= MemoryAccess::SHADER_STORAGE_WRITE | MemoryAccess::ALL_STAGES;
-        self
-    }
-
-    pub fn shader_read_image(mut self, image: &'a Image) -> Self {
-        self.transitions
-            .push((image, MemoryAccess::SHADER_STORAGE_READ | MemoryAccess::ALL_STAGES));
-        self.access |= MemoryAccess::SHADER_STORAGE_READ | MemoryAccess::ALL_STAGES;
-        self
-    }
-
-    pub fn shader_write_image(mut self, image: &'a Image) -> Self {
-        self.transitions
-            .push((image, MemoryAccess::SHADER_STORAGE_WRITE | MemoryAccess::ALL_STAGES));
-        self.access |= MemoryAccess::SHADER_STORAGE_WRITE | MemoryAccess::ALL_STAGES;
-        self
-    }
-
-    pub fn present(mut self, image: &'a Image) -> Self {
-        self.transitions.push((image, MemoryAccess::PRESENT));
-        self.access |= MemoryAccess::PRESENT;
-        self
-    }
-
-    pub fn sample_read_image(mut self, image: &'a Image) -> Self {
-        self.transitions
-            .push((image, MemoryAccess::SAMPLED_READ | MemoryAccess::ALL_STAGES));
-        self.access |= MemoryAccess::SAMPLED_READ | MemoryAccess::ALL_STAGES;
-        self
-    }
-
-    pub fn transfer_read(mut self) -> Self {
-        self.access |= MemoryAccess::TRANSFER_READ;
-        self
-    }
-
-    pub fn transfer_write(mut self) -> Self {
-        self.access |= MemoryAccess::TRANSFER_WRITE;
-        self
-    }
-
-    pub fn transfer_read_image(mut self, image: &'a Image) -> Self {
-        self.transitions.push((image, MemoryAccess::TRANSFER_READ));
-        self.access |= MemoryAccess::TRANSFER_READ;
-        self
-    }
-
-    pub fn transfer_write_image(mut self, image: &'a Image) -> Self {
-        self.transitions.push((image, MemoryAccess::TRANSFER_WRITE));
-        self.access |= MemoryAccess::TRANSFER_WRITE;
-        self
-    }
-
-    pub fn indirect(mut self) -> Self {
-        self.access |= MemoryAccess::INDIRECT_READ | MemoryAccess::ALL_STAGES;
-        self
-    }
-}
-
 /// TODO rename this, it's not really a stream as it needs to be dropped to submit work to the queue
 pub struct CommandStream {
     command_pool: ManuallyDrop<CommandPool>,
-    submission_index: u64,
     /// Command buffers waiting to be submitted.
     command_buffers_to_submit: Vec<vk::CommandBuffer>,
     /// Current command buffer.
     command_buffer: Option<vk::CommandBuffer>,
+    submitted: bool,
+    /// Last bound compute pipeline layout.
+    pipeline_layout: vk::PipelineLayout,
+    barrier_source: BarrierFlags,
+    create_ticket: u64
 
     // Buffer writes that need to be made available
     //tracked_writes: MemoryAccess,
     //tracked_images: FxHashMap<ResourceId, CommandBufferImageState>,
-
     //pub(crate) tracked_image_views: FxHashMap<ImageViewId, ImageView>,
-    submitted: bool,
-    /// Last bound compute pipeline layout.
-    pipeline_layout: vk::PipelineLayout,
 
-    //seen_initial_barrier: bool,
-    //initial_writes: MemoryAccess,
-    //initial_barrier: BarrierFlags,
-    barrier_source: BarrierFlags,
-}
-
-pub(crate) struct CommandBufferImageState {
-    pub image: vk::Image,
-    pub format: vk::Format,
-    pub id: ResourceId,
-    pub first_access: MemoryAccess,
-    pub last_access: MemoryAccess,
 }
 
 /*
@@ -362,6 +247,9 @@ impl BarrierFlags {
         if self.contains(Self::SAMPLED_READ) {
             access |= vk::AccessFlags2::SHADER_SAMPLED_READ;
         }
+        if self.contains(Self::UNIFORM_READ) {
+            access |= vk::AccessFlags2::UNIFORM_READ;
+        }
         if self.contains(Self::INDIRECT_READ) {
             stages |= vk::PipelineStageFlags2::DRAW_INDIRECT;
             access |= vk::AccessFlags2::INDIRECT_COMMAND_READ;
@@ -404,13 +292,20 @@ impl CommandStream {
     /// They should be submitted in the same order as they were created.
     pub fn new() -> CommandStream {
         let device = Device::global();
-        let submission_index = device.next_submission_index.fetch_add(1, Relaxed);
         let command_pool = device.get_or_create_command_pool(device.queue_family);
-        trace!("GPU: begin CommandStream {}", submission_index);
+
+        // Each command stream gets a "creation ticket number" that tracks in which order they were
+        // *created*.
+        // When submitting, they also get a "submission ticket number" that tracks
+        // in which order they were *submitted* to the GPU.
+        // Eventually, when all created command streams have been submitted (i.e. there are no
+        // live CommandStream objects), we normally have next_creation_ticket == next_submission_ticket.
+
+        let create_ticket = device.next_create_ticket.fetch_add(1, Relaxed);
+        trace!("GPU: create CommandStream, create_ticket {}", create_ticket);
 
         CommandStream {
             command_pool: ManuallyDrop::new(command_pool),
-            submission_index,
             command_buffers_to_submit: vec![],
             command_buffer: None,
             //tracked_images: Default::default(),
@@ -419,6 +314,7 @@ impl CommandStream {
             submitted: false,
             pipeline_layout: Default::default(),
             barrier_source: BarrierFlags::empty(),
+            create_ticket
         }
     }
 
@@ -557,7 +453,7 @@ impl CommandStream {
         }
     }
 
-    /// Binds push constants.
+    /*/// Binds push constants.
     fn do_cmd_push_constants(
         &mut self,
         command_buffer: vk::CommandBuffer,
@@ -593,43 +489,40 @@ impl CommandStream {
                 data as *const _ as *const c_void,
             );
         }
-    }
+    }*/
 
-    pub(crate) unsafe fn transition_image_layout(
+    /*/// Binds push constants.
+    ///
+    /// Push constants stay valid until the bound pipeline is changed.
+    ///
+    /// FIXME: this assumes that `bind_compute_pipeline` has been called.
+    fn push_constants<P>(&mut self, data: &P)
+    where
+        P: Copy,
+    {
+        let cb = self.get_or_create_command_buffer();
+        unsafe {
+            self.do_cmd_push_constants(
+                cb,
+                vk::PipelineBindPoint::COMPUTE,
+                self.pipeline_layout,
+                slice::from_raw_parts(data as *const P as *const MaybeUninit<u8>, size_of_val(data)),
+            );
+        }
+    }*/
+
+    pub(crate) unsafe fn image_barrier(
         &mut self,
-        image: vk::Image,
-        src_stage_mask: vk::PipelineStageFlags2,
-        src_access_mask: vk::AccessFlags2,
-        dst_stage_mask: vk::PipelineStageFlags2,
-        dst_access_mask: vk::AccessFlags2,
-        old_layout: vk::ImageLayout,
-        new_layout: vk::ImageLayout,
+        barrier: &vk::ImageMemoryBarrier2,
     ) {
         unsafe {
             let cb = self.get_or_create_command_buffer();
-            let barrier = vk::ImageMemoryBarrier2 {
-                src_stage_mask,
-                src_access_mask,
-                dst_stage_mask,
-                dst_access_mask,
-                old_layout,
-                new_layout,
-                image,
-                subresource_range: vk::ImageSubresourceRange {
-                    aspect_mask: vk::ImageAspectFlags::COLOR,
-                    base_mip_level: 0,
-                    level_count: vk::REMAINING_MIP_LEVELS,
-                    base_array_layer: 0,
-                    layer_count: vk::REMAINING_ARRAY_LAYERS,
-                },
-                ..Default::default()
-            };
             Device::global().raw.cmd_pipeline_barrier2(
                 cb,
                 &vk::DependencyInfo {
                     dependency_flags: Default::default(),
                     image_memory_barrier_count: 1,
-                    p_image_memory_barriers: &barrier,
+                    p_image_memory_barriers: barrier,
                     ..Default::default()
                 },
             );
@@ -669,12 +562,6 @@ impl CommandStream {
         }
     }
 
-    /*/// Tells the command stream that an operation has made writes that are not available to
-    /// subsequent operations.
-    pub fn invalidate(&mut self, scope: MemoryAccess) {
-        self.tracked_writes |= scope;
-    }*/
-
     /// Tells future barriers to wait for the specified producer stages.
     ///
     /// Typically, if you want future barriers to wait for all prior work to complete, you would call this
@@ -696,6 +583,10 @@ impl CommandStream {
     // TODO split in two parameters: one for global memory barrier, one for image layout transitions
     pub fn barrier(&mut self, dest: BarrierFlags) {
         //let mut image_barriers = vec![];
+
+        if self.barrier_source.is_empty() && dest.is_empty() {
+            return;
+        }
 
         let (src_stage_mask, src_access_mask) = self.barrier_source.to_vk_barrier_src_flags();
         let (dst_stage_mask, dst_access_mask) = dest.to_vk_barrier_dst_flags();
@@ -801,25 +692,6 @@ impl CommandStream {
         // TODO: we need to hold a reference to the pipeline until the command buffers are submitted
     }
 
-    /// Binds push constants.
-    ///
-    /// Push constants stay valid until the bound pipeline is changed.
-    ///
-    /// FIXME: this assumes that `bind_compute_pipeline` has been called.
-    fn push_constants<P>(&mut self, data: &P)
-    where
-        P: Copy,
-    {
-        let cb = self.get_or_create_command_buffer();
-        unsafe {
-            self.do_cmd_push_constants(
-                cb,
-                vk::PipelineBindPoint::COMPUTE,
-                self.pipeline_layout,
-                slice::from_raw_parts(data as *const P as *const MaybeUninit<u8>, size_of_val(data)),
-            );
-        }
-    }
 
     pub fn dispatch<T: Copy + 'static>(
         &mut self,
@@ -1017,15 +889,9 @@ pub fn submit(mut cmd: CommandStream) -> VkResult<()> {
     // Verify that the command streams are submitted in the order in which they were created.
     // Timeline semaphore values depend on this.
     assert!(!cmd.submitted);
-    assert_eq!(
-        device.expected_submission_index.load(Relaxed),
-        cmd.submission_index,
-        "CommandStream submitted out of order"
-    );
-    // Increment now so that this doesn't block other submissions if this one fails somehow.
-    device
-        .expected_submission_index
-        .store(cmd.submission_index + 1, Relaxed);
+
+    let submit_ticket = device.next_submit_ticket.fetch_add(1, Relaxed);
+    trace!("GPU: submit CommandStream, create_ticket={}, submit_ticket={}", cmd.create_ticket, submit_ticket);
 
     // flush pending writes
     cmd.barrier(BarrierFlags::empty());
@@ -1033,7 +899,7 @@ pub fn submit(mut cmd: CommandStream) -> VkResult<()> {
     // finish recording the current command buffer if not already done
     cmd.close_command_buffer();
 
-    let mut command_buffers = mem::take(&mut cmd.command_buffers_to_submit);
+    let command_buffers = mem::take(&mut cmd.command_buffers_to_submit);
 
     //----------------------
     // Update tracked resources:
@@ -1051,7 +917,7 @@ pub fn submit(mut cmd: CommandStream) -> VkResult<()> {
     //        dst_access_mask,
     //        ..Default::default()
     //    });
-//
+    //
     //    let mut image_barriers = Vec::new();
     //    for (_, state) in cmd.tracked_images.drain() {
     //        let prev_access = match submission_state.access_per_resource.entry(state.id) {
@@ -1089,10 +955,10 @@ pub fn submit(mut cmd: CommandStream) -> VkResult<()> {
     //            });
     //        }
     //    }
-//
+    //
     //    // update tracked writes across submissions
     //    submission_state.writes = cmd.tracked_writes;
-//
+    //
     //    // If we need a pipeline barrier before submitting the command buffers, we insert a "fixup" command buffer
     //    // containing the pipeline barrier, before the others.
     //    if global_memory_barrier.is_some() || !image_barriers.is_empty() {
@@ -1142,7 +1008,7 @@ pub fn submit(mut cmd: CommandStream) -> VkResult<()> {
     //----------------------
     // submit
     let signal_semaphores = vec![device.thread_safe.timeline];
-    let signal_semaphore_values = vec![cmd.submission_index];
+    let signal_semaphore_values = vec![submit_ticket];
     let timeline_submit_info = vk::TimelineSemaphoreSubmitInfo {
         signal_semaphore_value_count: signal_semaphore_values.len() as u32,
         p_signal_semaphore_values: signal_semaphore_values.as_ptr(),
@@ -1168,7 +1034,8 @@ pub fn submit(mut cmd: CommandStream) -> VkResult<()> {
             .queue_submit(submission_state.queue, &[submit_info], vk::Fence::null());
 
         submission_state.active_submissions.push_back(ActiveSubmission {
-            index: cmd.submission_index,
+            _create_ticket: cmd.create_ticket,
+            submit_ticket,
             // SAFETY: submitted = false so the command pool is valid
             command_pools: vec![ManuallyDrop::take(&mut cmd.command_pool)],
         });
@@ -1182,15 +1049,23 @@ pub fn present(image: &SwapchainImage) -> VkResult<()> {
     // transition image to PRESENT_SRC
     let mut cmd = CommandStream::new();
     unsafe {
-        cmd.transition_image_layout(
-            image.image.handle,
-            vk::PipelineStageFlags2::ALL_COMMANDS,
-            vk::AccessFlags2::MEMORY_WRITE,
-            vk::PipelineStageFlags2::BOTTOM_OF_PIPE,
-            vk::AccessFlags2::NONE,
-            vk::ImageLayout::GENERAL,
-            vk::ImageLayout::PRESENT_SRC_KHR,
-        );
+        cmd.image_barrier(&vk::ImageMemoryBarrier2 {
+            src_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
+            src_access_mask: vk::AccessFlags2::MEMORY_WRITE,
+            dst_stage_mask: vk::PipelineStageFlags2::BOTTOM_OF_PIPE,
+            dst_access_mask: vk::AccessFlags2::NONE,
+            old_layout: vk::ImageLayout::GENERAL,
+            new_layout: vk::ImageLayout::PRESENT_SRC_KHR,
+            image: image.image.handle,
+            subresource_range: vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: 0,
+                level_count: vk::REMAINING_MIP_LEVELS,
+                base_array_layer: 0,
+                layer_count: vk::REMAINING_ARRAY_LAYERS,
+            },
+            ..Default::default()
+        });
     }
     submit(cmd)?;
 
@@ -1200,8 +1075,7 @@ pub fn present(image: &SwapchainImage) -> VkResult<()> {
 
     // set up semaphore to wait for rendering to finish
     let device = Device::global();
-    let render_finished = device.get_or_create_semaphore();
-    sync_signal(render_finished, 0);
+    sync_signal(image.render_finished, 0);
 
     unsafe {
         let submission_state = device.submission_state.lock().unwrap();
@@ -1212,7 +1086,7 @@ pub fn present(image: &SwapchainImage) -> VkResult<()> {
                 submission_state.queue,
                 &vk::PresentInfoKHR {
                     wait_semaphore_count: 1,
-                    p_wait_semaphores: &render_finished,
+                    p_wait_semaphores: &image.render_finished,
                     swapchain_count: 1,
                     p_swapchains: &image.swapchain,
                     p_image_indices: &image.index,
@@ -1221,7 +1095,6 @@ pub fn present(image: &SwapchainImage) -> VkResult<()> {
                 },
             )
             .map(|_| ());
-        device.recycle_binary_semaphore(render_finished);
         result
     }
 }

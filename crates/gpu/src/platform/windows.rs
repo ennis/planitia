@@ -1,5 +1,5 @@
 use crate::device::{get_vk_sample_count, ResourceAllocation};
-use crate::{vk, Device, Image, ImageCreateInfo, Size3D};
+use crate::{aspects_for_format, vk, CommandStream, Device, Image, ImageCreateInfo, Size3D};
 use ash::vk::{HANDLE, SECURITY_ATTRIBUTES};
 use gpu_allocator::MemoryLocation;
 use std::ffi::{c_void, OsStr};
@@ -47,7 +47,7 @@ fn handle_name_to_wstr(name: Option<&str>) -> (Vec<u16>, *const u16) {
 }
 
 pub(crate) enum DedicatedAllocation {
-    Buffer(vk::Buffer),
+    //Buffer(vk::Buffer),
     Image(vk::Image),
 }
 
@@ -89,9 +89,9 @@ unsafe fn import_external_memory(
         };
 
         match dedicated {
-            DedicatedAllocation::Buffer(buffer) => {
-                dedicated_allocate_info.buffer = buffer;
-            }
+            //DedicatedAllocation::Buffer(buffer) => {
+            //    dedicated_allocate_info.buffer = buffer;
+            //}
             DedicatedAllocation::Image(image) => {
                 dedicated_allocate_info.image = image;
             }
@@ -150,6 +150,7 @@ impl Device {
             sharing_mode: vk::SharingMode::EXCLUSIVE,
             queue_family_index_count: 0,
             p_queue_family_indices: ptr::null(),
+            initial_layout: vk::ImageLayout::UNDEFINED,
             ..Default::default()
         };
         let handle = self
@@ -177,6 +178,31 @@ impl Device {
             image_info.mip_levels,
             image_info.array_layers,
         );
+
+        // transition image to GENERAL
+        {
+            let mut cmd = CommandStream::new();
+            cmd.image_barrier(&vk::ImageMemoryBarrier2 {
+                src_stage_mask: vk::PipelineStageFlags2::NONE,
+                src_access_mask: vk::AccessFlags2::MEMORY_WRITE,
+                dst_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
+                dst_access_mask: vk::AccessFlags2::MEMORY_READ,
+                old_layout: vk::ImageLayout::UNDEFINED,
+                new_layout: vk::ImageLayout::GENERAL,
+                src_queue_family_index: vk::QUEUE_FAMILY_EXTERNAL,
+                dst_queue_family_index: self.queue_family,
+                image: handle,
+                subresource_range: vk::ImageSubresourceRange {
+                    aspect_mask: aspects_for_format(image_info.format),
+                    base_mip_level: 0,
+                    level_count: image_info.mip_levels,
+                    base_array_layer: 0,
+                    layer_count: image_info.array_layers,
+                },
+                ..Default::default()
+            });
+            crate::submit(cmd).unwrap();
+        }
 
         Image {
             handle,

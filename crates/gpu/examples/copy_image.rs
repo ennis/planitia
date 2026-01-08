@@ -88,8 +88,8 @@ fn load_image(cmd: &mut CommandStream, path: impl AsRef<Path>, usage: ImageUsage
 
 struct VulkanWindow {
     window: Window,
-    surface: gpu::vk::SurfaceKHR,
-    format: gpu::vk::SurfaceFormatKHR,
+    //surface: gpu::vk::SurfaceKHR,
+    //format: gpu::vk::SurfaceFormatKHR,
     swap_chain: SwapChain,
     width: u32,
     height: u32,
@@ -109,7 +109,7 @@ impl ApplicationHandler for App {
             let size = window.inner_size();
             let surface = gpu::get_vulkan_surface(window.window_handle().unwrap().as_raw());
             let surface_format = unsafe { Device::global().get_preferred_surface_format(surface) };
-            let mut swap_chain =
+            let swap_chain =
                 unsafe { Device::global().create_swapchain(surface, surface_format, size.width, size.height) };
 
             let mut cmd = CommandStream::new();
@@ -122,8 +122,6 @@ impl ApplicationHandler for App {
 
             self.window = Some(VulkanWindow {
                 window,
-                surface,
-                format: surface_format,
                 swap_chain,
                 width: size.width,
                 height: size.height,
@@ -132,7 +130,7 @@ impl ApplicationHandler for App {
         }
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
         let window = self.window.as_mut().unwrap();
         let device = Device::global();
 

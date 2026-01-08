@@ -25,8 +25,8 @@ pub struct Line {
 #[derive(Clone, Copy)]
 struct RootParams {
     scene_info: Ptr<SceneInfoUniforms>,
-    vertices: Ptr<[LineVertex]>,
-    lines: Ptr<[Line]>,
+    vertices: Ptr<LineVertex>,
+    lines: Ptr<Line>,
     //start_vertex: u32,
     //vertex_count: u32,
     //line_width: f32,

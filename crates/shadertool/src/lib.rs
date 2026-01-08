@@ -2,7 +2,6 @@ mod build;
 mod manifest;
 
 use anyhow::Context;
-use color_print::cprintln;
 pub use manifest::*;
 use std::path::Path;
 use thiserror::Error;

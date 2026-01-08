@@ -6,9 +6,9 @@ pub struct SweepExperiment {
     sweep_stroke_pipeline: Handle<gpu::ComputePipeline>,
     debug_stroke_pipeline: Handle<gpu::GraphicsPipeline>,
 
-    strokes: Buffer<[geom::coat::SweptStroke]>,
-    stroke_vertices: Buffer<[geom::coat::SweptStrokeVertex]>,
-    cross_sections: Buffer<[geom::coat::PosNorm2DVertex]>,
+    strokes: Buffer<geom::coat::SweptStroke>,
+    stroke_vertices: Buffer<geom::coat::SweptStrokeVertex>,
+    cross_sections: Buffer<geom::coat::PosNorm2DVertex>,
 }
 
 impl SweepExperiment {

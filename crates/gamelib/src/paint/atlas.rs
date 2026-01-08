@@ -1,5 +1,5 @@
 use crate::paint::Srgba8;
-use gpu::{Barrier, ImageAspect, ImageCopyView, ImageCreateInfo, MemoryLocation, Size3D, vk, BarrierFlags};
+use gpu::{BarrierFlags, ImageAspect, ImageCopyView, ImageCreateInfo, MemoryLocation, Size3D, vk};
 use log::debug;
 use math::geom::{IRect, irect_xywh};
 use math::{U16Vec2, u16vec2};

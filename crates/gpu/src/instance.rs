@@ -44,13 +44,14 @@ static VULKAN_ENTRY: LazyLock<ash::Entry> = LazyLock::new(initialize_vulkan_entr
 /// Vulkan instance and instance function pointers.
 static VULKAN_INSTANCE: LazyLock<ash::Instance> = LazyLock::new(create_vulkan_instance);
 
-static VK_EXT_DEBUG_UTILS_INSTANCE: LazyLock<ash::ext::debug_utils::Instance> =
-    LazyLock::new(|| ash::ext::debug_utils::Instance::new(&*VULKAN_ENTRY, &*VULKAN_INSTANCE));
-
 static VK_KHR_SURFACE: LazyLock<ash::khr::surface::Instance> =
     LazyLock::new(|| ash::khr::surface::Instance::new(&*VULKAN_ENTRY, &*VULKAN_INSTANCE));
 
-static DEBUG_MESSENGER: LazyLock<vk::DebugUtilsMessengerEXT> = LazyLock::new(|| {
+/*
+static VK_EXT_DEBUG_UTILS_INSTANCE: LazyLock<ash::ext::debug_utils::Instance> =
+    LazyLock::new(|| ash::ext::debug_utils::Instance::new(&*VULKAN_ENTRY, &*VULKAN_INSTANCE));
+
+static _DEBUG_MESSENGER: LazyLock<vk::DebugUtilsMessengerEXT> = LazyLock::new(|| {
     unsafe extern "system" fn debug_utils_message_callback(
         message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
         _message_types: vk::DebugUtilsMessageTypeFlagsEXT,
@@ -101,7 +102,7 @@ static DEBUG_MESSENGER: LazyLock<vk::DebugUtilsMessengerEXT> = LazyLock::new(|| 
             .expect("failed to create debug messenger");
         debug_messenger
     }
-});
+});*/
 
 fn initialize_vulkan_entry() -> ash::Entry {
     unsafe { ash::Entry::load().expect("failed to initialize vulkan entry points") }
@@ -167,5 +168,3 @@ fn create_vulkan_instance() -> ash::Instance {
             .expect("failed to create vulkan instance")
     }
 }
-
-// Vulkan message callback

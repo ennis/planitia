@@ -327,9 +327,13 @@ where
         handler.vsync();
 
         // update the GUI
-        ctx.imgui.borrow_mut().run(|imgui_ctx| {
-            handler.imgui(imgui_ctx);
-        });
+        {
+            let mut cmd = gpu::CommandStream::new();
+            ctx.imgui.borrow_mut().run(&mut cmd, |imgui_ctx| {
+                handler.imgui(imgui_ctx);
+            });
+            gpu::submit(cmd).unwrap();
+        }
 
         // start frame capture if requested and RenderDoc is available
         if ctx.rdoc_capture_requested.get() {

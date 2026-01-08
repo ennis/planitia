@@ -1,8 +1,5 @@
 use crate::device::get_vk_sample_count;
-use crate::{
-    aspects_for_format, BufferUntyped, Descriptor, Device, Format, ResourceAllocation, ResourceDescriptorIndex,
-    ResourceId, Size3D, StorageImageHandle, TextureHandle, TrackedResource,
-};
+use crate::{aspects_for_format, BufferUntyped, CommandStream, Descriptor, Device, Format, ResourceAllocation, ResourceDescriptorIndex, ResourceId, Size3D, StorageImageHandle, TextureHandle, TrackedResource};
 use ash::vk;
 use ash::vk::Handle;
 use bitflags::bitflags;
@@ -45,7 +42,6 @@ bitflags! {
         const STORAGE = 0b1000;
         const COLOR_ATTACHMENT = 0b1_0000;
         const DEPTH_STENCIL_ATTACHMENT = 0b10_0000;
-        const TRANSIENT_ATTACHMENT = 0b100_0000;
         const INPUT_ATTACHMENT = 0b1000_0000;
     }
 }
@@ -368,6 +364,34 @@ impl Device {
         }
     }
 
+    // bullshit to transition to GENERAL layout and appease the validation layers
+    // the contents will be undefined anyway
+    pub(crate) unsafe fn transition_image_to_general(&self, image: vk::Image, aspect_mask: vk::ImageAspectFlags) {
+        unsafe {
+            let mut cmd = CommandStream::new();
+            cmd.image_barrier(&vk::ImageMemoryBarrier2 {
+                src_stage_mask: vk::PipelineStageFlags2::NONE,
+                src_access_mask: vk::AccessFlags2::empty(),
+                dst_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
+                dst_access_mask: vk::AccessFlags2::MEMORY_READ,
+                old_layout: vk::ImageLayout::UNDEFINED,
+                new_layout: vk::ImageLayout::GENERAL,
+                src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+                dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+                image,
+                subresource_range: vk::ImageSubresourceRange {
+                    aspect_mask,
+                    base_mip_level: 0,
+                    level_count: vk::REMAINING_MIP_LEVELS,
+                    base_array_layer: 0,
+                    layer_count: vk::REMAINING_ARRAY_LAYERS,
+                },
+                ..Default::default()
+            });
+            crate::submit(cmd).unwrap();
+        }
+    }
+
     /// Creates a new image resource.
     pub(crate) fn create_image(&self, image_info: &ImageCreateInfo) -> Image {
         unsafe {
@@ -422,6 +446,8 @@ impl Device {
                 image_info.mip_levels,
                 image_info.array_layers,
             );
+
+            self.transition_image_to_general(handle, aspects_for_format(image_info.format));
 
             Image {
                 handle,

@@ -5,22 +5,20 @@ use crate::device::bindless::BindlessDescriptorTable;
 use crate::instance::vk_khr_surface;
 use crate::platform::PlatformExtensions;
 use crate::{
-    aspects_for_format, get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, Barrier, BufferCreateInfo,
-    BufferUntyped, BufferUsage, CommandPool, CommandStream, ComputePipeline, ComputePipelineCreateInfo,
-    DescriptorSetLayout, Error, GraphicsPipeline, GraphicsPipelineCreateInfo, MemoryAccess, PreRasterizationShaders,
-    Ptr, Sampler, SamplerCreateInfo, SamplerCreateInfoHashable, SyncWait, SUBGROUP_SIZE,
+    get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, BufferCreateInfo,
+    BufferUntyped, BufferUsage, CommandPool, ComputePipeline, ComputePipelineCreateInfo,
+    DescriptorSetLayout, Error, GraphicsPipeline, GraphicsPipelineCreateInfo, PreRasterizationShaders,
+    Ptr, Sampler, SamplerCreateInfo, SamplerCreateInfoHashable, SUBGROUP_SIZE,
 };
 use ash::vk;
 use gpu_allocator::vulkan::AllocationCreateDesc;
 use gpu_allocator::MemoryLocation;
 use log::{debug, error, trace};
-use slotmap::secondary::Entry;
-use slotmap::{SecondaryMap, SlotMap};
+use slotmap::{SlotMap};
 use std::alloc::Layout;
 use std::collections::{HashMap, VecDeque};
-use std::ffi::{c_char, c_void, CStr, CString};
+use std::ffi::{c_void, CStr, CString};
 use std::marker::PhantomData;
-use std::mem::ManuallyDrop;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, LazyLock, Mutex};
@@ -108,7 +106,7 @@ impl UploadBuffer {
         }
     }
 
-    fn allocate_slice<T: Copy>(&mut self, data: &[T]) -> Ptr<[T]> {
+    fn allocate_slice<T: Copy>(&mut self, data: &[T]) -> Ptr<T> {
         let (_, ptr, raw_addr) = self.allocate_raw(Layout::for_value(data));
         unsafe {
             ptr::copy_nonoverlapping(data.as_ptr(), ptr as *mut T, data.len());
@@ -128,7 +126,7 @@ pub(crate) struct DeviceExtensions {
     //pub(crate) ext_shader_object: ash::ext::,
     pub(crate) khr_push_descriptor: ash::khr::push_descriptor::Device,
     pub(crate) ext_mesh_shader: ash::ext::mesh_shader::Device,
-    pub(crate) ext_extended_dynamic_state3: ash::ext::extended_dynamic_state3::Device,
+    pub(crate) _ext_extended_dynamic_state3: ash::ext::extended_dynamic_state3::Device,
     pub(crate) ext_debug_utils: ash::ext::debug_utils::Device,
 }
 
@@ -137,7 +135,7 @@ pub(crate) struct DeviceExtensions {
 pub(crate) struct DeviceThreadSafeState {
     pub(crate) physical_device_memory_properties: vk::PhysicalDeviceMemoryProperties,
     _physical_device_descriptor_buffer_properties: vk::PhysicalDeviceDescriptorBufferPropertiesEXT<'static>,
-    physical_device_properties: vk::PhysicalDeviceProperties2<'static>,
+    _physical_device_properties: vk::PhysicalDeviceProperties2<'static>,
 
     // SAFETY: we're never using this as an externally-synchronized command parameter.
     pub(crate) timeline: vk::Semaphore,
@@ -152,11 +150,11 @@ unsafe impl Sync for DeviceThreadSafeState {}
 pub(crate) struct DeviceSubmissionState {
     pub(crate) queue: vk::Queue,
     pub(crate) active_submissions: VecDeque<ActiveSubmission>,
-    /// Pending writes not yet made visible.
-    pub(crate) writes: MemoryAccess,
-    /// Last access type tracked per resource. Used mostly to track image layouts.
-    /// Get rid of this once GENERAL layouts with no performance penalty are widely supported.
-    pub(crate) access_per_resource: SecondaryMap<ResourceId, MemoryAccess>,
+    // Pending writes not yet made visible.
+    //pub(crate) writes: MemoryAccess,
+    // Last access type tracked per resource. Used mostly to track image layouts.
+    // Get rid of this once GENERAL layouts with no performance penalty are widely supported.
+    //pub(crate) access_per_resource: SecondaryMap<ResourceId, MemoryAccess>,
 }
 
 pub(crate) struct ResourceState {
@@ -197,9 +195,10 @@ pub struct Device {
     free_command_pools: Mutex<Vec<CommandPool>>,
 
     /// Index of the next submission not yet created.
-    pub(crate) next_submission_index: AtomicU64,
-    /// Index of the submission expected to be submitted in the following `submit` call.
-    pub(crate) expected_submission_index: AtomicU64,
+    pub(crate) next_create_ticket: AtomicU64,
+
+    /// Index of the next submission to be submitted.
+    pub(crate) next_submit_ticket: AtomicU64,
 
     /// Resources that have a zero user reference count and that should be ready for deletion soon,
     /// but we're waiting for the GPU to finish using them.
@@ -215,7 +214,8 @@ impl fmt::Debug for Device {
 }
 
 pub(crate) struct ActiveSubmission {
-    pub(crate) index: u64,
+    pub(crate) _create_ticket: u64,
+    pub(crate) submit_ticket: u64,
     pub(crate) command_pools: Vec<CommandPool>,
 }
 
@@ -576,22 +576,20 @@ impl Device {
                 khr_swapchain,
                 khr_push_descriptor,
                 ext_mesh_shader,
-                ext_extended_dynamic_state3,
+                _ext_extended_dynamic_state3: ext_extended_dynamic_state3,
                 ext_debug_utils,
             },
             platform_extensions,
             thread_safe: DeviceThreadSafeState {
                 physical_device_memory_properties,
                 _physical_device_descriptor_buffer_properties: physical_device_descriptor_buffer_properties,
-                physical_device_properties,
+                _physical_device_properties: physical_device_properties,
                 timeline,
                 physical_device,
             },
             submission_state: Mutex::new(DeviceSubmissionState {
                 queue,
                 active_submissions: VecDeque::new(),
-                writes: MemoryAccess::empty(),
-                access_per_resource: Default::default(),
             }),
             queue_family: graphics_queue_family_index,
             allocator: Mutex::new(allocator),
@@ -603,8 +601,8 @@ impl Device {
             descriptor_table,
             sampler_cache: Mutex::new(Default::default()),
             free_command_pools: Mutex::new(Default::default()),
-            next_submission_index: AtomicU64::new(1),
-            expected_submission_index: AtomicU64::new(1),
+            next_create_ticket: AtomicU64::new(1),
+            next_submit_ticket: AtomicU64::new(1),
             semaphores: Default::default(),
             deletion_queue: Mutex::new(vec![]),
             upload_buffer: Mutex::new(UploadBuffer::new(BufferUsage::UNIFORM)),
@@ -905,7 +903,7 @@ impl Device {
         deleter: impl FnOnce(&Self) + Send + Sync + 'static,
     ) {
         // See comments in `delete_after_current_submission`.
-        let last_submission = self.next_submission_index.load(Relaxed) - 1;
+        let last_submission = self.next_create_ticket.load(Relaxed) - 1;
         self.call_later(last_submission, move |device| {
             //trace!("GPU: deleting tracked resource {:?}", resource_id);
             Self::global().free_resource_id(resource_id);
@@ -921,7 +919,7 @@ impl Device {
         // We used to track resource uses per-submission, but this required user input
         // (`CommandStream::reference_resource`) and was error-prone.
         // Now we just go with the pessimistic, but reliable, approach.
-        let last_submission = self.next_submission_index.load(Relaxed) - 1;
+        let last_submission = self.next_create_ticket.load(Relaxed) - 1;
         self.call_later(last_submission, move |device| {
             deleter(device);
         })
@@ -947,7 +945,7 @@ impl Device {
     /// Uploads data to GPU memory via this device's upload buffer.
     ///
     /// The returned pointer is guaranteed to be valid for the current submission.
-    pub fn upload<T: Copy>(&self, data: &[T]) -> Ptr<[T]> {
+    pub fn upload<T: Copy>(&self, data: &[T]) -> Ptr<T> {
         let mut upload_buffer = self.upload_buffer.lock().unwrap();
         upload_buffer.allocate_slice(data)
     }
@@ -1009,7 +1007,7 @@ impl Device {
             let Some(submission) = submission_state.active_submissions.front() else {
                 break;
             };
-            if submission.index > last_completed_submission_index {
+            if submission.submit_ticket > last_completed_submission_index {
                 break;
             }
             let submission = submission_state.active_submissions.pop_front().unwrap();
@@ -1101,7 +1099,7 @@ impl Device {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////>
 // SHADERS, PIPELINES & LAYOUTS
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1588,5 +1586,5 @@ pub fn wait_idle() {
 /// used by the GPU.
 /// Otherwise, tasks scheduled with `call_later` or `delete_later` will never be executed.
 pub fn maintain() {
-    unsafe { Device::global().maintain() }
+    Device::global().maintain()
 }

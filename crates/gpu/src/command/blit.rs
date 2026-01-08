@@ -1,7 +1,10 @@
 //! Blit command encoders
 use ash::vk;
 
-use crate::{Barrier, BarrierFlags, BufferRangeUntyped, BufferUntyped, ClearColorValue, CommandStream, Device, Image, ImageCopyBuffer, ImageCopyView, ImageSubresourceLayers, Rect3D};
+use crate::{
+    BarrierFlags, BufferRangeUntyped, BufferUntyped, ClearColorValue, CommandStream, Device, Image, ImageCopyBuffer,
+    ImageCopyView, ImageSubresourceLayers, Rect3D,
+};
 
 impl CommandStream {
     pub fn fill_buffer(&mut self, range: &BufferRangeUntyped, data: u32) {
@@ -25,7 +28,7 @@ impl CommandStream {
             Device::global().raw.cmd_clear_color_image(
                 cb,
                 image.handle(),
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                vk::ImageLayout::GENERAL,
                 &clear_color_value.into(),
                 &[vk::ImageSubresourceRange {
                     aspect_mask: vk::ImageAspectFlags::COLOR,
@@ -39,8 +42,7 @@ impl CommandStream {
         self.barrier_source(BarrierFlags::TRANSFER)
     }
 
-    pub fn clear_depth_image(&mut self, image: &Image, depth: f32)
-    {
+    pub fn clear_depth_image(&mut self, image: &Image, depth: f32) {
         self.barrier(BarrierFlags::TRANSFER);
         let cb = self.get_or_create_command_buffer();
         unsafe {
@@ -48,7 +50,7 @@ impl CommandStream {
             Device::global().raw.cmd_clear_depth_stencil_image(
                 cb,
                 image.handle(),
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                vk::ImageLayout::GENERAL,
                 &vk::ClearDepthStencilValue { depth, stencil: 0 },
                 &[vk::ImageSubresourceRange {
                     aspect_mask: vk::ImageAspectFlags::DEPTH,
@@ -97,9 +99,9 @@ impl CommandStream {
             Device::global().raw.cmd_copy_image(
                 cb,
                 source.image.handle(),
-                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                vk::ImageLayout::GENERAL,
                 destination.image.handle(),
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                vk::ImageLayout::GENERAL,
                 &regions,
             );
         }
@@ -175,7 +177,7 @@ impl CommandStream {
                 cb,
                 source.buffer.handle(),
                 destination.image.handle(),
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                vk::ImageLayout::GENERAL,
                 &regions,
             );
         }
@@ -186,8 +188,8 @@ impl CommandStream {
     /// Copies data from an image to a buffer.
     pub fn copy_image_to_buffer(
         &mut self,
-        source: ImageCopyView<'_>,
-        destination: ImageCopyBuffer<'_>,
+        _source: ImageCopyView<'_>,
+        _destination: ImageCopyBuffer<'_>,
         _copy_size: vk::Extent3D,
     ) {
         todo!("copy_image_to_buffer");
@@ -250,9 +252,9 @@ impl CommandStream {
             Device::global().raw.cmd_blit_image(
                 cb,
                 src.handle(),
-                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                vk::ImageLayout::GENERAL,
                 dst.handle(),
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                vk::ImageLayout::GENERAL,
                 &blits,
                 filter,
             );

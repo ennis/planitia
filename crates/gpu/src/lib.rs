@@ -48,33 +48,20 @@ pub mod prelude {
 /// Standard subgroup size.
 pub const SUBGROUP_SIZE: u32 = 32;
 
-/*
-/// Device address of a GPU buffer.
-#[derive(Copy, Clone, Debug, Ord, PartialOrd, PartialEq, Eq, Hash)]
-#[repr(transparent)]
-pub struct PtrUntyped {
-    pub raw: vk::DeviceAddress,
-}*/
-
 /// Device address of a GPU buffer containing elements of type `T` its associated type.
-///
-/// The type should be `T: Copy` for a buffer containing a single element of type T,
-/// or `[T] where T: Copy` for slices of elements of type T.
 #[repr(transparent)]
-pub struct Ptr<T: ?Sized + 'static> {
+pub struct Ptr<T: 'static> {
     pub raw: vk::DeviceAddress,
     pub _phantom: PhantomData<T>,
 }
 
-impl<T: ?Sized + 'static> Ptr<T> {
+impl<T: 'static> Ptr<T> {
     /// Null (invalid) device address.
     pub const NULL: Self = Ptr {
         raw: 0,
         _phantom: PhantomData,
     };
-}
-
-impl<T: 'static> Ptr<[T]> {
+    
     pub fn offset(self, offset: usize) -> Self {
         Ptr {
             raw: self.raw + (offset * size_of::<T>()) as u64,
@@ -83,7 +70,7 @@ impl<T: 'static> Ptr<[T]> {
     }
 }
 
-impl<T: ?Sized + 'static> Clone for Ptr<T> {
+impl<T: 'static> Clone for Ptr<T> {
     fn clone(&self) -> Self {
         Ptr {
             raw: self.raw,
@@ -92,7 +79,7 @@ impl<T: ?Sized + 'static> Clone for Ptr<T> {
     }
 }
 
-impl<T: ?Sized + 'static> Copy for Ptr<T> {}
+impl<T: 'static> Copy for Ptr<T> {}
 
 /// Bindless handle to an image.
 #[derive(Copy, Clone, Debug)]
@@ -471,7 +458,7 @@ impl BufferRangeUntyped {
 }*/
 
 pub struct BufferRange<'a, T> {
-    pub buffer: &'a Buffer<[T]>,
+    pub buffer: &'a Buffer<T>,
     /// Offset into the buffer in bytes. Should be a multiple of `size_of::<T>()`.
     pub byte_offset: u64,
     /// Size of the slice in bytes. Should be a multiple of `size_of::<T>()`.
