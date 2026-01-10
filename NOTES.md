@@ -379,9 +379,8 @@ Stroke point attributes:
 
 Stroke attributes:
 
-_- brush index
-
-- base color_
+- brush index
+- base color
 
 # TODO
 

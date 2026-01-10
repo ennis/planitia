@@ -2,11 +2,11 @@
 use ash::vk;
 
 use crate::{
-    BarrierFlags, BufferRangeUntyped, BufferUntyped, ClearColorValue, CommandStream, Device, Image, ImageCopyBuffer,
+    BarrierFlags, BufferRangeUntyped, BufferUntyped, ClearColorValue, CommandBuffer, Device, Image, ImageCopyBuffer,
     ImageCopyView, ImageSubresourceLayers, Rect3D,
 };
 
-impl CommandStream {
+impl CommandBuffer {
     pub fn fill_buffer(&mut self, range: &BufferRangeUntyped, data: u32) {
         self.barrier(BarrierFlags::TRANSFER);
         let cb = self.get_or_create_command_buffer();

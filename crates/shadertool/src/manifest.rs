@@ -1,11 +1,11 @@
 use crate::manifest::Error::{InvalidType, MissingField};
-use anyhow::Context;
+use anyhow::{Context, anyhow};
 use log::error;
 use shader_archive::gpu::vk;
 use shader_archive::gpu::vk::PolygonMode;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use toml::Value as TomlValue;
+use toml::{Value as TomlValue};
 
 /// The maximum number of color targets in graphics states.
 pub const MAX_COLOR_TARGETS: usize = 8;
@@ -22,6 +22,129 @@ pub enum Error {
     Other(&'static str),
 }
 
+#[derive(Clone, Default)]
+pub struct Resource {
+    pub format: Option<vk::Format>,
+    pub length: Option<u32>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+}
+
+impl Resource {
+    fn from_toml(toml: &TomlValue) -> anyhow::Result<Self> {
+        let mut resource = Resource::default();
+        if let Some(format_str) = toml.get_optional_str("format")? {
+            resource.format = Some(get_format(format_str)?);
+        }
+
+        if let Some(length) = toml.get("length") {
+            if let Some(value) = length.as_integer() {
+                resource.length = Some(value.try_into()?);
+            } else if let Some(str) = length.as_str() {
+                // parse special strings like "dynamic"
+                match str {
+                    "dynamic" => resource.length = None,
+                    _ => return Err(InvalidType("length").into()),
+                }
+            } else {
+                return Err(InvalidType("length").into());
+            }
+        }
+
+        if let Some(width) = toml.get_optional_integer("width")? {
+            resource.width = Some(width.try_into()?);
+        }
+        if let Some(height) = toml.get_optional_integer("height")? {
+            resource.height = Some(height.try_into()?);
+        }
+        Ok(resource)
+    }
+}
+
+
+#[derive(Clone)]
+pub struct ColorAttachment {
+    pub resource: Option<String>,
+    pub clear_color: Option<[f32; 4]>,
+}
+
+impl ColorAttachment {
+    pub fn from_toml(toml: &TomlValue) -> anyhow::Result<Self> {
+        let clear_color = if let Some(array) = toml.get("clear_color") {
+            let arr = array.as_array().ok_or(InvalidType("clear_color"))?;
+            if arr.len() != 4 {
+                return Err(InvalidType("clear_color").into());
+            }
+            let mut color = [0.0f32; 4];
+            for (i, v) in arr.iter().enumerate() {
+                color[i] = v.as_float().ok_or(InvalidType("clear_color array element"))? as f32;
+            }
+            Some(color)
+        } else {
+            None
+        };
+
+        let resource = toml.get_optional_str("resource")?.map(|s| s.to_string());
+
+        Ok(ColorAttachment {
+            resource,
+            clear_color,
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct DepthStencilAttachment {
+    pub resource: Option<String>,
+    pub clear_depth: Option<f32>,
+    pub clear_stencil: Option<u32>,
+}
+
+impl DepthStencilAttachment {
+    pub fn from_toml(toml: &TomlValue) -> anyhow::Result<Self> {
+        let clear_depth = toml.get_optional_float("clear_depth")?.map(|v| v as f32);
+        let clear_stencil = toml.get_optional_integer("clear_stencil")?.map(|v| v as u32);
+        let resource = toml.get_optional_str("resource")?.map(|s| s.to_string());
+
+        Ok(DepthStencilAttachment {
+            resource,
+            clear_depth,
+            clear_stencil,
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct Pass {
+    // Original raw table, contains render state overrides
+    pub raw: TomlValue,
+    pub color_attachments: Vec<ColorAttachment>,
+    pub depth_stencil_attachment: Option<DepthStencilAttachment>,
+}
+
+impl Pass {
+    pub fn from_toml(toml: &TomlValue) -> anyhow::Result<Self> {
+        let mut color_attachments = vec![];
+        if let Some(array) = toml.get_optional_array("color_attachments")? {
+            for item in array {
+                color_attachments.push(ColorAttachment::from_toml(item)?);
+            }
+        }
+
+        let depth_attachment = if let Some(depth_toml) = toml.get_optional_table("depth_stencil_attachment")? {
+            Some(DepthStencilAttachment::from_toml(depth_toml)?)
+        } else {
+            None
+        };
+
+        Ok(Pass {
+            raw: toml.clone(),
+            color_attachments,
+            depth_stencil_attachment: depth_attachment,
+        })
+    }
+}
+
 #[derive(Clone)]
 pub struct BuildManifest {
     pub input_files: Vec<String>,
@@ -31,7 +154,9 @@ pub struct BuildManifest {
     pub default: GraphicsState,
     pub shader_profile: String,
     pub compiler: CompilerOptions,
-    pub override_: toml::Table,
+    pub pass: BTreeMap<String, Pass>,
+    //pub override_: toml::Table,
+    pub resources: BTreeMap<String, Resource>,
 }
 
 impl BuildManifest {
@@ -92,10 +217,12 @@ impl BuildManifest {
             .unwrap_or(DEFAULT_SHADER_PROFILE)
             .to_string();
 
-        // overrides
-        let mut override_ = toml::Table::new();
-        if let Some(overrides_toml) = toml.get("override") {
-            override_ = overrides_toml.as_table().ok_or(InvalidType("override"))?.clone();
+        // passes
+        let mut pass = BTreeMap::new();
+        if let Some(pass_toml) = toml.get_optional_table("pass")? {
+            for (name, pass_toml) in pass_toml.as_table().unwrap().iter() {
+                pass.insert(name.clone(), Pass::from_toml(pass_toml)?);
+            }
         }
 
         let compiler = {
@@ -106,6 +233,14 @@ impl BuildManifest {
             compiler
         };
 
+        // resource table
+        let mut resources = BTreeMap::new();
+        if let Some(resources_toml) = toml.get_optional_table("resources")? {
+            for (name, res_toml) in resources_toml.as_table().unwrap().iter() {
+                resources.insert(name.clone(), Resource::from_toml(res_toml)?);
+            }
+        }
+
         Ok(BuildManifest {
             input_files,
             shader_profile,
@@ -113,8 +248,9 @@ impl BuildManifest {
             include_paths,
             output_file,
             default,
-            override_,
+            pass,
             compiler,
+            resources,
         })
     }
 }
@@ -236,6 +372,8 @@ trait TomlExt {
     /// Returns `Ok(None)` if the field is not present.
     /// Returns `Err(Error::InvalidType)` if the field is present but not a boolean
     fn get_optional_bool(&self, field: &'static str) -> Result<Option<bool>, Error>;
+    fn get_optional_integer(&self, field: &'static str) -> Result<Option<i64>, Error>;
+    fn get_optional_float(&self, field: &'static str) -> Result<Option<f64>, Error>;
     /// Retrieves an optional table field from a TOML value.
     ///
     /// Returns `Ok(None)` if the field is not present.
@@ -265,6 +403,20 @@ impl TomlExt for toml::Value {
         match self.get(field) {
             None => Ok(None),
             Some(value) => value.as_bool().ok_or(InvalidType(field)).map(Some),
+        }
+    }
+
+    fn get_optional_integer(&self, field: &'static str) -> Result<Option<i64>, Error> {
+        match self.get(field) {
+            None => Ok(None),
+            Some(value) => value.as_integer().ok_or(InvalidType(field)).map(Some),
+        }
+    }
+
+    fn get_optional_float(&self, field: &'static str) -> Result<Option<f64>, Error> {
+        match self.get(field) {
+            None => Ok(None),
+            Some(value) => value.as_float().ok_or(InvalidType(field)).map(Some),
         }
     }
 
@@ -329,6 +481,8 @@ fn read_rasterizer_state(toml: &TomlValue, out: &mut shader_archive::RasterizerS
 fn get_format(fmtstr: &str) -> Result<vk::Format, Error> {
     match fmtstr {
         "RGBA8" => Ok(vk::Format::R8G8B8A8_UNORM),
+        "R32F" => Ok(vk::Format::R32_SFLOAT),
+        "RG32F" => Ok(vk::Format::R32G32_SFLOAT),
         "D32F" => Ok(vk::Format::D32_SFLOAT),
         "D32F_S8UI" => Ok(vk::Format::D32_SFLOAT_S8_UINT),
         _ => {
@@ -363,10 +517,10 @@ fn get_blend_op(op_str: &str) -> Result<vk::BlendOp, Error> {
     }
 }
 
-fn read_depth_stencil_state(toml: &TomlValue, out: &mut shader_archive::DepthStencilStateData) -> Result<(), Error> {
+fn read_depth_stencil_state(toml: &TomlValue, out: &mut shader_archive::DepthStencilStateData) -> anyhow::Result<()> {
     // any depth-stencil field automatically enables depth testing
     if let Some(format_str) = toml.get_optional_str("format")? {
-        out.format = get_format(format_str)?;
+        out.format = get_format(format_str).context("in depth_stencil")?;
         out.enable = true;
     }
     if let Some(depth_compare_op) = toml.get_optional_str("compare_op")? {
@@ -392,9 +546,9 @@ fn read_depth_stencil_state(toml: &TomlValue, out: &mut shader_archive::DepthSte
     Ok(())
 }
 
-fn read_color_target(toml: &TomlValue, out: &mut shader_archive::ColorTarget) -> Result<(), Error> {
+fn read_color_target(toml: &TomlValue, out: &mut shader_archive::ColorTarget) -> anyhow::Result<()> {
     if let Some(format_str) = toml.get_optional_str("format")? {
-        out.format = get_format(format_str)?;
+        out.format = get_format(format_str).context("in color_targets")?;
     }
     if let Some(src_color_blend_factor) = toml.get_optional_str("src_color")? {
         out.blend.src_color_blend_factor = get_blend_factor(src_color_blend_factor)?;
@@ -418,7 +572,7 @@ fn read_color_target(toml: &TomlValue, out: &mut shader_archive::ColorTarget) ->
     Ok(())
 }
 
-fn read_color_targets(toml: &TomlValue, out: &mut Vec<shader_archive::ColorTarget>) -> Result<(), Error> {
+fn read_color_targets(toml: &TomlValue, out: &mut Vec<shader_archive::ColorTarget>) -> anyhow::Result<()> {
     if let Some(array) = toml.as_array() {
         out.clear();
         for item in array {
@@ -437,8 +591,8 @@ fn read_color_targets(toml: &TomlValue, out: &mut Vec<shader_archive::ColorTarge
         for (key, value) in object {
             if let Ok(index) = key.parse::<usize>() {
                 // sanity check index and resize if needed
-                if index >= crate::manifest::MAX_COLOR_TARGETS {
-                    return Err(Error::Other("color target index out of range"));
+                if index >= MAX_COLOR_TARGETS {
+                    return Err(anyhow!("color target index out of range").context("in color_targets"));
                 }
                 if index >= out.len() {
                     out.resize(index + 1, shader_archive::ColorTarget::default());
@@ -448,6 +602,6 @@ fn read_color_targets(toml: &TomlValue, out: &mut Vec<shader_archive::ColorTarge
         }
         Ok(())
     } else {
-        return Err(InvalidType("color_targets"));
+        return Err(InvalidType("color_targets").into());
     }
 }

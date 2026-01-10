@@ -1,7 +1,7 @@
 //! Render command encoders
 use crate::{
     is_depth_and_stencil_format, Buffer, BufferUntyped, ClearColorValue, ColorAttachment,
-    CommandStream, DepthStencilAttachment, Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, Rect2D,
+    CommandBuffer, DepthStencilAttachment, Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, Rect2D,
     RootParams,
 };
 use ash::vk;
@@ -14,7 +14,7 @@ use std::ptr;
 ///
 /// This is used in `RenderPass::bind_pipeline`.
 pub struct RenderEncoder<'a> {
-    stream: &'a mut CommandStream,
+    stream: &'a mut CommandBuffer,
     command_buffer: vk::CommandBuffer,
     render_area: vk::Rect2D,
     // TODO: this will be useless once all shaders have the same bindless layout
@@ -500,7 +500,7 @@ pub struct RenderPassInfo<'a> {
     pub depth_stencil_attachment: Option<DepthStencilAttachment<'a>>,
 }
 
-impl CommandStream {
+impl CommandBuffer {
     /// Starts a rendering pass.
     ///
     /// The render area is set to cover the entire size of the attachments.
@@ -539,7 +539,7 @@ impl CommandStream {
             .map(|a| {
                 vk::RenderingAttachmentInfo {
                     image_view: a.image.view_handle(),
-                    image_layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                    image_layout: vk::ImageLayout::GENERAL,
                     resolve_mode: vk::ResolveModeFlags::NONE,
                     load_op: if a.clear_value.is_some() {
                         vk::AttachmentLoadOp::CLEAR

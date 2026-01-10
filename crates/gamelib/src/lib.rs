@@ -16,6 +16,7 @@ mod shaders;
 mod timer;
 pub mod util;
 mod world;
+mod render_world;
 
 //--- reexports ---
 pub use {color, egui, gpu, math};

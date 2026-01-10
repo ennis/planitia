@@ -9,7 +9,7 @@ use crate::paint::shape::RectShape;
 use crate::paint::tessellation::{Mesh, Tessellator};
 use crate::paint::text::GlyphCache;
 use color::Srgba8;
-use gpu::{CommandStream, Device, Ptr, RenderPassInfo, RootParams, Sampler, Vertex as GpuVertex, vk};
+use gpu::{CommandBuffer, Device, Ptr, RenderPassInfo, RootParams, Sampler, Vertex as GpuVertex, vk};
 use math::geom::Camera;
 use math::{Mat4, Rect, U16Vec2, UVec2, Vec2, u16vec2, uvec2, vec2};
 use shader_bridge::ShaderLibrary;
@@ -339,12 +339,12 @@ impl<'a> PaintScene<'a> {
         self.end_prim(None);
     }
 
-    pub fn finish(mut self, cmd: &mut CommandStream, params: &PaintRenderParams) {
+    pub fn finish(mut self, cmd: &mut CommandBuffer, params: &PaintRenderParams) {
         self.end_prim(None);
         self.draw_inner(cmd, params);
     }
 
-    fn draw_inner(mut self, cmd: &mut CommandStream, params: &PaintRenderParams) {
+    fn draw_inner(mut self, cmd: &mut CommandBuffer, params: &PaintRenderParams) {
         assert_eq!(
             params.color_target.format(),
             self.painter.color_format,

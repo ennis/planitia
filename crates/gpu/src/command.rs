@@ -1,5 +1,5 @@
 use crate::device::ActiveSubmission;
-use crate::{aspects_for_format, vk, CommandPool, ComputePipeline, Descriptor, Device, Ptr, SwapchainImage};
+use crate::{vk, CommandPool, ComputePipeline, Descriptor, Device, Ptr, SwapchainImage};
 use ash::prelude::VkResult;
 use ash::vk::DeviceAddress;
 use bitflags::bitflags;
@@ -18,8 +18,10 @@ union DescriptorBufferOrImage {
     buffer: vk::DescriptorBufferInfo,
 }
 
-/// TODO rename this, it's not really a stream as it needs to be dropped to submit work to the queue
-pub struct CommandStream {
+/// Buffer into which GPU commands are recorded.
+///
+/// These should be submitted to the GPU using [`submit`].
+pub struct CommandBuffer {
     command_pool: ManuallyDrop<CommandPool>,
     /// Command buffers waiting to be submitted.
     command_buffers_to_submit: Vec<vk::CommandBuffer>,
@@ -30,83 +32,7 @@ pub struct CommandStream {
     pipeline_layout: vk::PipelineLayout,
     barrier_source: BarrierFlags,
     create_ticket: u64
-
-    // Buffer writes that need to be made available
-    //tracked_writes: MemoryAccess,
-    //tracked_images: FxHashMap<ResourceId, CommandBufferImageState>,
-    //pub(crate) tracked_image_views: FxHashMap<ImageViewId, ImageView>,
-
 }
-
-/*
-/// A wrapper around a signaled binary semaphore.
-///
-/// This should be used in a wait operation, otherwise the semaphore will be leaked.
-#[derive(Debug)]
-pub struct SignaledSemaphore(pub(crate) vk::Semaphore);
-
-impl SignaledSemaphore {
-    pub fn wait(self) -> SemaphoreWait {
-        self.wait_dst_stage(vk::PipelineStageFlags::ALL_COMMANDS)
-    }
-
-    pub fn wait_dst_stage(self, dst_stage: vk::PipelineStageFlags) -> SemaphoreWait {
-        SemaphoreWait {
-            kind: SyncWait::Binary {
-                semaphore: self.0,
-                transfer_ownership: true,
-            },
-            dst_stage,
-        }
-    }
-}*/
-
-/*
-/// Describes the type of semaphore in a semaphore wait operation.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum SyncWait {
-    /// Binary semaphore wait.
-    Binary {
-        /// The semaphore to wait on.
-        semaphore: vk::Semaphore,
-        /// Whether to transfer ownership of the semaphore to the queue.
-        transfer_ownership: bool,
-    },
-    /// Timeline semaphore wait.
-    Timeline { semaphore: vk::Semaphore, value: u64 },
-    /// D3D12 fence wait.
-    D3D12Fence {
-        semaphore: vk::Semaphore,
-        fence: vk::Fence,
-        value: u64,
-    },
-}*/
-
-/*/// Describes the kind of semaphore signal operation.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum SemaphoreSignal {
-    /// Binary semaphore signal.
-    Binary {
-        /// The semaphore to signal.
-        semaphore: vk::Semaphore,
-    },
-    /// Timeline semaphore signal.
-    Timeline {
-        /// The semaphore to signal.
-        semaphore: vk::Semaphore,
-        /// The value to signal.
-        value: u64,
-    },
-    /// D3D12 fence signal.
-    D3D12Fence {
-        /// The semaphore to signal.
-        semaphore: vk::Semaphore,
-        /// The fence to signal.
-        fence: vk::Fence,
-        /// The value to signal.
-        value: u64,
-    },
-}*/
 
 bitflags! {
     #[derive(Copy,Clone,Debug,PartialEq,Eq,Hash)]
@@ -284,13 +210,13 @@ pub enum RootParams<'a, T: Copy + 'static> {
     Immediate(&'a T),
 }
 
-impl CommandStream {
+impl CommandBuffer {
     /// Creates a command stream used to submit commands to the GPU.
     ///
     /// Once finished, the command stream should be submitted to the GPU using
     /// `CommandStream::flush`.
     /// They should be submitted in the same order as they were created.
-    pub fn new() -> CommandStream {
+    pub fn new() -> CommandBuffer {
         let device = Device::global();
         let command_pool = device.get_or_create_command_pool(device.queue_family);
 
@@ -304,7 +230,7 @@ impl CommandStream {
         let create_ticket = device.next_create_ticket.fetch_add(1, Relaxed);
         trace!("GPU: create CommandStream, create_ticket {}", create_ticket);
 
-        CommandStream {
+        CommandBuffer {
             command_pool: ManuallyDrop::new(command_pool),
             command_buffers_to_submit: vec![],
             command_buffer: None,
@@ -786,7 +712,7 @@ impl CommandStream {
     }
 }
 
-impl Drop for CommandStream {
+impl Drop for CommandBuffer {
     fn drop(&mut self) {
         if !self.submitted {
             panic!("CommandStream was not submitted before being dropped");
@@ -877,7 +803,8 @@ pub fn sync_signal(semaphore: vk::Semaphore, value: u64) {
     sync(&[], &[SyncSignal { sync: semaphore, value }]);
 }
 
-pub fn submit(mut cmd: CommandStream) -> VkResult<()> {
+/// Submits the given commands for execution on the GPU.
+pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
     let device = Device::global();
 
     //----------------------
@@ -1047,7 +974,7 @@ pub fn submit(mut cmd: CommandStream) -> VkResult<()> {
 
 pub fn present(image: &SwapchainImage) -> VkResult<()> {
     // transition image to PRESENT_SRC
-    let mut cmd = CommandStream::new();
+    let mut cmd = CommandBuffer::new();
     unsafe {
         cmd.image_barrier(&vk::ImageMemoryBarrier2 {
             src_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,

@@ -128,7 +128,7 @@ impl CoatExperiment {
     }
 
     /// Update geometry buffers on the GPU.
-    fn update_geometry(&mut self, _cmd: &mut gpu::CommandStream) {
+    fn update_geometry(&mut self, _cmd: &mut gpu::CommandBuffer) {
         if self.geometry.is_none() {
             return;
         }
@@ -139,7 +139,7 @@ impl CoatExperiment {
         let geometry = self.geometry.as_ref().unwrap();
         self.gpu_data = None;
 
-        let header = geometry.header();
+        let header = geometry.root();
         let strokes = gpu::Buffer::from_slice(geometry.strokes(), "strokes");
         let stroke_vertices = gpu::Buffer::from_slice(geometry.stroke_vertices(), "stroke_vertices");
         let mesh_vertices = gpu::Buffer::from_slice(geometry.mesh_vertices(), "mesh_vertices");
@@ -169,7 +169,7 @@ impl CoatExperiment {
 
     pub(crate) fn render(
         &mut self,
-        cmd: &mut gpu::CommandStream,
+        cmd: &mut gpu::CommandBuffer,
         color_target: &gpu::Image,
         depth_target: &gpu::Image,
         scene_info: &SceneInfo,

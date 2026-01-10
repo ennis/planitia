@@ -17,7 +17,7 @@ pub(crate) struct BindlessDescriptorTable {
     pub(crate) layout: vk::DescriptorSetLayout,
     pub(crate) set: vk::DescriptorSet,
     /// Kept around for deletion.
-    pool: vk::DescriptorPool,
+    _pool: vk::DescriptorPool,
     /// Descriptor set writes must be externally synchronized, but we don't want to
     /// wrap `set` in a Mutex because that would require locking every time we want to copy the
     /// handle. So instead we lock this mutex when writing to the descriptor set.
@@ -148,7 +148,7 @@ impl BindlessDescriptorTable {
 
         BindlessDescriptorTable {
             layout,
-            pool,
+            _pool: pool,
             set,
             count,
             write_lock: Mutex::new(()),

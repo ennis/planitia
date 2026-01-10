@@ -28,18 +28,23 @@ color_targets = [
 # Pass overrides
 ######################################################################
 
-[override.depth_pass]
+[pass.depth_pass]
 color_targets = []
+depth_stencil_attachment = { bind = "depth_buffer", clear_depth = 1.0 }
 
-[override.debug_strokes]
+[pass.render_outlines]
+depth_stencil.write_enable = false
+color_attachments = [
+    { bind = "outline_angles", clear_color = [0.0, 0.0, 0.0, 0.0] }
+]
+
+[pass.lines]
 depth_stencil.write_enable = false
 
-[override.lines]
-depth_stencil.write_enable = false
-
-[override.background]
+[pass.background]
 depth_stencil.compare_op = "always"
 depth_stencil.write_enable = false
+
 
 ######################################################################
 # Resources
@@ -48,6 +53,7 @@ depth_stencil.write_enable = false
 [resource]
 color_buffer = { format = "RGBA8" }
 depth_buffer = { format = "D32F_S8UI" }
+outline_angles = { format = "RG32F" }
 outline_vertices = { len = "dynamic" }
 outline_indices = { len = "dynamic", index_type = "uint32" }
 #outline_indirect_command = { len = 1 }

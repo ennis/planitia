@@ -14,27 +14,34 @@
 use gpu::vk;
 use gpu::vk::{CullModeFlags, PolygonMode};
 use std::borrow::Cow;
-use std::io;
 use std::ops::Deref;
 use std::path::Path;
-use utils::archive::{ArchiveReader, ArchiveReaderOwned, Offset};
+use utils::archive::{ArchiveError, ArchiveReader, ArchiveReaderOwned, ArchiveRoot, Offset};
 use utils::zstring::ZString;
 
 pub use gpu;
 pub use utils::{archive, zstring};
 
-pub const PIPELINE_ARCHIVE_MAGIC: [u8; 4] = *b"PARC";
-
 #[repr(C)]
 #[derive(Copy, Clone)]
 // NoPadding
 pub struct PipelineArchiveData {
-    /// "PARC"
-    pub magic: [u8; 4],
-    /// 1
-    pub version: u32,
     pub manifest_file: FileDependency,
-    pub entries: Offset<[PipelineEntryData]>,
+    pub pipelines: Offset<[PipelineEntryData]>,
+    pub render_targets: Offset<[RenderTargetDesc]>,
+}
+
+impl ArchiveRoot for PipelineArchiveData {
+    const SIGNATURE: [u8; 4] = *b"PARC";
+    const VERSION: u32 = 3;
+}
+
+/// Describes a render target resource.
+#[repr(C)]
+#[derive(Copy, Clone)]
+// NoPadding
+pub struct RenderTargetDesc {
+    pub format: vk::Format,
 }
 
 #[repr(C)]
@@ -126,9 +133,26 @@ impl PipelineKind {
 #[derive(Clone, Copy)]
 pub struct ShaderData {
     pub stage: vk::ShaderStageFlags,
-    pub entry_point: ZString<32>,
+    pub entry_point: ZString<64>,
     pub spirv: Offset<[u32]>,
 }
+
+///
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct ColorAttachment {
+    pub resource_name: ZString<32>,
+    pub clear_color: Option<[f32; 4]>,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct DepthStencilAttachment {
+    pub resource_name: ZString<32>,
+    pub clear_depth: Option<f32>,
+    pub clear_stencil: Option<u32>,
+}
+
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -141,6 +165,8 @@ pub struct GraphicsPipelineData {
     pub depth_stencil: DepthStencilStateData,
     /// Color targets
     pub color_targets: Offset<[Offset<ColorTarget>]>,
+    pub color_attachments: Offset<[ColorAttachment]>,
+    pub depth_stencil_attachment: Option<DepthStencilAttachment>,
     pub shaders: Offset<[ShaderData]>,
 }
 
@@ -190,53 +216,33 @@ pub struct ColorTarget {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Pipeline archive file.
-pub struct PipelineArchive(Cow<'static, ArchiveReader>);
+pub struct PipelineArchive(Cow<'static, ArchiveReader<PipelineArchiveData>>);
 
 impl PipelineArchive {
-    pub fn load(file_path: impl AsRef<Path>) -> io::Result<Self> {
+    pub fn load(file_path: impl AsRef<Path>) -> Result<Self, ArchiveError> {
         let archive = ArchiveReaderOwned::load(file_path)?;
         let this = Self(Cow::Owned(archive));
-        this.check_header()?;
         Ok(this)
     }
 
-    pub fn from_bytes(data: &[u8]) -> io::Result<Self> {
-        let archive = ArchiveReaderOwned::from_bytes(data);
+    pub fn from_bytes(data: &[u8]) -> Result<Self, ArchiveError> {
+        let archive = ArchiveReaderOwned::from_bytes(data)?;
         let this = Self(Cow::Owned(archive));
-        this.check_header()?;
         Ok(this)
     }
 
-    pub fn from_bytes_static(data: &'static [u8]) -> io::Result<Self> {
-        let archive = ArchiveReader::new(data);
+    pub fn from_bytes_static(data: &'static [u8]) -> Result<Self, ArchiveError> {
+        let archive = ArchiveReader::new(data)?;
         Ok(Self(Cow::Borrowed(archive)))
     }
 
-    fn check_header(&self) -> io::Result<()> {
-        let header: &PipelineArchiveData = self.0.header().unwrap();
-        if header.magic != PIPELINE_ARCHIVE_MAGIC {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Invalid pipeline archive magic",
-            ));
-        }
-        if header.version != 1 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Unsupported pipeline archive version",
-            ));
-        }
-        Ok(())
-    }
-
     fn data(&self) -> &PipelineArchiveData {
-        let header: &PipelineArchiveData = self.0.header().unwrap();
-        header
+        self.0.root()
     }
 
     pub fn find_graphics_pipeline(&self, name: &str) -> Option<&GraphicsPipelineData> {
         let data = self.data();
-        let entries = &self.0[data.entries];
+        let entries = &self.0[data.pipelines];
         for entry in entries {
             if entry.name.as_str() == name {
                 match &entry.kind {
@@ -250,7 +256,7 @@ impl PipelineArchive {
 
     pub fn find_compute_pipeline(&self, name: &str) -> Option<&ComputePipelineData> {
         let data = self.data();
-        let entries = &self.0[data.entries];
+        let entries = &self.0[data.pipelines];
         for entry in entries {
             if entry.name.as_str() == name {
                 match &entry.kind {
@@ -265,7 +271,7 @@ impl PipelineArchive {
     /// Returns an iterator over all source files referenced by the pipelines in this archive.
     pub fn source_files<'a>(&'a self) -> impl Iterator<Item = &'a FileDependency> + 'a {
         let data = self.data();
-        let entries = &self.0[data.entries];
+        let entries = &self.0[data.pipelines];
         entries.iter().flat_map(move |entry| {
             let sources = &self.0[entry.sources];
             sources.iter()
@@ -281,7 +287,7 @@ impl PipelineArchive {
 
 // deref to ArchiveReader
 impl Deref for PipelineArchive {
-    type Target = ArchiveReader;
+    type Target = ArchiveReader<PipelineArchiveData>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -301,17 +307,9 @@ mod tests {
     fn generate_archive() {
         let mut writer = ArchiveWriter::new();
         // start with the header since it contains the signature
-        let header = writer.write(PipelineArchiveData {
-            magic: *b"PARC",
-            version: 1,
-            manifest_file: FileDependency {
-                path: Offset::INVALID,
-                mtime: 0,
-            },
-            entries: Offset::INVALID,
-        });
+
         let color_targets = {
-            let color_targets = &[writer.write(ColorTarget {
+            let color_targets = &[writer.write(&ColorTarget {
                 format: vk::Format::R8G8B8A8_UNORM,
                 blend: ColorBlendEquationData {
                     src_color_blend_factor: vk::BlendFactor::SRC_ALPHA,
@@ -342,6 +340,8 @@ mod tests {
                         depth_write_enable: true,
                     },
                     color_targets,
+                    color_attachments: Offset::INVALID,
+                    depth_stencil_attachment: None,
                     shaders: Offset::INVALID,
                 }),
                 root_params: RootParamLayout {
@@ -351,7 +351,14 @@ mod tests {
                 sources: Offset::INVALID,
             }],
         );
-        writer[header].entries = entries;
+        writer.write_root(&PipelineArchiveData {
+            manifest_file: FileDependency {
+                path: Offset::INVALID,
+                mtime: 0,
+            },
+            pipelines: entries,
+            render_targets: Offset::INVALID,
+        });
 
         // dump to disk
         fs::write("src/pipeline_archive/example_archive.parc", writer.as_slice()).unwrap();

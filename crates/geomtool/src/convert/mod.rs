@@ -44,8 +44,8 @@ struct CrossSection {
 }
 
 struct Converter {
-    archive: ArchiveWriter,
-    header: Offset<GeoArchiveHeader>,
+    archive: ArchiveWriter<GeoArchiveHeader>,
+    //header: Offset<GeoArchiveHeader>,
     /// Generic surface mesh vertices.
     mesh_vertices: Vec<geom::mesh::MeshVertex>,
     /// Paint stroke vertices
@@ -69,15 +69,10 @@ struct Converter {
 impl Converter {
     fn new() -> Converter {
         let mut archive = ArchiveWriter::new();
-        let header = archive.write(geom::GeoArchiveHeader {
-            magic: geom::GeoArchiveHeader::MAGIC,
-            version: geom::GeoArchiveHeader::VERSION,
-            ..
-        });
 
         Converter {
             archive,
-            header,
+            //header,
             mesh_vertices: vec![],
             stroke_vertices: vec![],
             swept_stroke_vertices: vec![],
@@ -93,7 +88,6 @@ impl Converter {
 
     fn finish(self, output_file: &Path) -> Result<()> {
         let mut archive = self.archive;
-        let header = self.header;
 
         let coats = archive.write_slice(&self.coats);
         let mesh_vertices = archive.write_slice(&self.mesh_vertices);
@@ -112,14 +106,18 @@ impl Converter {
             geom::VertexArray::PosNorm2D(cross_section_vertices),
         ]);
 
-        archive[header].indices = mesh_indices;
-        archive[header].vertex_arrays = arrays;
-        archive[header].primitives = archive.write_slice(&[
+        let primitives = archive.write_slice(&[
             geom::Primitive::Stroke(strokes),
             geom::Primitive::Coat(coats),
             geom::Primitive::Mesh(meshes),
             geom::Primitive::SweptStroke(swept_strokes),
         ]);
+
+        let _ = archive.write_root(&GeoArchiveHeader {
+            vertex_arrays: arrays,
+            primitives,
+            indices: mesh_indices,
+        });
 
         if !cfg().quiet {
             cprintln!(

@@ -59,6 +59,8 @@ struct Game {
     height: u32,
     demo: WidgetGallery,
     color: Color32,
+    bg_top_color: Color32,
+    bg_bottom_color: Color32,
     painter: Painter,
     camera_control: CameraControl,
     depth_stencil_buffer: gpu::Image,
@@ -89,6 +91,8 @@ impl Default for Game {
         Self {
             demo: WidgetGallery::default(),
             color: Default::default(),
+            bg_top_color: Color32::from_rgb(100, 149, 237),
+            bg_bottom_color: Color32::from_rgb(25, 25, 112),
             painter: Painter::new(gpu::Format::R8G8B8A8_UNORM, None),
             depth_stencil_buffer: create_depth_buffer(WIDTH, HEIGHT),
             camera_control: CameraControl::default(),
@@ -112,6 +116,8 @@ impl Game {
     fn render_scene(&mut self, encoder: &mut gpu::RenderEncoder, _camera: &Camera, scene_info: &SceneInfo) {
         //----------------------------------
         // Draw background
+        let bottom_color = Srgba8::from(self.bg_bottom_color.to_srgba_unmultiplied());
+        let top_color = Srgba8::from(self.bg_top_color.to_srgba_unmultiplied());
         if self.show_background {
             if let Ok(background_shader) = self.background_shader.read() {
                 encoder.bind_graphics_pipeline(&*background_shader);
@@ -122,8 +128,8 @@ impl Game {
                     0..1,
                     root_params! {
                         scene_uniforms: Ptr<SceneInfoUniforms> = scene_info.gpu,
-                        bottom_color: Srgba8 = srgba8(20, 20, 40, 255),
-                        top_color: Srgba8 = srgba8(100, 150, 255, 255)
+                        bottom_color: Srgba8 = bottom_color,
+                        top_color: Srgba8 = top_color
                     },
                 );
             }
@@ -148,7 +154,7 @@ impl Game {
         }
     }
 
-    fn render_overlay(&mut self, cmd: &mut gpu::CommandStream, target: &gpu::Image) {
+    fn render_overlay(&mut self, cmd: &mut gpu::CommandBuffer, target: &gpu::Image) {
         let mut scene = self.painter.build_scene();
 
         let mut text = TextLayout::new(
@@ -236,6 +242,7 @@ impl AppHandler for Game {
         self.height = height;
         self.camera_control.resize(width, height);
         self.depth_stencil_buffer = create_depth_buffer(width, height);
+        self.outline_experiment.resize(width, height);
     }
 
     fn vsync(&mut self) {}
@@ -246,7 +253,7 @@ impl AppHandler for Game {
         //       to block the GUI and rendering.
         AssetCache::instance().do_reload();
 
-        let mut cmd = gpu::CommandStream::new();
+        let mut cmd = gpu::CommandBuffer::new();
         let time = self.start_time.elapsed().as_secs_f32();
         let frame = self.frame_count;
         self.frame_count += 1;
@@ -309,8 +316,40 @@ impl AppHandler for Game {
 
     fn imgui(&mut self, ctx: &egui::Context) {
         egui::Window::new("imgui").show(ctx, |ui| {
-            ui.color_edit_button_srgba(&mut self.color);
-            self.demo.ui(ui);
+
+            egui::Grid::new("params")
+                .num_columns(2)
+                .spacing([40.0, 4.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    ui.label("Show grid");
+                    ui.checkbox(&mut self.show_grid, "");
+                    ui.end_row();
+
+                    ui.label("Show background");
+                    ui.checkbox(&mut self.show_background, "");
+                    ui.end_row();
+
+                    ui.label("Show painting demo");
+                    ui.checkbox(&mut self.show_painting_demo, "");
+                    ui.end_row();
+
+                    ui.label("Show imgui");
+                    ui.checkbox(&mut self.show_imgui, "");
+                    ui.end_row();
+
+                    ui.label("Painting demo color");
+                    ui.color_edit_button_srgba(&mut self.color);
+                    ui.end_row();
+
+                    ui.label("BG top color");
+                    ui.color_edit_button_srgba(&mut self.bg_top_color);
+                    ui.end_row();
+
+                    ui.label("BG bottom color");
+                    ui.color_edit_button_srgba(&mut self.bg_bottom_color);
+                    ui.end_row();
+                });
         });
     }
 }

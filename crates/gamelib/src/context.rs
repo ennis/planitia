@@ -89,7 +89,7 @@ impl Context {
         self.platform.teardown();
     }
 
-    fn render_imgui(&self, command_stream: &mut gpu::CommandStream, image: &gpu::Image) {
+    fn render_imgui(&self, command_stream: &mut gpu::CommandBuffer, image: &gpu::Image) {
         self.imgui.borrow_mut().render(command_stream, image);
     }
 
@@ -266,7 +266,7 @@ impl<H: AppHandler + Default + 'static> App<H> {
     }
 
     /// Renders the ImGui UI into the given image using the provided command stream.
-    pub fn render_imgui(&self, command_stream: &mut gpu::CommandStream, image: &gpu::Image) {
+    pub fn render_imgui(&self, command_stream: &mut gpu::CommandBuffer, image: &gpu::Image) {
         let context = self.ensure_running().get_context();
         context.render_imgui(command_stream, image);
     }
@@ -328,7 +328,7 @@ where
 
         // update the GUI
         {
-            let mut cmd = gpu::CommandStream::new();
+            let mut cmd = gpu::CommandBuffer::new();
             ctx.imgui.borrow_mut().run(&mut cmd, |imgui_ctx| {
                 handler.imgui(imgui_ctx);
             });

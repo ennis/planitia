@@ -59,7 +59,7 @@ impl Renderer {
         }
     }
 
-    pub fn update_textures(&mut self, cmd: &mut CommandStream, textures_delta: egui::TexturesDelta) {
+    pub fn update_textures(&mut self, cmd: &mut CommandBuffer, textures_delta: egui::TexturesDelta) {
         let convert_filter = |min_filter: egui::TextureFilter| -> vk::Filter {
             match min_filter {
                 egui::TextureFilter::Nearest => vk::Filter::NEAREST,
@@ -137,7 +137,7 @@ impl Renderer {
 
     pub fn render(
         &mut self,
-        cmd: &mut CommandStream,
+        cmd: &mut CommandBuffer,
         color_target: &Image,
         ctx: &egui::Context,
         textures_delta: egui::TexturesDelta,
@@ -201,8 +201,8 @@ impl Renderer {
             let clip_max_x = clip_max_x.clamp(clip_min_x, width as i32);
             let clip_max_y = clip_max_y.clamp(clip_min_y, height as i32);
 
-            //enc.bind_vertex_buffer(0, vertex_buffer.slice(..).as_bytes());
-            //enc.bind_index_buffer(vk::IndexType::UINT32, index_buffer.slice(..).as_bytes());
+            /*enc.bind_vertex_buffer(0, vertex_buffer.slice(..).as_bytes());
+            enc.bind_index_buffer(vk::IndexType::UINT32, index_buffer.slice(..).as_bytes());*/
             enc.set_scissor(
                 clip_min_x,
                 clip_min_y,

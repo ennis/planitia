@@ -34,7 +34,7 @@ pub use gpu_macros::Vertex;
 
 pub mod prelude {
     pub use crate::{
-        vk, Buffer, BufferUsage, ClearColorValue, ColorBlendEquation, ColorTargetState, CommandStream,
+        vk, Buffer, BufferUsage, ClearColorValue, ColorBlendEquation, ColorTargetState, CommandBuffer,
         DepthStencilState, Format, FragmentState, GraphicsPipeline, GraphicsPipelineCreateInfo, Image, ImageCreateInfo,
         ImageType, ImageUsage, MemoryLocation, PipelineBindPoint, PipelineLayoutDescriptor, Point2D,
         PreRasterizationShaders, RasterizationState, Rect2D, RenderEncoder, Sampler, SamplerCreateInfo, ShaderCode,
@@ -411,52 +411,6 @@ pub enum Descriptor<'a> {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/*
-/// Typed buffers.
-#[repr(transparent)]
-pub struct Buffer<T: ?Sized> {
-    pub untyped: BufferUntyped,
-    _marker: PhantomData<T>,
-}*/
-/*
-impl<T: ?Sized> Clone for Buffer<T> {
-    fn clone(&self) -> Self {
-        Self {
-            untyped: self.untyped.clone(),
-            _marker: PhantomData,
-        }
-    }
-}
-
-impl<T: ?Sized> GpuResource for Buffer<T> {
-    fn set_last_submission_index(&self, submission_index: u64) {
-        self.untyped.set_last_submission_index(submission_index);
-    }
-}*/
-
-/*
-#[derive(Clone, Debug)]
-pub struct BufferRangeUntyped {
-    pub buffer: BufferUntyped,
-    pub offset: u64,
-    pub size: u64,
-}
-
-impl BufferRangeUntyped {
-    pub fn offset(&self) -> u64 {
-        self.offset
-    }
-
-    pub fn handle(&self) -> vk::Buffer {
-        self.buffer.handle
-    }
-
-    pub fn size(&self) -> u64 {
-        self.size
-    }
-
-}*/
-
 pub struct BufferRange<'a, T> {
     pub buffer: &'a Buffer<T>,
     /// Offset into the buffer in bytes. Should be a multiple of `size_of::<T>()`.
@@ -550,10 +504,6 @@ pub type BufferRangeUntyped<'a> = BufferRange<'a, u8>;
 pub struct ColorAttachment<'a> {
     pub image: &'a Image,
     pub clear_value: Option<[f64; 4]> = None,
-    /*pub image_view: ImageView,
-    pub load_op: vk::AttachmentLoadOp,
-    pub store_op: vk::AttachmentStoreOp,
-    pub clear_value: [f64; 4],*/
 }
 
 impl ColorAttachment<'_> {
@@ -596,12 +546,6 @@ pub struct DepthStencilAttachment<'a> {
     pub image: &'a Image,
     pub depth_clear_value: Option<f64> = None,
     pub stencil_clear_value: Option<u32> = None,
-    /*pub depth_load_op: vk::AttachmentLoadOp,
-    pub depth_store_op: vk::AttachmentStoreOp,
-    pub stencil_load_op: vk::AttachmentLoadOp,
-    pub stencil_store_op: vk::AttachmentStoreOp,
-    pub depth_clear_value: f64,
-    pub stencil_clear_value: u32,*/
 }
 
 impl DepthStencilAttachment<'_> {
@@ -693,41 +637,6 @@ pub enum PreRasterizationShaders<'a> {
         mesh: ShaderEntryPoint<'a>,
     },
 }
-
-/*
-impl<'a> PreRasterizationShaders<'a> {
-    /// Creates a new `PreRasterizationShaders` object using mesh shading from the specified source file path.
-    ///
-    /// The specified source file should contain both task and mesh shaders. The entry point for both shaders is `main`.
-    /// Use the `__TASK__` and `__MESH__` macros to distinguish between the two shaders within the source file.
-    pub fn mesh_shading_from_source_file(file_path: &'a Path) -> Self {
-        let entry_point = "main";
-        Self::MeshShading {
-            task: Some(ShaderEntryPoint {
-                code: ShaderCode::Source(ShaderSource::File(file_path)),
-                entry_point,
-            }),
-            mesh: ShaderEntryPoint {
-                code: ShaderCode::Source(ShaderSource::File(file_path)),
-                entry_point,
-            },
-        }
-    }
-
-    /// Creates a new `PreRasterizationShaders` object using primitive shading, without tessellation, from the specified source file path.
-    pub fn vertex_shader_from_source_file(file_path: &'a Path) -> Self {
-        let entry_point = "main";
-        Self::PrimitiveShading {
-            vertex: ShaderEntryPoint {
-                code: ShaderCode::Source(ShaderSource::File(file_path)),
-                entry_point,
-            },
-            tess_control: None,
-            tess_evaluation: None,
-            geometry: None,
-        }
-    }
-}*/
 
 #[derive(Copy, Clone, Debug)]
 pub struct GraphicsPipelineCreateInfo<'a> {
@@ -938,126 +847,6 @@ pub fn format_pixel_byte_size(fmt: vk::Format) -> u32 {
         _ => panic!("unsupported or block-compressed format"),
     }
 }
-
-/*
-fn map_buffer_access_to_barrier(state: BufferAccess) -> (vk::PipelineStageFlags2, vk::AccessFlags2) {
-    let mut stages = vk::PipelineStageFlags2::empty();
-    let mut access = vk::AccessFlags2::empty();
-    let shader_stages = vk::PipelineStageFlags2::VERTEX_SHADER
-        | vk::PipelineStageFlags2::FRAGMENT_SHADER
-        | vk::PipelineStageFlags2::COMPUTE_SHADER;
-
-    if state.contains(BufferAccess::MAP_READ) {
-        stages |= vk::PipelineStageFlags2::HOST;
-        access |= vk::AccessFlags2::HOST_READ;
-    }
-    if state.contains(BufferAccess::MAP_WRITE) {
-        stages |= vk::PipelineStageFlags2::HOST;
-        access |= vk::AccessFlags2::HOST_WRITE;
-    }
-    if state.contains(BufferAccess::COPY_SRC) {
-        stages |= vk::PipelineStageFlags2::TRANSFER;
-        access |= vk::AccessFlags2::TRANSFER_READ;
-    }
-    if state.contains(BufferAccess::COPY_DST) {
-        stages |= vk::PipelineStageFlags2::TRANSFER;
-        access |= vk::AccessFlags2::TRANSFER_WRITE;
-    }
-    if state.contains(BufferAccess::UNIFORM) {
-        stages |= shader_stages;
-        access |= vk::AccessFlags2::UNIFORM_READ;
-    }
-    if state.intersects(BufferAccess::STORAGE_READ) {
-        stages |= shader_stages;
-        access |= vk::AccessFlags2::SHADER_READ;
-    }
-    if state.intersects(BufferAccess::STORAGE_READ_WRITE) {
-        stages |= shader_stages;
-        access |= vk::AccessFlags2::SHADER_READ | vk::AccessFlags2::SHADER_WRITE;
-    }
-    if state.contains(BufferAccess::INDEX) {
-        stages |= vk::PipelineStageFlags2::VERTEX_INPUT;
-        access |= vk::AccessFlags2::INDEX_READ;
-    }
-    if state.contains(BufferAccess::VERTEX) {
-        stages |= vk::PipelineStageFlags2::VERTEX_INPUT;
-        access |= vk::AccessFlags2::VERTEX_ATTRIBUTE_READ;
-    }
-    if state.contains(BufferAccess::INDIRECT) {
-        stages |= vk::PipelineStageFlags2::DRAW_INDIRECT;
-        access |= vk::AccessFlags2::INDIRECT_COMMAND_READ;
-    }
-
-    (stages, access)
-}
-
-fn map_image_access_to_barrier(state: ImageAccess) -> (vk::PipelineStageFlags2, vk::AccessFlags2) {
-    let mut stages = vk::PipelineStageFlags2::empty();
-    let mut access = vk::AccessFlags2::empty();
-    let shader_stages = vk::PipelineStageFlags2::VERTEX_SHADER
-        | vk::PipelineStageFlags2::FRAGMENT_SHADER
-        | vk::PipelineStageFlags2::COMPUTE_SHADER;
-
-    if state.contains(ImageAccess::COPY_SRC) {
-        stages |= vk::PipelineStageFlags2::TRANSFER;
-        access |= vk::AccessFlags2::TRANSFER_READ;
-    }
-    if state.contains(ImageAccess::COPY_DST) {
-        stages |= vk::PipelineStageFlags2::TRANSFER;
-        access |= vk::AccessFlags2::TRANSFER_WRITE;
-    }
-    if state.contains(ImageAccess::SAMPLED_READ) {
-        stages |= shader_stages;
-        access |= vk::AccessFlags2::SHADER_READ;
-    }
-    if state.contains(ImageAccess::COLOR_TARGET) {
-        stages |= vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT;
-        access |= vk::AccessFlags2::COLOR_ATTACHMENT_READ | vk::AccessFlags2::COLOR_ATTACHMENT_WRITE;
-    }
-    if state.intersects(ImageAccess::DEPTH_STENCIL_READ) {
-        stages |= vk::PipelineStageFlags2::EARLY_FRAGMENT_TESTS | vk::PipelineStageFlags2::LATE_FRAGMENT_TESTS;
-        access |= vk::AccessFlags2::DEPTH_STENCIL_ATTACHMENT_READ;
-    }
-    if state.intersects(ImageAccess::DEPTH_STENCIL_WRITE) {
-        stages |= vk::PipelineStageFlags2::EARLY_FRAGMENT_TESTS | vk::PipelineStageFlags2::LATE_FRAGMENT_TESTS;
-        access |= vk::AccessFlags2::DEPTH_STENCIL_ATTACHMENT_READ | vk::AccessFlags2::DEPTH_STENCIL_ATTACHMENT_WRITE;
-    }
-    if state.contains(ImageAccess::IMAGE_READ) {
-        stages |= shader_stages;
-        access |= vk::AccessFlags2::SHADER_READ;
-    }
-    if state.contains(ImageAccess::IMAGE_READ_WRITE) {
-        stages |= shader_stages;
-        access |= vk::AccessFlags2::SHADER_READ | vk::AccessFlags2::SHADER_WRITE;
-    }
-
-    if state == ImageAccess::UNINITIALIZED || state == ImageAccess::PRESENT {
-        (vk::PipelineStageFlags2::TOP_OF_PIPE, vk::AccessFlags2::empty())
-    } else {
-        (stages, access)
-    }
-}
-
-fn map_image_access_to_layout(access: ImageAccess, format: Format) -> vk::ImageLayout {
-    let is_color = aspects_for_format(format).contains(vk::ImageAspectFlags::COLOR);
-    match access {
-        ImageAccess::UNINITIALIZED => vk::ImageLayout::UNDEFINED,
-        ImageAccess::COPY_SRC => vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-        ImageAccess::COPY_DST => vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-        ImageAccess::SAMPLED_READ if is_color => vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        ImageAccess::COLOR_TARGET => vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-        ImageAccess::DEPTH_STENCIL_WRITE => vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        _ => {
-            if access == ImageAccess::PRESENT {
-                vk::ImageLayout::PRESENT_SRC_KHR
-            } else if is_color {
-                vk::ImageLayout::GENERAL
-            } else {
-                vk::ImageLayout::DEPTH_STENCIL_READ_ONLY_OPTIMAL
-            }
-        }
-    }
-}*/
 
 // Implementation detail of the VertexInput macro
 #[doc(hidden)]

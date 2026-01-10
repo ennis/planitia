@@ -1,5 +1,5 @@
 use crate::device::get_vk_sample_count;
-use crate::{aspects_for_format, BufferUntyped, CommandStream, Descriptor, Device, Format, ResourceAllocation, ResourceDescriptorIndex, ResourceId, Size3D, StorageImageHandle, TextureHandle, TrackedResource};
+use crate::{aspects_for_format, BufferUntyped, CommandBuffer, Descriptor, Device, Format, ResourceAllocation, ResourceDescriptorIndex, ResourceId, Size3D, StorageImageHandle, TextureHandle, TrackedResource};
 use ash::vk;
 use ash::vk::Handle;
 use bitflags::bitflags;
@@ -91,12 +91,12 @@ pub struct ImageCreateInfo<'a> {
 /// Image data stored in CPU-visible memory.
 pub struct ImageBuffer {
     /// Host-mapped buffer containing the image data.
-    data: BufferUntyped,
-    format: Format,
-    pitch: u32,
-    width: u32,
-    height: u32,
-    depth: u32,
+    pub data: BufferUntyped,
+    pub format: Format,
+    pub pitch: u32,
+    pub width: u32,
+    pub height: u32,
+    pub depth: u32,
 }
 
 /// Represents an image resource on the GPU.
@@ -217,7 +217,7 @@ impl Image {
     }
 
     /// Returns the bindless texture handle of this image view.
-    pub fn texture_descriptor_index(&self) -> TextureHandle {
+    pub fn texture_handle(&self) -> TextureHandle {
         TextureHandle {
             index: self.descriptors.texture.index(),
             _unused: 0,
@@ -225,7 +225,7 @@ impl Image {
     }
 
     /// Returns the bindless storage image handle of this image view.
-    pub fn storage_descriptor_index(&self) -> StorageImageHandle {
+    pub fn storage_handle(&self) -> StorageImageHandle {
         StorageImageHandle {
             index: self.descriptors.storage.index(),
             _unused: 0,
@@ -368,7 +368,7 @@ impl Device {
     // the contents will be undefined anyway
     pub(crate) unsafe fn transition_image_to_general(&self, image: vk::Image, aspect_mask: vk::ImageAspectFlags) {
         unsafe {
-            let mut cmd = CommandStream::new();
+            let mut cmd = CommandBuffer::new();
             cmd.image_barrier(&vk::ImageMemoryBarrier2 {
                 src_stage_mask: vk::PipelineStageFlags2::NONE,
                 src_access_mask: vk::AccessFlags2::empty(),

@@ -1,4 +1,3 @@
-use crate::experiments::coat::ExpandedVertex;
 use crate::experiments::lines::draw_lines;
 use crate::{SceneInfo, SceneInfoUniforms};
 use color::{Srgba8, srgba8};
@@ -6,7 +5,9 @@ use gamelib::asset::Handle;
 use gamelib::input::InputEvent;
 use gamelib::pipeline_cache::get_graphics_pipeline;
 use gpu::PrimitiveTopology::TriangleList;
-use gpu::{BarrierFlags, Buffer, BufferCreateInfo, DrawIndirectCommand, MemoryLocation, Ptr, RenderPassInfo, RootParams};
+use gpu::{
+    BarrierFlags, Buffer, BufferCreateInfo, DrawIndirectCommand, Image, MemoryLocation, Ptr, RenderPassInfo, RootParams,
+};
 use hgeo::util::polygons_to_triangle_mesh;
 use log::info;
 use math::Vec3;
@@ -16,16 +17,30 @@ use std::fmt;
 use std::ops::Range;
 use std::path::Path;
 
+/// Vertices emitted by the outline extraction compute shader.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub(crate) struct OutlineVertex {
+    pub(crate) clip_pos: math::Vec4,
+    pub(crate) angle: f32,
+    pub(crate) reserved_0: f32,
+    pub(crate) reserved_1: f32,
+    pub(crate) reserved_2: f32,
+}
+
 /// Loads geometry from the specified file path.
 pub struct OutlineExperiment {
-    pipeline: Handle<gpu::ComputePipeline>,
-    debug_strokes: Handle<gpu::GraphicsPipeline>,
+    extract_outlines: Handle<gpu::ComputePipeline>,
+    render_outlines: Handle<gpu::GraphicsPipeline>,
     depth_pass: Handle<gpu::GraphicsPipeline>,
+    corner_detection: Handle<gpu::GraphicsPipeline>,
+
     mesh: Mesh,
     clusters: Buffer<Cluster>,
     cluster_draw_commands: Buffer<DrawIndirectCommand>,
-    outline_vertices: Buffer<ExpandedVertex>,
+    outline_vertices: Buffer<OutlineVertex>,
     outline_indices: Buffer<u32>,
+    angle_texture: Image,
 }
 
 struct Vertex {
@@ -478,12 +493,12 @@ fn cluster_edges(
         cluster_gpu.edge_count = cluster.edges.len() as u16;
         cluster_gpu.normal_cone = cluster.cone;
 
-        //eprintln!(
-        //    "cluster: {} edges, {} vertices, {} faces",
-        //    cluster_gpu.edge_count, cluster_gpu.vertex_count, cluster_gpu.face_count
-        //);
-        //eprintln!("- edges: {:?}", cluster_gpu.edges);
-        //eprintln!("- vertices: {:?}", &cluster_gpu.vertices);
+        /*eprintln!(
+            "cluster: {} edges, {} vertices, {} faces",
+            cluster_gpu.edge_count, cluster_gpu.vertex_count, cluster_gpu.face_count
+        );
+        eprintln!("- edges: {:?}", cluster_gpu.edges);
+        eprintln!("- vertices: {:?}", &cluster_gpu.vertices);*/
 
         draw_commands.push(DrawIndirectCommand {
             vertex_count: (cluster_gpu.face_count as u32) * 3,
@@ -515,7 +530,7 @@ struct OutlineExperimentRootParams {
     clusters: Ptr<Cluster>,
     cluster_count: u32,
     vertex_count: u32,
-    out_vertices: Ptr<ExpandedVertex>,
+    out_vertices: Ptr<OutlineVertex>,
     out_indices: Ptr<u32>,
     out_draw_command: Ptr<DrawIndirectCommand>,
 }
@@ -528,12 +543,29 @@ struct DepthPassRootParams {
     cluster_count: u32,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub(crate) struct RenderOutlinesRootParams {
+    pub(crate) scene_info: gpu::Ptr<SceneInfoUniforms>,
+    pub(crate) vertices: gpu::Ptr<OutlineVertex>,
+    pub(crate) indices: gpu::Ptr<u32>,
+    pub(crate) depth_texture: gpu::TextureHandle,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct CornerDetectionRootParams {
+    pub(crate) scene_info: gpu::Ptr<SceneInfoUniforms>,
+    pub(crate) angle_tex: gpu::TextureHandle,
+}
+
 impl OutlineExperiment {
     pub fn new() -> Self {
         Self {
-            pipeline: gamelib::pipeline_cache::get_compute_pipeline("/shaders/game_shaders.sharc#outline"),
-            debug_strokes: get_graphics_pipeline("/shaders/game_shaders.sharc#debug_strokes"),
+            extract_outlines: gamelib::pipeline_cache::get_compute_pipeline("/shaders/game_shaders.sharc#outline"),
+            render_outlines: get_graphics_pipeline("/shaders/game_shaders.sharc#render_outlines"),
             depth_pass: get_graphics_pipeline("/shaders/game_shaders.sharc#depth_pass"),
+            corner_detection: get_graphics_pipeline("/shaders/game_shaders.sharc#corner_detection"),
             mesh: Mesh {
                 face: vec![],
                 edges: vec![],
@@ -544,6 +576,14 @@ impl OutlineExperiment {
             cluster_draw_commands: gpu::Buffer::from_slice(&[], "outline_cluster_draw_commands"),
             outline_vertices: gpu::Buffer::from_slice(&[], "outline_vertices"),
             outline_indices: gpu::Buffer::from_slice(&[], "outline_indices"),
+            angle_texture: gpu::Image::new(gpu::ImageCreateInfo {
+                width: 1,
+                height: 1,
+                format: gpu::Format::R32G32_SFLOAT,
+                usage: gpu::ImageUsage::SAMPLED | gpu::ImageUsage::STORAGE | gpu::ImageUsage::COLOR_ATTACHMENT,
+                label: "outline_angle_texture",
+                ..
+            }),
         }
     }
 
@@ -576,12 +616,12 @@ impl OutlineExperiment {
         self.clusters = cluster_edges(&mut mesh, &cluster_params, &mut draw_commands);
         self.cluster_draw_commands = gpu::Buffer::from_slice(&draw_commands, "outline_cluster_draw_commands");
         self.mesh = mesh;
-        self.outline_vertices = gpu::Buffer::<ExpandedVertex>::new(gpu::BufferCreateInfo {
+        self.outline_vertices = gpu::Buffer::new(gpu::BufferCreateInfo {
             len: self.mesh.vertices.len() * 20, // not great
             label: "outline_vertices",
             ..
         });
-        self.outline_indices = gpu::Buffer::<u32>::new(gpu::BufferCreateInfo {
+        self.outline_indices = gpu::Buffer::new(gpu::BufferCreateInfo {
             len: self.mesh.vertices.len() * 40, // no idea
             label: "outline_indices",
             ..
@@ -599,22 +639,36 @@ impl OutlineExperiment {
         }
     }
 
+    pub(crate) fn resize(&mut self, width: u32, height: u32) {
+        self.angle_texture = gpu::Image::new(gpu::ImageCreateInfo {
+            width,
+            height,
+            format: gpu::Format::R32G32_SFLOAT,
+            usage: gpu::ImageUsage::SAMPLED | gpu::ImageUsage::STORAGE | gpu::ImageUsage::COLOR_ATTACHMENT,
+            label: "outline_angle_texture",
+            ..
+        });
+    }
+
     pub(crate) fn render(
         &mut self,
-        cmd: &mut gpu::CommandStream,
+        cmd: &mut gpu::CommandBuffer,
         color_target: &gpu::Image,
         depth_target: &gpu::Image,
         scene_info: &SceneInfo,
     ) {
-        let outline_pipeline = match self.pipeline.read() {
+        let outline_pipeline = match self.extract_outlines.read() {
             Ok(p) => p,
             Err(_) => return,
         };
 
-        let Ok(debug_stroke_pipeline) = self.debug_strokes.read() else {
+        let Ok(render_outlines) = self.render_outlines.read() else {
             return;
         };
-        let Ok(depth_pass_pipeline) = self.depth_pass.read() else {
+        let Ok(depth_pass) = self.depth_pass.read() else {
+            return;
+        };
+        let Ok(corner_detection) = self.corner_detection.read() else {
             return;
         };
 
@@ -628,7 +682,7 @@ impl OutlineExperiment {
                 ..
             }),
         });
-        encoder.bind_graphics_pipeline(&*depth_pass_pipeline);
+        encoder.bind_graphics_pipeline(&*depth_pass);
         encoder.draw_indirect(
             TriangleList,
             None,
@@ -683,27 +737,52 @@ impl OutlineExperiment {
         // render contours
         let mut encoder = cmd.begin_rendering(RenderPassInfo {
             color_attachments: &[gpu::ColorAttachment {
-                image: color_target,
+                image: &self.angle_texture,
+                clear_value: Some([0.0, 0.0, 0.0, 0.0]),
                 ..
             }],
             depth_stencil_attachment: None,
         });
 
-        encoder.bind_graphics_pipeline(&*debug_stroke_pipeline);
+        encoder.bind_graphics_pipeline(&*render_outlines);
         encoder.draw_indirect(
             TriangleList,
             None,
             &draw_indirect_command_buffer,
             0..1,
-            RootParams::Immediate(&crate::experiments::coat::DebugStrokesRootParams {
+            RootParams::Immediate(&RenderOutlinesRootParams {
                 scene_info: scene_info.gpu,
                 vertices: self.outline_vertices.ptr(),
                 indices: self.outline_indices.ptr(),
-                depth_texture: depth_target.texture_descriptor_index(),
+                depth_texture: depth_target.texture_handle(),
             }),
         );
+        encoder.finish();
 
-        //draw_lines(&mut encoder, &line_vertices, &lines, scene_info);
+        cmd.barrier_source(BarrierFlags::FRAGMENT_SHADER | BarrierFlags::COLOR_ATTACHMENT);
+        cmd.barrier(BarrierFlags::FRAGMENT_SHADER | BarrierFlags::SAMPLED_READ);
+
+        /////////////////////////////////////////////////////////
+        // corner detection
+        let mut encoder = cmd.begin_rendering(RenderPassInfo {
+            color_attachments: &[gpu::ColorAttachment {
+                image: color_target,
+                clear_value: None,
+            }],
+            depth_stencil_attachment: Some(gpu::DepthStencilAttachment {
+                image: &depth_target,
+                depth_clear_value: None,
+                stencil_clear_value: None,
+            }),
+        });
+        encoder.bind_graphics_pipeline(&*corner_detection);
+        encoder.draw(TriangleList, None, 0..6, 0..1, RootParams::Immediate(&CornerDetectionRootParams {
+            scene_info: scene_info.gpu,
+            angle_tex: self.angle_texture.texture_handle(),
+        }));
+        encoder.finish();
+
+        /*draw_lines(&mut encoder, &line_vertices, &lines, scene_info);*/
 
         /*fn random_color(index: usize) -> Srgba8 {
             let random_colors = &[

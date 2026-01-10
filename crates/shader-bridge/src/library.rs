@@ -2,7 +2,6 @@ use crate::error::Error;
 use crate::session::{create_session, SessionOptions};
 use crate::SHADER_PROFILE;
 use gpu::vk;
-use slang::reflection::{TypeLayout};
 use slang::Downcast;
 use std::path::{Path, PathBuf};
 
@@ -58,7 +57,7 @@ pub struct CompiledEntryPoint {
     /// Source file path of the shader.
     pub path: Option<String>,
     /// Reflection information.
-    program: slang::ComponentType,
+    _program: slang::ComponentType,
 }
 
 impl CompiledEntryPoint {
@@ -173,7 +172,7 @@ impl ShaderLibrary {
             },
             name: entry_point_name.to_string(),
             path: self.path.clone(),
-            program,
+            _program: program,
         })
     }
 

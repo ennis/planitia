@@ -1,13 +1,11 @@
-use crate::{BuildManifest, BuildOptions, GraphicsState};
+use crate::{BuildManifest, BuildOptions, GraphicsState, Pass};
 use anyhow::{Context, anyhow, bail};
 use color_print::{ceprintln, cprintln};
 use log::warn;
 use shader_archive::archive::{ArchiveWriter, Offset};
 use shader_archive::gpu::vk;
 use shader_archive::zstring::ZString64;
-use shader_archive::{
-    FileDependency, PIPELINE_ARCHIVE_MAGIC, PipelineEntryData, RootParamInfo, RootParamLayout, ShaderData,
-};
+use shader_archive::{FileDependency, PipelineEntryData, RootParamInfo, RootParamLayout, ShaderData};
 use slang::reflection::TypeLayout;
 use slang::{DebugInfoLevel, Downcast};
 use std::cell::OnceCell;
@@ -18,7 +16,9 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use std::{env, fs, slice};
 
-fn make_file_dependency(path: &Path, archive: &mut ArchiveWriter) -> anyhow::Result<FileDependency> {
+type PipelineArchiveWriter = ArchiveWriter<shader_archive::PipelineArchiveData>;
+
+fn make_file_dependency(path: &Path, archive: &mut PipelineArchiveWriter) -> anyhow::Result<FileDependency> {
     let canonical_path = path.canonicalize()?;
     let modified_time = fs::metadata(&canonical_path)?.modified()?;
     let mtime = match modified_time.duration_since(SystemTime::UNIX_EPOCH) {
@@ -457,8 +457,9 @@ impl BuildManifest {
 
     fn write_pipeline(
         &self,
-        archive: &mut ArchiveWriter,
+        archive: &mut PipelineArchiveWriter,
         pipeline_name: &str,
+        pass: Option<&Pass>,
         gs: &GraphicsState,
         entry_points: &[&EntryPoint],
         _options: &BuildOptions,
@@ -500,9 +501,43 @@ impl BuildManifest {
             let color_targets = {
                 let mut color_targets = Vec::new();
                 for ct in gs.color_targets.iter() {
-                    color_targets.push(archive.write(*ct));
+                    color_targets.push(archive.write(ct));
                 }
                 archive.write_slice(color_targets.as_slice())
+            };
+
+            // attachments
+            let mut color_attachments = Offset::INVALID;
+            let mut depth_stencil_attachment = None;
+            if let Some(pass) = pass {
+                {
+                    let mut attachments = Vec::with_capacity(pass.color_attachments.len());
+                    for ca in pass.color_attachments.iter() {
+                        attachments.push(shader_archive::ColorAttachment {
+                            resource_name: ca.resource.as_ref().map(|s| s.as_str().into()).unwrap_or_default(),
+                            clear_color: ca.clear_color,
+                        });
+                    }
+                    color_attachments = archive.write_slice(&attachments[..])
+                }
+
+                if let Some(dsa) = &pass.depth_stencil_attachment {
+                    depth_stencil_attachment = Some(shader_archive::DepthStencilAttachment {
+                        resource_name: dsa.resource.as_ref().map(|s| s.as_str().into()).unwrap_or_default(),
+                        clear_depth: dsa.clear_depth,
+                        clear_stencil: dsa.clear_stencil,
+                    })
+                }
+
+                // check that we have the correct number of attachments
+                if pass.color_attachments.len() != gs.color_targets.len() {
+                    bail!(
+                        "pipeline `{}` has {} color attachments, but {} color blend targets",
+                        pipeline_name,
+                        pass.color_attachments.len(),
+                        gs.color_targets.len()
+                    );
+                }
             };
 
             let shaders = archive.write_slice(&shaders[..]);
@@ -512,6 +547,8 @@ impl BuildManifest {
                 rasterization: gs.rasterizer,
                 depth_stencil: gs.depth_stencil,
                 color_targets,
+                color_attachments,
+                depth_stencil_attachment,
             })
         };
 
@@ -700,25 +737,28 @@ impl BuildManifest {
         }
 
         let mut archive = ArchiveWriter::new();
-        let header = archive.write(shader_archive::PipelineArchiveData {
-            magic: PIPELINE_ARCHIVE_MAGIC,
-            version: 1,
-            manifest_file: FileDependency::default(),
-            entries: Offset::INVALID,
-        });
-        archive[header].manifest_file = make_file_dependency(&self.manifest_path, &mut archive)?;
-
-        let mut entries = Vec::new();
-        for (&pipeline_name, entry_points) in pipelines.iter() {
-            let mut state = self.default.clone();
-            if let Some(ref overrides) = self.override_.get(pipeline_name) {
-                state.apply_overrides(overrides)?;
+        let pipelines_offset = {
+            let mut entries = Vec::new();
+            for (&pipeline_name, entry_points) in pipelines.iter() {
+                let mut state = self.default.clone();
+                let pass = if let Some(pass) = self.pass.get(pipeline_name) {
+                    state.apply_overrides(&pass.raw)?;
+                    Some(pass)
+                } else {
+                    None
+                };
+                entries.push(self.write_pipeline(&mut archive, pipeline_name, pass, &state, entry_points, options)?);
             }
-            entries.push(self.write_pipeline(&mut archive, pipeline_name, &state, entry_points, options)?);
-        }
-        let entries_offset = archive.write_slice(&entries[..]);
-        archive[header].entries = entries_offset;
+            archive.write_slice(&entries[..])
+        };
 
+        let manifest_file = make_file_dependency(&self.manifest_path, &mut archive)?;
+
+        let _ = archive.write_root(&shader_archive::PipelineArchiveData {
+            manifest_file,
+            pipelines: pipelines_offset,
+            render_targets: Offset::INVALID,
+        });
         archive.write_to_file(&output_file).context("writing output")?;
 
         Ok(())

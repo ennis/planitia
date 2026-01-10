@@ -1,7 +1,5 @@
 use crate::device::{get_preferred_present_mode, get_preferred_swap_extent};
-use crate::{
-    aspects_for_format, vk_khr_surface, CommandStream, Device, Image, ImageType, ImageUsage, ResourceAllocation, Size3D,
-};
+use crate::{vk_khr_surface, CommandBuffer, Device, Image, ImageType, ImageUsage, ResourceAllocation, Size3D};
 use ash::vk;
 use std::ptr;
 use std::time::Duration;
@@ -131,7 +129,7 @@ impl Device {
 
         // transition image to GENERAL
         {
-            let mut cmd = CommandStream::new();
+            let mut cmd = CommandBuffer::new();
             unsafe {
                 cmd.image_barrier(&vk::ImageMemoryBarrier2 {
                     src_stage_mask: vk::PipelineStageFlags2::NONE,

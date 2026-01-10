@@ -1,7 +1,6 @@
 use ash::vk;
 use core::ptr;
-use log::log;
-use std::ffi::{c_void, CStr, CString};
+use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::sync::LazyLock;
 

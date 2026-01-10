@@ -5,7 +5,7 @@ use std::ptr;
 use std::time::Duration;
 
 use gpu::{
-    vk, BufferCreateInfo, BufferUntyped, BufferUsage, CommandStream, Device, Image, ImageAspect, ImageCopyBuffer,
+    vk, BufferCreateInfo, BufferUntyped, BufferUsage, CommandBuffer, Device, Image, ImageAspect, ImageCopyBuffer,
     ImageCopyView, ImageCreateInfo, ImageDataLayout, ImageType, ImageUsage, MemoryLocation, Offset3D, Rect3D,
     SwapChain,
 };
@@ -16,7 +16,7 @@ use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::{Window, WindowAttributes, WindowId};
 
-fn load_image(cmd: &mut CommandStream, path: impl AsRef<Path>, usage: ImageUsage) -> Image {
+fn load_image(cmd: &mut CommandBuffer, path: impl AsRef<Path>, usage: ImageUsage) -> Image {
     let path = path.as_ref();
 
     let dyn_image = image::open(path).expect("could not open image file");
@@ -112,7 +112,7 @@ impl ApplicationHandler for App {
             let swap_chain =
                 unsafe { Device::global().create_swapchain(surface, surface_format, size.width, size.height) };
 
-            let mut cmd = CommandStream::new();
+            let mut cmd = CommandBuffer::new();
             let image = load_image(
                 &mut cmd,
                 "crates/gpu/examples/yukari.png",
@@ -154,7 +154,7 @@ impl ApplicationHandler for App {
                         .unwrap()
                 };
 
-                let mut cmd = CommandStream::new();
+                let mut cmd = CommandBuffer::new();
                 let image = &window.image;
                 let blit_w = image.size().width.min(window.width);
                 let blit_h = image.size().height.min(window.height);

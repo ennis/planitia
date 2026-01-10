@@ -94,6 +94,39 @@
  ✔ Do away with encoders @done (25-12-19 17:01)
      ComputeEncoder is strictly useless
 
+ ☐ GPU API streamline: render targets
+    Currently, to add a render target to a fragment shader, you need to
+    * (1) add a field to the app struct to store the new render target
+    * (2) add code in ctor to create the render target
+    * (3) add code in window_event to resize the render target 
+    * (4) modify the begin_rendering call to add the new color attachment
+    * (5) modify shaders.toml to declare the color attachment
+    * (6) add the color field in the FragmentOutput struct
+    * (7) finally, in the fragment shader, write to the new color field <-- this is the only thing that matters
+    That's SEVEN different locations to modify existing code, and thus SEVEN opportunities to add new bugs. This is too much. 
+    The plan
+    * can't do much about (6) and (7)
+    * (5) can be inferred from the return type of the fragment shader, although you'd still need to declare the blending mode and format somewhere
+        * possibly as attributes in FragmentOutput: `[format(RGBA8)][blend=...]`
+            * but then you'd have to specify that on every fragment output struct; would need to deduplicate them
+        * Note that it's possible (but unlikely) that we'd like to use the same fragment shader in different pipelines, with possibly different attachment formats and blending modes
+    * (1,2,3) render targets could be automatically allocated and resized by the application, from an entry in the manifest
+    * (4) change begin_rendering parameters to take a graphics pipeline instead. Graphics pipeline would have reflection data that would tell which render target to bind.
+        * `let mut encoder = renderer.begin_pass("name")`
+        * in shaders, FragmentOutput fields would have an attribute that specifies which RT to write to `[render_target("main_color")]`
+            * and maybe, the color to clear the render target to
+        * the specifics of the render targets would be written in shaders.toml (the format will be extended to describe pipeline resources as well)
+
+    After the proposal
+    * (1) Add a color field to the FragmentOutput struct, with the `[render_target("name")]` attribute
+    * (2) In the fragment shader, write the color field
+    * (3) Modify shaders.toml to declare the new color attachment for the pipeline
+    * (4) Modify shaders.toml to declare a new render target resource
+    Rust code doesn't need to change anymore.
+
+    Going further, we can skip (3) entirely if the blending mode is specified in FragmentOutput.
+
+
 
 Render world:
     The "render world" holds all resources, pipelines, and is in charge of running the render passes. It also holds the current scene to draw.

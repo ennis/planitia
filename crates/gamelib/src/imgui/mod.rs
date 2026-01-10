@@ -7,7 +7,7 @@ use crate::imgui;
 use crate::imgui::input_state::EguiInputState;
 use crate::input::InputEvent;
 use egui::{Align, Color32, FontDefinitions, RichText, Style, TextFormat, TextStyle};
-use gpu::CommandStream;
+use gpu::CommandBuffer;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::mem;
@@ -76,7 +76,7 @@ impl ImguiContext {
         self.input.update(&self.ctx, event)
     }
 
-    pub(crate) fn run(&mut self, cmd: &mut CommandStream, f: impl FnMut(&egui::Context)) {
+    pub(crate) fn run(&mut self, cmd: &mut CommandBuffer, f: impl FnMut(&egui::Context)) {
         let raw_input = self.input.raw.take();
         let output = self.ctx.run(raw_input, f);
         self.input.handle_platform_output(&output.platform_output);
@@ -85,7 +85,7 @@ impl ImguiContext {
         self.renderer.update_textures(cmd, textures_delta);
     }
 
-    pub(crate) fn render(&mut self, cmd: &mut CommandStream, image: &gpu::Image) {
+    pub(crate) fn render(&mut self, cmd: &mut CommandBuffer, image: &gpu::Image) {
         self.renderer.render(
             cmd,
             image,

@@ -5,10 +5,9 @@ pub mod coat;
 pub mod mesh;
 
 use std::borrow::Cow;
-use std::io;
 use std::ops::Deref;
 use std::path::Path;
-use utils::archive::{ArchiveReader, ArchiveReaderOwned, Offset};
+use utils::archive::{ArchiveError, ArchiveReader, ArchiveReaderOwned, ArchiveRoot, Offset};
 
 pub use coat::*;
 pub use mesh::*;
@@ -17,22 +16,14 @@ pub use mesh::*;
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct GeoArchiveHeader {
-    /// Magic number identifying the file as a geometry archive.
-    pub magic: [u8; 4],
-    /// Version of the geometry archive format.
-    pub version: u32,
-
     pub vertex_arrays: Offset<[VertexArray]> = Offset::INVALID,
     pub primitives: Offset<[Primitive]> = Offset::INVALID,
     pub indices: Offset<[u32]> = Offset::INVALID,
+}
 
-    //pub stroke_vertices: Offset<[StrokeVertex]> = Offset::INVALID,
-    //pub mesh_vertices: Offset<[MeshVertex]> = Offset::INVALID,
-    ///// Indices into `mesh_vertices`, relative to `mesh_part.base_vertex`.
-    //pub mesh_indices: Offset<[u32]> = Offset::INVALID,
-    //pub strokes: Offset<[Stroke]> = Offset::INVALID,
-    //pub coats: Offset<[Coat]> = Offset::INVALID,
-    //pub meshes: Offset<[Mesh]> = Offset::INVALID,
+impl ArchiveRoot for GeoArchiveHeader {
+    const SIGNATURE: [u8; 4] = *b"GEOM";
+    const VERSION: u32 = 2;
 }
 
 #[repr(C)]
@@ -58,58 +49,30 @@ pub enum Primitive {
     Coat(Offset<[Coat]>),
 }
 
-impl GeoArchiveHeader {
-    /// Magic number for geometry archive files.
-    pub const MAGIC: [u8; 4] = *b"GEOM";
-    /// Current version of the geometry archive format.
-    pub const VERSION: u32 = 2;
-}
-
-pub struct GeoArchive(Cow<'static, ArchiveReader>);
+pub struct GeoArchive(Cow<'static, ArchiveReader<GeoArchiveHeader>>);
 
 impl GeoArchive {
-    pub fn load(file_path: impl AsRef<Path>) -> io::Result<Self> {
+    pub fn load(file_path: impl AsRef<Path>) -> Result<Self, ArchiveError> {
         let archive = ArchiveReaderOwned::load(file_path)?;
         let this = Self(Cow::Owned(archive));
-        this.check_header()?;
         Ok(this)
     }
 
-    pub fn from_bytes(data: &[u8]) -> io::Result<Self> {
-        let archive = ArchiveReaderOwned::from_bytes(data);
+    pub fn from_bytes(data: &[u8]) -> Result<Self, ArchiveError> {
+        let archive = ArchiveReaderOwned::from_bytes(data)?;
         let this = Self(Cow::Owned(archive));
-        this.check_header()?;
         Ok(this)
     }
 
-    pub fn from_bytes_static(data: &'static [u8]) -> io::Result<Self> {
-        let archive = ArchiveReader::new(data);
+    pub fn from_bytes_static(data: &'static [u8]) -> Result<Self, ArchiveError> {
+        let archive = ArchiveReader::new(data)?;
         Ok(Self(Cow::Borrowed(archive)))
-    }
-
-    fn check_header(&self) -> io::Result<()> {
-        let header: &GeoArchiveHeader = self.0.header().unwrap();
-        if header.magic != GeoArchiveHeader::MAGIC {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid archive magic"));
-        }
-        if header.version != GeoArchiveHeader::VERSION {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Unsupported archive version",
-            ));
-        }
-        Ok(())
-    }
-
-    pub fn header(&self) -> &GeoArchiveHeader {
-        let header: &GeoArchiveHeader = self.0.header().unwrap();
-        header
     }
 
     /// Returns a slice of all stroke primitives in the archive.
     // TODO this API and all below are dumb
     pub fn strokes(&self) -> &[Stroke] {
-        let header = self.header();
+        let header = self.deref().root();
         let primitives = &self[header.primitives];
         for prim in primitives {
             if let Primitive::Stroke(offset) = prim {
@@ -120,7 +83,7 @@ impl GeoArchive {
     }
 
     pub fn stroke_vertices(&self) -> &[StrokeVertex] {
-        let header = self.header();
+        let header = self.deref().root();
         let vertex_arrays = &self[header.vertex_arrays];
         for va in vertex_arrays {
             if let VertexArray::Stroke(offset) = va {
@@ -131,7 +94,7 @@ impl GeoArchive {
     }
 
     pub fn swept_strokes(&self) -> &[SweptStroke] {
-        let header = self.header();
+        let header = self.deref().root();
         let primitives = &self[header.primitives];
         for prim in primitives {
             if let Primitive::SweptStroke(offset) = prim {
@@ -142,7 +105,7 @@ impl GeoArchive {
     }
 
     pub fn swept_stroke_vertices(&self) -> &[SweptStrokeVertex] {
-        let header = self.header();
+        let header = self.deref().root();
         let vertex_arrays = &self[header.vertex_arrays];
         for va in vertex_arrays {
             if let VertexArray::SweptStroke(offset) = va {
@@ -153,7 +116,7 @@ impl GeoArchive {
     }
 
     pub fn coats(&self) -> &[Coat] {
-        let header = self.header();
+        let header = self.deref().root();
         let primitives = &self[header.primitives];
         for prim in primitives {
             if let Primitive::Coat(offset) = prim {
@@ -164,7 +127,7 @@ impl GeoArchive {
     }
 
     pub fn mesh_vertices(&self) -> &[MeshVertex] {
-        let header = self.header();
+        let header = self.deref().root();
         let vertex_arrays = &self[header.vertex_arrays];
         for va in vertex_arrays {
             if let VertexArray::Mesh(offset) = va {
@@ -175,14 +138,14 @@ impl GeoArchive {
     }
 
     pub fn indices(&self) -> &[u32] {
-        let header = self.header();
+        let header = self.deref().root();
         &self[header.indices]
     }
 }
 
 // deref to ArchiveReader
 impl Deref for GeoArchive {
-    type Target = ArchiveReader;
+    type Target = ArchiveReader<GeoArchiveHeader>;
 
     fn deref(&self) -> &Self::Target {
         &self.0

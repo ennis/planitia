@@ -1,5 +1,5 @@
 use crate::device::{get_vk_sample_count, ResourceAllocation};
-use crate::{aspects_for_format, vk, CommandStream, Device, Image, ImageCreateInfo, Size3D};
+use crate::{aspects_for_format, vk, CommandBuffer, Device, Image, ImageCreateInfo, Size3D};
 use ash::vk::{HANDLE, SECURITY_ATTRIBUTES};
 use gpu_allocator::MemoryLocation;
 use std::ffi::{c_void, OsStr};
@@ -181,7 +181,7 @@ impl Device {
 
         // transition image to GENERAL
         {
-            let mut cmd = CommandStream::new();
+            let mut cmd = CommandBuffer::new();
             cmd.image_barrier(&vk::ImageMemoryBarrier2 {
                 src_stage_mask: vk::PipelineStageFlags2::NONE,
                 src_access_mask: vk::AccessFlags2::MEMORY_WRITE,
