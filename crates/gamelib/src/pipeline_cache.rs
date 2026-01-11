@@ -1,7 +1,7 @@
-use crate::asset::{AssetCache, Dependencies, Handle, LoadResult, VfsPath};
+use crate::asset::{AssetCache, DefaultLoader, Dependencies, FileMetadata, Handle, LoadResult, Provider, VfsPath};
 use gpu::{PreRasterizationShaders, ShaderEntryPoint, vk};
 use log::{debug, warn};
-use shader_archive::{PipelineArchive, ShaderData};
+use shader_archive::{ShaderArchive, ShaderData};
 use std::sync::MutexGuard;
 use std::time::SystemTime;
 use std::{fs, io};
@@ -38,23 +38,24 @@ fn unix_mtime(last_modified: SystemTime) -> u64 {
 }
 
 /// Loads a pipeline archive file or retrieves it from the asset cache.
-pub fn load_pipeline_archive(path: impl AsRef<VfsPath>) -> Handle<PipelineArchive> {
+pub fn load_pipeline_archive(path: impl AsRef<VfsPath>) -> Handle<ShaderArchive> {
     let cache = AssetCache::instance();
-    cache.load_and_insert(path.as_ref(), |data, metadata, deps| {
+    cache.load(path.as_ref(), |path, metadata, provider, deps| {
         // add dependencies on the manifest and source files
-        let a = PipelineArchive::from_bytes(data).unwrap();
+        let data = provider.load(path)?;
+        let a = ShaderArchive::from_bytes(&*data).unwrap();
 
         // hot reloading support
         #[cfg(feature = "hot_reload")]
         {
-            fn should_rebuild_archive(archive: &PipelineArchive) -> bool {
-                fn inner(archive: &PipelineArchive) -> io::Result<bool> {
+            fn should_rebuild_archive(archive: &ShaderArchive) -> bool {
+                fn inner(archive: &ShaderArchive) -> io::Result<bool> {
                     let manifest_path = &archive[archive.manifest_file().path];
                     let manifest_mtime = unix_mtime(fs::metadata(manifest_path)?.modified()?);
 
                     if manifest_mtime > archive.manifest_file().mtime {
                         debug!(
-                            "pipeline manifest modified: {} (last:{:?}, archive:{:?})",
+                            "shader manifest modified: {} (last:{:?}, archive:{:?})",
                             manifest_path,
                             manifest_mtime,
                             archive.manifest_file().mtime
@@ -67,7 +68,7 @@ pub fn load_pipeline_archive(path: impl AsRef<VfsPath>) -> Handle<PipelineArchiv
                         let source_metadata = fs::metadata(path)?;
                         if unix_mtime(source_metadata.modified()?) > source.mtime {
                             debug!(
-                                "pipeline archive dependency modified: {} (last:{:?}, archive:{:?})",
+                                "shader archive dependency modified: {} (last:{:?}, archive:{:?})",
                                 path,
                                 source_metadata.modified()?,
                                 source.mtime
@@ -104,7 +105,7 @@ pub fn load_pipeline_archive(path: impl AsRef<VfsPath>) -> Handle<PipelineArchiv
 
 fn get_shader_entry_point<'a>(
     stage: gpu::ShaderStage,
-    archive: &'a PipelineArchive,
+    archive: &'a ShaderArchive,
     shader: &'a ShaderData,
 ) -> ShaderEntryPoint<'a> {
     let spirv = &archive[shader.spirv];
@@ -112,19 +113,16 @@ fn get_shader_entry_point<'a>(
         stage,
         code: spirv,
         entry_point: shader.entry_point.as_str(),
-        push_constants_size: 0,
+        push_constants_size: 0, // ignored by gpu anyway
         source_path: None,
-        workgroup_size: [0, 0, 0],
+        workgroup_size: [0, 0, 0], // ignored by gpu anyway
     }
 }
 
-fn create_graphics_pipeline_from_archive(
-    archive: &PipelineArchive,
-    name: &str,
+pub(crate) fn create_graphics_pipeline_from_archive(
+    archive: &ShaderArchive,
+    entry: &shader_archive::GraphicsPipelineData,
 ) -> Result<gpu::GraphicsPipeline, PipelineCreateError> {
-    let entry = archive
-        .find_graphics_pipeline(name)
-        .ok_or_else(|| PipelineCreateError::PipelineNotFound(name.to_string()))?;
     let color_targets: Vec<_> = {
         let color_targets = &archive[entry.color_targets];
         color_targets
@@ -223,13 +221,10 @@ fn create_graphics_pipeline_from_archive(
     Ok(pipeline)
 }
 
-fn create_compute_pipeline_from_archive(
-    archive: &PipelineArchive,
-    name: &str,
+pub(crate) fn create_compute_pipeline_from_archive(
+    archive: &ShaderArchive,
+    entry: &shader_archive::ComputePipelineData,
 ) -> Result<gpu::ComputePipeline, PipelineCreateError> {
-    let entry = archive
-        .find_compute_pipeline(name)
-        .ok_or_else(|| PipelineCreateError::PipelineNotFound(name.to_string()))?;
     let shader = get_shader_entry_point(gpu::ShaderStage::Compute, &archive, &entry.compute_shader);
     let cpci = gpu::ComputePipelineCreateInfo {
         set_layouts: &[],
@@ -240,33 +235,70 @@ fn create_compute_pipeline_from_archive(
     Ok(pipeline)
 }
 
+pub fn load_graphics_pipeline(
+    path: &VfsPath,
+    _metadata: &FileMetadata,
+    _provider: &dyn Provider,
+    _dependencies: &mut Dependencies,
+) -> LoadResult<gpu::GraphicsPipeline> {
+    let archive_file = path.path_without_fragment();
+    let name = path.fragment().expect("pipeline name missing in path");
+    let archive_handle = load_pipeline_archive(archive_file);
+
+    let archive = archive_handle.read()?;
+    let entry = archive
+        .find_graphics_pipeline(name)
+        .ok_or_else(|| PipelineCreateError::PipelineNotFound(name.to_string()))?;
+
+    Ok(create_graphics_pipeline_from_archive(&*archive, entry)?)
+}
+
+pub fn load_compute_pipeline(
+    path: &VfsPath,
+    _metadata: &FileMetadata,
+    _provider: &dyn Provider,
+    _dependencies: &mut Dependencies,
+) -> LoadResult<gpu::ComputePipeline> {
+    let archive_file = path.path_without_fragment();
+    let name = path.fragment().expect("pipeline name missing in path");
+    let archive_handle = load_pipeline_archive(archive_file);
+
+    let archive = archive_handle.read()?;
+    let entry = archive
+        .find_compute_pipeline(name)
+        .ok_or_else(|| PipelineCreateError::PipelineNotFound(name.to_string()))?;
+    Ok(create_compute_pipeline_from_archive(&*archive, entry)?)
+}
+
 /// Loads a graphics pipeline object from the specified archive file and pipeline name.
 pub fn get_graphics_pipeline(path: impl AsRef<VfsPath>) -> Handle<gpu::GraphicsPipeline> {
-    fn load(path: &VfsPath, dependencies: &mut Dependencies) -> LoadResult<gpu::GraphicsPipeline> {
-        let archive_file = path.path_without_fragment();
-        let name = path.fragment().expect("pipeline name missing in path");
-        let archive_handle = load_pipeline_archive(archive_file);
-        dependencies.add(&archive_handle);
-
-        let archive = archive_handle.read()?;
-        Ok(create_graphics_pipeline_from_archive(&*archive, name)?)
-    }
-
     let path = path.as_ref();
-    AssetCache::instance().insert_with_dependencies(path, load)
+    AssetCache::instance().load(path, load_graphics_pipeline)
 }
 
 pub fn get_compute_pipeline(path: impl AsRef<VfsPath>) -> Handle<gpu::ComputePipeline> {
-    fn load(path: &VfsPath, dependencies: &mut Dependencies) -> LoadResult<gpu::ComputePipeline> {
-        let archive_file = path.path_without_fragment();
-        let name = path.fragment().expect("pipeline name missing in path");
-        let archive_handle = load_pipeline_archive(archive_file);
-        dependencies.add(&archive_handle);
-
-        let archive = archive_handle.read()?;
-        Ok(create_compute_pipeline_from_archive(&*archive, name)?)
-    }
-
     let path = path.as_ref();
-    AssetCache::instance().insert_with_dependencies(path, load)
+    AssetCache::instance().load(path, load_compute_pipeline)
+}
+
+impl DefaultLoader for gpu::GraphicsPipeline {
+    fn load(
+        path: &VfsPath,
+        metadata: &FileMetadata,
+        provider: &dyn Provider,
+        dependencies: &mut Dependencies,
+    ) -> LoadResult<Self> {
+        load_graphics_pipeline(path, metadata, provider, dependencies)
+    }
+}
+
+impl DefaultLoader for gpu::ComputePipeline {
+    fn load(
+        path: &VfsPath,
+        metadata: &FileMetadata,
+        provider: &dyn Provider,
+        dependencies: &mut Dependencies,
+    ) -> LoadResult<Self> {
+        load_compute_pipeline(path, metadata, provider, dependencies)
+    }
 }

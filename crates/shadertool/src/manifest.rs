@@ -1,11 +1,12 @@
 use crate::manifest::Error::{InvalidType, MissingField};
 use anyhow::{Context, anyhow};
 use log::error;
+use shader_archive::gpu;
 use shader_archive::gpu::vk;
 use shader_archive::gpu::vk::PolygonMode;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use toml::{Value as TomlValue};
+use toml::Value as TomlValue;
 
 /// The maximum number of color targets in graphics states.
 pub const MAX_COLOR_TARGETS: usize = 8;
@@ -22,19 +23,51 @@ pub enum Error {
     Other(&'static str),
 }
 
+fn get_image_usage(usage_str: &str) -> Result<gpu::ImageUsage, Error> {
+    match usage_str {
+        "color_attachment" => Ok(gpu::ImageUsage::COLOR_ATTACHMENT),
+        "depth_stencil_attachment" => Ok(gpu::ImageUsage::DEPTH_STENCIL_ATTACHMENT),
+        "sampled" => Ok(gpu::ImageUsage::SAMPLED),
+        "storage" => Ok(gpu::ImageUsage::STORAGE),
+        "transfer_src" => Ok(gpu::ImageUsage::TRANSFER_SRC),
+        "transfer_dst" => Ok(gpu::ImageUsage::TRANSFER_DST),
+        _ => {
+            error!("Unknown image usage: {}", usage_str);
+            Err(InvalidType("usage"))
+        }
+    }
+}
+
+fn get_image_usages(usages: &TomlValue) -> Result<gpu::ImageUsage, Error> {
+    if let Some(array) = usages.as_array() {
+        let mut usage_flags = gpu::ImageUsage::empty();
+        for item in array {
+            let usage_str = item.as_str().ok_or(InvalidType("usages array element"))?;
+            let usage = get_image_usage(usage_str)?;
+            usage_flags |= usage;
+        }
+        Ok(usage_flags)
+    } else if let Some(usage_str) = usages.as_str() {
+        get_image_usage(usage_str)
+    } else {
+        Err(InvalidType("usage").into())
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct Resource {
-    pub format: Option<vk::Format>,
+    pub format: vk::Format,
     pub length: Option<u32>,
     pub width: Option<u32>,
     pub height: Option<u32>,
+    pub usage: Option<gpu::ImageUsage>,
 }
 
 impl Resource {
     fn from_toml(toml: &TomlValue) -> anyhow::Result<Self> {
         let mut resource = Resource::default();
         if let Some(format_str) = toml.get_optional_str("format")? {
-            resource.format = Some(get_format(format_str)?);
+            resource.format = get_format(format_str)?;
         }
 
         if let Some(length) = toml.get("length") {
@@ -51,16 +84,21 @@ impl Resource {
             }
         }
 
+        if let Some(usage_toml) = toml.get("usage") {
+            resource.usage = Some(get_image_usages(usage_toml)?);
+        }
+
         if let Some(width) = toml.get_optional_integer("width")? {
             resource.width = Some(width.try_into()?);
         }
+
         if let Some(height) = toml.get_optional_integer("height")? {
             resource.height = Some(height.try_into()?);
         }
+
         Ok(resource)
     }
 }
-
 
 #[derive(Clone)]
 pub struct ColorAttachment {
@@ -86,10 +124,7 @@ impl ColorAttachment {
 
         let resource = toml.get_optional_str("resource")?.map(|s| s.to_string());
 
-        Ok(ColorAttachment {
-            resource,
-            clear_color,
-        })
+        Ok(ColorAttachment { resource, clear_color })
     }
 }
 

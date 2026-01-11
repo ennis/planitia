@@ -1,5 +1,5 @@
 //! Windows platform backend
-use crate::platform::{EventToken, InitOptions, PlatformHandler, RenderTargetImage, UserEvent};
+use crate::platform::{EventToken, InitOptions, PlatformInterface, RenderTargetImage, UserEvent};
 use log::error;
 use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
@@ -109,7 +109,7 @@ pub struct Win32Platform {
     quit_requested: Cell<bool>,
 }
 
-impl PlatformHandler for Win32Platform {
+impl PlatformInterface for Win32Platform {
     fn teardown(&self) {
         // release window resources
         self.window.borrow_mut().take();

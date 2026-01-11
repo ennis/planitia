@@ -4,9 +4,9 @@ use ash::prelude::VkResult;
 use ash::vk::DeviceAddress;
 use bitflags::bitflags;
 use log::{error, trace};
-pub use render::{DrawIndexedIndirectCommand, DrawIndirectCommand, RenderEncoder, RenderPassInfo};
+pub use render::{DrawIndexedIndirectCommand, DrawIndirectCommand, RenderEncoder};
 use std::ffi::{c_void, CString};
-use std::mem::{ManuallyDrop};
+use std::mem::ManuallyDrop;
 use std::sync::atomic::Ordering::Relaxed;
 use std::{mem, ptr, slice};
 
@@ -31,7 +31,7 @@ pub struct CommandBuffer {
     /// Last bound compute pipeline layout.
     pipeline_layout: vk::PipelineLayout,
     barrier_source: BarrierFlags,
-    create_ticket: u64
+    create_ticket: u64,
 }
 
 bitflags! {
@@ -210,6 +210,20 @@ pub enum RootParams<'a, T: Copy + 'static> {
     Immediate(&'a T),
 }
 
+impl<T: Copy+'static> From<Ptr<T>> for RootParams<'_, T>
+{
+    fn from(p: Ptr<T>) -> Self {
+        RootParams::Ptr(p)
+    }
+}
+
+impl<'a, T: Copy+'static> From<&'a T> for RootParams<'a, T>
+{
+    fn from(data: &'a T) -> Self {
+        RootParams::Immediate(data)
+    }
+}
+
 impl CommandBuffer {
     /// Creates a command stream used to submit commands to the GPU.
     ///
@@ -240,7 +254,7 @@ impl CommandBuffer {
             submitted: false,
             pipeline_layout: Default::default(),
             barrier_source: BarrierFlags::empty(),
-            create_ticket
+            create_ticket,
         }
     }
 
@@ -437,10 +451,7 @@ impl CommandBuffer {
         }
     }*/
 
-    pub(crate) unsafe fn image_barrier(
-        &mut self,
-        barrier: &vk::ImageMemoryBarrier2,
-    ) {
+    pub(crate) unsafe fn image_barrier(&mut self, barrier: &vk::ImageMemoryBarrier2) {
         unsafe {
             let cb = self.get_or_create_command_buffer();
             Device::global().raw.cmd_pipeline_barrier2(
@@ -618,17 +629,16 @@ impl CommandBuffer {
         // TODO: we need to hold a reference to the pipeline until the command buffers are submitted
     }
 
-
-    pub fn dispatch<T: Copy + 'static>(
+    pub fn dispatch<'params, T: Copy + 'static>(
         &mut self,
         group_count_x: u32,
         group_count_y: u32,
         group_count_z: u32,
-        root_params: RootParams<T>,
+        root_params: impl Into<RootParams<'params, T>>,
     ) {
         let cb = self.get_or_create_command_buffer();
         unsafe {
-            self.set_root_params(cb, vk::PipelineBindPoint::COMPUTE, self.pipeline_layout, root_params);
+            self.set_root_params(cb, vk::PipelineBindPoint::COMPUTE, self.pipeline_layout, root_params.into());
             Device::global()
                 .raw
                 .cmd_dispatch(cb, group_count_x, group_count_y, group_count_z);
@@ -818,7 +828,11 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
     assert!(!cmd.submitted);
 
     let submit_ticket = device.next_submit_ticket.fetch_add(1, Relaxed);
-    trace!("GPU: submit CommandStream, create_ticket={}, submit_ticket={}", cmd.create_ticket, submit_ticket);
+    trace!(
+        "GPU: submit CommandStream, create_ticket={}, submit_ticket={}",
+        cmd.create_ticket,
+        submit_ticket
+    );
 
     // flush pending writes
     cmd.barrier(BarrierFlags::empty());

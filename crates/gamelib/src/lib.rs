@@ -3,6 +3,7 @@
 
 pub mod asset;
 pub mod camera_control;
+mod component;
 pub mod context;
 mod event;
 pub mod executor;
@@ -12,11 +13,11 @@ mod notifier;
 pub mod paint;
 pub mod pipeline_cache;
 pub mod platform;
+mod render_world;
 mod shaders;
 mod timer;
 pub mod util;
 mod world;
-mod render_world;
 
 //--- reexports ---
 pub use {color, egui, gpu, math};

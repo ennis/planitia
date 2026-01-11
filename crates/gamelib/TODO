@@ -31,6 +31,8 @@
  ☐ async asset reloading
  ☐ move egui shaders to shader-archive
  ☐ Deprecate shader-bridge? Move functionality to shadertool
+ ☐ crate color should not depend on gpu
+    should be the opposite, optional dependency of gpu on color to implement vertex data types
  ✔ buffer pool for uploading stuff to the GPU on each frame (use case: immediate / line rendering) @done (26-01-08 16:12)
  ☐ find a better API than indexing with `Offset<>` to read archives
      Relative pointers?

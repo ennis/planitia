@@ -5,7 +5,7 @@ use crate::{
 
 impl CommandBuffer {
     pub fn upload_image_data(&mut self, image: ImageCopyView, size: Size3D, data: &[u8]) {
-        let staging_buffer = Buffer::from_slice(data, "");
+        let staging_buffer = Buffer::from_slice(data);
 
         self.copy_buffer_to_image(
             ImageCopyBuffer {

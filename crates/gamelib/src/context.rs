@@ -4,7 +4,7 @@ use crate::imgui;
 use crate::imgui::ImguiContext;
 use crate::input::InputEvent;
 pub use crate::platform::LoopHandler;
-use crate::platform::{EventToken, InitOptions, Platform, PlatformHandler, RenderTargetImage, UserEvent};
+use crate::platform::{EventToken, InitOptions, Platform, PlatformInterface, RenderTargetImage, UserEvent};
 use futures::future::AbortHandle;
 use gpu::vk::Handle;
 use keyboard_types::{Key, KeyState, Modifiers, NamedKey};
@@ -140,7 +140,7 @@ pub trait AppHandler {
     fn render(&mut self, image: RenderTargetImage<'_>) {}
 
     /// Called when a watched file or directory has changed.
-    fn file_system_event(&mut self, path: &Path) {}
+    fn file_changed(&mut self) {}
 
     fn close_requested(&mut self) {}
     fn imgui(&mut self, ctx: &egui::Context) {}
@@ -149,8 +149,8 @@ pub trait AppHandler {
 //--------------------------------------------------------------------------------------------------
 
 struct MainThreadContext<H: 'static> {
-    handler: RefCell<H>,
     context: Context,
+    handler: RefCell<H>,
 }
 
 struct AppInner<H: 'static> {
@@ -158,6 +158,9 @@ struct AppInner<H: 'static> {
 }
 
 pub struct App<H: 'static>(OnceLock<AppInner<H>>);
+
+// Holds the currently running App instance.
+//static CURRENT_APP: OnceLock<&'static App<dyn AppHandler>> = OnceLock::new();
 
 impl<H: AppHandler + Default + 'static> App<H> {
     pub const fn new() -> Self {

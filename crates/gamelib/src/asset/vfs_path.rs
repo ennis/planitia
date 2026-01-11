@@ -89,6 +89,19 @@ impl VfsPath {
         }
     }
 
+    /// Returns the file name part of the path (excluding directory and fragment).
+    pub fn file_name(&self) -> &str {
+        let s = &self.0;
+        let s = match s.rfind('#') {
+            Some(pos) => &s[..pos],
+            None => s,
+        };
+        match s.rfind('/') {
+            Some(pos) => &s[pos + 1..],
+            None => s,
+        }
+    }
+
     /// Returns the directory part of the path (including the trailing slash).
     ///
     /// # Examples
@@ -125,8 +138,31 @@ impl AsRef<VfsPath> for str {
 }
 
 /// Owned version of VfsPath.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub struct VfsPathBuf(String);
+
+impl VfsPathBuf {
+    /// Creates a new VfsPathBuf from a String.
+    pub fn new(path: impl Into<String>) -> Self {
+        // TODO check for validity?
+        VfsPathBuf(path.into())
+    }
+
+    /// Appends a component to the path.
+    pub fn push(&mut self, component: &str) {
+        // TODO testing
+        let this_trailing_slash = self.0.ends_with('/');
+        let component_leading_slash = component.starts_with('/');
+        if this_trailing_slash && component_leading_slash {
+            self.0.push_str(&component[1..]);
+        } else if !this_trailing_slash && !component_leading_slash && !self.0.is_empty() {
+            self.0.push('/');
+            self.0.push_str(component);
+        } else {
+            self.0.push_str(component);
+        }
+    }
+}
 
 impl Deref for VfsPathBuf {
     type Target = VfsPath;

@@ -209,7 +209,9 @@ impl DxgiVulkanInteropSwapChain {
                 fence_shared_handle.0 as vk::HANDLE,
                 None,
             );
-            gpu::Device::global().set_object_name(fence_semaphore, "DxgiVulkanSharedFence");
+
+            // SAFETY: no concurrent access possible just after creation
+            gpu::set_debug_name_raw(fence_semaphore, "DxgiVulkanSharedFence");
 
             DxgiVulkanInteropSwapChain {
                 dxgi_swap_chain: swap_chain,

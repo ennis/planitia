@@ -207,6 +207,7 @@ impl Device {
         Image {
             handle,
             id: self.allocate_resource_id(),
+            memory_location: MemoryLocation::Unknown,
             allocation: ResourceAllocation::DeviceMemory { device_memory },
             swapchain_image: false,
             descriptors,
@@ -341,6 +342,7 @@ impl Device {
         let image = Image {
             handle,
             id: self.allocate_resource_id(),
+            memory_location,
             allocation: ResourceAllocation::DeviceMemory { device_memory },
             swapchain_image: false,
             descriptors,

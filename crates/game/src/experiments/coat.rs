@@ -6,7 +6,7 @@ use gamelib::input::InputEvent;
 use gamelib::pipeline_cache::{get_compute_pipeline, get_graphics_pipeline};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::util::PushBuffer;
-use gpu::{RenderPassInfo, RootParams};
+use gpu::{RootParams};
 
 /// Post-stroke expansion vertex, already in clip space.
 #[repr(C)]
@@ -140,20 +140,18 @@ impl CoatExperiment {
         self.gpu_data = None;
 
         let header = geometry.root();
-        let strokes = gpu::Buffer::from_slice(geometry.strokes(), "strokes");
-        let stroke_vertices = gpu::Buffer::from_slice(geometry.stroke_vertices(), "stroke_vertices");
-        let mesh_vertices = gpu::Buffer::from_slice(geometry.mesh_vertices(), "mesh_vertices");
-        let mesh_indices = gpu::Buffer::from_slice(geometry.indices(), "mesh_indices");
+        let strokes = gpu::Buffer::from_slice(geometry.strokes());
+        let stroke_vertices = gpu::Buffer::from_slice(geometry.stroke_vertices());
+        let mesh_vertices = gpu::Buffer::from_slice(geometry.mesh_vertices());
+        let mesh_indices = gpu::Buffer::from_slice(geometry.indices());
 
         let expansion_buffer_size = stroke_vertices.len() * NVERTEX;
         let expansion_vertices = gpu::Buffer::new(gpu::BufferCreateInfo {
             len: expansion_buffer_size,
-            label: "expansion_buffer",
             ..
         });
         let expansion_indices = gpu::Buffer::new(gpu::BufferCreateInfo {
             len: stroke_vertices.len() * (NVERTEX - 1) * 6,
-            label: "expansion_indices",
             ..
         });
 
@@ -253,17 +251,17 @@ impl CoatExperiment {
         let Ok(debug_stroke_pipeline) = self.debug_stroke_pipeline.read() else {
             return;
         };
-        let mut encoder = cmd.begin_rendering(RenderPassInfo {
-            color_attachments: &[gpu::ColorAttachment {
+        let mut encoder = cmd.begin_rendering(
+            &[gpu::ColorAttachment {
                 image: color_target,
                 clear_value: None,
             }],
-            depth_stencil_attachment: Some(gpu::DepthStencilAttachment {
+            Some(gpu::DepthStencilAttachment {
                 image: &depth_target,
                 depth_clear_value: None,
                 stencil_clear_value: None,
-            }),
-        });
+            }));
+        
         encoder.bind_graphics_pipeline(&*debug_stroke_pipeline);
         let index_count = strokes
             .iter()
@@ -280,12 +278,12 @@ impl CoatExperiment {
             None,
             0..index_count,
             0..1,
-            RootParams::Immediate(&DebugStrokesRootParams {
+            &DebugStrokesRootParams {
                 scene_info: scene_info.gpu,
                 vertices: gpu_data.expansion_vertices.ptr(),
                 indices: gpu_data.expansion_indices.ptr(),
                 depth_texture: gpu::TextureHandle::INVALID,
-            }),
+            },
         );
 
         //draw_lines(&mut encoder, &line_vertices, &lines, scene_info);

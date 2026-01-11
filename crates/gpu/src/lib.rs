@@ -45,6 +45,13 @@ pub mod prelude {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// Trait for wrappers of Vulkan objects.
+pub trait VulkanObject {
+    type Handle: vk::Handle;
+    fn handle(&self) -> Self::Handle;
+}
+
+
 /// Standard subgroup size.
 pub const SUBGROUP_SIZE: u32 = 32;
 
@@ -61,7 +68,7 @@ impl<T: 'static> Ptr<T> {
         raw: 0,
         _phantom: PhantomData,
     };
-    
+
     pub fn offset(self, offset: usize) -> Self {
         Ptr {
             raw: self.raw + (offset * size_of::<T>()) as u64,
@@ -675,6 +682,10 @@ pub struct ComputePipelineCreateInfo<'a> {
 /// ```
 pub fn mip_level_count(width: u32, height: u32) -> u32 {
     (width.max(height) as f32).log2().floor() as u32
+}
+
+pub fn is_depth_format(fmt: vk::Format) -> bool {
+    is_depth_only_format(fmt) || is_depth_and_stencil_format(fmt)
 }
 
 pub fn is_depth_and_stencil_format(fmt: vk::Format) -> bool {

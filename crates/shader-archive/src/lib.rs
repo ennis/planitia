@@ -8,6 +8,8 @@
 //! Information in a pipeline file is sufficient to create a complete pipeline object.
 //!
 //! Pipeline files can be directly mapped in memory and read without any copy or parsing step.
+//!
+//! TODO: add documentation for resource entries
 
 #![feature(default_field_values)]
 
@@ -16,32 +18,48 @@ use gpu::vk::{CullModeFlags, PolygonMode};
 use std::borrow::Cow;
 use std::ops::Deref;
 use std::path::Path;
+use std::time::SystemTime;
+use std::{fs, io};
 use utils::archive::{ArchiveError, ArchiveReader, ArchiveReaderOwned, ArchiveRoot, Offset};
 use utils::zstring::ZString;
 
 pub use gpu;
+use log::{debug, warn};
 pub use utils::{archive, zstring};
 
 #[repr(C)]
 #[derive(Copy, Clone)]
 // NoPadding
-pub struct PipelineArchiveData {
+pub struct ShaderArchiveRoot {
     pub manifest_file: FileDependency,
     pub pipelines: Offset<[PipelineEntryData]>,
-    pub render_targets: Offset<[RenderTargetDesc]>,
+    pub images: Offset<[ImageResourceDesc]>,
 }
 
-impl ArchiveRoot for PipelineArchiveData {
+impl ArchiveRoot for ShaderArchiveRoot {
     const SIGNATURE: [u8; 4] = *b"PARC";
     const VERSION: u32 = 3;
 }
 
-/// Describes a render target resource.
 #[repr(C)]
 #[derive(Copy, Clone)]
-// NoPadding
-pub struct RenderTargetDesc {
+pub enum ImageResourceSize {
+    /// Size is determined at runtime.
+    Dynamic,
+    /// The image is a screen-sized render target.
+    RenderTarget,
+    /// Size is fixed.
+    Fixed { width: u32, height: u32 },
+}
+
+/// Describes an image resource.
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct ImageResourceDesc {
+    pub name: ZString<32>,
     pub format: vk::Format,
+    pub usage: gpu::ImageUsage,
+    pub size: ImageResourceSize,
 }
 
 #[repr(C)]
@@ -80,9 +98,7 @@ pub struct RootParamLayout {
 pub struct RootParamInfo {
     /// Name of the root parameter in the struct (for debugging purposes).
     pub name: ZString<32>,
-    /// The ID of the render-world value that this root parameter should be bound to.
-    ///
-    /// It can be empty, in which case the parameter is initialized to zero.
+    /// The ID of the render-world value or resource that this root parameter should be bound to.
     pub render_world_binding: ZString<32>,
     /// Offset of the parameter in the root parameter struct.
     pub offset: u32,
@@ -153,7 +169,6 @@ pub struct DepthStencilAttachment {
     pub clear_stencil: Option<u32>,
 }
 
-
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct GraphicsPipelineData {
@@ -216,27 +231,95 @@ pub struct ColorTarget {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Pipeline archive file.
-pub struct PipelineArchive(Cow<'static, ArchiveReader<PipelineArchiveData>>);
+pub struct ShaderArchive(Cow<'static, ArchiveReader<ShaderArchiveRoot>>);
 
-impl PipelineArchive {
+impl ShaderArchive {
+    /// Loads a shader archive from a file.
     pub fn load(file_path: impl AsRef<Path>) -> Result<Self, ArchiveError> {
         let archive = ArchiveReaderOwned::load(file_path)?;
         let this = Self(Cow::Owned(archive));
         Ok(this)
     }
 
+    /// Loads a shader archive from a byte slice.
     pub fn from_bytes(data: &[u8]) -> Result<Self, ArchiveError> {
         let archive = ArchiveReaderOwned::from_bytes(data)?;
         let this = Self(Cow::Owned(archive));
         Ok(this)
     }
 
+    /// Loads a shader archive from a static byte slice.
     pub fn from_bytes_static(data: &'static [u8]) -> Result<Self, ArchiveError> {
         let archive = ArchiveReader::new(data)?;
         Ok(Self(Cow::Borrowed(archive)))
     }
 
-    fn data(&self) -> &PipelineArchiveData {
+    /// Returns an iterator over all file dependencies of the archive.
+    pub fn dependencies(&self) -> impl Iterator<Item = &FileDependency> {
+        let root = self.root();
+        let source_files = {
+            let entries = &self[root.pipelines];
+            entries.iter().flat_map(move |entry| {
+                let sources = &self[entry.sources];
+                sources.iter()
+            })
+        };
+        std::iter::once(&root.manifest_file).chain(source_files)
+    }
+
+    /// Checks whether any dependency of the archive has changed compared to the recorded modification times.
+    pub fn dependencies_changed(&self) -> io::Result<bool> {
+        fn unix_mtime(last_modified: SystemTime) -> u64 {
+            if last_modified > SystemTime::now() {
+                warn!("last modification time is in the future: {:?}", last_modified);
+            }
+
+            match last_modified.duration_since(SystemTime::UNIX_EPOCH) {
+                Ok(duration) => duration.as_secs(),
+                Err(_) => {
+                    warn!("invalid modification time (before UNIX_EPOCH)");
+                    0
+                }
+            }
+        }
+
+        let root = self.root();
+        let manifest_path = &self[root.manifest_file.path];
+        let manifest_mtime = unix_mtime(fs::metadata(manifest_path)?.modified()?);
+
+        if manifest_mtime > root.manifest_file.mtime {
+            debug!(
+                "shader manifest modified: {} (last:{:?}, archive:{:?})",
+                manifest_path, manifest_mtime, root.manifest_file.mtime
+            );
+            return Ok(true);
+        }
+
+        let source_files = {
+            let entries = &self[root.pipelines];
+            entries.iter().flat_map(move |entry| {
+                let sources = &self[entry.sources];
+                sources.iter()
+            })
+        };
+
+        for source in source_files {
+            let path = &self[source.path];
+            let source_metadata = fs::metadata(path)?;
+            if unix_mtime(source_metadata.modified()?) > source.mtime {
+                debug!(
+                    "shader archive dependency modified: {} (last:{:?}, archive:{:?})",
+                    path,
+                    source_metadata.modified()?,
+                    source.mtime
+                );
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    fn data(&self) -> &ShaderArchiveRoot {
         self.0.root()
     }
 
@@ -286,8 +369,8 @@ impl PipelineArchive {
 }
 
 // deref to ArchiveReader
-impl Deref for PipelineArchive {
-    type Target = ArchiveReader<PipelineArchiveData>;
+impl Deref for ShaderArchive {
+    type Target = ArchiveReader<ShaderArchiveRoot>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -351,13 +434,13 @@ mod tests {
                 sources: Offset::INVALID,
             }],
         );
-        writer.write_root(&PipelineArchiveData {
+        writer.write_root(&ShaderArchiveRoot {
             manifest_file: FileDependency {
                 path: Offset::INVALID,
                 mtime: 0,
             },
             pipelines: entries,
-            render_targets: Offset::INVALID,
+            images: Offset::INVALID,
         });
 
         // dump to disk

@@ -35,9 +35,10 @@ mod vfs_path;
 use std::any::{Any, TypeId};
 pub use vfs_path::*;
 
+use crate::platform::{UserEvent, wake_event_loop};
 use log::{debug, error, info};
 use notify_debouncer_mini::notify::{RecommendedWatcher, RecursiveMode, Watcher};
-use notify_debouncer_mini::{Debouncer, new_debouncer};
+use notify_debouncer_mini::{DebounceEventHandler, DebounceEventResult, Debouncer, new_debouncer};
 use slotmap::SlotMap;
 use std::cell::UnsafeCell;
 use std::cmp::PartialEq;
@@ -47,16 +48,10 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Relaxed;
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak};
-use std::time::SystemTime;
+use std::sync::{Arc, LazyLock, Mutex, MutexGuard, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak};
+use std::time::{Duration, SystemTime};
 use std::{io, mem};
 use utils::aligned_vec::AVec;
-
-/*
-path resolution:
-- if there's an explicit source, query the registered provider for that source
-- otherwise, use the default resolver:
-*/
 
 pub type LoadResult<T> = Result<T, anyhow::Error>;
 
@@ -70,6 +65,61 @@ pub enum AssetLoadError {
     #[error("asset not loaded")]
     NotLoaded,
 }
+
+////////////////////////////////////////////////////////////////////
+
+type LocalFileWatcher = Debouncer<RecommendedWatcher>;
+
+/// Events emitted to the event loop by `FileWatcher`.
+pub struct FileSystemEvent {
+    pub paths: Vec<PathBuf>,
+}
+
+/// Generic file watcher.
+///
+/// This will emit `file_changed` events to the main event loop when a file changes.
+pub struct FileWatcher {
+    watcher: LocalFileWatcher,
+}
+
+impl FileWatcher {
+    pub fn new(callback: fn()) -> Result<Self, io::Error> {
+        #[derive(Clone)]
+        struct Handler(fn());
+
+        impl DebounceEventHandler for Handler {
+            fn handle_event(&mut self, event_result: DebounceEventResult) {
+                match event_result {
+                    Ok(ref events) => {
+                        let paths = events.iter().map(|event| event.path.to_path_buf()).collect::<Vec<_>>();
+                        if !paths.is_empty() {
+                            debug!("FileWatcher: files changed: {paths:?}");
+                            let callback = self.0;
+                            wake_event_loop(move || callback());
+                        }
+                    }
+                    Err(err) => {
+                        error!("FileWatcher error: {err}");
+                    }
+                }
+            }
+        }
+
+        const DEBOUNCE_TIMEOUT_MS: u64 = 500;
+
+        let watcher = new_debouncer(Duration::from_millis(DEBOUNCE_TIMEOUT_MS), Handler(callback)).unwrap();
+        Ok(Self { watcher })
+    }
+
+    pub fn watch_file<P: AsRef<Path>>(&mut self, path: P) {
+        self.watcher
+            .watcher()
+            .watch(path.as_ref(), RecursiveMode::NonRecursive)
+            .unwrap();
+    }
+}
+
+////////////////////////////////////////////////////////////////////
 
 /// Metadata about a file in the VFS.
 pub struct FileMetadata {
@@ -218,7 +268,33 @@ impl<'a, T: Asset> AssetReadGuard<'a, T> {
     }
 }*/
 
-/// A reference to a loaded asset.
+/// Assets that have default loader functions.
+pub trait DefaultLoader: Asset + Sized {
+    /// Loads the asset.
+    fn load(path: &VfsPath, metadata: &FileMetadata, provider: &dyn Provider, dependencies: &mut Dependencies) -> LoadResult<Self>;
+}
+
+#[macro_export]
+macro_rules! static_assets {
+    (
+        $($(#[$attr:meta])* $v:vis static $name:ident : $ty:ty = $path:expr;)*
+    ) => {
+        $(
+            $(#[$attr])*
+            $v static $name: std::sync::LazyLock<$crate::asset::Handle<$ty>> = std::sync::LazyLock::new(|| {
+                $crate::asset::AssetCache::instance().load(
+                    &$crate::asset::VfsPath::new($path),
+                    // TODO: support other load strategies
+                    <$ty as $crate::asset::DefaultLoader>::load,
+                )
+            });
+        )*
+    };
+}
+
+pub use static_assets;
+
+/// A reference to an asset.
 pub struct Handle<T: Asset>(Arc<Entry<AssetStorage<T>>>);
 
 impl<T: Asset> Handle<T> {
@@ -280,19 +356,35 @@ impl<T: Asset> Deref for Handle<T> {
 
 ////////////////////////////////////////////////////////////////////
 
+// FIXME: there should be only one kind of loader function, taking a VfsPath and Dependencies,
+//        and the loader should be responsible for loading the file data itself if needed.
 enum LoaderKind {
-    FromSlice,        // (fn(&[u8], &mut Dependencies) -> T),
-    FromStaticSlice,  // (fn(&'static [u8], &mut Dependencies) -> T),
-    WithDependencies, // (fn(&VfsPath, &mut Dependencies) -> T),
+    /// Loads the asset from a byte slice.
+    ///
+    /// Loader function signature: `fn(&[u8], &FileMetadata, &mut Dependencies) -> LoadResult<T>`
+    FromSlice,
+    /// Loads the asset from a static byte slice.
+    ///
+    /// This can be more efficient if the target asset type can reference the static data directly,
+    /// without copying it.
+    ///
+    /// Loader function signature: `fn(&'static [u8], &FileMetadata, &mut Dependencies) -> LoadResult<T>`
+    FromStaticSlice,
+    /// Loads the asset from a file specified by a VFS path.
+    ///
+    /// Loader function signature: `fn(&VfsPath, &mut Dependencies) -> LoadResult<T>`
+    FromPath,
 }
 
 type LoadFromSliceFn<T> = fn(&[u8], &FileMetadata, &mut Dependencies) -> LoadResult<T>;
 type LoadFromStaticSliceFn<T> = fn(&'static [u8], &FileMetadata, &mut Dependencies) -> LoadResult<T>;
-type LoadWithDependenciesFn<T> = fn(&VfsPath, &mut Dependencies) -> LoadResult<T>;
+type LoadFromPathFn<T> = fn(&VfsPath, &mut Dependencies) -> LoadResult<T>;
+
+type LoadFn<T> = fn(&VfsPath, &FileMetadata, &dyn Provider, &mut Dependencies) -> LoadResult<T>;
 
 struct Loader {
     type_id: TypeId,
-    kind: LoaderKind,
+    //kind: LoaderKind,
     func: *const (),
     reload: fn(&Entry),
 }
@@ -306,7 +398,17 @@ fn reload_thunk<T: Asset>(entry: &Entry) {
 }
 
 impl Loader {
-    fn from_slice<T: Asset>(f: LoadFromSliceFn<T>) -> Self {
+
+    fn new<T: Asset>(load_fn: LoadFn<T>) -> Self {
+        Self {
+            type_id: TypeId::of::<T>(),
+            //kind: LoaderKind::FromPath,
+            func: load_fn as *const (),
+            reload: reload_thunk::<T>,
+        }
+    }
+
+    /*fn from_slice<T: Asset>(f: LoadFromSliceFn<T>) -> Self {
         Self {
             type_id: TypeId::of::<T>(),
             kind: LoaderKind::FromSlice,
@@ -324,17 +426,34 @@ impl Loader {
         }
     }
 
-    fn with_dependencies<T: Asset>(f: LoadWithDependenciesFn<T>) -> Self {
+    fn from_path<T: Asset>(f: LoadFromPathFn<T>) -> Self {
         Self {
             type_id: TypeId::of::<T>(),
-            kind: LoaderKind::WithDependencies,
+            kind: LoaderKind::FromPath,
             func: f as *const (),
             reload: reload_thunk::<T>,
         }
-    }
+    }*/
 
     fn load<T: Asset>(&self, path: &VfsPath, providers: &Providers, deps: &mut Dependencies) -> LoadResult<T> {
-        let result = match self.kind {
+        let f: LoadFn<T> = unsafe { std::mem::transmute(self.func) };
+        let (provider, metadata) = providers.find_provider(path)?;
+        // track local file dependencies for hot reloading
+        if let Some(ref local_path) = metadata.local_path {
+            deps.add_local_file(local_path);
+        }
+        let result = f(path, &metadata, provider, deps);
+
+        match result {
+            Err(err) => {
+                error!("failed to load asset `{}`: {}", path.as_str(), err);
+                Err(err)
+            }
+            Ok(asset) => Ok(asset),
+        }
+
+        //let bytes = provider.load(path)?;
+        /*let result = match self.kind {
             LoaderKind::FromSlice => {
                 let f: LoadFromSliceFn<T> = unsafe { std::mem::transmute(self.func) };
                 // TODO error handling
@@ -352,25 +471,14 @@ impl Loader {
                 let f: LoadFromStaticSliceFn<T> = unsafe { std::mem::transmute(self.func) };
                 let (provider, metadata) = providers.find_provider(path)?;
                 let bytes = provider.load_static(path)?;
-                // track local file dependencies for hot reloading
-                if let Some(ref local_path) = metadata.local_path {
-                    deps.add_local_file(local_path);
-                }
                 f(bytes, &metadata, deps)
             }
-            LoaderKind::WithDependencies => {
-                let f: LoadWithDependenciesFn<T> = unsafe { std::mem::transmute(self.func) };
+            LoaderKind::FromPath => {
+                let f: LoadFromPathFn<T> = unsafe { std::mem::transmute(self.func) };
                 f(path, deps)
             }
-        };
+        };*/
 
-        match result {
-            Err(err) => {
-                error!("failed to load asset `{}`: {}", path.as_str(), err);
-                Err(err)
-            }
-            Ok(asset) => Ok(asset),
-        }
     }
 }
 
@@ -392,7 +500,7 @@ impl<T: Asset> Entry<AssetStorage<T>> {
         let result = self.loader.load(&self.path, &providers, &mut deps);
         // Mark as clean before reloading, because some loaders may immediately modify/rebuild
         // the underlying asset file, triggering another reload. This is the case, for example,
-        // with pipeline archives in hot-reload mode, which are automatically rebuilt if their
+        // with shader archives in hot-reload mode, which are automatically rebuilt if their
         // source files have a later modification time.
         self.dirty.store(false, Relaxed);
 
@@ -430,8 +538,6 @@ impl<T: Asset> Reload for WithLoader<T> {
         deps
     }
 }*/
-
-type LocalFileWatch = Debouncer<RecommendedWatcher>;
 
 impl Entry {
     fn downcast_ref<T: Asset>(&self) -> Option<&Entry<AssetStorage<T>>> {
@@ -616,16 +722,10 @@ impl AssetCache {
         Handle::new(entry)
     }
 
-    pub fn load_and_insert<T: Asset>(&self, path: &VfsPath, loader: LoadFromSliceFn<T>) -> Handle<T> {
-        unsafe { self.insert_inner(path, Loader::from_slice(loader)) }
-    }
-
-    pub fn load_and_insert_static<T: Asset>(&self, path: &VfsPath, loader: LoadFromStaticSliceFn<T>) -> Handle<T> {
-        unsafe { self.insert_inner(path, Loader::from_static_slice(loader)) }
-    }
-
-    pub fn insert_with_dependencies<T: Asset>(&self, path: &VfsPath, loader: LoadWithDependenciesFn<T>) -> Handle<T> {
-        unsafe { self.insert_inner(path, Loader::with_dependencies(loader)) }
+    /// Loads the asset file at the given path and invokes the given loader function to create the asset,
+    /// then inserts the asset into the cache and returns a handle to it.
+    pub fn load<T: Asset>(&self, path: &VfsPath, loader: LoadFn<T>) -> Handle<T> {
+        unsafe { self.insert_inner(path, Loader::new(loader)) }
     }
 
     pub fn do_reload(&self) {

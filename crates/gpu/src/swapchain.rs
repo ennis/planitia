@@ -3,6 +3,7 @@ use crate::{vk_khr_surface, CommandBuffer, Device, Image, ImageType, ImageUsage,
 use ash::vk;
 use std::ptr;
 use std::time::Duration;
+use gpu_allocator::MemoryLocation;
 
 #[derive(Debug)]
 struct SwapchainImageInner {
@@ -71,6 +72,7 @@ impl Device {
         );
         Image {
             id: self.allocate_resource_id(),
+            memory_location: MemoryLocation::Unknown,
             allocation: ResourceAllocation::External,
             handle,
             swapchain_image: true,

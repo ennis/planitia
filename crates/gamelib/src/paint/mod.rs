@@ -9,9 +9,9 @@ use crate::paint::shape::RectShape;
 use crate::paint::tessellation::{Mesh, Tessellator};
 use crate::paint::text::GlyphCache;
 use color::Srgba8;
-use gpu::{CommandBuffer, Device, Ptr, RenderPassInfo, RootParams, Sampler, Vertex as GpuVertex, vk};
+use gpu::{vk, CommandBuffer, Ptr, RootParams, Sampler, Vertex as GpuVertex};
 use math::geom::Camera;
-use math::{Mat4, Rect, U16Vec2, UVec2, Vec2, u16vec2, uvec2, vec2};
+use math::{u16vec2, uvec2, vec2, Mat4, Rect, U16Vec2, UVec2, Vec2};
 use shader_bridge::ShaderLibrary;
 
 use crate::paint::atlas::Atlas;
@@ -360,17 +360,16 @@ impl<'a> PaintScene<'a> {
         let _atlas = self.painter.texture_atlas.prepare_texture(cmd);
 
         // setup encoder
-        let mut encoder = cmd.begin_rendering(RenderPassInfo {
-            color_attachments: &[gpu::ColorAttachment {
+        let mut encoder = cmd.begin_rendering(
+            &[gpu::ColorAttachment {
                 image: &params.color_target,
                 clear_value: None,
             }],
-            depth_stencil_attachment: params.depth_target.as_ref().map(|d| gpu::DepthStencilAttachment {
+            params.depth_target.as_ref().map(|d| gpu::DepthStencilAttachment {
                 image: d,
                 depth_clear_value: None,
                 stencil_clear_value: None,
-            }),
-        });
+            }));
 
         let width = params.color_target.width();
         let height = params.color_target.height();
@@ -436,8 +435,8 @@ fn draw_mesh(
     if mesh.vertices.is_empty() || mesh.indices.is_empty() {
         return;
     }
-    let vertex_buffer = gpu::Buffer::from_slice(&mesh.vertices, "");
-    let index_buffer = gpu::Buffer::from_slice(&mesh.indices, "");
+    let vertex_buffer = gpu::Buffer::from_slice(&mesh.vertices);
+    let index_buffer = gpu::Buffer::from_slice(&mesh.indices);
     set_scissor(encoder, params, clip);
     encoder.draw_indexed(
         TriangleList,

@@ -1,8 +1,7 @@
 //! Render command encoders
 use crate::{
-    is_depth_and_stencil_format, Buffer, BufferUntyped, ClearColorValue, ColorAttachment,
-    CommandBuffer, DepthStencilAttachment, Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, Rect2D,
-    RootParams,
+    is_depth_and_stencil_format, Buffer, BufferUntyped, ClearColorValue, ColorAttachment, CommandBuffer,
+    DepthStencilAttachment, Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, Rect2D, RootParams,
 };
 use ash::vk;
 use std::ops::Range;
@@ -317,20 +316,20 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
-    pub fn draw<T: Copy + 'static>(
+    pub fn draw<'params, T: Copy + 'static>(
         &mut self,
         topology: PrimitiveTopology,
         vertex_buffer: Option<&BufferUntyped>,
         vertices: Range<u32>,
         instances: Range<u32>,
-        root_params: RootParams<T>,
+        root_params: impl Into<RootParams<'params, T>>,
     ) {
         unsafe {
             self.stream.set_root_params(
                 self.command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout,
-                root_params,
+                root_params.into(),
             );
             let device = &Device::global().raw;
             if let Some(vb) = vertex_buffer {
@@ -347,7 +346,7 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
-    pub fn draw_indexed<T: Copy + 'static>(
+    pub fn draw_indexed<'params, T: Copy + 'static>(
         &mut self,
         topology: PrimitiveTopology,
         index_buffer: &Buffer<u32>,
@@ -355,14 +354,14 @@ impl<'a> RenderEncoder<'a> {
         vertex_buffer: Option<&BufferUntyped>,
         base_vertex: i32,
         instances: Range<u32>,
-        root_params: RootParams<T>,
+        root_params: impl Into<RootParams<'params, T>>,
     ) {
         unsafe {
             self.stream.set_root_params(
                 self.command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout,
-                root_params,
+                root_params.into(),
             );
 
             let device = &Device::global().raw;
@@ -382,20 +381,20 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
-    pub fn draw_indirect<T: Copy + 'static>(
+    pub fn draw_indirect<'params, T: Copy + 'static>(
         &mut self,
         topology: PrimitiveTopology,
         vertex_buffer: Option<&BufferUntyped>,
         commands: &Buffer<DrawIndirectCommand>,
         draw_range: Range<u32>,
-        root_params: RootParams<T>,
+        root_params: impl Into<RootParams<'params, T>>,
     ) {
         unsafe {
             self.stream.set_root_params(
                 self.command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout,
-                root_params,
+                root_params.into(),
             );
             let device = &Device::global().raw;
             if let Some(vb) = vertex_buffer {
@@ -412,21 +411,21 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
-    pub fn draw_indexed_indirect<T: Copy + 'static>(
+    pub fn draw_indexed_indirect<'params, T: Copy + 'static>(
         &mut self,
         topology: PrimitiveTopology,
         index_buffer: &Buffer<u32>,
         vertex_buffer: Option<&BufferUntyped>,
         commands: &Buffer<DrawIndexedIndirectCommand>,
         draw_range: Range<u32>,
-        root_params: RootParams<T>,
+        root_params: impl Into<RootParams<'params, T>>,
     ) {
         unsafe {
             self.stream.set_root_params(
                 self.command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout,
-                root_params,
+                root_params.into(),
             );
             let device = &Device::global().raw;
             if let Some(vb) = vertex_buffer {
@@ -444,19 +443,19 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
-    pub fn draw_mesh_tasks<T: Copy + 'static>(
+    pub fn draw_mesh_tasks<'params, T: Copy + 'static>(
         &mut self,
         group_count_x: u32,
         group_count_y: u32,
         group_count_z: u32,
-        root_params: RootParams<T>,
+        root_params: impl Into<RootParams<'params, T>>,
     ) {
         unsafe {
             self.stream.set_root_params(
                 self.command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout,
-                root_params,
+                root_params.into(),
             );
             Device::global().extensions.ext_mesh_shader.cmd_draw_mesh_tasks(
                 self.command_buffer,
@@ -492,14 +491,6 @@ impl<'a> Drop for RenderEncoder<'a> {
     }
 }
 
-/// Parameters of `CommandStream::begin_rendering`
-pub struct RenderPassInfo<'a> {
-    /// The color attachments to use for the render pass.
-    pub color_attachments: &'a [ColorAttachment<'a>],
-    /// The depth/stencil attachment to use for the render pass.
-    pub depth_stencil_attachment: Option<DepthStencilAttachment<'a>>,
-}
-
 impl CommandBuffer {
     /// Starts a rendering pass.
     ///
@@ -508,16 +499,20 @@ impl CommandBuffer {
     ///
     /// # Arguments
     ///
-    /// * `attachments` - The attachments to use for the render pass
-    pub fn begin_rendering(&mut self, desc: RenderPassInfo) -> RenderEncoder<'_> {
+    /// * `color_attachments` - The attachments to use for the render pass
+    /// * `depth_stencil_attachment` - The depth-stencil attachment to use for the render pass.
+    pub fn begin_rendering(&mut self,
+                           color_attachments: &[ColorAttachment],
+                           depth_stencil_attachment: Option<DepthStencilAttachment>) -> RenderEncoder<'_>
+    {
         // determine render area
         let render_area = {
             // FIXME validate that all attachments have the same size
             // FIXME validate that all images are 2D
             let extent;
-            if let Some(color) = desc.color_attachments.first() {
+            if let Some(color) = color_attachments.first() {
                 extent = color.image.size();
-            } else if let Some(ref depth) = desc.depth_stencil_attachment {
+            } else if let Some(ref depth) = depth_stencil_attachment {
                 extent = depth.image.size();
             } else {
                 panic!("render_area must be specified if no attachments are specified");
@@ -533,8 +528,8 @@ impl CommandBuffer {
         };
 
         // Begin render pass
-        let color_attachment_infos: Vec<_> = desc
-            .color_attachments
+        let color_attachment_infos: Vec<_> = 
+            color_attachments
             .iter()
             .map(|a| {
                 vk::RenderingAttachmentInfo {
@@ -560,7 +555,7 @@ impl CommandBuffer {
         let stencil_attachment;
         let p_depth_attachment;
         let p_stencil_attachment;
-        if let Some(ref depth) = desc.depth_stencil_attachment {
+        if let Some(ref depth) = depth_stencil_attachment {
             depth_attachment = vk::RenderingAttachmentInfo {
                 image_view: depth.image.view_handle(),
                 image_layout: vk::ImageLayout::GENERAL,

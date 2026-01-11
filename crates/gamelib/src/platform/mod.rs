@@ -2,6 +2,7 @@
 
 use crate::input::InputEvent;
 use std::any::Any;
+use std::fmt;
 use std::path::Path;
 use std::time::Instant;
 
@@ -45,7 +46,19 @@ impl Default for InitOptions {
     }
 }
 
-pub type UserEvent = Box<dyn Any + Send>;
+pub enum UserEvent {
+    Timeout(EventToken),
+    Callback(Box<dyn FnOnce() + Send>),
+}
+
+impl fmt::Debug for UserEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            UserEvent::Timeout(token) => write!(f, "UserEvent::Timeout({:?})", token),
+            UserEvent::Callback(_) => write!(f, "UserEvent::Callback(<fn>)"),
+        }
+    }
+}
 
 /// Defines methods that are called when the event loop resumes.
 #[allow(unused_variables)]
@@ -58,7 +71,8 @@ pub trait LoopHandler {
     fn close_requested(&mut self);
 }
 
-pub trait PlatformHandler {
+/// Trait to control the event loop and rendering of the application.
+pub trait PlatformInterface {
     /// Releases global resources.
     fn teardown(&self);
 

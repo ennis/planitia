@@ -3,9 +3,9 @@ use anyhow::{Context, anyhow, bail};
 use color_print::{ceprintln, cprintln};
 use log::warn;
 use shader_archive::archive::{ArchiveWriter, Offset};
-use shader_archive::gpu::vk;
+use shader_archive::gpu::{ImageUsage, is_depth_format, vk};
 use shader_archive::zstring::ZString64;
-use shader_archive::{FileDependency, PipelineEntryData, RootParamInfo, RootParamLayout, ShaderData};
+use shader_archive::{FileDependency, PipelineEntryData, RootParamInfo, RootParamLayout, ShaderData, gpu};
 use slang::reflection::TypeLayout;
 use slang::{DebugInfoLevel, Downcast};
 use std::cell::OnceCell;
@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use std::{env, fs, slice};
 
-type PipelineArchiveWriter = ArchiveWriter<shader_archive::PipelineArchiveData>;
+type PipelineArchiveWriter = ArchiveWriter<shader_archive::ShaderArchiveRoot>;
 
 fn make_file_dependency(path: &Path, archive: &mut PipelineArchiveWriter) -> anyhow::Result<FileDependency> {
     let canonical_path = path.canonicalize()?;
@@ -91,6 +91,22 @@ impl Display for BuildErrors {
 }*/
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+fn find_user_attribute<'a>(
+    decl: &'a slang::reflection::Variable,
+    name: &str,
+) -> Option<&'a slang::reflection::UserAttribute> {
+    for attr in decl.user_attributes() {
+        if attr.name() == name {
+            return Some(attr);
+        }
+    }
+    None
+}
+
+fn get_user_attribute_string<'a>(var: &'a slang::reflection::Variable, name: &str, index: u32) -> Option<&'a str> {
+    find_user_attribute(var, name).and_then(|attr| attr.argument_value_string(index))
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -180,15 +196,6 @@ fn get_root_param_info(entry_point: &slang::reflection::EntryPoint) -> Vec<RootP
         format
     }
 
-    fn find_render_world_binding_attr(v: &slang::reflection::Variable) -> Option<String> {
-        for attr in v.user_attributes() {
-            if attr.name() == "render_world" {
-                return attr.argument_value_string(0).map(String::from);
-            }
-        }
-        None
-    }
-
     // push constant are entry point function parameters with kind uniform
     //let mut size = 0;
     // the `params` in `void main(uniform RootParams* params)`
@@ -214,7 +221,8 @@ fn get_root_param_info(entry_point: &slang::reflection::EntryPoint) -> Vec<RootP
     let mut infos = Vec::new();
     if root_params_ty_layout.kind() == slang::TypeKind::Struct {
         for field in root_params_ty_layout.fields() {
-            let render_world_binding = find_render_world_binding_attr(field.variable()).unwrap_or_default();
+            let render_world_binding =
+                get_user_attribute_string(field.variable(), "RenderWorld", 0).unwrap_or_default();
             let offset = field.offset(field.category());
             let size = field.type_layout().size(field.category());
             let format = convert_root_param_ty(field.ty());
@@ -238,19 +246,6 @@ fn get_root_param_info(entry_point: &slang::reflection::EntryPoint) -> Vec<RootP
 
     infos
 }
-
-/*
-fn find_user_attribute_by_name<'a>(
-    decl: &'a slang::reflection::Decl,
-    name: &str,
-) -> Option<&'a slang::reflection::UserAttribute> {
-    for attr in decl.user_attributes() {
-        if attr.name() == name {
-            return Some(attr);
-        }
-    }
-    None
-}*/
 
 fn slang_stage_to_stage_flags(stage: slang::Stage) -> vk::ShaderStageFlags {
     match stage {
@@ -317,64 +312,63 @@ struct EntryPoint {
     spirv: Vec<u32>,
 }
 
-impl BuildManifest {
-    fn load_module_entry_point(
-        &self,
-        session: &slang::Session,
-        module: &slang::Module,
-        file: &Path,
-        file_mtime: u64,
-        index: u32,
-        _options: &BuildOptions,
-    ) -> anyhow::Result<EntryPoint> {
-        let mut pass = None;
+fn load_module_entry_point(
+    session: &slang::Session,
+    module: &slang::Module,
+    file: &Path,
+    file_mtime: u64,
+    index: u32,
+    _options: &BuildOptions,
+) -> anyhow::Result<EntryPoint> {
+    let mut pass = None;
+    {
+        // `[pass("...")]` attribute
+        for attr in module
+            .entry_point_by_index(index)
+            .unwrap()
+            .function_reflection()
+            .user_attributes()
         {
-            // `[pass("...")]` attribute
-            for attr in module
-                .entry_point_by_index(index)
-                .unwrap()
-                .function_reflection()
-                .user_attributes()
-            {
-                if attr.name() == "pass" {
-                    pass = attr.argument_value_string(0).map(String::from);
-                }
+            if attr.name() == "pass" {
+                pass = attr.argument_value_string(0).map(String::from);
             }
         }
-
-        // compile entry point
-        let program = link_entry_point(&session, &module, index)?;
-
-        // retrieve SPIR-V blob
-        let blob = {
-            let blob = program.entry_point_code(0, 0).map_err(SlangError::from)?;
-            convert_spirv_u8_to_u32(blob.as_slice())
-        };
-
-        // extract data from reflection: root parameters, push constant size, work group size
-        let reflection = program.layout(0).expect("failed to get reflection");
-        let entry_point = reflection.entry_point_by_index(0).unwrap();
-        let push_constants_size = get_push_constants_size(&entry_point);
-        let work_group_size = {
-            let s = entry_point.compute_thread_group_size();
-            [s[0] as u32, s[1] as u32, s[2] as u32]
-        };
-        let root_params = get_root_param_info(&entry_point);
-
-        Ok(EntryPoint {
-            _module: module.clone(),
-            name: entry_point.name().to_string(),
-            file: file.to_path_buf(),
-            file_mtime,
-            stage: slang_stage_to_stage_flags(entry_point.stage()),
-            push_constants_size,
-            root_params,
-            pass,
-            work_group_size,
-            spirv: blob,
-        })
     }
 
+    // compile entry point
+    let program = link_entry_point(&session, &module, index)?;
+
+    // retrieve SPIR-V blob
+    let blob = {
+        let blob = program.entry_point_code(0, 0).map_err(SlangError::from)?;
+        convert_spirv_u8_to_u32(blob.as_slice())
+    };
+
+    // extract data from reflection: root parameters, push constant size, work group size
+    let reflection = program.layout(0).expect("failed to get reflection");
+    let entry_point = reflection.entry_point_by_index(0).unwrap();
+    let push_constants_size = get_push_constants_size(&entry_point);
+    let work_group_size = {
+        let s = entry_point.compute_thread_group_size();
+        [s[0] as u32, s[1] as u32, s[2] as u32]
+    };
+    let root_params = get_root_param_info(&entry_point);
+
+    Ok(EntryPoint {
+        _module: module.clone(),
+        name: entry_point.name().to_string(),
+        file: file.to_path_buf(),
+        file_mtime,
+        stage: slang_stage_to_stage_flags(entry_point.stage()),
+        push_constants_size,
+        root_params,
+        pass,
+        work_group_size,
+        spirv: blob,
+    })
+}
+
+impl BuildManifest {
     fn create_slang_session(&self, include_paths: &[String]) -> slang::Session {
         let global_session = get_slang_global_session();
 
@@ -437,7 +431,7 @@ impl BuildManifest {
         // compile all entry points
         let mut errors = String::new();
         for i in 0..module.entry_point_count() {
-            match self.load_module_entry_point(&session, &module, file, file_mtime, i, options) {
+            match load_module_entry_point(&session, &module, file, file_mtime, i, options) {
                 Ok(entry_point) => {
                     entry_points.push(entry_point);
                 }
@@ -531,7 +525,8 @@ impl BuildManifest {
 
                 // check that we have the correct number of attachments
                 if pass.color_attachments.len() != gs.color_targets.len() {
-                    bail!(
+                    //bail!(
+                    warn!(
                         "pipeline `{}` has {} color attachments, but {} color blend targets",
                         pipeline_name,
                         pass.color_attachments.len(),
@@ -625,6 +620,46 @@ impl BuildManifest {
 
         env::set_current_dir(prev_current_dir)?;
         Ok(paths)
+    }
+
+    /// Builds the list of resources.
+    fn write_image_resources(
+        &self,
+        archive: &mut PipelineArchiveWriter,
+    ) -> Offset<[shader_archive::ImageResourceDesc]> {
+        let mut images = Vec::with_capacity(self.resources.len());
+        for (name, desc) in self.resources.iter() {
+            let size = match (desc.width, desc.height) {
+                (Some(w), Some(h)) => shader_archive::ImageResourceSize::Fixed { width: w, height: h },
+                _ => {
+                    // TODO what to do if only one dimension is specified?
+                    //      for now, treat as render target size
+                    shader_archive::ImageResourceSize::RenderTarget
+                }
+            };
+
+            images.push(shader_archive::ImageResourceDesc {
+                name: name.as_str().into(),
+                format: desc.format,
+                // If the usage is specified explicitly, use that. Otherwise,
+                // we assume that most images are going to be used as render target attachments
+                // and sampled in shaders.
+                // This is maybe pessimistic, but it's complicated and error-prone to infer that
+                // from shader reflection alone.
+                usage: if let Some(usage) = desc.usage {
+                    usage
+                } else {
+                    (if is_depth_format(desc.format) {
+                        ImageUsage::DEPTH_STENCIL_ATTACHMENT
+                    } else {
+                        ImageUsage::COLOR_ATTACHMENT
+                    }) | ImageUsage::SAMPLED
+                        | ImageUsage::STORAGE
+                },
+                size,
+            });
+        }
+        archive.write_slice(&images[..])
     }
 
     /// Scans shader source files for shader definitions and collects a list of shader pipelines and entry points to compile.
@@ -731,11 +766,11 @@ impl BuildManifest {
             );
         }
 
-        // write archive
         if !options.quiet {
             cprintln!("<g,bold>Writing</> {}", output_file.display());
         }
 
+        // emit pipelines
         let mut archive = ArchiveWriter::new();
         let pipelines_offset = {
             let mut entries = Vec::new();
@@ -752,12 +787,16 @@ impl BuildManifest {
             archive.write_slice(&entries[..])
         };
 
+        // emit resource entries
+        let images = self.write_image_resources(&mut archive);
+
         let manifest_file = make_file_dependency(&self.manifest_path, &mut archive)?;
 
-        let _ = archive.write_root(&shader_archive::PipelineArchiveData {
+        // write archive root and dump to file
+        let _ = archive.write_root(&shader_archive::ShaderArchiveRoot {
             manifest_file,
             pipelines: pipelines_offset,
-            render_targets: Offset::INVALID,
+            images,
         });
         archive.write_to_file(&output_file).context("writing output")?;
 

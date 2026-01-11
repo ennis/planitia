@@ -1,4 +1,4 @@
-use crate::{BufferRange, BufferUsage, Device, Ptr, ResourceAllocation, ResourceId, TrackedResource};
+use crate::{BufferRange, BufferUsage, Device, Ptr, ResourceAllocation, ResourceId, TrackedResource, VulkanObject};
 use ash::vk;
 use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
 use gpu_allocator::MemoryLocation;
@@ -10,6 +10,7 @@ use std::ops::RangeBounds;
 use std::os::raw::c_void;
 use std::ptr::NonNull;
 use std::{mem, ptr, slice};
+use ash::vk::{Handle, ObjectType};
 
 impl<T: ?Sized> Drop for Buffer<T> {
     fn drop(&mut self) {
@@ -26,14 +27,12 @@ impl<T: ?Sized> Drop for Buffer<T> {
 
 /// Buffer creation info.
 #[derive(Copy, Clone, Debug)]
-pub struct BufferCreateInfo<'a> {
+pub struct BufferCreateInfo {
     /// Length in number of elements.
     pub len: usize,
     /// Usage flags. Must include all intended uses of the buffer.
     pub usage: BufferUsage = BufferUsage::empty(),
     pub memory_location: MemoryLocation = MemoryLocation::Unknown,
-    /// Debug label.
-    pub label: &'a str = "",
 }
 
 /// A buffer of GPU-visible memory, optionally mapped in host memory, without any associated type.
@@ -71,16 +70,15 @@ impl<T: Copy> Buffer<T> {
     }
 
     /// Creates a CpuToGpu buffer and copies data into it.
-    pub fn from_slice(data: &[T], label: &str) -> Buffer<T> {
-        Buffer::from_slice_with_usage(BufferUsage::default(), data, label)
+    pub fn from_slice(data: &[T]) -> Buffer<T> {
+        Buffer::from_slice_with_usage(BufferUsage::default(), data)
     }
 
     /// Creates a CpuToGpu buffer and copies data into it.
-    pub fn from_slice_with_usage(usage: BufferUsage, data: &[T], label: &str) -> Buffer<T> {
+    pub fn from_slice_with_usage(usage: BufferUsage, data: &[T]) -> Buffer<T> {
         let buffer = Buffer::new(BufferCreateInfo {
             len: data.len(),
             usage,
-            label,
             memory_location: MemoryLocation::CpuToGpu,
         });
         unsafe {
@@ -250,6 +248,14 @@ impl<T: ?Sized> std::fmt::Debug for Buffer<T> {
     }
 }
 
+impl<T> VulkanObject for Buffer<T> {
+    type Handle = vk::Buffer;
+
+    fn handle(&self) -> vk::Buffer {
+        self.handle
+    }
+}
+
 impl<T: ?Sized> TrackedResource for Buffer<T> {
     fn id(&self) -> ResourceId {
         self.id
@@ -341,13 +347,8 @@ impl Device {
                 ..Default::default()
             });
 
-            if !create_info.label.is_empty() {
-                // SAFETY: no concurrent access possible
-                self.set_object_name(handle, create_info.label);
-            }
-
             let id = self.allocate_resource_id();
-            trace!("GPU: create buffer {:?} {:?} {id:?}", handle, create_info.label);
+            trace!("GPU: create buffer {handle:?} {id:?}");
 
             BufferUntyped {
                 id,

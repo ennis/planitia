@@ -1,5 +1,6 @@
 use crate::{SceneInfo, SceneInfoUniforms};
 use gamelib::pipeline_cache::get_graphics_pipeline;
+use gamelib::static_assets;
 use gpu::PrimitiveTopology::{TriangleList, TriangleStrip};
 use gpu::{BufferCreateInfo, DrawIndirectCommand, MemoryLocation, Ptr, vk};
 
@@ -33,6 +34,7 @@ struct RootParams {
     //filter_width: f32,
 }
 
+
 /// Draws 3d polylines with given line width in world units.
 pub fn draw_lines<'a>(
     encoder: &mut gpu::RenderEncoder,
@@ -40,23 +42,28 @@ pub fn draw_lines<'a>(
     lines: &[Line],
     scene_info: &SceneInfo,
 ) {
-    let pipeline = get_graphics_pipeline("/shaders/game_shaders.sharc#lines");
-    let Ok(pipeline) = pipeline.read() else {
+    static_assets! {
+        static LINES_PIPELINE: gpu::GraphicsPipeline = "/shaders/game_shaders.sharc#lines";
+    }
+
+    let Ok(pipeline) = LINES_PIPELINE.read() else {
         return;
     };
 
-    let vertices_buffer = gpu::Buffer::from_slice(vertices, "line_vertices");
-    let lines_buffer = gpu::Buffer::from_slice(lines, "lines");
+    let vertices_buffer = gpu::Buffer::from_slice(vertices);
+    let lines_buffer = gpu::Buffer::from_slice(lines);
 
+    // use indirect draws to reduce the overhead a bit when drawing many (~1000+) lines
     let mut commands = gpu::Buffer::new(BufferCreateInfo {
         len: lines.len(),
         memory_location: MemoryLocation::CpuToGpu,
         ..
     });
-
     for (i, line) in lines.iter().enumerate() {
         unsafe {
+            // SAFETY: we have exclusive access to the buffer, the GPU is not using it right now
             commands.as_mut_slice()[i].write(DrawIndirectCommand {
+                // one quad per line segment, so 2 vertices per line vertex
                 vertex_count: line.vertex_count * 2,
                 instance_count: 1,
                 first_vertex: line.start_vertex,
@@ -71,10 +78,10 @@ pub fn draw_lines<'a>(
         None,
         &commands,
         0..lines.len() as u32,
-        gpu::RootParams::Immediate(&RootParams {
+        &RootParams {
             scene_info: scene_info.gpu,
             vertices: vertices_buffer.ptr(),
             lines: lines_buffer.ptr(),
-        }),
+        },
     );
 }

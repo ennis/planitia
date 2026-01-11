@@ -47,6 +47,12 @@ struct Cluster {
     uint16_t face_count;
 }
 
+ClusterVertex fetch_cluster_vertex(Cluster* clusters, uint draw_id, uint vertex_id) {
+    let face = clusters[draw_id].faces[vertex_id / 3];
+    let vertex = clusters[draw_id].vertices[face.vertices[vertex_id % 3]];
+    return vertex;
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Depth pass
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -67,8 +73,7 @@ struct DepthPassRootParams {
 [pass("depth_pass")]
 DepthPassVertexOutput depth_pass_vertex(uint vertex_id : SV_VertexID, uint draw_id: SV_DrawIndex, uniform DepthPassRootParams* u)
 {
-    let face = u.clusters[draw_id].faces[vertex_id / 3];
-    let vertex = u.clusters[draw_id].vertices[face.vertices[vertex_id % 3]];
+    let vertex = fetch_cluster_vertex(u.clusters, draw_id, vertex_id);
     DepthPassVertexOutput o;
     o.pos = mul(u.scene_info.view_proj_matrix, float4(vertex.position, 1.0));
     return o;
@@ -86,32 +91,19 @@ void depth_pass_fragment(DepthPassVertexOutput i) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 struct OutlineRootParams {
-    [bind("scene_info")]
     SceneInfo* scene_info;
-
-    [bind("clusters")]
     Cluster* clusters;
-
-    [bind("cluster_count")]
     uint cluster_count;
-
     uint vertex_count;
-
-    [bind("outline_vertices")]
     OutlineVertex* out_vertices;
-
-    [bind("outline_indices")]
     uint* out_indices;
-
-    [bind("outline_indirect_command")]
-    [len(1)]
     DrawIndirectCommand* out_draw_command;
 }
 
 [shader("compute")]
 [numthreads(MAX_EDGES, 1, 1)]
-[pass("outline")]
-void outline_main(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_GroupThreadID, uniform OutlineRootParams* u)
+[pass("extract_outlines")]
+void extract_outlines(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_GroupThreadID, uniform OutlineRootParams* u)
 {
     // we spawn one workgroup per edge cluster, and each thread in the workgroup processes one edge
 
@@ -281,7 +273,7 @@ ScreenQuadVSOut corner_detection_vertex_shader(uint vertex_id : SV_VertexID)
 struct CornerDetectionFSOut {
     [[vk::location(0)]] float4 color;
     float depth: SV_Depth;
-};
+}
 
 [shader("fragment")]
 [pass("corner_detection")]
@@ -316,5 +308,48 @@ CornerDetectionFSOut corner_detection_fragment_shader(
     CornerDetectionFSOut o;
     o.color = color;
     o.depth = frag_coord.z-0.1;
+    return o;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Base rendering
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+struct BaseRenderVSOut {
+    float4 pos: SV_Position;
+    [[vk::location(0)]] float4 color;
+    [[vk::location(1)]] float3 normal;
+}
+
+struct BaseRenderFSOut {
+    [[vk::location(0)]] float4 color;
+}
+
+struct BaseRenderRootParams {
+    SceneInfo* scene_info;
+    Cluster* clusters;
+    float3 main_light_direction;    // in world space
+
+    //uint cluster_count;
+}
+
+[shader("vertex")]
+[pass("base_render")]
+BaseRenderVSOut base_render_vertex(uint vertex_id : SV_VertexID, uint draw_id: SV_DrawIndex, uniform BaseRenderRootParams* u)
+{
+    let vertex = fetch_cluster_vertex(u.clusters, draw_id, vertex_id);
+    BaseRenderVSOut o;
+    o.pos = mul(u.scene_info.view_proj_matrix, float4(vertex.position, 1.0));
+    o.normal = mul(float3x3(u.scene_info.view_matrix), vertex.normal);
+    return o;
+}
+
+[shader("fragment")]
+[pass("base_render")]
+BaseRenderFSOut base_render_fragment(BaseRenderVSOut i, uniform BaseRenderRootParams* u) {
+    BaseRenderFSOut o;
+    float3 normal = normalize(i.normal);
+    float light_intensity = saturate(dot(normal, -u.main_light_direction));
+    o.color = float4(light_intensity.xxx, 1.0);
     return o;
 }

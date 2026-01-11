@@ -4,12 +4,10 @@ use std::slice;
 use crate::shaders::{EGUI_FRAG_MAIN, EGUI_VERTEX_MAIN};
 use egui::epaint::Primitive;
 use egui::{ClippedPrimitive, ImageData};
-use log::debug;
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::prelude::*;
-use gpu::{
-    BarrierFlags, ColorAttachment, Device, ImageCopyView, Offset3D, RenderPassInfo, RootParams, Size3D, Vertex,
-};
+use gpu::{BarrierFlags, ColorAttachment, Device, ImageCopyView, Offset3D, RootParams, Size3D, Vertex};
+use log::debug;
 
 #[derive(Copy, Clone, Vertex)]
 #[repr(C)]
@@ -92,7 +90,11 @@ impl Renderer {
                     height,
                     ..
                 });
-                image.set_name("egui texture");
+
+                unsafe {
+                    // SAFETY: no concurrent access possible as we just created the image
+                    gpu::set_debug_name(&image, format!("egui_texture_{id:?}"));
+                }
 
                 let sampler = Sampler::new(SamplerCreateInfo {
                     mag_filter: convert_filter(tex.options.magnification),
@@ -144,7 +146,6 @@ impl Renderer {
         shapes: Vec<egui::epaint::ClippedShape>,
         pixels_per_point: f32,
     ) {
-
         let clipped_primitives = ctx.tessellate(shapes, pixels_per_point);
 
         let meshes: Vec<_> = clipped_primitives
@@ -163,8 +164,15 @@ impl Renderer {
         for (_, mesh) in meshes.iter() {
             let vertex_data: &[EguiVertex] =
                 unsafe { slice::from_raw_parts(mesh.vertices.as_ptr().cast(), mesh.vertices.len()) };
-            let vertex_buffer = Buffer::from_slice(vertex_data, "egui vertex buffer");
-            let index_buffer = Buffer::from_slice(&mesh.indices, "egui index buffer");
+            let vertex_buffer = Buffer::from_slice(vertex_data);
+            let index_buffer = Buffer::from_slice(&mesh.indices);
+
+            unsafe {
+                // SAFETY: no concurrent access possible as we just created the buffers
+                gpu::set_debug_name(&vertex_buffer, "egui_vertex_buffer");
+                gpu::set_debug_name(&index_buffer, "egui_index_buffer");
+            }
+
             mesh_vertex_buffers.push(vertex_buffer);
             mesh_index_buffers.push(index_buffer);
         }
@@ -176,13 +184,13 @@ impl Renderer {
         });
 
         // encode draw commands
-        let mut enc = cmd.begin_rendering(RenderPassInfo {
-            color_attachments: &[ColorAttachment {
+        let mut enc = cmd.begin_rendering(
+            &[ColorAttachment {
                 image: color_target,
-                clear_value: None,
+                ..
             }],
-            depth_stencil_attachment: None,
-        });
+            None,
+        );
 
         enc.bind_graphics_pipeline(&self.pipeline);
 
@@ -215,12 +223,7 @@ impl Renderer {
             enc.push_descriptors(
                 0,
                 &[
-                    (
-                        0,
-                        texture
-                            .image
-                            .texture_descriptor(vk::ImageLayout::GENERAL),
-                    ),
+                    (0, texture.image.texture_descriptor(vk::ImageLayout::GENERAL)),
                     (1, self.sampler.descriptor()),
                 ],
             );

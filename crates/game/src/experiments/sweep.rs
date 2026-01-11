@@ -18,9 +18,9 @@ impl SweepExperiment {
         let debug_stroke_pipeline =
             gamelib::pipeline_cache::get_graphics_pipeline("/shaders/pipelines.parc#debug_swept_strokes");
 
-        let strokes = Buffer::from_slice(&[], "swept_strokes");
-        let stroke_vertices = Buffer::from_slice(&[], "swept_stroke_vertices");
-        let cross_sections = Buffer::from_slice(&[], "swept_stroke_cross_sections");
+        let strokes = Buffer::from_slice(&[]);
+        let stroke_vertices = Buffer::from_slice(&[]);
+        let cross_sections = Buffer::from_slice(&[]);
 
         Self {
             sweep_stroke_pipeline,

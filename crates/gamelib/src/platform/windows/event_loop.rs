@@ -91,7 +91,7 @@ impl<'a> WinitAppHandler<'a> {
             if let Some(TimerEntry { deadline, token }) = next {
                 if deadline <= now {
                     // TODO: timer callback instead of user event?
-                    self.inner.event(Box::new(token));
+                    self.inner.event(UserEvent::Timeout(token));
                 } else {
                     // Timer not expired, put it back and break
                     self.this.timers.borrow_mut().push(next.unwrap());
@@ -245,11 +245,11 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
 pub(crate) static EVENT_LOOP_PROXY: OnceLock<EventLoopProxy<WakeReason>> = OnceLock::new();
 
 /// Wakes the event loop with the given user event.
-pub fn wake_event_loop(payload: UserEvent) {
+pub fn wake_event_loop(callback: impl FnOnce() + Send + 'static) {
     EVENT_LOOP_PROXY
         .get()
         .unwrap()
-        .send_event(WakeReason::User(payload))
+        .send_event(WakeReason::User(UserEvent::Callback(Box::new(callback))))
         .unwrap()
 }
 

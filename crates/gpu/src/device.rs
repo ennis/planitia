@@ -1,122 +1,31 @@
 //! Abstractions over a vulkan device & queues.
 mod bindless;
+mod upload_buffer;
 
 use crate::device::bindless::BindlessDescriptorTable;
+use crate::device::upload_buffer::{UploadBuffer, UPLOAD_BUFFER_CHUNK_SIZE};
 use crate::instance::vk_khr_surface;
 use crate::platform::PlatformExtensions;
 use crate::{
-    get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, BufferCreateInfo,
-    BufferUntyped, BufferUsage, CommandPool, ComputePipeline, ComputePipelineCreateInfo,
-    DescriptorSetLayout, Error, GraphicsPipeline, GraphicsPipelineCreateInfo, PreRasterizationShaders,
-    Ptr, Sampler, SamplerCreateInfo, SamplerCreateInfoHashable, SUBGROUP_SIZE,
+    get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, BufferCreateInfo, BufferUntyped, BufferUsage,
+    CommandPool, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error, GraphicsPipeline,
+    GraphicsPipelineCreateInfo, PreRasterizationShaders, Ptr, Sampler, SamplerCreateInfo, SamplerCreateInfoHashable,
+    VulkanObject, SUBGROUP_SIZE,
 };
 use ash::vk;
 use gpu_allocator::vulkan::AllocationCreateDesc;
-use gpu_allocator::MemoryLocation;
 use log::{debug, error, trace};
-use slotmap::{SlotMap};
-use std::alloc::Layout;
+use slotmap::SlotMap;
 use std::collections::{HashMap, VecDeque};
 use std::ffi::{c_void, CStr, CString};
-use std::marker::PhantomData;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::{fmt, mem, ptr};
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Size of the global descriptor heaps (in number of descriptors).
 const DESCRIPTOR_TABLE_SIZE: usize = 4096;
-
-/// Alignment of upload buffer allocations.
-const UPLOAD_BUFFER_ALIGNMENT: usize = 256;
-
-/// Upload buffer chunk size.
-const UPLOAD_BUFFER_CHUNK_SIZE: usize = 1 * 1024 * 1024; // Allocate 1 MB chunks
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-fn align(size: usize) -> usize {
-    (size + UPLOAD_BUFFER_ALIGNMENT - 1) / UPLOAD_BUFFER_ALIGNMENT * UPLOAD_BUFFER_ALIGNMENT
-}
-
-/// Manages chunks of CPU-visible GPU memory for copying data from the host.
-struct UploadBuffer {
-    full: Vec<BufferUntyped>,
-    current: Option<BufferUntyped>,
-    offset: usize,
-    usage: BufferUsage,
-}
-
-impl UploadBuffer {
-    fn new(usage: BufferUsage) -> Self {
-        Self {
-            full: vec![],
-            offset: 0,
-            usage,
-            current: None,
-        }
-    }
-
-    /// Ensures that there is space for an allocation of `size` bytes in the current buffer,
-    /// or creates a new buffer if necessary.
-    ///
-    /// Returns the offset in the current buffer where the allocation can be made.
-    fn allocate_raw(&mut self, layout: Layout) -> (usize, *mut u8, vk::DeviceAddress) {
-        let size = layout.size();
-        assert!(layout.align() <= UPLOAD_BUFFER_ALIGNMENT);
-
-        let aligned_offset = align(self.offset);
-        if let Some(chunk) = self.current.as_ref() {
-            if aligned_offset + size <= chunk.len() {
-                let offset = aligned_offset;
-                self.offset = aligned_offset + size;
-                let addr = unsafe { chunk.as_mut_ptr_u8().add(offset) };
-                let device_address = chunk.ptr().raw + offset as u64;
-                return (offset, addr, device_address);
-            }
-        }
-
-        let new_chunk_size = align(UPLOAD_BUFFER_CHUNK_SIZE.max(size));
-        if let Some(chunk) = self.current.take() {
-            self.full.push(chunk);
-        }
-        let chunk = BufferUntyped::new(BufferCreateInfo {
-            len: new_chunk_size,
-            usage: self.usage,
-            memory_location: MemoryLocation::CpuToGpu,
-            label: "upload_buffer_chunk",
-        });
-        let addr = chunk.as_mut_ptr_u8();
-        let device_address = chunk.ptr().raw;
-        self.current = Some(chunk);
-        self.offset = size;
-        (0, addr, device_address)
-    }
-
-    fn allocate<T: Copy>(&mut self, data: &T) -> Ptr<T> {
-        let (_, ptr, raw_addr) = self.allocate_raw(Layout::new::<T>());
-        unsafe {
-            ptr::copy_nonoverlapping(data as *const T, ptr as *mut T, 1);
-        }
-        Ptr {
-            raw: raw_addr,
-            _phantom: PhantomData,
-        }
-    }
-
-    fn allocate_slice<T: Copy>(&mut self, data: &[T]) -> Ptr<T> {
-        let (_, ptr, raw_addr) = self.allocate_raw(Layout::for_value(data));
-        unsafe {
-            ptr::copy_nonoverlapping(data.as_ptr(), ptr as *mut T, data.len());
-        }
-        Ptr {
-            raw: raw_addr,
-            _phantom: PhantomData,
-        }
-    }
-}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -811,29 +720,6 @@ impl Device {
     /// Returns the underlying raw vulkan device (via `ash::Device`).
     pub fn raw(&self) -> &ash::Device {
         &self.raw
-    }
-
-    /// Helper function to associate a debug name to a vulkan object.
-    ///
-    /// # Arguments
-    /// * `handle` - the handle to the object
-    /// * `name` - the name to associate with the object
-    ///
-    /// # Safety
-    /// * The handle must be a valid vulkan object handle.
-    /// * The function is not thread safe.
-    pub unsafe fn set_object_name<H: vk::Handle>(&self, handle: H, name: &str) {
-        let object_name = CString::new(name).unwrap();
-        // SAFETY:
-        self.extensions
-            .ext_debug_utils
-            .set_debug_utils_object_name(&vk::DebugUtilsObjectNameInfoEXT {
-                object_type: H::TYPE,
-                object_handle: handle.as_raw(),
-                p_object_name: object_name.as_ptr(),
-                ..Default::default()
-            })
-            .unwrap();
     }
 
     /// Allocates a new resource ID for tracking a resource.
@@ -1587,4 +1473,47 @@ pub fn wait_idle() {
 /// Otherwise, tasks scheduled with `call_later` or `delete_later` will never be executed.
 pub fn maintain() {
     Device::global().maintain()
+}
+
+/// Assigns a debug name to an object represented by its raw vulkan handle
+///
+/// # Arguments
+/// * `handle` - the handle to the object
+/// * `name` - the name to associate with the object
+///
+/// # Safety
+/// * This function internally calls `vkSetDebugUtilsObjectNameEXT`, which requires that the access
+///   to the object is externally synchronized: only the calling thread may access the object
+///   while this function is executing.
+/// * The handle must be a valid vulkan object handle.
+pub unsafe fn set_debug_name_raw<H: vk::Handle>(handle: H, name: impl AsRef<str>) {
+    let device = Device::global();
+    let object_name = CString::new(name.as_ref()).unwrap();
+
+    unsafe {
+        // SAFETY: TODO
+        device
+            .extensions
+            .ext_debug_utils
+            .set_debug_utils_object_name(&vk::DebugUtilsObjectNameInfoEXT {
+                object_type: H::TYPE,
+                object_handle: handle.as_raw(),
+                p_object_name: object_name.as_ptr(),
+                ..Default::default()
+            })
+            .unwrap();
+    }
+}
+
+/// Assigns a debug name to a vulkan object.
+///
+/// # Safety
+///
+/// This function internally calls `vkSetDebugUtilsObjectNameEXT`, which requires that the access
+/// to the object is externally synchronized: only the calling thread may access the object
+/// while this function is executing.
+pub unsafe fn set_debug_name<Object: VulkanObject>(object: &Object, name: impl AsRef<str>) {
+    unsafe {
+        set_debug_name_raw(object.handle(), name);
+    }
 }

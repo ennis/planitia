@@ -1,5 +1,5 @@
 use crate::device::get_vk_sample_count;
-use crate::{aspects_for_format, BufferUntyped, CommandBuffer, Descriptor, Device, Format, ResourceAllocation, ResourceDescriptorIndex, ResourceId, Size3D, StorageImageHandle, TextureHandle, TrackedResource};
+use crate::{aspects_for_format, BufferUntyped, CommandBuffer, Descriptor, Device, Format, ResourceAllocation, ResourceDescriptorIndex, ResourceId, Size3D, StorageImageHandle, TextureHandle, TrackedResource, VulkanObject};
 use ash::vk;
 use ash::vk::Handle;
 use bitflags::bitflags;
@@ -66,7 +66,7 @@ impl From<ImageUsage> for vk::ImageUsageFlags {
 
 /// Information passed to `Image::new` to describe the image to be created.
 #[derive(Copy, Clone, Debug)]
-pub struct ImageCreateInfo<'a> {
+pub struct ImageCreateInfo {
     pub memory_location: MemoryLocation = MemoryLocation::GpuOnly,
     /// Dimensionality of the image.
     pub type_: ImageType = ImageType::Image2D,
@@ -84,8 +84,6 @@ pub struct ImageCreateInfo<'a> {
     pub array_layers: u32 = 1,
     /// Number of samples. Default is `1`. `0` is *not* a valid value.
     pub samples: u32 = 1,
-    /// Optional debug label.
-    pub label: &'a str = "",
 }
 
 /// Image data stored in CPU-visible memory.
@@ -103,6 +101,7 @@ pub struct ImageBuffer {
 #[derive(Debug)]
 pub struct Image {
     pub(crate) id: ResourceId,
+    pub(crate) memory_location: MemoryLocation,
     pub(crate) allocation: ResourceAllocation,
     pub(crate) swapchain_image: bool,
     pub(crate) descriptors: ImageResourceDescriptors,
@@ -145,16 +144,18 @@ impl TrackedResource for Image {
     }
 }
 
+impl VulkanObject for Image {
+    type Handle = vk::Image;
+
+    fn handle(&self) -> vk::Image {
+        self.handle
+    }
+}
+
 impl Image {
     /// Creates a new image resource.
     pub fn new(image_info: ImageCreateInfo) -> Image {
         Device::global().create_image(&image_info)
-    }
-
-    pub fn set_name(&self, label: &str) {
-        unsafe {
-            Device::global().set_object_name(self.handle, label);
-        }
     }
 
     /// Returns the type (dimensionality) of the image.
@@ -433,10 +434,6 @@ impl Device {
                 .bind_image_memory(handle, allocation.memory(), allocation.offset() as u64)
                 .unwrap();
 
-            if !image_info.label.is_empty() {
-                self.set_object_name(handle, image_info.label);
-            }
-
             // create the bindless image view
             let descriptors = self.create_image_resource_descriptors(
                 handle,
@@ -452,6 +449,7 @@ impl Device {
             Image {
                 handle,
                 id: self.allocate_resource_id(),
+                memory_location: image_info.memory_location,
                 allocation: ResourceAllocation::Allocation { allocation },
                 swapchain_image: false,
                 descriptors,

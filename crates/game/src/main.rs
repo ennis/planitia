@@ -1,7 +1,7 @@
 #![expect(unused, reason = "noisy")]
 #![feature(default_field_values)]
 
-use gamelib::asset::{AssetCache, Handle};
+use gamelib::asset::{AssetCache, FileSystemEvent, Handle};
 use gamelib::camera_control::{CameraControl, CameraControlInput};
 use gamelib::context::{App, AppHandler, LoopHandler};
 use gamelib::egui;
@@ -15,7 +15,7 @@ use std::ops::Deref;
 use color::{Srgba8, srgba8};
 use egui_demo_lib::{View, WidgetGallery};
 use gpu::PrimitiveTopology::TriangleList;
-use gpu::{Image, Ptr, RenderPassInfo, RootParams, root_params};
+use gpu::{Image, Ptr, RootParams, root_params};
 use log::debug;
 use math::geom::{Camera, rect_xywh};
 use math::{Mat4, Vec2, Vec3, vec2};
@@ -235,7 +235,11 @@ impl AppHandler for Game {
         self.outline_experiment.input(&input_event);
     }
 
-    fn event(&mut self, event: UserEvent) {}
+    fn event(&mut self, event: UserEvent) {
+        /*if let Ok(FileSystemEvent { .. }) = event.downcast::<FileSystemEvent>() {
+            self.
+        }*/
+    }
 
     fn resized(&mut self, width: u32, height: u32) {
         self.width = width;
@@ -276,17 +280,15 @@ impl AppHandler for Game {
             };
             scene_info.gpu = cmd.upload(&scene_info.info);
 
-            let mut encoder = cmd.begin_rendering(RenderPassInfo {
-                color_attachments: &[gpu::ColorAttachment {
+            let mut encoder = cmd.begin_rendering(&[gpu::ColorAttachment {
                     image: target.image,
                     clear_value: Some([0.0, 0.0, 0.0, 1.0]),
                 }],
-                depth_stencil_attachment: Some(gpu::DepthStencilAttachment {
+                Some(gpu::DepthStencilAttachment {
                     image: &self.depth_stencil_buffer,
                     depth_clear_value: Some(1.0),
                     stencil_clear_value: Some(0),
-                }),
-            });
+                }));
 
             self.render_scene(&mut encoder, &camera, &scene_info);
             encoder.finish();
@@ -316,7 +318,6 @@ impl AppHandler for Game {
 
     fn imgui(&mut self, ctx: &egui::Context) {
         egui::Window::new("imgui").show(ctx, |ui| {
-
             egui::Grid::new("params")
                 .num_columns(2)
                 .spacing([40.0, 4.0])
