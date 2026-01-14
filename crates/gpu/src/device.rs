@@ -849,7 +849,7 @@ impl Device {
         let mut upload_buffer = self.upload_buffer.lock().unwrap();
         let full = mem::take(&mut upload_buffer.full);
         if !full.is_empty() {
-            debug!(
+            trace!(
                 "deleting {} full upload buffers ({} MB)",
                 full.len(),
                 full.len() * UPLOAD_BUFFER_CHUNK_SIZE / (1024 * 1024)

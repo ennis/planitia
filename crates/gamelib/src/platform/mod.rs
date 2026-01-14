@@ -69,6 +69,7 @@ pub trait LoopHandler {
     fn vsync(&mut self);
     fn poll(&mut self);
     fn close_requested(&mut self);
+    fn exiting(&mut self);
 }
 
 /// Trait to control the event loop and rendering of the application.

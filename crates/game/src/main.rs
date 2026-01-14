@@ -17,8 +17,10 @@ use egui_demo_lib::{View, WidgetGallery};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::{Image, Ptr, RootParams, root_params};
 use log::debug;
+use ron::ser::PrettyConfig;
 use math::geom::{Camera, rect_xywh};
 use math::{Mat4, Vec2, Vec3, vec2};
+use serde::{Deserialize, Serialize};
 
 mod experiments;
 
@@ -54,6 +56,40 @@ impl Deref for SceneInfo {
     }
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+struct Config {
+    show_grid: bool,
+    show_painting_demo: bool,
+    show_background: bool,
+    show_imgui: bool,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            show_grid: false,
+            show_painting_demo: false,
+            show_background: false,
+            show_imgui: false,
+        }
+    }
+}
+
+const CONFIG_FILE: &str = "config.ron";
+
+impl Config {
+    fn load() -> Self {
+        let ron_str = std::fs::read_to_string(CONFIG_FILE).unwrap_or_default();
+        ron::from_str(&ron_str).unwrap_or_default()
+    }
+
+    fn save(&self) {
+        if let Ok(ron_str) = ron::ser::to_string_pretty(self, PrettyConfig::default()) {
+            let _ = std::fs::write(CONFIG_FILE, ron_str);
+        }
+    }
+}
+
 struct Game {
     width: u32,
     height: u32,
@@ -70,10 +106,7 @@ struct Game {
     start_time: std::time::Instant,
     coat_experiment: experiments::coat::CoatExperiment,
     outline_experiment: experiments::outlines::OutlineExperiment,
-    show_grid: bool,
-    show_painting_demo: bool,
-    show_background: bool,
-    show_imgui: bool,
+    cfg: Config,
 }
 
 fn create_depth_buffer(width: u32, height: u32) -> Image {
@@ -104,10 +137,7 @@ impl Default for Game {
             start_time: std::time::Instant::now(),
             coat_experiment: experiments::coat::CoatExperiment::new(),
             outline_experiment: experiments::outlines::OutlineExperiment::new(),
-            show_grid: true,
-            show_painting_demo: false,
-            show_background: true,
-            show_imgui: false,
+            cfg: Config::load(),
         }
     }
 }
@@ -118,7 +148,7 @@ impl Game {
         // Draw background
         let bottom_color = Srgba8::from(self.bg_bottom_color.to_srgba_unmultiplied());
         let top_color = Srgba8::from(self.bg_top_color.to_srgba_unmultiplied());
-        if self.show_background {
+        if self.cfg.show_background {
             if let Ok(background_shader) = self.background_shader.read() {
                 encoder.bind_graphics_pipeline(&*background_shader);
                 encoder.draw(
@@ -137,7 +167,7 @@ impl Game {
 
         //----------------------------------
         // Draw grid
-        if self.show_grid {
+        if self.cfg.show_grid {
             if let Ok(grid_shader) = self.grid_shader.read() {
                 encoder.bind_graphics_pipeline(&*grid_shader);
                 encoder.draw(
@@ -185,7 +215,7 @@ impl Game {
             },
         );
 
-        if self.show_painting_demo {
+        if self.cfg.show_painting_demo {
             experiments::painting_test(
                 &mut self.painter,
                 cmd,
@@ -213,16 +243,16 @@ impl AppHandler for Game {
         }
 
         if input_event.is_shortcut("G") {
-            self.show_grid = !self.show_grid;
+            self.cfg.show_grid = !self.cfg.show_grid;
         }
         if input_event.is_shortcut("H") {
-            self.show_background = !self.show_background;
+            self.cfg.show_background = !self.cfg.show_background;
         }
         if input_event.is_shortcut("P") {
-            self.show_painting_demo = !self.show_painting_demo;
+            self.cfg.show_painting_demo = !self.cfg.show_painting_demo;
         }
         if input_event.is_shortcut("I") {
-            self.show_imgui = !self.show_imgui;
+            self.cfg.show_imgui = !self.cfg.show_imgui;
         }
 
         // --- CAMERA ---
@@ -305,7 +335,7 @@ impl AppHandler for Game {
 
         //-------------------------------
         // Render GUI
-        if self.show_imgui {
+        if self.cfg.show_imgui {
             APP.render_imgui(&mut cmd, &target.image);
         }
 
@@ -324,19 +354,19 @@ impl AppHandler for Game {
                 .striped(true)
                 .show(ui, |ui| {
                     ui.label("Show grid");
-                    ui.checkbox(&mut self.show_grid, "");
+                    ui.checkbox(&mut self.cfg.show_grid, "");
                     ui.end_row();
 
                     ui.label("Show background");
-                    ui.checkbox(&mut self.show_background, "");
+                    ui.checkbox(&mut self.cfg.show_background, "");
                     ui.end_row();
 
                     ui.label("Show painting demo");
-                    ui.checkbox(&mut self.show_painting_demo, "");
+                    ui.checkbox(&mut self.cfg.show_painting_demo, "");
                     ui.end_row();
 
                     ui.label("Show imgui");
-                    ui.checkbox(&mut self.show_imgui, "");
+                    ui.checkbox(&mut self.cfg.show_imgui, "");
                     ui.end_row();
 
                     ui.label("Painting demo color");
@@ -352,6 +382,10 @@ impl AppHandler for Game {
                     ui.end_row();
                 });
         });
+    }
+
+    fn exiting(&mut self) {
+        self.cfg.save();
     }
 }
 

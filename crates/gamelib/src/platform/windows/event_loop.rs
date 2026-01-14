@@ -239,6 +239,10 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
             event_loop.exit();
         }
     }
+
+    fn exiting(&mut self, event_loop: &ActiveEventLoop) {
+        self.inner.exiting();
+    }
 }
 
 /// Proxy to wake the event loop from other threads.

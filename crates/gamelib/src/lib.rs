@@ -18,9 +18,11 @@ mod shaders;
 mod timer;
 pub mod util;
 mod world;
+mod tweak;
 
 //--- reexports ---
 pub use {color, egui, gpu, math};
+pub use tweak::*;
 
 ///////////////////////////////////////////////////////////////////
 

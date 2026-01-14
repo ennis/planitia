@@ -10,7 +10,7 @@ use egui::{Align, Color32, FontDefinitions, RichText, Style, TextFormat, TextSty
 use gpu::CommandBuffer;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::mem;
+use std::{fs, mem};
 
 // see https://github.com/rerun-io/rerun/blob/main/crates/re_ui/src/lib.rs#L599
 fn generic_list_header<R>(ui: &mut egui::Ui, label: &str, right_buttons: impl Fn(&mut egui::Ui) -> R) {
@@ -51,6 +51,8 @@ fn color_icon(icon: &str, color: Color32) -> RichText {
     RichText::new(icon).size(20.0).color(color)
 }
 
+const PERSISTED_SETTINGS_FILE: &str = "egui_settings.ron";
+
 pub(crate) struct ImguiContext {
     renderer: imgui::egui_backend::Renderer,
     ctx: egui::Context,
@@ -64,6 +66,16 @@ impl ImguiContext {
         ctx.set_fonts(FontDefinitions::default());
         ctx.set_style(Style::default());
         let renderer = egui_backend::Renderer::new();
+
+        // try to load saved state
+        if let Ok(ron_str) = fs::read_to_string(PERSISTED_SETTINGS_FILE) {
+            if let Ok(saved) = ron::from_str::<egui::Memory>(&ron_str) {
+                ctx.memory_mut(|mem| {
+                    *mem = saved;
+                });
+            }
+        }
+
         Self {
             renderer,
             ctx,
@@ -94,5 +106,11 @@ impl ImguiContext {
             mem::take(&mut self.output.shapes),
             mem::take(&mut self.output.pixels_per_point),
         );
+    }
+
+    pub(crate) fn save_state(&mut self) {
+        self.ctx.memory(|mem| {
+            fs::write(PERSISTED_SETTINGS_FILE, ron::to_string(mem).unwrap()).expect("failed to save egui state")
+        });
     }
 }

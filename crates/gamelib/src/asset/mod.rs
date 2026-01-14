@@ -36,7 +36,7 @@ use std::any::{Any, TypeId};
 pub use vfs_path::*;
 
 use crate::platform::{UserEvent, wake_event_loop};
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 use notify_debouncer_mini::notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use notify_debouncer_mini::{DebounceEventHandler, DebounceEventResult, Debouncer, new_debouncer};
 use slotmap::SlotMap;
@@ -194,7 +194,7 @@ impl Providers {
     /// Finds the appropriate provider for the given VFS path.
     fn find_provider(&self, path: &VfsPath) -> Result<(&dyn Provider, FileMetadata), io::Error> {
         let source = path.source().unwrap_or("");
-        debug!(
+        trace!(
             "find_provider: looking for provider for path `{}`, source = {}",
             path.as_str(),
             source
@@ -204,7 +204,7 @@ impl Providers {
                 if let Ok(metadata) = provider.exists(path) {
                     return Ok((provider.as_ref(), metadata));
                 } else {
-                    debug!("find_provider: {} did not have `{}`", source, path.as_str());
+                    trace!("find_provider: {} did not have `{}`", source, path.as_str());
                 }
             }
         }
@@ -497,12 +497,12 @@ impl<T: Asset> Entry<AssetStorage<T>> {
     fn reload(&self) {
         let mut deps = Dependencies::new(&self.path);
         let providers = Providers::get().read().unwrap();
-        let result = self.loader.load(&self.path, &providers, &mut deps);
         // Mark as clean before reloading, because some loaders may immediately modify/rebuild
         // the underlying asset file, triggering another reload. This is the case, for example,
         // with shader archives in hot-reload mode, which are automatically rebuilt if their
         // source files have a later modification time.
         self.dirty.store(false, Relaxed);
+        let result = self.loader.load(&self.path, &providers, &mut deps);
 
         // swap the asset
         // FIXME: we only update the asset;
@@ -587,7 +587,17 @@ impl Dependencies {
                 dependencies: HashSet::new(),
                 local_files: new_debouncer(std::time::Duration::from_millis(500), {
                     let path = path.to_path_buf();
-                    move |event| {
+                    move |event: DebounceEventResult| {
+                        match event {
+                            Ok(ref events) => {
+                                for ev in events {
+                                    debug!("asset file changed: {:?}, dependency of {}", ev.path, path.as_str());
+                                }
+                            }
+                            Err(err) => {
+                                error!("asset file watcher error: {err}");
+                            }
+                        }
                         AssetCache::instance().asset_changed(&path);
                     }
                 })
@@ -622,7 +632,7 @@ impl Dependencies {
         #[cfg(feature = "hot_reload")]
         {
             let path = path.as_ref();
-            debug!("watching for changes: `{}`", path.display());
+            trace!("watching for changes: `{}`", path.display());
             self.local_files
                 .watcher()
                 .watch(path, RecursiveMode::NonRecursive)
@@ -667,9 +677,9 @@ impl AssetCache {
             type_id: TypeId::of::<T>(),
         };
 
-        // Check if an entry already exists.
+        // Check if an entry already exists and is clean.
         // The cache is locked only for the duration of the check.
-        if let Some(existing) = self.inner.read().unwrap().by_path.get(&key) {
+        if let Some(existing) = self.inner.read().unwrap().by_path.get(&key) && !existing.dirty.load(Relaxed) {
             return Handle::new(existing.clone().downcast().expect("invalid asset type stored in cache"));
         }
 
@@ -733,19 +743,25 @@ impl AssetCache {
         {
             let dirty_paths = mem::take(&mut *self.dirty_paths.lock().unwrap());
 
-            let mut keys_to_reload: HashSet<CacheKey> = {
+            if dirty_paths.is_empty() {
+                return;
+            }
+
+            debug!("--- AssetCache: reloading assets ---");
+
+            // mark all affected entries as dirty and collect the keys of dirty entries
+            let mut keys_to_reload = HashSet::new();
+            {
                 let inner = self.inner.read().unwrap();
-                dirty_paths
-                    .iter()
-                    .flat_map(|path| {
-                        inner
-                            .by_path
-                            .keys()
-                            .filter(|key| key.path.path_without_fragment() == &**path)
-                            .cloned()
-                    })
-                    .collect()
-            };
+                for path in dirty_paths.iter() {
+                    for (key, entry) in inner.by_path.iter() {
+                        if key.path.path_without_fragment() == &**path {
+                            entry.dirty.store(true, Relaxed);
+                            keys_to_reload.insert(key.clone());
+                        }
+                    }
+                }
+            }
 
             loop {
                 for k in mem::take(&mut keys_to_reload) {
@@ -754,18 +770,32 @@ impl AssetCache {
                     let Some(entry) = inner.get_entry(&k) else { continue };
 
                     // skip if the entry is not ready to be reloaded: i.e. if any of its dependencies are dirty
-                    let mut can_reload = true;
+                    let mut any_dependency_dirty = false;
                     for dep_key in entry.dependencies.dependencies.iter() {
                         let Some(dep_entry) = inner.get_entry(dep_key) else {
                             continue;
                         };
                         if dep_entry.dirty.load(Relaxed) {
-                            can_reload = false;
+                            any_dependency_dirty = true;
                             break;
                         }
                     }
 
-                    if !can_reload {
+                    // also skip if the entry itself is not dirty (a loader function may have
+                    // reloaded it manually already)
+                    if !entry.dirty.load(Relaxed) {
+                        // the entry itself is clean, but its dependencies are dirty; this probably
+                        // should not happen.
+                        if any_dependency_dirty {
+                            error!(
+                                "asset `{}` is marked clean but has dirty dependencies; this should not happen",
+                                k.path.as_str()
+                            );
+                        }
+                        continue;
+                    }
+
+                    if any_dependency_dirty {
                         // put back in the queue
                         keys_to_reload.insert(k);
                         continue;
@@ -786,10 +816,13 @@ impl AssetCache {
                 }
             }
         }
+
+        debug!("--- AssetCache: finished ---");
     }
 
     /// Called by providers to notify that a file has changed.
     pub fn asset_changed(&self, path: &VfsPath) {
+        //debug!("asset file changed: {}", path.as_str());
         #[cfg(feature = "hot_reload")]
         self.dirty_paths
             .lock()

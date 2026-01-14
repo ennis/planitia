@@ -34,12 +34,16 @@ depth_stencil_attachment = { bind = "depth_buffer", clear_depth = 1.0 }
 
 [pass.render_outlines]
 depth_stencil.write_enable = false
-color_attachments = [
-    { bind = "outline_angles", clear_color = [0.0, 0.0, 0.0, 0.0] }
+color_targets = [
+    { format = "RG32F", src_color = "src_alpha", dst_color = "one_minus_src_alpha", color_op = "add", src_alpha = "one", dst_alpha = "zero", alpha = "add" }
 ]
+
 
 [pass.lines]
 depth_stencil.write_enable = false
+
+[pass.base_render]
+#depth_stencil.compare_op = "always"
 
 [pass.background]
 depth_stencil.compare_op = "always"

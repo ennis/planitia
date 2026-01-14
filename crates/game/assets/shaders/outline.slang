@@ -1,10 +1,12 @@
 import common;
 import scene_info;
 
+static const uint16_t CLUSTER_EDGE_FLAG_BORDER = 1 << 0;
+static const uint16_t CLUSTER_EDGE_FLAG_CREASE = 1 << 1;
 
 struct ClusterEdge {
-    uint16_t face_0;
-    uint16_t face_1;
+    uint16_t normal_a;
+    uint16_t normal_b;
     uint16_t vertex_0;
     uint16_t vertex_1;
 }
@@ -16,7 +18,27 @@ struct ClusterVertex {
 
 struct ClusterFace {
     uint16_t3 vertices;
-    float3 normal;
+}
+
+struct Meshlet {
+    NormalCone normal_cone;
+    uint base_vertex;
+    uint base_edge;
+    uint base_face;
+    uint base_face_normal;
+    uint16_t vertex_count;
+    uint16_t edge_count;
+    uint16_t face_count;
+    uint16_t face_normal_count;
+}
+
+// See documentation in outlines.rs
+struct MeshData {
+    ClusterVertex* vertices;
+    ClusterEdge* edges;
+    ClusterFace* faces;
+    float3* face_normals;
+    Meshlet* meshlets;
 }
 
 struct NormalCone {
@@ -36,20 +58,11 @@ struct OutlineVertex {
 
 static const uint MAX_EDGES = 128;
 
-// See documentation in outlines.rs
-struct Cluster {
-    ClusterVertex vertices[MAX_EDGES];
-    ClusterEdge edges[MAX_EDGES];
-    ClusterFace faces[MAX_EDGES*2];
-    NormalCone normal_cone;
-    uint16_t vertex_count;
-    uint16_t edge_count;
-    uint16_t face_count;
-}
-
-ClusterVertex fetch_cluster_vertex(Cluster* clusters, uint draw_id, uint vertex_id) {
-    let face = clusters[draw_id].faces[vertex_id / 3];
-    let vertex = clusters[draw_id].vertices[face.vertices[vertex_id % 3]];
+ClusterVertex fetch_mesh_vertex(MeshData data, uint draw_id, uint vertex_id) {
+    let base_face = data.meshlets[draw_id].base_face;
+    let base_vertex = data.meshlets[draw_id].base_vertex;
+    let face = data.faces[base_face + vertex_id / 3];
+    let vertex = data.vertices[base_vertex + face.vertices[vertex_id % 3]];
     return vertex;
 }
 
@@ -65,15 +78,14 @@ struct DepthPassVertexOutput {
 
 struct DepthPassRootParams {
     SceneInfo* scene_info;
-    Cluster* clusters;
-    uint cluster_count;
+    MeshData mesh;
 };
 
 [shader("vertex")]
 [pass("depth_pass")]
 DepthPassVertexOutput depth_pass_vertex(uint vertex_id : SV_VertexID, uint draw_id: SV_DrawIndex, uniform DepthPassRootParams* u)
 {
-    let vertex = fetch_cluster_vertex(u.clusters, draw_id, vertex_id);
+    let vertex = fetch_mesh_vertex(u.mesh, draw_id, vertex_id);
     DepthPassVertexOutput o;
     o.pos = mul(u.scene_info.view_proj_matrix, float4(vertex.position, 1.0));
     return o;
@@ -90,9 +102,9 @@ void depth_pass_fragment(DepthPassVertexOutput i) {
 // Outline extraction
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-struct OutlineRootParams {
+struct ExtractOutlinesRootParams {
     SceneInfo* scene_info;
-    Cluster* clusters;
+    MeshData mesh;
     uint cluster_count;
     uint vertex_count;
     OutlineVertex* out_vertices;
@@ -103,7 +115,7 @@ struct OutlineRootParams {
 [shader("compute")]
 [numthreads(MAX_EDGES, 1, 1)]
 [pass("extract_outlines")]
-void extract_outlines(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_GroupThreadID, uniform OutlineRootParams* u)
+void extract_outlines(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_GroupThreadID, uniform ExtractOutlinesRootParams* u)
 {
     // we spawn one workgroup per edge cluster, and each thread in the workgroup processes one edge
 
@@ -113,24 +125,27 @@ void extract_outlines(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_Gro
         return;
     }
 
-    Cluster* c = &u.clusters[cli];
+    Meshlet* m = &u.mesh.meshlets[cli];
+    let base_edge = m.base_edge;
+    let base_vertex = m.base_vertex;
+    let base_face_normal = m.base_face_normal;
 
     uint edge_index = group_thread_id.x;
-    if (edge_index >= c.edge_count) {
+    if (edge_index >= m.edge_count) {
         return;
     }
 
-    let edge = c.edges[edge_index];
+    let edge = u.mesh.edges[base_edge + edge_index];
     var is_outside_edge = false;
     var is_contour = false;
 
-    if (edge.face_0 == 0xFFFF || edge.face_1 == 0xFFFF) {
+    if (edge.normal_a == 0xFFFF || edge.normal_b == 0xFFFF) {
         is_outside_edge = true;
     } else {
-        let n0 = c.faces[edge.face_0].normal;
-        let n1 = c.faces[edge.face_1].normal;
+        let n0 = u.mesh.face_normals[base_face_normal + edge.normal_a];
+        let n1 = u.mesh.face_normals[base_face_normal + edge.normal_b];
         let eye = u.scene_info.eye;
-        let view = eye - c.vertices[edge.vertex_0].position;
+        let view = eye - u.mesh.vertices[base_vertex + edge.vertex_0].position;
         if (dot(n0, view) * dot(n1, view) < 0.0) {
             is_contour = true;
         }
@@ -142,8 +157,8 @@ void extract_outlines(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_Gro
     float hw_aa = max(width, 1.) * .5; //+ filter_width * sqrt(2.);
 
     if (is_contour || is_outside_edge) {
-        var v0 = mul(u.scene_info.view_proj_matrix, float4(c.vertices[edge.vertex_0].position, 1.));
-        var v1 = mul(u.scene_info.view_proj_matrix, float4(c.vertices[edge.vertex_1].position, 1.));
+        var v0 = mul(u.scene_info.view_proj_matrix, float4(u.mesh.vertices[base_vertex + edge.vertex_0].position, 1.));
+        var v1 = mul(u.scene_info.view_proj_matrix, float4(u.mesh.vertices[base_vertex + edge.vertex_1].position, 1.));
         var v0offset = v0;
         var v1offset = v1;
 
@@ -319,6 +334,7 @@ struct BaseRenderVSOut {
     float4 pos: SV_Position;
     [[vk::location(0)]] float4 color;
     [[vk::location(1)]] float3 normal;
+    [[vk::location(2)]] nointerpolation int meshlet_id;
 }
 
 struct BaseRenderFSOut {
@@ -327,7 +343,7 @@ struct BaseRenderFSOut {
 
 struct BaseRenderRootParams {
     SceneInfo* scene_info;
-    Cluster* clusters;
+    MeshData mesh;
     float3 main_light_direction;    // in world space
 
     //uint cluster_count;
@@ -337,10 +353,11 @@ struct BaseRenderRootParams {
 [pass("base_render")]
 BaseRenderVSOut base_render_vertex(uint vertex_id : SV_VertexID, uint draw_id: SV_DrawIndex, uniform BaseRenderRootParams* u)
 {
-    let vertex = fetch_cluster_vertex(u.clusters, draw_id, vertex_id);
+    let vertex = fetch_mesh_vertex(u.mesh, draw_id, vertex_id);
     BaseRenderVSOut o;
     o.pos = mul(u.scene_info.view_proj_matrix, float4(vertex.position, 1.0));
     o.normal = mul(float3x3(u.scene_info.view_matrix), vertex.normal);
+    o.meshlet_id = draw_id;
     return o;
 }
 
@@ -349,7 +366,12 @@ BaseRenderVSOut base_render_vertex(uint vertex_id : SV_VertexID, uint draw_id: S
 BaseRenderFSOut base_render_fragment(BaseRenderVSOut i, uniform BaseRenderRootParams* u) {
     BaseRenderFSOut o;
     float3 normal = normalize(i.normal);
-    float light_intensity = saturate(dot(normal, -u.main_light_direction));
+    float light_intensity = saturate(dot(normal, -normalize(u.main_light_direction)));
     o.color = float4(light_intensity.xxx, 1.0);
+
+    // colorize per cluster
+    //o.color.rgb = palette(float(i.meshlet_id) * 0.1, float3(0.5,0.5,0.5),float3(0.5,0.5,0.5),float3(1.0,1.0,1.0),float3(0.0,0.33,0.67));
+
+
     return o;
 }

@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::ops::Range;
 use std::path::Path;
-use gamelib::static_assets;
+use gamelib::{static_assets, tweak};
 
 /// Vertices emitted by the outline extraction compute shader.
 #[repr(C)]
@@ -31,40 +31,14 @@ pub(crate) struct OutlineVertex {
 
 /// Loads geometry from the specified file path.
 pub struct OutlineExperiment {
-    //extract_outlines: Handle<gpu::ComputePipeline>,
-    //render_outlines: Handle<gpu::GraphicsPipeline>,
-    //depth_pass: Handle<gpu::GraphicsPipeline>,
-    //corner_detection: Handle<gpu::GraphicsPipeline>,
+    // --- Preprocessed mesh data ---
     mesh: Mesh,
-    clusters: Buffer<Cluster>,
-    cluster_draw_commands: Buffer<DrawIndirectCommand>,
+    processed_mesh: Option<ProcessedMesh>,
+
+    // --- GPU pipeline resources ---
     outline_vertices: Buffer<OutlineVertex>,
     outline_indices: Buffer<u32>,
     angle_texture: Image,
-}
-
-struct Vertex {
-    position: Vec3,
-    normal: Vec3,
-}
-
-struct Face {
-    normal: Vec3,
-    vertices: [u32; 3],
-    edges: [u32; 3],
-}
-
-struct Edge {
-    /// 1st vertex index
-    v0: u32,
-    /// 2nd vertex index
-    v1: u32,
-    /// 1st adjacent face index
-    f0: u32,
-    /// 2nd adjacent face index
-    f1: u32,
-    /// Current cluster
-    cluster: usize,
 }
 
 #[repr(C)]
@@ -78,6 +52,7 @@ struct NormalCone {
 
 struct EdgeCluster {
     edges: Vec<u32>,
+    faces: Vec<u32>,
     cone: NormalCone,
 }
 
@@ -87,83 +62,134 @@ const MAX_EDGES_PER_CLUSTER: usize = 128;
 
 #[repr(C)]
 #[derive(Copy, Clone, Default)]
-struct ClusterEdge {
-    face_0: u16,
-    face_1: u16,
+struct MeshEdge {
+    normal_a: u16,
+    normal_b: u16,
     vertex_0: u16,
-    vertex_1: u16,
+    vertex_1: u16
 }
 
-impl fmt::Debug for ClusterEdge {
+const CLUSTER_EDGE_FLAG_BORDER: u16 = 1 << 0;
+const CLUSTER_EDGE_FLAG_CREASE: u16 = 1 << 1;
+
+impl fmt::Debug for MeshEdge {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "(f0={},f1={},v0={},v1={})",
-            self.face_0, self.face_1, self.vertex_0, self.vertex_1
+            "(na={},nb={},v0={},v1={})",
+            self.normal_a, self.normal_b, self.vertex_0, self.vertex_1
         )
     }
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, Default, Debug)]
-struct ClusterVertex {
+struct MeshVertex {
     position: Vec3,
     normal: Vec3,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, Default)]
-struct ClusterFace {
+struct MeshFace {
     vertices: [u16; 3],
-    normal: Vec3,
 }
 
-/// Edge "meshlet" for GPU consumption
 #[repr(C)]
 #[derive(Copy, Clone)]
-struct Cluster {
-    /// Vertices in this cluster.
-    vertices: [ClusterVertex; MAX_EDGES_PER_CLUSTER],
-    /// All edges (represented by the two faces they connect) in this cluster
-    edges: [ClusterEdge; MAX_EDGES_PER_CLUSTER],
-    /// All faces in this cluster
-    faces: [ClusterFace; MAX_EDGES_PER_CLUSTER * 2],
-    normal_cone: NormalCone,
-    vertex_count: u16,
-    edge_count: u16,
-    face_count: u16,
+struct MeshData {
+    vertices: Ptr<MeshVertex>,
+    edges: Ptr<MeshEdge>,
+    faces: Ptr<MeshFace>,
+    face_normals: Ptr<Vec3>,
+    meshlets: Ptr<Meshlet>,
 }
 
-impl Default for Cluster {
+impl Default for MeshData {
     fn default() -> Self {
         Self {
-            vertices: [ClusterVertex::default(); MAX_EDGES_PER_CLUSTER],
-            edges: [ClusterEdge::default(); MAX_EDGES_PER_CLUSTER],
-            faces: [ClusterFace::default(); MAX_EDGES_PER_CLUSTER * 2],
-            vertex_count: 0,
-            edge_count: 0,
-            face_count: 0,
-            normal_cone: NormalCone::default(),
+            vertices: Ptr::NULL,
+            edges: Ptr::NULL,
+            faces: Ptr::NULL,
+            face_normals: Ptr::NULL,
+            meshlets: Ptr::NULL,
         }
     }
 }
 
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct Meshlet {
+    normal_cone: NormalCone,
+    base_vertex: u32,
+    base_edge: u32,
+    base_face: u32,
+    base_face_normal: u32,
+    vertex_count: u16,
+    edge_count: u16,
+    face_count: u16,
+    face_normal_count: u16,
+}
+
+struct ProcessedMesh {
+    vertices: gpu::Buffer<MeshVertex>,
+    edges: gpu::Buffer<MeshEdge>,
+    faces: gpu::Buffer<MeshFace>,
+    face_normals: gpu::Buffer<Vec3>,
+    meshlets: gpu::Buffer<Meshlet>,
+    draw_commands: gpu::Buffer<DrawIndirectCommand>,
+    gpu: MeshData,
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+struct Vertex {
+    point: u32,
+    normal: Vec3,
+}
+
+struct Face {
+    normal: Vec3,
+    vertices: [u32; 3],
+    edges: [u32; 3],
+}
+
+struct Edge {
+    /// 1st point index
+    p0: u32,
+    /// 2nd point index
+    p1: u32,
+    /// 1st adjacent face index
+    f0: u32,
+    /// 2nd adjacent face index
+    f1: u32,
+    /// Current cluster
+    cluster: usize,
+}
+
+const NO_FACE: u32 = u32::MAX;
+
+#[derive(Default)]
 struct Mesh {
-    face: Vec<Face>,
-    edges: Vec<Edge>, // pairs of vertex indices
+    /// Triplets of vertex indices + face normal.
+    faces: Vec<Face>,
+    /// Pairs of vertex indices + edge type.
+    edges: Vec<Edge>,
     vertices: Vec<Vertex>,
-    incident_edges: Vec<SmallVec<u32, 6>>, // per-vertex incident edge indices
+    points: Vec<Vec3>,
+    incident_edges: Vec<SmallVec<u32, 6>>, // per-point incident edge indices
 }
 
 impl Mesh {
-    fn from_triangle_mesh(vertices: Vec<Vertex>, indices: &[u32]) -> Mesh {
+    fn new(points: Vec<Vec3>, vertices: Vec<Vertex>, indices: &[u32]) -> Mesh {
         assert!(
             indices.len() % 3 == 0,
             "invalid number of indices: must be a multiple of 3"
         );
 
-        let mut faces = Vec::with_capacity(indices.len() / 3);
-        let mut edges = HashMap::new();
+        let mut faces : Vec<Face> = Vec::with_capacity(indices.len() / 3);
+        // (min(P0,P1), max(P0,P1)) -> Edge index
+        let mut edge_map : HashMap<(u32,u32), u32> = HashMap::new();
+        let mut edges : Vec<Edge> = Vec::new();
 
         for index in indices.chunks(3) {
             let v0 = index[0];
@@ -171,53 +197,59 @@ impl Mesh {
             let v2 = index[2];
 
             let normal = {
-                let p0 = vertices[v0 as usize].position;
-                let p1 = vertices[v1 as usize].position;
-                let p2 = vertices[v2 as usize].position;
+                let p0 = points[vertices[v0 as usize].point as usize];
+                let p1 = points[vertices[v1 as usize].point as usize];
+                let p2 = points[vertices[v2 as usize].point as usize];
                 let edge1 = p1 - p0;
                 let edge2 = p2 - p0;
                 Vec3::cross(edge1, edge2).normalize()
             };
 
+
+            let mut insert_edge = |va: u32, vb: u32, face| -> u32 {
+                let pa = vertices[va as usize].point;
+                let pb = vertices[vb as usize].point;
+
+                *edge_map.entry((pa.min(pb), pa.max(pb)))
+                    .and_modify(|edge_index: &mut u32| {
+                        edges[*edge_index as usize].f1 = face;
+                    })
+                    .or_insert_with(|| {
+                        let edge_index = edges.len() as u32;
+                        edges.push(Edge {
+                            p0: pa.min(pb),
+                            p1: pa.max(pb),
+                            f0: face,
+                            f1: NO_FACE,
+                            cluster: 0,
+                        });
+                        edge_index
+                    })
+            };
+
+            let face_index = faces.len() as u32;
+            let e0 = insert_edge(v0, v1, face_index);
+            let e1 = insert_edge(v1, v2, face_index);
+            let e2 = insert_edge(v2, v0, face_index);
+
             faces.push(Face {
                 normal,
                 vertices: [v0, v1, v2],
-                edges: [0; 3], // to be filled later
+                edges: [e0, e1, e2],
             });
-
-            let mut insert_edge = |va: u32, vb: u32, face| {
-                edges
-                    .entry((va.min(vb), va.max(vb)))
-                    .and_modify(|edge: &mut Edge| {
-                        edge.f1 = face;
-                    })
-                    .or_insert_with(|| Edge {
-                        v0: va.min(vb),
-                        v1: va.max(vb),
-                        f0: face,
-                        f1: u32::MAX,
-                        cluster: 0,
-                    });
-            };
-
-            let face_index = (faces.len() - 1) as u32;
-            insert_edge(v0, v1, face_index);
-            insert_edge(v1, v2, face_index);
-            insert_edge(v2, v0, face_index);
         }
 
-        let edges: Vec<Edge> = edges.into_values().collect();
-
-        let mut incident_edges: Vec<SmallVec<_, 6>> = vec![smallvec![]; vertices.len()];
+        let mut incident_edges: Vec<SmallVec<_, 6>> = vec![smallvec![]; points.len()];
         for (i_edge, edge) in edges.iter().enumerate() {
-            incident_edges[edge.v0 as usize].push(i_edge as u32);
-            incident_edges[edge.v1 as usize].push(i_edge as u32);
+            incident_edges[edge.p0 as usize].push(i_edge as u32);
+            incident_edges[edge.p1 as usize].push(i_edge as u32);
         }
 
         Mesh {
-            face: faces,
+            faces,
             edges,
             vertices,
+            points,
             incident_edges,
         }
     }
@@ -231,11 +263,11 @@ fn compute_normal_cone(mesh: &Mesh, cluster_edges: &[u32]) -> NormalCone {
     let mut count = 0;
 
     let mut accumulate = |face_index: u32| -> usize {
-        if face_index == u32::MAX {
+        if face_index == NO_FACE {
             return 0;
         }
         if faces.insert(face_index) {
-            let face = &mesh.face[face_index as usize];
+            let face = &mesh.faces[face_index as usize];
             n += face.normal;
             1
         } else {
@@ -257,10 +289,10 @@ fn compute_normal_cone(mesh: &Mesh, cluster_edges: &[u32]) -> NormalCone {
     let mut out_normal = Vec3::ZERO;
 
     let mut update_min = |face_index: u32| {
-        if face_index == u32::MAX {
+        if face_index == NO_FACE {
             return;
         }
-        let face = &mesh.face[face_index as usize];
+        let face = &mesh.faces[face_index as usize];
         let angle = Vec3::dot(face.normal, n);
         if angle < min_dot {
             min_dot = angle;
@@ -273,7 +305,7 @@ fn compute_normal_cone(mesh: &Mesh, cluster_edges: &[u32]) -> NormalCone {
         let edge = &mesh.edges[*edge_index as usize];
         update_min(edge.f0);
         update_min(edge.f1);
-        let midpoint = (mesh.vertices[edge.v0 as usize].position + mesh.vertices[edge.v1 as usize].position) / 2.0;
+        let midpoint = (mesh.points[edge.p0 as usize] + mesh.points[edge.p1 as usize]) / 2.0;
         center += midpoint;
     }
     center /= cluster_edges.len() as f32;
@@ -281,7 +313,7 @@ fn compute_normal_cone(mesh: &Mesh, cluster_edges: &[u32]) -> NormalCone {
     let mut radius = 0.0f32;
     for edge_index in cluster_edges {
         let edge = &mesh.edges[*edge_index as usize];
-        let midpoint = (mesh.vertices[edge.v0 as usize].position + mesh.vertices[edge.v1 as usize].position) / 2.0;
+        let midpoint = (mesh.points[edge.p0 as usize] + mesh.points[edge.p1 as usize]) / 2.0;
         let dist = (midpoint - center).length();
         radius = f32::max(radius, dist);
     }
@@ -299,15 +331,10 @@ fn acceptance_heuristic(cone: &NormalCone, cam_dist: f32) -> f32 {
     f32::sin(cone.angle + beta_s)
 }
 
-struct ClusterEdgesParams {
-    cam_dist: f32,
-}
-
 fn cluster_edges(
     mesh: &mut Mesh,
-    params: &ClusterEdgesParams,
-    draw_commands: &mut Vec<DrawIndirectCommand>,
-) -> Buffer<Cluster> {
+    cam_dist: f32,
+) -> Vec<EdgeCluster> {
     // start with one cluster per edge
     let mut clusters: Vec<EdgeCluster> = Vec::new();
 
@@ -315,6 +342,7 @@ fn cluster_edges(
         let cone = compute_normal_cone(mesh, &[i as u32]);
         let cluster = EdgeCluster {
             edges: vec![i as u32],
+            faces: vec![],
             cone,
         };
         mesh.edges[i].cluster = i;
@@ -330,8 +358,8 @@ fn cluster_edges(
             let nedges = clusters[i_cluster].edges.len();
             'try_merge_with_incident: for i_cluster_edge in 0..nedges {
                 let i_edge = clusters[i_cluster].edges[i_cluster_edge] as usize;
-                for vertex in [mesh.edges[i_edge].v0, mesh.edges[i_edge].v1] {
-                    for &e2 in &mesh.incident_edges[vertex as usize] {
+                for point in [mesh.edges[i_edge].p0, mesh.edges[i_edge].p1] {
+                    for &e2 in &mesh.incident_edges[point as usize] {
                         let e2 = &mesh.edges[e2 as usize];
                         if e2.cluster == i_cluster {
                             continue;
@@ -353,9 +381,9 @@ fn cluster_edges(
                             .collect();
                         let merged_cone = compute_normal_cone(mesh, &merged_edges);
 
-                        let accept_0 = acceptance_heuristic(&clusters[i_cluster].cone, params.cam_dist);
-                        let accept_1 = acceptance_heuristic(&cluster_1.cone, params.cam_dist);
-                        let accept_merged = acceptance_heuristic(&merged_cone, params.cam_dist);
+                        let accept_0 = acceptance_heuristic(&clusters[i_cluster].cone, cam_dist);
+                        let accept_1 = acceptance_heuristic(&cluster_1.cone, cam_dist);
+                        let accept_merged = acceptance_heuristic(&merged_cone, cam_dist);
 
                         let gain = accept_0 + accept_1 - accept_merged;
                         if gain > 0.0 {
@@ -381,116 +409,201 @@ fn cluster_edges(
 
     let num_clusters = clusters.iter().filter(|c| !c.edges.is_empty()).count();
 
+    // Now cluster faces according to the most common cluster among their incident edges.
+    for (fi,face) in &mut mesh.faces.iter_mut().enumerate() {
+        let mut votes = [(0, 0); 3];  // (cluster index, vote count)
+
+        let mut vote = |cluster_index| {
+            if let Some(p) = votes.iter().position(|(ci, _)| *ci == cluster_index) {
+                votes[p].1 += 1;
+            } else {
+                *votes.iter_mut().find(|(_, count)| *count == 0).unwrap() = (cluster_index, 1);
+            }
+        };
+
+        for &ei in &face.edges {
+            //eprintln!("face {} edge {} cluster {}", fi, ei, mesh.edges[ei as usize].cluster);
+            vote(mesh.edges[ei as usize].cluster as u32);
+        }
+
+        let cluster = votes.iter().max_by_key(|&(_, count)| count).unwrap().0;
+        //eprintln!("face {} assigned to cluster {}", fi, cluster);
+        clusters[cluster as usize].faces.push(fi as u32);
+    }
+
     info!("merged {} edges into {} clusters", mesh.edges.len(), num_clusters);
+    clusters
+}
 
-    let mut clusters_gpu = gpu::Buffer::new(BufferCreateInfo {
-        len: num_clusters,
-        usage: Default::default(),
-        memory_location: MemoryLocation::CpuToGpu,
-    });
+fn convert_edge_clusters_to_meshlets(
+    mesh: &Mesh,
+    clusters: &[EdgeCluster],
+) -> ProcessedMesh
+{
+    let num_clusters = clusters.iter().filter(|c| !c.edges.is_empty()).count();
 
-    // Convert to GPU data
-    for (i_cluster, cluster) in clusters.iter().filter(|c| !c.edges.is_empty()).enumerate() {
-        let mut cluster_gpu = Cluster::default();
-
-        let mut vertex_map: HashMap<u32, u16> = HashMap::new();
-        let mut face_map: HashMap<u32, u16> = HashMap::new();
-
-        {
-            let mut next_vertex_index = 0;
-            for (i_edge, &edge_index) in cluster.edges.iter().enumerate() {
-                let edge = &mesh.edges[edge_index as usize];
-
-                let quad_vertices;
-                let vertices = if edge.f0 == u32::MAX {
-                    &mesh.face[edge.f1 as usize].vertices[..]
-                } else if edge.f1 == u32::MAX {
-                    &mesh.face[edge.f0 as usize].vertices[..]
-                } else {
-                    let v0 = edge.v0;
-                    let v1 = edge.v1;
-                    quad_vertices = [
-                        edge.v0,
-                        edge.v1,
-                        mesh.face[edge.f0 as usize]
-                            .vertices
-                            .iter()
-                            .find(|&&v| v != v0 && v != v1)
-                            .unwrap()
-                            .clone(),
-                        mesh.face[edge.f1 as usize]
-                            .vertices
-                            .iter()
-                            .find(|&&v| v != v0 && v != v1)
-                            .unwrap()
-                            .clone(),
-                    ];
-                    &quad_vertices
-                };
-
-                for &v_index in vertices {
-                    if !vertex_map.contains_key(&v_index) {
-                        let vertex = &mesh.vertices[v_index as usize];
-                        cluster_gpu.vertices[next_vertex_index] = ClusterVertex {
-                            position: vertex.position,
-                            normal: vertex.normal,
-                        };
-                        vertex_map.insert(v_index, next_vertex_index as u16);
-                        next_vertex_index += 1;
-                    }
-                }
+    // Generate GPU vertices.
+    // We generate one GPU vertex per mesh vertex, unless the mesh vertex shares its attributes
+    // (position and normal) with another vertex.
+    #[derive(Copy, Clone, PartialOrd, Ord, Eq, PartialEq, Hash)]
+    struct VertexKey {
+        key: [u32;4]
+    }
+    impl VertexKey {
+        fn new(point_index: u32, normal: Vec3) -> Self {
+            let nx = normal.x.to_bits();    // sue me
+            let ny = normal.y.to_bits();
+            let nz = normal.z.to_bits();
+            Self {
+                key: [point_index, nx, ny, nz]
             }
         }
+    }
 
-        for &edge_index in cluster.edges.iter() {
-            let edge = &mesh.edges[edge_index as usize];
-            //eprintln!("edge count : {}", cluster.edges.len());
-            for &f_index in &[edge.f0, edge.f1] {
-                if f_index == u32::MAX {
-                    continue;
-                }
-                if !face_map.contains_key(&f_index) {
-                    let face = &mesh.face[f_index as usize];
-                    //eprintln!("face vertices: {:?} ", face.vertices);
+    // Point index, normal  -> GPU vertex index
+    let mut vertex_map: Vec<u32> = vec![0; mesh.vertices.len()];
+    let mut gpu_vertices_tmp: Vec<MeshVertex> = Vec::new();
 
-                    let v0 = vertex_map[&face.vertices[0]];
-                    let v1 = vertex_map[&face.vertices[1]];
-                    let v2 = vertex_map[&face.vertices[2]];
-                    cluster_gpu.faces[cluster_gpu.face_count as usize] = ClusterFace {
-                        vertices: [v0, v1, v2],
-                        normal: face.normal,
-                    };
-                    face_map.insert(f_index, cluster_gpu.face_count);
-                    cluster_gpu.face_count += 1;
-                }
-            }
+    {
+        let mut vertex_dedup: HashMap<VertexKey, u32> = HashMap::new();
+        for (vi, vertex) in mesh.vertices.iter().enumerate() {
+            let key = VertexKey::new(vertex.point, vertex.normal);
+            let gvi = *vertex_dedup.entry(key).or_insert_with(|| {
+                gpu_vertices_tmp.push(MeshVertex {
+                    position: mesh.points[vertex.point as usize],
+                    normal: vertex.normal,
+                });
+                (gpu_vertices_tmp.len() - 1) as u32
+            });
+            vertex_map[vi] = gvi;
         }
+    }
+
+    // same as gpu_vertices, but partitioned by meshlet
+    let mut partitioned_vertices: Vec<MeshVertex> = Vec::with_capacity(gpu_vertices_tmp.len());
+    let mut partitioned_normals: Vec<Vec3> = Vec::with_capacity(gpu_vertices_tmp.len());
+    let mut partitioned_faces: Vec<MeshFace> = Vec::with_capacity(mesh.faces.len());
+    let mut partitioned_edges: Vec<MeshEdge> = Vec::with_capacity(mesh.edges.len());
+    let mut meshlets: Vec<Meshlet> = Vec::with_capacity(num_clusters);
+    let mut draw_commands: Vec<DrawIndirectCommand> = Vec::with_capacity(num_clusters);
+
+    // Generate meshlets that contain all the faces and vertices incident to
+    // the edges in a clusters.
+
+    // nomenclature:
+    //      VI  = vertex index (mesh.vertices[VI])
+    //      FI  = face index (mesh.faces[FI])
+    //      LVI = local vertex index (partitioned_vertices[base_vertex + LVI])
+    //      LNI = local normal index (partitioned_normals[base_face_normal + LNI])
+    //
+    // local_vertex_map     maps VI  -> LVI relative to current base_vertex
+    // local_face_normals   maps FI  -> LNI relative to current base_face_normal
+    // local_vertex_dedup:  maps (point index, normal) -> LVI relative to current base_vertex
+    for (_i_cluster, cluster) in clusters.iter().filter(|c| !c.edges.is_empty()).enumerate() {
+
+        let mut local_vertex_map: HashMap<u32, u16> = HashMap::new();
+        let mut local_vertex_dedup: HashMap<VertexKey, u16> = HashMap::new();
+        let mut local_face_normals: HashMap<u32, u16> = HashMap::new();
+
+        let base_vertex = partitioned_vertices.len() as u32;
+        let base_edge = partitioned_edges.len() as u32;
+        let base_face = partitioned_faces.len() as u32;
+        let base_face_normal = partitioned_normals.len() as u32;
+
+        let mut emit_local_vertex = |vi: u32| -> u16 {
+            *local_vertex_map.entry(vi).or_insert_with(|| {
+                // insert or fuse with equivalent vertex
+                let vertex = &mesh.vertices[vi as usize];
+                let key = VertexKey::new(vertex.point, vertex.normal);
+                let lvi = *local_vertex_dedup.entry(key).or_insert_with(|| {
+                    partitioned_vertices.push(MeshVertex {
+                        position: mesh.points[vertex.point as usize],
+                        normal: vertex.normal,
+                    });
+                    (partitioned_vertices.len() as u32 - 1 - base_vertex) as u16
+                });
+                lvi
+            })
+        };
+
+        // --- emit meshlet vertices ---
 
         for (i_edge, &edge_index) in cluster.edges.iter().enumerate() {
             let edge = &mesh.edges[edge_index as usize];
-            let f0 = if edge.f0 == u32::MAX {
-                u16::MAX
-            } else {
-                face_map[&edge.f0]
-            };
-            let f1 = if edge.f1 == u32::MAX {
-                u16::MAX
-            } else {
-                face_map[&edge.f1]
-            };
-            let v0 = vertex_map[&edge.v0];
-            let v1 = vertex_map[&edge.v1];
 
-            cluster_gpu.edges[i_edge] = ClusterEdge {
-                face_0: f0,
-                face_1: f1,
-                vertex_0: v0,
-                vertex_1: v1,
-            };
+            let mut incident_face_normals = [0; 2];
+
+            for (i,&fi) in [edge.f0, edge.f1].iter().enumerate() {
+                if fi == NO_FACE {
+                    incident_face_normals[i] = 0xFFFF;
+                } else {
+                    let lni = local_face_normals.entry(fi).or_insert_with(|| {
+                        let face = &mesh.faces[fi as usize];
+                        partitioned_normals.push(face.normal);
+                        (partitioned_normals.len() as u32 - 1 - base_face_normal) as u16
+                    });
+                    incident_face_normals[i] = *lni;
+                }
+            }
+
+            let fi = match (edge.f0, edge.f1) {
+                (NO_FACE, NO_FACE) => panic!("edge has no incident faces"),
+                (NO_FACE, _) => edge.f1,
+                (_, NO_FACE) => edge.f0,
+                _ => edge.f0,
+            } as usize;
+
+            // find vertices that corresponds to the edge endpoints
+            // for crease edges, this could be the vertices coming from either incident face
+            // in any case, for edges, only the position is valid
+            let edge_v0 = *mesh.faces[fi].vertices.iter().find(|&vi| mesh.vertices[*vi as usize].point == edge.p0).unwrap();
+            let edge_v1 = *mesh.faces[fi].vertices.iter().find(|&vi| mesh.vertices[*vi as usize].point == edge.p1).unwrap();
+
+            // map vertices into meshlet data
+            let vertex_0 = emit_local_vertex(edge_v0);
+            let vertex_1 = emit_local_vertex(edge_v1);
+
+            partitioned_edges.push(MeshEdge {
+                normal_a: incident_face_normals[0],
+                normal_b: incident_face_normals[1],
+                vertex_0,
+                vertex_1
+            });
         }
 
-        cluster_gpu.edge_count = cluster.edges.len() as u16;
-        cluster_gpu.normal_cone = cluster.cone;
+
+        // --- emit meshlet faces ---
+        for &fi in cluster.faces.iter() {
+            let face = &mesh.faces[fi as usize];
+            let lv0 = emit_local_vertex(face.vertices[0]);
+            let lv1 = emit_local_vertex(face.vertices[1]);
+            let lv2 = emit_local_vertex(face.vertices[2]);
+            partitioned_faces.push(MeshFace {
+                vertices: [lv0, lv1, lv2],
+            });
+        }
+
+        let face_count = cluster.faces.len() as u16;
+        dbg!(face_count);
+
+        meshlets.push(Meshlet {
+            normal_cone: cluster.cone,
+            base_vertex,
+            base_edge,
+            base_face,
+            base_face_normal,
+            vertex_count: (partitioned_vertices.len() as u32 - base_vertex) as u16,
+            edge_count: cluster.edges.len() as u16,
+            face_count: cluster.faces.len() as u16,
+            face_normal_count: local_face_normals.len() as u16,
+        });
+
+        draw_commands.push(DrawIndirectCommand {
+            vertex_count: (face_count * 3) as u32,
+            instance_count: 1,
+            first_vertex: 0,
+            first_instance: 0,
+        });
 
         /*eprintln!(
             "cluster: {} edges, {} vertices, {} faces",
@@ -498,36 +611,40 @@ fn cluster_edges(
         );
         eprintln!("- edges: {:?}", cluster_gpu.edges);
         eprintln!("- vertices: {:?}", &cluster_gpu.vertices);*/
-
-        draw_commands.push(DrawIndirectCommand {
-            vertex_count: (cluster_gpu.face_count as u32) * 3,
-            instance_count: 1,
-            first_vertex: 0,
-            first_instance: 0,
-        });
-
-        unsafe {
-            clusters_gpu.as_mut_slice()[i_cluster].write(cluster_gpu);
-        }
     }
-    clusters_gpu
+
+    let vertices = gpu::Buffer::from_slice(&partitioned_vertices);
+    let edges = gpu::Buffer::from_slice(&partitioned_edges);
+    let faces = gpu::Buffer::from_slice(&partitioned_faces);
+    let face_normals = gpu::Buffer::from_slice(&partitioned_normals);
+    let meshlets = gpu::Buffer::from_slice(&meshlets);
+    let draw_commands = gpu::Buffer::from_slice(&draw_commands);
+
+    let gpu = MeshData {
+        vertices: vertices.ptr(),
+        edges: edges.ptr(),
+        faces: faces.ptr(),
+        face_normals: face_normals.ptr(),
+        meshlets: meshlets.ptr(),
+    };
+    ProcessedMesh {
+        vertices,
+        edges,
+        faces,
+        face_normals,
+        meshlets,
+        draw_commands,
+        gpu,
+    }
 }
 
-/*
-struct OutlineRootParams {
-    SceneInfo* scene_info;
-    Cluster* clusters;
-    uint32_t cluster_count;
-    PushBuffer<OutlineVertex> out_outline_vertices;
-}
-*/
 
 #[repr(C)]
 #[derive(Copy, Clone)]
-struct OutlineExperimentRootParams {
+struct ExtractOutlinesRootParams {
     scene_info: Ptr<SceneInfoUniforms>,
-    clusters: Ptr<Cluster>,
-    cluster_count: u32,
+    mesh_data: MeshData,
+    meshlet_count: u32,
     vertex_count: u32,
     out_vertices: Ptr<OutlineVertex>,
     out_indices: Ptr<u32>,
@@ -538,8 +655,15 @@ struct OutlineExperimentRootParams {
 #[derive(Copy, Clone)]
 struct DepthPassRootParams {
     scene_info: Ptr<SceneInfoUniforms>,
-    clusters: Ptr<Cluster>,
-    cluster_count: u32,
+    mesh_data: MeshData,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct BaseRenderRootParams {
+    scene_info: Ptr<SceneInfoUniforms>,
+    mesh_data: MeshData,
+    main_light_direction: Vec3,
 }
 
 #[repr(C)]
@@ -569,14 +693,8 @@ static_assets! {
 impl OutlineExperiment {
     pub fn new() -> Self {
         Self {
-            mesh: Mesh {
-                face: vec![],
-                edges: vec![],
-                vertices: vec![],
-                incident_edges: vec![],
-            },
-            clusters: gpu::Buffer::from_slice(&[]),
-            cluster_draw_commands: gpu::Buffer::from_slice(&[]),
+            mesh: Mesh::default(),
+            processed_mesh: None,
             outline_vertices: gpu::Buffer::from_slice(&[]),
             outline_indices: gpu::Buffer::from_slice(&[]),
             angle_texture: gpu::Image::new(gpu::ImageCreateInfo {
@@ -593,31 +711,39 @@ impl OutlineExperiment {
     fn load_geometry(&mut self, path: &Path) {
         let geo = hgeo::Geo::load(path).unwrap();
 
-        let mut vertices = Vec::new();
-        let mut indices = Vec::new();
+        let points = geo.point_attribute_typed::<Vec3>("P").unwrap().as_slice().to_vec();
 
-        // load all polygon meshes
-        polygons_to_triangle_mesh(
-            &geo,
-            |g, ptnum| {
-                let position: Vec3 = g.point(ptnum, "P");
-                let normal: Vec3 = g.point(ptnum, "N");
-                vertices.push(Vertex { position, normal });
-                vertices.len() as u32 - 1
-            },
-            |i0, i1, i2| {
-                indices.push(i0);
-                indices.push(i1);
-                indices.push(i2);
-            },
-        );
+        let (vertices, indices) = {
+            let mut vertices = Vec::new();
+            let mut indices = Vec::new();
+            hgeo::util::polygons_to_triangle_mesh(
+                &geo,
+                |g, vtxnum| {
+                    let normal: Vec3 = g.vertex(vtxnum, "N");
+                    //let point = g.vertexpoint(vtxnum);
+                    //eprintln!("vertex {vtxnum}: pt = {point}");
+                    vertices.push(Vertex {
+                        point: g.vertexpoint(vtxnum),
+                        normal,
+                    });
+                    vertices.len() as u32 - 1
+                },
+                |i0, i1, i2| {
+                    indices.push(i0);
+                    indices.push(i1);
+                    indices.push(i2);
+                },
+            );
+            (vertices, indices)
+        };
 
-        let mut mesh = Mesh::from_triangle_mesh(vertices, &indices);
-        let cluster_params = ClusterEdgesParams { cam_dist: 10.0 };
-        let mut draw_commands = Vec::new();
-        self.clusters = cluster_edges(&mut mesh, &cluster_params, &mut draw_commands);
-        self.cluster_draw_commands = gpu::Buffer::from_slice(&draw_commands);
+        let mut mesh = Mesh::new(points, vertices, &indices);
+
+        let edge_clusters = cluster_edges(&mut mesh, 10.0);
+        let processed_mesh = convert_edge_clusters_to_meshlets(&mesh, &edge_clusters);
+        self.processed_mesh = Some(processed_mesh);
         self.mesh = mesh;
+
         self.outline_vertices = gpu::Buffer::new(gpu::BufferCreateInfo {
             len: self.mesh.vertices.len() * 20, // not great
             ..
@@ -655,42 +781,45 @@ impl OutlineExperiment {
         color_target: &gpu::Image,
         depth_target: &gpu::Image,
         scene_info: &SceneInfo,
-    ) -> Result<(), AssetLoadError> {
-
-        let extract_outlines = EXTRACT_OUTLINES.read()?;
-        let render_outlines = RENDER_OUTLINES.read()?;
-        let depth_pass = DEPTH_PASS.read()?;
-        let corner_detection = CORNER_DETECTION.read()?;
+    ) -> Result<(), AssetLoadError>
+    {
+        let Some(ref mesh) = self.processed_mesh else {
+            return Ok(());
+        };
 
         /////////////////////////////////////////////////////////
-        // depth pass
+        // base render & depth pass
         {
             cmd.barrier(BarrierFlags::DEPTH_STENCIL);
             let mut encoder = cmd.begin_rendering(
-                &[],
+                &[gpu::ColorAttachment {
+                    image: color_target,
+                    clear_value: None,
+                }],
                 Some(gpu::DepthStencilAttachment {
                     image: &depth_target,
-                    ..
+                    depth_clear_value: None,
+                    stencil_clear_value: None,
                 }));
+            encoder.bind_graphics_pipeline(&*BASE_RENDER.read()?);
 
-            encoder.bind_graphics_pipeline(&*depth_pass);
             encoder.draw_indirect(
                 TriangleList,
                 None,
-                &self.cluster_draw_commands,
-                0..self.cluster_draw_commands.len() as u32,
-                &DepthPassRootParams {
+                &mesh.draw_commands,
+                0..mesh.draw_commands.len() as u32,
+                &BaseRenderRootParams {
                     scene_info: scene_info.gpu,
-                    clusters: self.clusters.ptr(),
-                    cluster_count: self.clusters.len() as u32,
+                    mesh_data: mesh.gpu,
+                    main_light_direction: tweak!(main_light_direction = Vec3::new(0.5, -1.0, 0.5).normalize()),
                 },
             );
+            encoder.finish();
         }
-
 
         /////////////////////////////////////////////////////////
         // contour extraction
-        cmd.bind_compute_pipeline(&*extract_outlines);
+        cmd.bind_compute_pipeline(&*EXTRACT_OUTLINES.read()?);
 
         let draw_indirect_command_buffer = gpu::Buffer::from_slice(
             &[gpu::DrawIndirectCommand {
@@ -702,13 +831,13 @@ impl OutlineExperiment {
         );
 
         cmd.dispatch(
-            self.clusters.len() as u32,
+            mesh.meshlets.len() as u32,
             1,
             1,
-            &OutlineExperimentRootParams {
+            &ExtractOutlinesRootParams {
                 scene_info: scene_info.gpu,
-                clusters: self.clusters.ptr(),
-                cluster_count: self.clusters.len() as u32,
+                mesh_data: mesh.gpu,
+                meshlet_count: mesh.meshlets.len() as u32,
                 vertex_count: 0,
                 out_vertices: self.outline_vertices.ptr(),
                 out_indices: self.outline_indices.ptr(),
@@ -735,7 +864,7 @@ impl OutlineExperiment {
                 }],
                 None);
 
-            encoder.bind_graphics_pipeline(&*render_outlines);
+            encoder.bind_graphics_pipeline(&*RENDER_OUTLINES.read()?);
             encoder.draw_indirect(
                 TriangleList,
                 None,
@@ -754,8 +883,12 @@ impl OutlineExperiment {
             cmd.barrier(BarrierFlags::FRAGMENT_SHADER | BarrierFlags::SAMPLED_READ);
         }
 
+
+
+
         /////////////////////////////////////////////////////////
         // corner detection
+        if tweak!(show_corner_detection = true)
         {
             let mut encoder = cmd.begin_rendering(
                 &[gpu::ColorAttachment {
@@ -767,7 +900,7 @@ impl OutlineExperiment {
                     depth_clear_value: None,
                     stencil_clear_value: None,
                 }));
-            encoder.bind_graphics_pipeline(&*corner_detection);
+            encoder.bind_graphics_pipeline(&*CORNER_DETECTION.read()?);
             encoder.draw(
                 TriangleList,
                 None,

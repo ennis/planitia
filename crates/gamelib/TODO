@@ -18,7 +18,7 @@
      It was a nasty use-after-free due to slice::from_raw_parts ignoring lifetimes
  ☐ Use vulkan swapchains instead of DXGI, to make things simpler to debug @low
  ✔ Replace uses of `Device::global().function` by global functions. @done (25-11-01 10:37)
- ☐ Load mesh
+ ✔ Load mesh @done (26-01-10 13:36)
  ✔ Import shader-bridge @done (25-10-06 22:26)
  ✔ move to a separate repo @done (25-10-06 22:26)
  ☐ get rid of winit
@@ -128,6 +128,12 @@
 
     Going further, we can skip (3) entirely if the blending mode is specified in FragmentOutput.
 
+ ☐ GPU API streamline 2: scripting
+     It's useless if there's no autocompletion for the pass names and parameters.
+ ☐ Global tweakable variables
+     In rust code, call `tweak::<T>(min, max)` to automatically show a slider in the GUI
+ ☐ QoL: remember last application state and reload (geometry file, pipeline config)
+ ☐ Global settings singleton
 
 
 Render world:
@@ -231,6 +237,23 @@ Winit replacement:
     ☐ resizing
     ☐ custom cursors 
     ☐ clipboard
+
+Event loop:
+    ☐ Figure out callbacks
+        Async? Too restrictive, must wrap stuff in Arcs or Rc<RefCell>
+        The most intuitive model is the current one: a single static `App` object holding the state. Callbacks can refer to it without capturing anything.
+        However, this requires the whole application state to be visible to all components: it's not very decoupled.
+        Proposal: individual components can't request to be called back directly; instead the application must route all events manually to all components
+            -> not very well decoupled
+        Proposal: application components are `'static`
+            They *are* static in practice. 
+            But the reference we get when we borrow the RefCell sure isn't.
+            `&self` can be moved into callbacks, but it will need interior mutability.
+                Technically, when callbacks are called from the top of the event loop, it's almost sure that nothing holds a borrow of the component.
+        Proposal: store independent application components in separate statics
+            There's no need to stuff everything into App if the stuff is decoupled anyway.
+        Red lines: no Rc, no RefCells
+            ergonomic impact is too much
 
 Bugs:
     ☐ vkDestroySemaphore(): can't be called on VkSemaphore 0xcb1c7c000000001b[DxgiVulkanSharedFence] that is currently in use by VkQueue 0x1be997ad4c0.

@@ -248,6 +248,7 @@ impl Geo {
         if let Some(attr) = self.vertex_attribute_typed::<T>(name) {
             attr[vertex_index as usize].clone()
         } else if let Some(attr) = self.point_attribute_typed::<T>(name) {
+            // if the attribute doesn't exist on vertices, try points
             let point_index = self.topology[vertex_index as usize] as usize;
             attr[point_index].clone()
         } else {

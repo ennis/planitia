@@ -8,7 +8,7 @@ use crate::platform::{EventToken, InitOptions, Platform, PlatformInterface, Rend
 use futures::future::AbortHandle;
 use gpu::vk::Handle;
 use keyboard_types::{Key, KeyState, Modifiers, NamedKey};
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use mlua::Lua;
 use renderdoc::{RenderDoc, V141};
 use std::cell::{Cell, OnceCell, RefCell};
@@ -18,6 +18,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, OnceLock};
 use std::{mem, ptr};
 use threadbound::ThreadBound;
+use crate::tweak::show_tweaks_gui;
 
 /// Holds the application's global objects and services.
 pub(crate) struct Context {
@@ -31,6 +32,7 @@ pub(crate) struct Context {
     rdoc: Option<RefCell<RenderDoc<V141>>>,
     rdoc_capture_requested: Cell<bool>,
     rdoc_launch_replay_ui: Cell<bool>,
+    debug_mark_counter: Cell<usize>,
 }
 
 unsafe fn rdoc_instance_ptr() -> *mut c_void {
@@ -82,6 +84,7 @@ impl Context {
             rdoc: rdoc.map(RefCell::new),
             rdoc_capture_requested: Cell::new(false),
             rdoc_launch_replay_ui: Cell::new(false),
+            debug_mark_counter: Cell::new(0),
         }
     }
 
@@ -144,6 +147,8 @@ pub trait AppHandler {
 
     fn close_requested(&mut self) {}
     fn imgui(&mut self, ctx: &egui::Context) {}
+
+    fn exiting(&mut self) {}
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -301,12 +306,25 @@ where
 
         match input_event {
             InputEvent::KeyboardEvent(ref ke) if ke.key == Key::Named(NamedKey::F9) && ke.state == KeyState::Down => {
-                ctx.rdoc_capture_requested.set(true);
                 if ke.modifiers.contains(Modifiers::SHIFT) {
-                    ctx.rdoc_launch_replay_ui.set(true);
                 }
             }
             _ => {}
+        }
+
+        if input_event.is_shortcut("F9") {
+            ctx.rdoc_capture_requested.set(true);
+        }
+
+        if input_event.is_shortcut("Shift+F9") {
+            ctx.rdoc_capture_requested.set(true);
+            ctx.rdoc_launch_replay_ui.set(true);
+        }
+
+        if input_event.is_shortcut("F4") {
+            let count = ctx.debug_mark_counter.get();
+            ctx.debug_mark_counter.set(count + 1);
+            info!("---------------------------------- MARK {count} ----------------------------------");
         }
 
         // Otherwise, pass the event to the inner handler
@@ -333,6 +351,9 @@ where
         {
             let mut cmd = gpu::CommandBuffer::new();
             ctx.imgui.borrow_mut().run(&mut cmd, |imgui_ctx| {
+                egui::Window::new("Tweaks").show(imgui_ctx, |ui| {
+                    show_tweaks_gui(ui);
+                });
                 handler.imgui(imgui_ctx);
             });
             gpu::submit(cmd).unwrap();
@@ -370,5 +391,11 @@ where
 
     fn close_requested(&mut self) {
         self.get_handler().borrow_mut().close_requested();
+    }
+
+    fn exiting(&mut self) {
+        let ctx = self.get_context();
+        ctx.imgui.borrow_mut().save_state();
+        self.get_handler().borrow_mut().exiting();
     }
 }

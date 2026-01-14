@@ -17,8 +17,8 @@ pub fn polygons_to_triangle_mesh<VertexFn, TriangleFn>(
 {
     // whether the point index has been added to the vertex list
     // (houdini point index -> our mesh vertex index)
-    let mut inserted_points = HashMap::<u32, u32>::new();
-    let mut cur_prim_indices = Vec::new();
+    //let mut inserted_points = HashMap::<u32, u32>::new();
+    let mut cur_indices = Vec::new();
 
     for prim in g.polygons() {
         if !prim.closed {
@@ -27,22 +27,15 @@ pub fn polygons_to_triangle_mesh<VertexFn, TriangleFn>(
         }
 
         for (i, vi) in prim.vertices().enumerate() {
-            let pi = g.vertexpoint(vi);
-
-            // emit vertex
-            let v = *inserted_points.entry(pi).or_insert_with(|| {
-                let vertex_index = emit_vertex(g, pi);
-                vertex_index
-            });
-
-            cur_prim_indices.push(v);
+            let vertex_index = emit_vertex(g, vi);
+            cur_indices.push(vertex_index);
 
             if i >= 2 {
                 // emit triangle
-                emit_triangle(cur_prim_indices[0], cur_prim_indices[i - 1], cur_prim_indices[i]);
+                emit_triangle(cur_indices[0], cur_indices[i - 1], cur_indices[i]);
             }
         }
 
-        cur_prim_indices.clear()
+        cur_indices.clear()
     }
 }

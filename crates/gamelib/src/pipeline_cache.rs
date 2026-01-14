@@ -42,6 +42,7 @@ pub fn load_pipeline_archive(path: impl AsRef<VfsPath>) -> Handle<ShaderArchive>
     let cache = AssetCache::instance();
     cache.load(path.as_ref(), |path, metadata, provider, deps| {
         // add dependencies on the manifest and source files
+        debug!("loading pipeline archive: {}", path.as_str());
         let data = provider.load(path)?;
         let a = ShaderArchive::from_bytes(&*data).unwrap();
 
@@ -81,6 +82,12 @@ pub fn load_pipeline_archive(path: impl AsRef<VfsPath>) -> Handle<ShaderArchive>
 
                 inner(archive).unwrap_or(false)
             }
+
+            for source in a.source_files() {
+                deps.add_local_file(&a[source.path]);
+            }
+            deps.add_local_file(&a[a.manifest_file().path]);
+
             if should_rebuild_archive(&a) {
                 shadertool::build_pipeline(
                     &a[a.manifest_file().path],
@@ -93,10 +100,6 @@ pub fn load_pipeline_archive(path: impl AsRef<VfsPath>) -> Handle<ShaderArchive>
                 )?;
             }
 
-            for source in a.source_files() {
-                deps.add_local_file(&a[source.path]);
-            }
-            deps.add_local_file(&a[a.manifest_file().path]);
         }
 
         Ok(a)
@@ -245,6 +248,8 @@ pub fn load_graphics_pipeline(
     let name = path.fragment().expect("pipeline name missing in path");
     let archive_handle = load_pipeline_archive(archive_file);
 
+    debug!("loading graphics pipeline '{}' from archive '{}'", name, archive_file.as_str());
+
     let archive = archive_handle.read()?;
     let entry = archive
         .find_graphics_pipeline(name)
@@ -262,6 +267,8 @@ pub fn load_compute_pipeline(
     let archive_file = path.path_without_fragment();
     let name = path.fragment().expect("pipeline name missing in path");
     let archive_handle = load_pipeline_archive(archive_file);
+
+    debug!("loading compute pipeline '{}' from archive '{}'", name, archive_file.as_str());
 
     let archive = archive_handle.read()?;
     let entry = archive
