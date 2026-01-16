@@ -13,7 +13,7 @@ struct LineVertex {
     Srgba8 color;
 };
 
-struct VertexOutput {
+struct VSOut {
     float4 pos: SV_Position;
     [[vk::location(0)]] float4 color;
     [[vk::location(1)]] float2 local_pos;
@@ -21,14 +21,15 @@ struct VertexOutput {
     [[vk::location(3)]] nointerpolation float filter_width;
 };
 
-struct PushConstants {
+struct DrawLinesRootParams {
     SceneInfo* scene_info;
     LineVertex* vertices;
     Line* lines;
 };
 
 [shader("vertex")]
-VertexOutput line_drawing_vertex(uint vertex_id : SV_VertexID, uint draw_index : SV_DrawIndex, uniform PushConstants* u)
+[pass("draw_lines")]
+VSOut draw_lines_vertex(uint vertex_id : SV_VertexID, uint draw_index : SV_DrawIndex, uniform DrawLinesRootParams* u)
 {
     Line l = u.lines[draw_index];
 
@@ -79,7 +80,7 @@ VertexOutput line_drawing_vertex(uint vertex_id : SV_VertexID, uint draw_index :
         b.xy += d * n * px_size * b.w;
     }
 
-    VertexOutput o;
+    VSOut o;
     o.pos = (vertex_id % 2 == 0) ? b : a;
     o.color = float4(v.color) / 255.0;
     o.local_pos = (vertex_id % 2 == 0) ? float2(0.0, -hw_aa) : float2(1.0, hw_aa);
@@ -90,15 +91,16 @@ VertexOutput line_drawing_vertex(uint vertex_id : SV_VertexID, uint draw_index :
 
 ////////////////////////////////////////////////////////////////////////
 
-struct FragmentOutput
+struct FSOut
 {
     [[vk::location(0)]] float4 color;
 };
 
 
 [shader("fragment")]
-FragmentOutput line_drawing_fragment(VertexOutput v, uniform PushConstants* u) {
-    FragmentOutput o;
+[pass("draw_lines")]
+FSOut draw_lines_fragment(VSOut v, uniform DrawLinesRootParams* u) {
+    FSOut o;
     // clamped width
     float width1 = max(v.width, 1.0);
     float h = width1 * 0.5;
@@ -114,7 +116,7 @@ FragmentOutput line_drawing_fragment(VertexOutput v, uniform PushConstants* u) {
 }
 
 ////////////////////////////////////////////////////////////////////////
-
+/*
 // Converts Normalized Device Coordinates (NDC) to window coordinates.
 float3 ndc2win(float3 ndc, float2 screenSize)
 {
@@ -132,3 +134,4 @@ float4 project(float3 pos, float4x4 viewProjectionMatrix)
 {
     return mul(viewProjectionMatrix, float4(pos, 1.));
 }
+*/

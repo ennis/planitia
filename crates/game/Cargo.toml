@@ -17,6 +17,7 @@ hgeo = { workspace = true }
 smallvec = "2.0.0-alpha.12"
 serde = { version = "1.0.228", features = ["derive"] }
 ron = "0.12"
+bytesize = "2.3.1"
 
 [build-dependencies]
 shadertool = { workspace = true }

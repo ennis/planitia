@@ -489,6 +489,16 @@ pub struct Size3D {
     pub depth: u32,
 }
 
+impl Size3D {
+    pub fn new(width: u32, height: u32, depth: u32) -> Self {
+        Self {
+            width,
+            height,
+            depth,
+        }
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // BLENDING
 

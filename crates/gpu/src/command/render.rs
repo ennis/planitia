@@ -1,8 +1,5 @@
 //! Render command encoders
-use crate::{
-    is_depth_and_stencil_format, Buffer, BufferUntyped, ClearColorValue, ColorAttachment, CommandBuffer,
-    DepthStencilAttachment, Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, Rect2D, RootParams,
-};
+use crate::{is_depth_and_stencil_format, Buffer, BufferUntyped, ClearColorValue, ColorAttachment, CommandBuffer, DepthBias, DepthStencilAttachment, Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, Rect2D, RootParams};
 use ash::vk;
 use std::ops::Range;
 use std::ptr;
@@ -78,6 +75,26 @@ impl<'a> RenderEncoder<'a> {
                 set,
                 bindings,
             );
+        }
+    }
+
+    pub fn set_depth_bias(&mut self, db: Option<DepthBias>) {
+        let device = &Device::global().raw;
+        unsafe {
+            match db {
+                Some(db) => {
+                    device.cmd_set_depth_bias_enable(self.command_buffer, true);
+                    device.cmd_set_depth_bias(
+                        self.command_buffer,
+                        db.constant_factor,
+                        db.clamp,
+                        db.slope_factor,
+                    );
+                }
+                None => {
+                    device.cmd_set_depth_bias_enable(self.command_buffer, false);
+                }
+            }
         }
     }
 

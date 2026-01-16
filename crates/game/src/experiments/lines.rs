@@ -1,8 +1,7 @@
 use crate::{SceneInfo, SceneInfoUniforms};
-use gamelib::pipeline_cache::get_graphics_pipeline;
-use gamelib::static_assets;
-use gpu::PrimitiveTopology::{TriangleList, TriangleStrip};
-use gpu::{BufferCreateInfo, DrawIndirectCommand, MemoryLocation, Ptr, vk};
+use gamelib::{static_assets, tweak};
+use gpu::PrimitiveTopology::TriangleStrip;
+use gpu::{BufferCreateInfo, DrawIndirectCommand, MemoryLocation, Ptr};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(C)]
@@ -43,7 +42,7 @@ pub fn draw_lines<'a>(
     scene_info: &SceneInfo,
 ) {
     static_assets! {
-        static LINES_PIPELINE: gpu::GraphicsPipeline = "/shaders/game_shaders.sharc#lines";
+        static LINES_PIPELINE: gpu::GraphicsPipeline = "/shaders/game_shaders.sharc#draw_lines";
     }
 
     let Ok(pipeline) = LINES_PIPELINE.read() else {
@@ -73,6 +72,11 @@ pub fn draw_lines<'a>(
     }
 
     encoder.bind_graphics_pipeline(&pipeline);
+    encoder.set_depth_bias(Some(gpu::DepthBias {
+        constant_factor: tweak!(line_depth_bias_constant: f32 = 1.0),
+        slope_factor: tweak!(line_depth_bias_slope: f32 = 1.0),
+        clamp: 0.0,
+    }));
     encoder.draw_indirect(
         TriangleStrip,
         None,

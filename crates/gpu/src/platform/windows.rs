@@ -214,11 +214,14 @@ impl Device {
             usage: image_info.usage,
             type_: image_info.type_,
             format: image_info.format,
+            mip_levels: image_info.mip_levels,
+            array_layers: image_info.array_layers,
             size: Size3D {
                 width: image_info.width,
                 height: image_info.height,
                 depth: image_info.depth,
             },
+            samples: 0,
         }
     }
 
@@ -349,11 +352,14 @@ impl Device {
             usage: image_info.usage,
             type_: image_info.type_,
             format: image_info.format,
+            mip_levels: image_info.mip_levels,
+            array_layers: image_info.array_layers,
             size: Size3D {
                 width: image_info.width,
                 height: image_info.height,
                 depth: image_info.depth,
             },
+            samples: image_info.samples,
         };
         (image, win32_handle)
     }

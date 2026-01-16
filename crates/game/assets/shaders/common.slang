@@ -148,6 +148,21 @@ public float4 angle_to_color(float angle)
     return float4(hsv2rgb(float3(hue, 1.0, 1.0)), 1.0);
 }
 
+// https://c0de517e.blogspot.com/2017/11/coder-color-palettes-for-data.html
+public float3 colorize_1d(float x)
+{
+     x = saturate(x);
+     float r = -0.121 + 0.893 * x + 0.276 * sin (1.94 - 5.69 * x);
+     float g = 0.07 + 0.947 * x;
+     float b = 0.107 + (1.5 - 1.22 * x) * x;
+     return float3(r, g, b);
+}
+
+public float3 colorize_id(int id)
+{
+    return palette(float(id) * 0.0247, float3(0.5,0.5,0.5),float3(0.5,0.5,0.5),float3(1.0,1.0,1.0),float3(0.0,0.33,0.67));
+}
+
 //////////////////////////////////////////////////////////////////
 public struct ScreenQuadVSOut
 {

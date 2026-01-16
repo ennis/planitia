@@ -70,8 +70,8 @@ fn cfg() -> &'static Config {
 fn print_geometry_summary(geo: &Geo) {
     cprintln!("<bold>Geometry Summary</>:");
     cprintln!("  Points:     <b>{}</>", geo.point_count);
-    cprintln!("  Primitives: <y>{}</>", geo.primitive_count);
     cprintln!("  Vertices:   <m>{}</>", geo.vertex_count);
+    cprintln!("  Primitives: <y>{}</>", geo.primitive_count);
 
     let polygon_count = geo.polygons().count();
     let bezier_count = geo.beziers().count();

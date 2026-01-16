@@ -225,7 +225,7 @@ pub struct ColorBlendEquationData {
 #[derive(Clone, Copy, Default)]
 pub struct ColorTarget {
     pub format: vk::Format,
-    pub blend: ColorBlendEquationData,
+    pub blend: Option<ColorBlendEquationData>,
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -394,14 +394,14 @@ mod tests {
         let color_targets = {
             let color_targets = &[writer.write(&ColorTarget {
                 format: vk::Format::R8G8B8A8_UNORM,
-                blend: ColorBlendEquationData {
+                blend: Some(ColorBlendEquationData {
                     src_color_blend_factor: vk::BlendFactor::SRC_ALPHA,
                     dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
                     color_blend_op: vk::BlendOp::ADD,
                     src_alpha_blend_factor: vk::BlendFactor::ONE,
                     dst_alpha_blend_factor: vk::BlendFactor::ZERO,
                     alpha_blend_op: vk::BlendOp::ADD,
-                },
+                }),
             })];
             writer.write_slice(color_targets)
         };

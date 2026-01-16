@@ -1,7 +1,7 @@
 use crate::manifest::Error::{InvalidType, MissingField};
 use anyhow::{Context, anyhow};
 use log::error;
-use shader_archive::gpu;
+use shader_archive::{gpu, ColorBlendEquationData};
 use shader_archive::gpu::vk;
 use shader_archive::gpu::vk::PolygonMode;
 use std::collections::BTreeMap;
@@ -516,6 +516,9 @@ fn read_rasterizer_state(toml: &TomlValue, out: &mut shader_archive::RasterizerS
 fn get_format(fmtstr: &str) -> Result<vk::Format, Error> {
     match fmtstr {
         "RGBA8" => Ok(vk::Format::R8G8B8A8_UNORM),
+        "RGBA8UI" => Ok(vk::Format::R8G8B8A8_UINT),
+        "RGBA16UI" => Ok(vk::Format::R16G16B16A16_UINT),
+        "RGB10_A2" => Ok(vk::Format::A2B10G10R10_UNORM_PACK32),
         "R32F" => Ok(vk::Format::R32_SFLOAT),
         "RG32F" => Ok(vk::Format::R32G32_SFLOAT),
         "D32F" => Ok(vk::Format::D32_SFLOAT),
@@ -581,29 +584,63 @@ fn read_depth_stencil_state(toml: &TomlValue, out: &mut shader_archive::DepthSte
     Ok(())
 }
 
+fn read_blend(toml: &TomlValue) -> anyhow::Result<Option<ColorBlendEquationData>> {
+    if let Some(str) = toml.as_str() {
+        match str {
+            "disabled" => Ok(None),
+            "over" => {
+                Ok(Some(ColorBlendEquationData {
+                    src_color_blend_factor: vk::BlendFactor::SRC_ALPHA,
+                    dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
+                    color_blend_op: vk::BlendOp::ADD,
+                    src_alpha_blend_factor: vk::BlendFactor::ONE,
+                    dst_alpha_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
+                    alpha_blend_op: vk::BlendOp::ADD,
+                }))
+            }
+            "over_premultiplied" => {
+                Ok(Some(ColorBlendEquationData {
+                    src_color_blend_factor: vk::BlendFactor::ONE,
+                    dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
+                    color_blend_op: vk::BlendOp::ADD,
+                    src_alpha_blend_factor: vk::BlendFactor::ONE,
+                    dst_alpha_blend_factor: vk::BlendFactor::ZERO,
+                    alpha_blend_op: vk::BlendOp::ADD,
+                }))
+            }
+            _ => Err(anyhow!("unknown predefined blend mode").context("in blend")),
+        }
+    } else {
+        let mut blend = ColorBlendEquationData::default();
+        if let Some(src_color_blend_factor) = toml.get_optional_str("src_color")? {
+            blend.src_color_blend_factor = get_blend_factor(src_color_blend_factor)?;
+        }
+        if let Some(dst_color_blend_factor) = toml.get_optional_str("dst_color")? {
+            blend.dst_color_blend_factor = get_blend_factor(dst_color_blend_factor)?;
+        }
+        if let Some(color_blend_op) = toml.get_optional_str("color_op")? {
+            blend.color_blend_op = get_blend_op(color_blend_op)?;
+        }
+        if let Some(src_alpha_blend_factor) = toml.get_optional_str("src_alpha")? {
+            blend.src_alpha_blend_factor = get_blend_factor(src_alpha_blend_factor)?;
+        }
+        if let Some(dst_alpha_blend_factor) = toml.get_optional_str("dst_alpha")? {
+            blend.dst_alpha_blend_factor = get_blend_factor(dst_alpha_blend_factor)?;
+        }
+        if let Some(alpha_blend_op) = toml.get_optional_str("alpha_op")? {
+            blend.alpha_blend_op = get_blend_op(alpha_blend_op)?;
+        }
+        Ok(Some(blend))
+    }
+}
+
 fn read_color_target(toml: &TomlValue, out: &mut shader_archive::ColorTarget) -> anyhow::Result<()> {
     if let Some(format_str) = toml.get_optional_str("format")? {
-        out.format = get_format(format_str).context("in color_targets")?;
+        out.format = get_format(format_str)?;
     }
-    if let Some(src_color_blend_factor) = toml.get_optional_str("src_color")? {
-        out.blend.src_color_blend_factor = get_blend_factor(src_color_blend_factor)?;
+    if let Some(blend_toml) = toml.get("blend") {
+        out.blend = read_blend(blend_toml)?;
     }
-    if let Some(dst_color_blend_factor) = toml.get_optional_str("dst_color")? {
-        out.blend.dst_color_blend_factor = get_blend_factor(dst_color_blend_factor)?;
-    }
-    if let Some(color_blend_op) = toml.get_optional_str("color_op")? {
-        out.blend.color_blend_op = get_blend_op(color_blend_op)?;
-    }
-    if let Some(src_alpha_blend_factor) = toml.get_optional_str("src_alpha")? {
-        out.blend.src_alpha_blend_factor = get_blend_factor(src_alpha_blend_factor)?;
-    }
-    if let Some(dst_alpha_blend_factor) = toml.get_optional_str("dst_alpha")? {
-        out.blend.dst_alpha_blend_factor = get_blend_factor(dst_alpha_blend_factor)?;
-    }
-    if let Some(alpha_blend_op) = toml.get_optional_str("alpha_op")? {
-        out.blend.alpha_blend_op = get_blend_op(alpha_blend_op)?;
-    }
-
     Ok(())
 }
 
@@ -612,7 +649,7 @@ fn read_color_targets(toml: &TomlValue, out: &mut Vec<shader_archive::ColorTarge
         out.clear();
         for item in array {
             let mut color_target = shader_archive::ColorTarget::default();
-            read_color_target(item, &mut color_target)?;
+            read_color_target(item, &mut color_target).context("in color_targets")?;
             out.push(color_target);
         }
         Ok(())
@@ -632,7 +669,7 @@ fn read_color_targets(toml: &TomlValue, out: &mut Vec<shader_archive::ColorTarge
                 if index >= out.len() {
                     out.resize(index + 1, shader_archive::ColorTarget::default());
                 }
-                read_color_target(value, &mut out[index])?;
+                read_color_target(value, &mut out[index]).context("in color_targets")?;
             }
         }
         Ok(())

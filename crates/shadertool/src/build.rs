@@ -698,7 +698,9 @@ impl BuildManifest {
                         // use cargo::error when running in a build script, otherwise absolutely
                         // nothing is reported to the user even through stderr, unless running
                         // `cargo -vv`
-                        println!("cargo::error={}", err);
+                        for line in err.to_string().lines() {
+                            println!("cargo::error={}", line);
+                        }
                     } else {
                         ceprintln!("<r,bold>error</>: {err}");
                     }

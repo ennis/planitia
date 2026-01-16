@@ -99,7 +99,6 @@ pub fn load_pipeline_archive(path: impl AsRef<VfsPath>) -> Handle<ShaderArchive>
                     },
                 )?;
             }
-
         }
 
         Ok(a)
@@ -134,13 +133,13 @@ pub(crate) fn create_graphics_pipeline_from_archive(
                 let c = &archive[c];
                 gpu::ColorTargetState {
                     format: c.format,
-                    blend_equation: Some(gpu::ColorBlendEquation {
-                        src_color_blend_factor: c.blend.src_color_blend_factor,
-                        dst_color_blend_factor: c.blend.dst_color_blend_factor,
-                        color_blend_op: c.blend.color_blend_op,
-                        src_alpha_blend_factor: c.blend.src_alpha_blend_factor,
-                        dst_alpha_blend_factor: c.blend.dst_alpha_blend_factor,
-                        alpha_blend_op: c.blend.alpha_blend_op,
+                    blend_equation: c.blend.map(|blend| gpu::ColorBlendEquation {
+                        src_color_blend_factor: blend.src_color_blend_factor,
+                        dst_color_blend_factor: blend.dst_color_blend_factor,
+                        color_blend_op: blend.color_blend_op,
+                        src_alpha_blend_factor: blend.src_alpha_blend_factor,
+                        dst_alpha_blend_factor: blend.dst_alpha_blend_factor,
+                        alpha_blend_op: blend.alpha_blend_op,
                     }),
                     color_write_mask: vk::ColorComponentFlags::RGBA,
                 }
@@ -248,7 +247,11 @@ pub fn load_graphics_pipeline(
     let name = path.fragment().expect("pipeline name missing in path");
     let archive_handle = load_pipeline_archive(archive_file);
 
-    debug!("loading graphics pipeline '{}' from archive '{}'", name, archive_file.as_str());
+    debug!(
+        "loading graphics pipeline '{}' from archive '{}'",
+        name,
+        archive_file.as_str()
+    );
 
     let archive = archive_handle.read()?;
     let entry = archive
@@ -268,7 +271,11 @@ pub fn load_compute_pipeline(
     let name = path.fragment().expect("pipeline name missing in path");
     let archive_handle = load_pipeline_archive(archive_file);
 
-    debug!("loading compute pipeline '{}' from archive '{}'", name, archive_file.as_str());
+    debug!(
+        "loading compute pipeline '{}' from archive '{}'",
+        name,
+        archive_file.as_str()
+    );
 
     let archive = archive_handle.read()?;
     let entry = archive

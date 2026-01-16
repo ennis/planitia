@@ -21,7 +21,7 @@ depth_stencil.format = "D32F_S8UI"  # 32-bit float depth, 8-bit stencil
 depth_stencil.compare_op = "less"
 depth_stencil.write_enable = true
 color_targets = [
-    { format = "RGBA8", src_color = "src_alpha", dst_color = "one_minus_src_alpha", color_op = "add", src_alpha = "one", dst_alpha = "zero", alpha = "add" }
+    { format = "RGBA8", blend = { src_color = "src_alpha", dst_color = "one_minus_src_alpha", color_op = "add", src_alpha = "one", dst_alpha = "zero", alpha = "add" } }
 ]
 
 ######################################################################
@@ -35,15 +35,20 @@ depth_stencil_attachment = { bind = "depth_buffer", clear_depth = 1.0 }
 [pass.render_outlines]
 depth_stencil.write_enable = false
 color_targets = [
-    { format = "RG32F", src_color = "src_alpha", dst_color = "one_minus_src_alpha", color_op = "add", src_alpha = "one", dst_alpha = "zero", alpha = "add" }
+    { format = "RGBA16UI", blend = "disabled" }
 ]
 
+[pass.corner_detection]
+depth_stencil.write_enable = false
 
-[pass.lines]
+[pass.draw_lines]
 depth_stencil.write_enable = false
 
 [pass.base_render]
-#depth_stencil.compare_op = "always"
+color_targets = [
+    { format = "RGBA8", blend = "over" },           # color
+    { format = "RGB10_A2", blend = "disabled" }      # normal
+]
 
 [pass.background]
 depth_stencil.compare_op = "always"

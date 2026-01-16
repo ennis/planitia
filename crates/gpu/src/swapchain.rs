@@ -1,9 +1,9 @@
 use crate::device::{get_preferred_present_mode, get_preferred_swap_extent};
 use crate::{vk_khr_surface, CommandBuffer, Device, Image, ImageType, ImageUsage, ResourceAllocation, Size3D};
 use ash::vk;
+use gpu_allocator::MemoryLocation;
 use std::ptr;
 use std::time::Duration;
-use gpu_allocator::MemoryLocation;
 
 #[derive(Debug)]
 struct SwapchainImageInner {
@@ -80,11 +80,14 @@ impl Device {
             usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::TRANSFER_DST,
             type_: ImageType::Image2D,
             format,
+            mip_levels: 1,
+            array_layers: 1,
             size: Size3D {
                 width,
                 height,
                 depth: 1,
             },
+            samples: 0,
         }
     }
 

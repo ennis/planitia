@@ -678,6 +678,7 @@ impl Device {
                 fragment_stores_and_atomics: vk::TRUE,
                 depth_clamp: vk::TRUE,
                 multi_draw_indirect: vk::TRUE,
+                independent_blend: vk::TRUE,
                 ..Default::default()
             },
             ..Default::default()
@@ -1180,7 +1181,7 @@ impl Device {
         // ------ Dynamic states ------
 
         // TODO: this could be a static property of the pipeline interface
-        let mut dynamic_states = vec![vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
+        let mut dynamic_states = vec![vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR, vk::DynamicState::DEPTH_BIAS, vk::DynamicState::DEPTH_BIAS_ENABLE];
 
         if matches!(
             create_info.pre_rasterization_shaders,

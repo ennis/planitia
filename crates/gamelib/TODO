@@ -31,18 +31,18 @@
  ☐ async asset reloading
  ☐ move egui shaders to shader-archive
  ☐ Deprecate shader-bridge? Move functionality to shadertool
- ☐ crate color should not depend on gpu
+ ☐ crate color should not depend on gpu @high @easy 
     should be the opposite, optional dependency of gpu on color to implement vertex data types
  ✔ buffer pool for uploading stuff to the GPU on each frame (use case: immediate / line rendering) @done (26-01-08 16:12)
- ☐ find a better API than indexing with `Offset<>` to read archives
+ ☐ find a better API than indexing with `Offset<>` to read archives @low
      Relative pointers?
- ☐ "viewport" module/object that bundles the render target (the screen) with utilities to paint things on it (upload buffer, line drawing, etc.)
+ ☐ "viewport" module/object that bundles the render target (the screen) with utilities to paint things on it (upload buffer, line drawing, etc.) @low
  ✔ GPU: avoid mistake of calling `push_constants` before setting a pipeline @done (25-12-21 17:21)
      setting push constants is now done at the same time as the draw call ("root parameters")
  ✔ shadertool: emit debug-info (dump spirv) @done (25-12-01 23:33)
  ✔ PushConstants (Root paramters) should be a single pointer to GPU memory (No Graphics API) @done (26-01-01 17:12)
      To avoid mistakes like putting an atomic variable in push constants
- ☐ Framework to emit/manipulate geometry from compute shaders in a unified way (polylines, meshes)
+ ☐ Framework to emit/manipulate geometry from compute shaders in a unified way (polylines, meshes) @low
  ☐ Geometry format: make a generic file format for geometry instead of hard-coding all the different vertex and primitive types
      There are too many types of vertex formats to track, and they must be hard-coded into the file format. 
      New ones are added regularly, which requires changing the file format in a non-backwards-compatible way.
@@ -96,7 +96,7 @@
  ✔ Do away with encoders @done (25-12-19 17:01)
      ComputeEncoder is strictly useless
 
- ☐ GPU API streamline: render targets
+ ☐ GPU API streamline: render targets @low
     Currently, to add a render target to a fragment shader, you need to
     * (1) add a field to the app struct to store the new render target
     * (2) add code in ctor to create the render target
@@ -130,11 +130,10 @@
 
  ☐ GPU API streamline 2: scripting
      It's useless if there's no autocompletion for the pass names and parameters.
- ☐ Global tweakable variables
+ ✔ Global tweakable variables @done (26-01-12 12:38)
      In rust code, call `tweak::<T>(min, max)` to automatically show a slider in the GUI
  ☐ QoL: remember last application state and reload (geometry file, pipeline config)
  ☐ Global settings singleton
-
 
 Render world:
     The "render world" holds all resources, pipelines, and is in charge of running the render passes. It also holds the current scene to draw.
@@ -149,6 +148,12 @@ Models:
     ☐ Salient edges
     ☐ Convex patch decomposition
     ☐ Armature
+    ☐ Figure out representation for "crease edges"
+        Split points: if multiple houdini vertices share the same point AND vertex normal, then fuse them into a single "mesh vertex" (the usual)
+        Indexed vertex attributes: each vertex sent to the GPU has two indices
+            * a vertex index to query vertex level attributes
+            * a point index for point attributes
+            This requires two lookups. Most of the time, point == vertex index
 
 Contours:
     ☐ Differentiate boundaries from outlines
@@ -168,6 +173,9 @@ Contours:
         ☐ Authored color
         ☐ Bone index
     
+What we have now: lineart map with: ss normal angle, group id
+Need to expand that into strokes. Possible approaches
+* compute distance field from lineart pixels
 
 Terrain rendering:
     ✔ Find out how to do the initial adaptive meshing @done (25-12-15 15:55)

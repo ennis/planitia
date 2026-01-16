@@ -1,5 +1,8 @@
 use crate::device::get_vk_sample_count;
-use crate::{aspects_for_format, BufferUntyped, CommandBuffer, Descriptor, Device, Format, ResourceAllocation, ResourceDescriptorIndex, ResourceId, Size3D, StorageImageHandle, TextureHandle, TrackedResource, VulkanObject};
+use crate::{
+    aspects_for_format, BufferUntyped, CommandBuffer, Descriptor, Device, Format, ResourceAllocation,
+    ResourceDescriptorIndex, ResourceId, Size3D, StorageImageHandle, TextureHandle, TrackedResource, VulkanObject,
+};
 use ash::vk;
 use ash::vk::Handle;
 use bitflags::bitflags;
@@ -109,7 +112,10 @@ pub struct Image {
     pub(crate) usage: ImageUsage,
     pub(crate) type_: ImageType,
     pub(crate) format: Format,
+    pub(crate) mip_levels: u32,
+    pub(crate) array_layers: u32,
     pub(crate) size: Size3D,
+    pub(crate) samples: u32,
 }
 
 impl Drop for Image {
@@ -231,6 +237,51 @@ impl Image {
             index: self.descriptors.storage.index(),
             _unused: 0,
         }
+    }
+
+    /// Resizes this image to the new dimensions.
+    ///
+    /// This effectively creates a new image and that replaces the old one.
+    /// The contents of the existing image are discarded.
+    /// Any existing descriptors or handles will become invalid, but those used in previous command
+    /// buffer operations stay valid until those command buffers have finished executing.
+    ///
+    /// This function must be called only on images created with `Image::new`.
+    /// It will panic when called on images that refer to external storage, like swap chain images
+    /// or images imported from external handles.
+    /// Also, it cannot change the dimensionality of the current image.
+    ///
+    /// # Panics
+    /// - when called on a swap chain image
+    /// - when called on an imported image (via e.g. create_imported_image_win32).
+    /// - when the specified dimensions do not match the current dimensionality
+    ///   (e.g. depth != 1 when image_type is Image2D).
+    pub fn resize(&mut self, new_size: Size3D) {
+        assert!(!self.swapchain_image, "cannot resize a swap chain image");
+        assert!(
+            !matches!(
+                self.allocation,
+                ResourceAllocation::External | ResourceAllocation::DeviceMemory { .. }
+            ),
+            "cannot resize images created from external memory"
+        );
+        match self.type_ {
+            ImageType::Image1D => assert_eq!(new_size.height, 1, "cannot change image dimensionality when resizing"),
+            ImageType::Image2D => assert_eq!(new_size.depth, 1, "cannot change image dimensionality when resizing"),
+            ImageType::Image3D => {}
+        }
+        *self = Self::new(ImageCreateInfo {
+            memory_location: self.memory_location,
+            type_: self.type_,
+            usage: self.usage,
+            format: self.format,
+            width: new_size.width,
+            height: new_size.height,
+            depth: new_size.depth,
+            mip_levels: self.mip_levels,
+            array_layers: self.array_layers,
+            samples: self.samples,
+        });
     }
 }
 
@@ -456,11 +507,14 @@ impl Device {
                 usage: image_info.usage,
                 type_: image_info.type_,
                 format: image_info.format,
+                mip_levels: image_info.mip_levels,
+                array_layers: image_info.array_layers,
                 size: Size3D {
                     width: image_info.width,
                     height: image_info.height,
                     depth: image_info.depth,
                 },
+                samples: image_info.samples,
             }
         }
     }

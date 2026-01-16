@@ -704,6 +704,13 @@ impl CommandBuffer {
             cb
         } else {
             let cb = self.create_command_buffer_raw();
+
+            // setup default dynamic state so validation layers don't complain
+            unsafe {
+                let device = Device::global();
+                device.raw.cmd_set_depth_bias_enable(cb, false);
+            }
+
             self.command_buffer = Some(cb);
             cb
         }

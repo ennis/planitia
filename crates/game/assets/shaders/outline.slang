@@ -14,6 +14,7 @@ struct ClusterEdge {
 struct ClusterVertex {
     float3 position;
     float3 normal;
+    float pointy;
 }
 
 struct ClusterFace {
@@ -30,6 +31,7 @@ struct Meshlet {
     uint16_t edge_count;
     uint16_t face_count;
     uint16_t face_normal_count;
+    uint16_t group_id;
 }
 
 // See documentation in outlines.rs
@@ -49,11 +51,17 @@ struct NormalCone {
 }
 
 struct OutlineVertex {
+    // clip-space position
     float4 clip_position;
+    // normal orientation in screen space
     float angle;
+    // CLUSTER_EDGE_FLAGS*
+    uint16_t flags;
+    // sub-object ID
+    uint16_t group_id;
+    // Spikiness
+    float pointy;
     float reserved0;
-    float reserved1;
-    float reserved2;
 }
 
 static const uint MAX_EDGES = 128;
@@ -95,6 +103,55 @@ DepthPassVertexOutput depth_pass_vertex(uint vertex_id : SV_VertexID, uint draw_
 [pass("depth_pass")]
 void depth_pass_fragment(DepthPassVertexOutput i) {
     // nothing
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Base render + depth pre-pass
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+struct BaseRenderVSOut {
+    float4 pos: SV_Position;
+    [[vk::location(0)]] float4 color;
+    [[vk::location(1)]] float3 normal;
+    [[vk::location(2)]] nointerpolation int meshlet_id;
+}
+
+struct BaseRenderFSOut {
+    [[vk::location(0)]] float4 color;
+    [[vk::location(1)]] float3 normal;
+}
+
+struct BaseRenderRootParams {
+    SceneInfo* scene_info;
+    MeshData mesh;
+    float3 main_light_direction;    // in world space
+}
+
+[shader("vertex")]
+[pass("base_render")]
+BaseRenderVSOut base_render_vertex(uint vertex_id : SV_VertexID, uint draw_id: SV_DrawIndex, uniform BaseRenderRootParams* u)
+{
+    let vertex = fetch_mesh_vertex(u.mesh, draw_id, vertex_id);
+    BaseRenderVSOut o;
+    o.pos = mul(u.scene_info.view_proj_matrix, float4(vertex.position, 1.0));
+    o.normal = mul(float3x3(u.scene_info.view_matrix), vertex.normal);
+    o.meshlet_id = draw_id;
+    return o;
+}
+
+[shader("fragment")]
+[pass("base_render")]
+BaseRenderFSOut base_render_fragment(BaseRenderVSOut i, uniform BaseRenderRootParams* u) {
+    BaseRenderFSOut o;
+    float3 normal = normalize(i.normal);
+    float light_intensity = saturate(dot(normal, -normalize(u.main_light_direction)));
+    o.color = float4(light_intensity.xxx, 1.0);
+    o.normal = normal;
+    // colorize per cluster
+    //o.color.rgb = palette(float(i.meshlet_id) * 0.1, float3(0.5,0.5,0.5),float3(0.5,0.5,0.5),float3(1.0,1.0,1.0),float3(0.0,0.33,0.67));
+    //o.color.rgb = normal;
+    return o;
 }
 
 
@@ -172,29 +229,26 @@ void extract_outlines(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_Gro
         v0offset.xy += hw_aa * n * v0offset.w;
         v1offset.xy += hw_aa * n * v1offset.w;
 
-        uint base_vertex;
-        InterlockedAdd(u.vertex_count, 4, base_vertex);
-        uint base_index;
-        InterlockedAdd(u.out_draw_command.vertex_count, 6, base_index);
+        uint vtx_ptr;
+        uint idx_ptr;
+        InterlockedAdd(u.vertex_count, 4, vtx_ptr);
+        InterlockedAdd(u.out_draw_command.vertex_count, 6, idx_ptr);
 
-        //let v0dbg = float4(2.0 * float2(base_index, cli*7) / u.scene_info.screen_size - 1.0, 0.0, 1.0);
-        //let v1dbg = float4(2.0 * float2(base_index + 6, cli*7) / u.scene_info.screen_size - 1.0, 0.0, 1.0);
-        //let v2dbg = float4(2.0 * float2(base_index, cli*7 + 6) / u.scene_info.screen_size - 1.0, 0.0, 1.0);
-        //let v3dbg = float4(2.0 * float2(base_index + 6, cli*7 + 6) / u.scene_info.screen_size - 1.0, 0.0, 1.0);
+        uint16_t flags = is_outside_edge ? CLUSTER_EDGE_FLAG_BORDER : 0;
 
-        let outside_edge_factor = is_outside_edge ? 1.0 : 0.0;
+        let pointy_0 = u.mesh.vertices[base_vertex + edge.vertex_0].pointy;
+        let pointy_1 = u.mesh.vertices[base_vertex + edge.vertex_1].pointy;
+        u.out_vertices[vtx_ptr] = OutlineVertex(v0, angle, flags, m.group_id, pointy_0);
+        u.out_vertices[vtx_ptr+1] = OutlineVertex(v1, angle, flags, m.group_id, pointy_1);
+        u.out_vertices[vtx_ptr+2] = OutlineVertex(v0offset, angle, flags, m.group_id, pointy_0);
+        u.out_vertices[vtx_ptr+3] = OutlineVertex(v1offset, angle, flags, m.group_id, pointy_1);
 
-        u.out_vertices[base_vertex] = OutlineVertex(v0, angle, outside_edge_factor);
-        u.out_vertices[base_vertex+1] = OutlineVertex(v1, angle, outside_edge_factor);
-        u.out_vertices[base_vertex+2] = OutlineVertex(v0offset, angle, outside_edge_factor);
-        u.out_vertices[base_vertex+3] = OutlineVertex(v1offset, angle, outside_edge_factor);
-
-        u.out_indices[base_index] = base_vertex;
-        u.out_indices[base_index+1] = base_vertex + 1;
-        u.out_indices[base_index+2] = base_vertex + 2;
-        u.out_indices[base_index+3] = base_vertex + 1;
-        u.out_indices[base_index+4] = base_vertex + 3;
-        u.out_indices[base_index+5] = base_vertex + 2;
+        u.out_indices[idx_ptr] = vtx_ptr;
+        u.out_indices[idx_ptr+1] = vtx_ptr + 1;
+        u.out_indices[idx_ptr+2] = vtx_ptr + 2;
+        u.out_indices[idx_ptr+3] = vtx_ptr + 1;
+        u.out_indices[idx_ptr+4] = vtx_ptr + 3;
+        u.out_indices[idx_ptr+5] = vtx_ptr + 2;
     }
 }
 
@@ -202,18 +256,18 @@ void extract_outlines(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_Gro
 // Render outlines
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-struct RenderOutlinesVSOut {
-    float4 pos: SV_Position;
-    float angle;
-    float4 color;
-    float2 local_pos;
-};
-
 struct RenderOutlineRootParams {
     SceneInfo* scene_info;
     OutlineVertex* vertices;
     uint* indices;
     Texture2D.Handle depth;
+};
+
+struct RenderOutlinesVSOut {
+    float4 pos: SV_Position;
+    float angle;
+    float pointy;
+    nointerpolation uint group_id;
 };
 
 [shader("vertex")]
@@ -225,14 +279,13 @@ RenderOutlinesVSOut render_outlines_vertex(uint vertex_id : SV_VertexID, uniform
     RenderOutlinesVSOut o;
     o.pos = vertex.clip_position;
     o.angle = vertex.angle;
-    //if (vertex.reserved0 > 0.5) {
-    //    o.color = float4(1, 1, 1, 1);
-    //}
+    o.pointy = vertex.pointy;
+    o.group_id = vertex.group_id;
     return o;
 }
 
 struct RenderOutlinesFSOut {
-    [[vk::location(0)]] float4 color;
+    [[vk::location(0)]] uint4 color;
     float depth: SV_Depth;
 };
 
@@ -240,7 +293,7 @@ struct RenderOutlinesFSOut {
 [pass("render_outlines")]
 RenderOutlinesFSOut render_outlines_fragment(
     float3 frag_coord: SV_Position,
-    RenderOutlinesVSOut vertex_output,
+    RenderOutlinesVSOut vsout,
     uniform RenderOutlineRootParams* params)
 {
     int3 coord = int3(int2(frag_coord.xy), 0);
@@ -257,14 +310,14 @@ RenderOutlinesFSOut render_outlines_fragment(
     test += (ref_depth <= params.depth.Load(int3(coord.x,     coord.y + 1, 0), 0).r) ? 1 : 0;
     test += (ref_depth <= params.depth.Load(int3(coord.x + 1, coord.y + 1, 0), 0).r) ? 1 : 0;
 
-    //float4 color = vertex_output.color;
+    //float4 color = vsout.color;
     if (test < 2) {
         discard;
         //color = float4(0.3, 0.3, 0.6, 1);
     }
 
     RenderOutlinesFSOut o;
-    o.color = float4(vertex_output.angle,1,0,1);
+    o.color = uint4(vsout.group_id, uint((vsout.angle / TAU) * 65535.), uint(vsout.pointy * 65535.), 1);
     o.depth = frag_coord.z-0.1;
     return o;
 }
@@ -275,7 +328,9 @@ RenderOutlinesFSOut render_outlines_fragment(
 
 struct CornerDetectionRootParams {
     SceneInfo* scene_info;
-    Texture2D.Handle angle_tex;
+    Texture2D<uint16_t4>.Handle angle_tex;
+    Texture2D<float4>.Handle normal_tex;
+    RWTexture2D<int16_t2>.Handle jfa_tex;
 };
 
 [shader("vertex")]
@@ -287,7 +342,6 @@ ScreenQuadVSOut corner_detection_vertex_shader(uint vertex_id : SV_VertexID)
 
 struct CornerDetectionFSOut {
     [[vk::location(0)]] float4 color;
-    float depth: SV_Depth;
 }
 
 [shader("fragment")]
@@ -299,79 +353,109 @@ CornerDetectionFSOut corner_detection_fragment_shader(
 {
     int3 coord = int3(int2(frag_coord.xy), 0);
 
-    //int test = 0;
-    //const float ref_depth = frag_coord.z;
-    //test += (ref_depth <= params.angle_tex.Load(int3(coord.x - 1, coord.y - 1, 0), 0).r) ? 1 : 0;
-    //test += (ref_depth <= params.angle_tex.Load(int3(coord.x,     coord.y - 1, 0), 0).r) ? 1 : 0;
-    //test += (ref_depth <= params.angle_tex.Load(int3(coord.x + 1, coord.y - 1, 0), 0).r) ? 1 : 0;
-    //test += (ref_depth <= params.angle_tex.Load(int3(coord.x - 1, coord.y,     0), 0).r) ? 1 : 0;
-    //test += (ref_depth <= params.angle_tex.Load(int3(coord.x,     coord.y,     0), 0).r) ? 1 : 0;
-    //test += (ref_depth <= params.angle_tex.Load(int3(coord.x + 1, coord.y,     0), 0).r) ? 1 : 0;
-    //test += (ref_depth <= params.angle_tex.Load(int3(coord.x - 1, coord.y + 1, 0), 0).r) ? 1 : 0;
-    //test += (ref_depth <= params.angle_tex.Load(int3(coord.x,     coord.y + 1, 0), 0).r) ? 1 : 0;
-    //test += (ref_depth <= params.angle_tex.Load(int3(coord.x + 1, coord.y + 1, 0), 0).r) ? 1 : 0;
+    let tex00 = params.angle_tex.Load(int3(coord.x, coord.y, 0));
+    let tex10 = params.angle_tex.Load(int3(coord.x + 1, coord.y, 0));
+    let tex01 = params.angle_tex.Load(int3(coord.x, coord.y + 1, 0));
+    let tex11 = params.angle_tex.Load(int3(coord.x + 1, coord.y + 1, 0));
 
-    var angle = params.angle_tex.Load(int3(coord.x, coord.y, 0), 0);
-    var color = angle_to_color(angle.r);
-    color.a = angle.g;
+    let angle00 = (float(tex00.y) / 65535.0) * TAU;
+    let angle10 = (float(tex10.y) / 65535.0) * TAU;
+    let angle01 = (float(tex01.y) / 65535.0) * TAU;
+    let angle11 = (float(tex11.y) / 65535.0) * TAU;
 
-   //if (test < 2) {
-   //    discard;
-   //    //color = float4(0.3, 0.3, 0.6, 1);
-   //}
+    let n00 = float3(cos(angle00), sin(angle00), 0.0);
+    let n10 = float3(cos(angle10), sin(angle10), 0.0);
+    let n01 = float3(cos(angle01), sin(angle01), 0.0);
+    let n11 = float3(cos(angle11), sin(angle11), 0.0);
+
+    let dnxdx = (n10.x - n00.x) * tex00.a * tex10.a;
+    let dnydy = (n01.y - n00.y) * tex00.a * tex01.a;
+    let div = dnxdx + dnydy;
+
+    let jfa_value = int2(params.jfa_tex.Load(coord.xy));
+    let ref_outline = params.angle_tex.Load(int3(jfa_value,0));
+
+    let dist = length(float2(jfa_value - coord.xy));
+    let width = 5.0;
+    let aastep = fwidth(dist);
+    let div_factor = smoothstep(width, width - aastep, dist);
+    let color = float4(colorize_id(ref_outline.r), div_factor);
+
+    //let normal = float3(cos(angle.r), sin(angle.r), 0.0);
+    //var color = float4(colorize_1d(div), 1.0);
+    //var color = float4(float3(div), 1.0);
+    //color.rgb = colorize_id(tex00.r);
+    //color.rgb = float3(float2(jfa_value) / params.scene_info.screen_size, 0.0);
+    //color.a = 1.0;
+    //color.a = tex00.a;
+    //color.rgb = params.normal_tex.Load(coord, 0).rgb;
+
+    //if (test < 2) {
+    //    discard;
+    //    //color = float4(0.3, 0.3, 0.6, 1);
+    //}
 
     CornerDetectionFSOut o;
     o.color = color;
-    o.depth = frag_coord.z-0.1;
     return o;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-// Base rendering
+// JFA 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-struct BaseRenderVSOut {
-    float4 pos: SV_Position;
-    [[vk::location(0)]] float4 color;
-    [[vk::location(1)]] float3 normal;
-    [[vk::location(2)]] nointerpolation int meshlet_id;
-}
-
-struct BaseRenderFSOut {
-    [[vk::location(0)]] float4 color;
-}
-
-struct BaseRenderRootParams {
+struct JFAInitRootParams {
     SceneInfo* scene_info;
-    MeshData mesh;
-    float3 main_light_direction;    // in world space
+    Texture2D<uint16_t4>.Handle angle_tex;
+    RWTexture2D<int16_t2>.Handle jfa_tex;
+};
 
-    //uint cluster_count;
-}
+static const uint JFA_TILE_SIZE = 16;
 
-[shader("vertex")]
-[pass("base_render")]
-BaseRenderVSOut base_render_vertex(uint vertex_id : SV_VertexID, uint draw_id: SV_DrawIndex, uniform BaseRenderRootParams* u)
+[shader("compute")]
+[pass("jfa_init")]
+[numthreads(JFA_TILE_SIZE, JFA_TILE_SIZE, 1)]
+void jfa_init(uint3 thread_id : SV_DispatchThreadID, uniform JFAInitRootParams* params)
 {
-    let vertex = fetch_mesh_vertex(u.mesh, draw_id, vertex_id);
-    BaseRenderVSOut o;
-    o.pos = mul(u.scene_info.view_proj_matrix, float4(vertex.position, 1.0));
-    o.normal = mul(float3x3(u.scene_info.view_matrix), vertex.normal);
-    o.meshlet_id = draw_id;
-    return o;
+    int3 coord = int3(thread_id.xy, 0);
+    let texel = params.angle_tex.Load(coord, 0);
+    let init = texel.a > 0.0 ? int16_t2(coord.x, coord.y) : int16_t2(-1, -1);
+    params.jfa_tex.Store(coord.xy, init);
 }
 
-[shader("fragment")]
-[pass("base_render")]
-BaseRenderFSOut base_render_fragment(BaseRenderVSOut i, uniform BaseRenderRootParams* u) {
-    BaseRenderFSOut o;
-    float3 normal = normalize(i.normal);
-    float light_intensity = saturate(dot(normal, -normalize(u.main_light_direction)));
-    o.color = float4(light_intensity.xxx, 1.0);
+struct JFAStepParams {
+    SceneInfo *scene_info;
+    RWTexture2D<int16_t2>.Handle jfa_in_tex;
+    RWTexture2D<int16_t2>.Handle jfa_out_tex;
+    uint step_size;
+}; 
 
-    // colorize per cluster
-    //o.color.rgb = palette(float(i.meshlet_id) * 0.1, float3(0.5,0.5,0.5),float3(0.5,0.5,0.5),float3(1.0,1.0,1.0),float3(0.0,0.33,0.67));
+[shader("compute")]
+[pass("jfa_step")]
+[numthreads(JFA_TILE_SIZE, JFA_TILE_SIZE, 1)]
+void jfa_step(uint3 thread_id : SV_DispatchThreadID, uniform JFAStepParams *params)
+{
+    int2 coord = thread_id.xy;
+    let k = params.step_size;
+    var cur = params.jfa_in_tex.Load(coord);
+    var cur_dist = length(float2(cur - coord));
 
+    let size = int2(params.scene_info.screen_size);
+    if (coord.x >= size.x || coord.y >= size.y) {
+        return;
+    }
 
-    return o;
+    for (int i = -1; i <= 1; ++i) {
+        for (int j = -1; j <= 1; ++j) {
+            let ncoord = clamp(coord + k * int2(i, j), int2(0,0), size - int2(1,1));
+            let nb = params.jfa_in_tex.Load(ncoord);
+            let dist = length(float2(nb - coord));
+            if (nb.x != -1 && (cur.x == -1 || dist < cur_dist)) {
+                cur = nb;
+                cur_dist = dist;
+            }
+        }
+    }
+
+    params.jfa_out_tex.Store(coord, cur);
 }
