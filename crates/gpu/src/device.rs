@@ -775,26 +775,6 @@ impl Device {
             .expect("failed to allocate device memory")
     }
 
-    fn ticket_completed(&self, ticket: u64) -> bool {
-        let last_completed_submission_index =
-            unsafe { self.raw.get_semaphore_counter_value(self.thread_safe.timeline).unwrap() };
-
-        if last_completed_submission_index == u64::MAX {
-            error!("GetSemaphoreCounterValue returned UINT64_MAX");
-            return false;
-        }
-
-        // find corresponding submission for ticket
-        let submission_state = self.submission_state.lock().unwrap();
-        for s in submission_state.active_submissions.iter() {
-            if s.create_ticket == ticket {
-                return s.timeline_value <= last_completed_submission_index;
-            }
-        }
-
-        ticket <= last_completed_submission_index
-    }
-
     /// Schedules a function call.
     ///
     /// The function will be called once the GPU has finished processing commands up to and

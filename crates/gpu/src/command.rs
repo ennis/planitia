@@ -1,5 +1,5 @@
 use crate::device::ActiveSubmission;
-use crate::{vk, CommandPool, ComputePipeline, Descriptor, Device, Ptr, SwapchainImage};
+use crate::{vk, CommandPool, ComputePipeline, Descriptor, Device, Ptr, SwapChain, SwapchainImage};
 use ash::prelude::VkResult;
 use ash::vk::DeviceAddress;
 use bitflags::bitflags;
@@ -1013,9 +1013,10 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
     result
 }
 
-pub fn present(image: &SwapchainImage) -> VkResult<()> {
+pub fn present(swap_chain: &mut SwapChain, index: usize) -> VkResult<()> {
     // transition image to PRESENT_SRC
     let mut cmd = CommandBuffer::new();
+    let image = &swap_chain.images[index];
     unsafe {
         cmd.image_barrier(&vk::ImageMemoryBarrier2 {
             src_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
@@ -1056,8 +1057,8 @@ pub fn present(image: &SwapchainImage) -> VkResult<()> {
                     wait_semaphore_count: 1,
                     p_wait_semaphores: &image.render_finished,
                     swapchain_count: 1,
-                    p_swapchains: &image.swapchain,
-                    p_image_indices: &image.index,
+                    p_swapchains: &swap_chain.handle,
+                    p_image_indices: &[index as u32] as *const u32,
                     p_results: ptr::null_mut(),
                     ..Default::default()
                 },

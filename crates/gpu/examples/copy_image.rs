@@ -148,7 +148,7 @@ impl ApplicationHandler for App {
 
             WindowEvent::RedrawRequested => {
                 // SAFETY: swapchain is valid
-                let swapchain_image = unsafe {
+                let (index, swapchain_image) = unsafe {
                     device
                         .acquire_next_swapchain_image(&window.swap_chain, Duration::from_millis(100))
                         .unwrap()
@@ -172,14 +172,14 @@ impl ApplicationHandler for App {
                     &image,
                     Default::default(),
                     region,
-                    &swapchain_image.image,
+                    &swapchain_image,
                     Default::default(),
                     region,
                     vk::Filter::NEAREST,
                 );
 
                 gpu::submit(cmd).unwrap();
-                gpu::present(&swapchain_image).unwrap();
+                gpu::present(&mut window.swap_chain, index).unwrap();
                 gpu::maintain();
             }
             _ => {}

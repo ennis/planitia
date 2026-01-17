@@ -5,22 +5,15 @@ use gpu::{Device, SyncWait, vk};
 use log::warn;
 use std::cell::Cell;
 use std::mem::ManuallyDrop;
-use windows::Win32::Foundation::{CloseHandle, GENERIC_ALL, HANDLE};
+use windows::Win32::Foundation::{CloseHandle, GENERIC_ALL, HANDLE, HWND};
 use windows::Win32::Graphics::Direct3D12::{
     D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_FENCE_FLAG_SHARED, D3D12_RESOURCE_BARRIER, D3D12_RESOURCE_BARRIER_0,
     D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_BARRIER_TYPE, D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
     D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_TRANSITION_BARRIER,
     ID3D12CommandQueue, ID3D12Fence, ID3D12GraphicsCommandList, ID3D12Resource,
 };
-use windows::Win32::Graphics::Dxgi::Common::{
-    DXGI_ALPHA_MODE_IGNORE, DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_TYPELESS,
-    DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_SAMPLE_DESC,
-};
-use windows::Win32::Graphics::Dxgi::{
-    DXGI_ERROR_WAS_STILL_DRAWING, DXGI_PRESENT_DO_NOT_WAIT, DXGI_SCALING_STRETCH, DXGI_SWAP_CHAIN_DESC1,
-    DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING, DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL, DXGI_USAGE_RENDER_TARGET_OUTPUT,
-    IDXGIFactory4, IDXGISwapChain3,
-};
+use windows::Win32::Graphics::Dxgi::Common::{DXGI_ALPHA_MODE_IGNORE, DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_TYPELESS, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_SAMPLE_DESC, DXGI_ALPHA_MODE_UNSPECIFIED, DXGI_ALPHA_MODE_STRAIGHT};
+use windows::Win32::Graphics::Dxgi::{DXGI_ERROR_WAS_STILL_DRAWING, DXGI_PRESENT_DO_NOT_WAIT, DXGI_SCALING_STRETCH, DXGI_SWAP_CHAIN_DESC1, DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING, DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL, DXGI_USAGE_RENDER_TARGET_OUTPUT, IDXGIFactory4, IDXGISwapChain3, DXGI_SWAP_EFFECT_SEQUENTIAL, DXGI_SCALING_NONE};
 use windows::core::{Interface, Owned};
 
 /// DXGI swap chain that provides facilities for interoperation with Vulkan.
@@ -88,18 +81,12 @@ impl Drop for DxgiVulkanInteropSwapChain {
 }
 
 impl DxgiVulkanInteropSwapChain {
-    /// Creates a swap chain with vulkan interop.
-    pub(super) fn new(
-        format: DXGI_FORMAT,
-        width: u32,
-        height: u32,
-        usage: gpu::ImageUsage,
-    ) -> DxgiVulkanInteropSwapChain {
+    pub(super) fn new(format: DXGI_FORMAT, width: u32, height: u32, usage: gpu::ImageUsage) -> DxgiVulkanInteropSwapChain {
         let gfx = GraphicsContext::current();
         let vk_format = dxgi_to_vk_format(format);
 
         // create the DXGI swap chain
-        let swap_chain = create_composition_swap_chain(&gfx.dxgi_factory, &gfx.cmd_queue.0, format, width, height);
+        let swap_chain = create_swap_chain(&gfx.dxgi_factory, &gfx.cmd_queue.0, format, width, height);
         let mut images = vec![];
 
         unsafe {
@@ -226,10 +213,11 @@ impl DxgiVulkanInteropSwapChain {
         }
     }
 
+
     /// Acquires the next image from the swap chain for rendering.
     ///
     /// This must be followed by a call to `present()`.
-    pub(super) fn get_image(&self) -> RenderTargetImage<'_> {
+    pub(super) fn get_image(&self) -> &gpu::Image {
         assert!(!self.acquired.get(), "surface already acquired");
 
         let gfx = GraphicsContext::current();
@@ -252,8 +240,7 @@ impl DxgiVulkanInteropSwapChain {
 
         self.acquired.set(true);
 
-        // FIXME: SemaphoreWait is not the correct type because the caller should choose the dst_stage
-        RenderTargetImage { image: &image.image }
+        &image.image
     }
 
     /// Presents the image that was last acquired with `get_image()`.
@@ -308,12 +295,13 @@ impl DxgiVulkanInteropSwapChain {
 /// # Panics
 ///
 /// Panics if `width` or `height` are zero (zero-sized swap chains are not supported).
-fn create_composition_swap_chain(
+fn create_swap_chain(
     dxgi_factory: &IDXGIFactory4,
     command_queue: &ID3D12CommandQueue,
     dxgi_format: DXGI_FORMAT,
     width: u32,
     height: u32,
+    //mode: SwapChainMode,
 ) -> IDXGISwapChain3 {
     // CreateSwapChainForComposition fails if width or height are zero.
     // Catch this early to avoid a cryptic error message from the system.
@@ -352,12 +340,37 @@ fn create_composition_swap_chain(
             // This shouldn't fail (IDXGISwapChain3 is DXGI 1.4 / Windows 10)
             .cast::<IDXGISwapChain3>()
             .unwrap();
-
         swap_chain
+
+        /*swap_chain = dxgi_factory
+            .CreateSwapChainForHwnd(
+                command_queue,
+                hwnd,
+                &DXGI_SWAP_CHAIN_DESC1 {
+                    Width: width,
+                    Height: height,
+                    Format: dxgi_format,
+                    Stereo: false.into(),
+                    SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+                    BufferUsage: DXGI_USAGE_RENDER_TARGET_OUTPUT,
+                    BufferCount: SWAP_CHAIN_BUFFER_COUNT,
+                    Scaling: DXGI_SCALING_STRETCH,
+                    SwapEffect: DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL,
+                    AlphaMode: DXGI_ALPHA_MODE_IGNORE,
+                    Flags: 0,
+                },
+                None,
+                None,
+            )
+            .expect("CreateSwapChainForHwnd failed")
+            // This shouldn't fail (IDXGISwapChain3 is DXGI 1.4 / Windows 10)
+            .cast::<IDXGISwapChain3>()
+            .unwrap();*/
+
     }
 }
 
-fn dxgi_to_vk_format(format: DXGI_FORMAT) -> vk::Format {
+pub(super) fn dxgi_to_vk_format(format: DXGI_FORMAT) -> vk::Format {
     match format {
         DXGI_FORMAT_R8G8B8A8_TYPELESS => vk::Format::R8G8B8A8_UNORM,
         DXGI_FORMAT_R8G8B8A8_UNORM => vk::Format::R8G8B8A8_UNORM,

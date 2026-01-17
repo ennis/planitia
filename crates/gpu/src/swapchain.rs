@@ -6,9 +6,9 @@ use std::ptr;
 use std::time::Duration;
 
 #[derive(Debug)]
-struct SwapchainImageInner {
-    image: Image,
-    render_finished: vk::Semaphore,
+pub struct SwapchainImage {
+    pub image: Image,
+    pub render_finished: vk::Semaphore,
 }
 
 /// Represents a swap chain.
@@ -19,9 +19,10 @@ pub struct SwapChain {
     pub format: vk::SurfaceFormatKHR,
     pub width: u32,
     pub height: u32,
-    images: Vec<SwapchainImageInner>,
+    pub images: Vec<SwapchainImage>,
 }
 
+/*
 /// Contains information about an image in a swapchain.
 #[derive(Debug)]
 pub struct SwapchainImage<'a> {
@@ -31,7 +32,7 @@ pub struct SwapchainImage<'a> {
     pub index: u32,
     pub image: &'a Image,
     pub(crate) render_finished: vk::Semaphore,
-}
+}*/
 
 /// Swap chains
 impl Device {
@@ -98,7 +99,7 @@ impl Device {
         &self,
         swap_chain: &'a SwapChain,
         timeout: Duration,
-    ) -> Result<SwapchainImage<'a>, vk::Result> {
+    ) -> Result<(usize, &'a Image), vk::Result> {
         // We can't use `get_or_create_semaphore` because according to the spec the semaphore
         // passed to `vkAcquireNextImage` must not have any pending operations, whereas
         // `get_or_create_semaphore` only guarantees that a wait operation has been submitted
@@ -122,15 +123,9 @@ impl Device {
             }
         };
 
-        let img = SwapchainImage {
-            swapchain: swap_chain.handle,
-            image: &swap_chain.images[index as usize].image,
-            index,
-            render_finished: swap_chain.images[index as usize].render_finished,
-        };
-
         // wait (GPU side) for the image to be ready
         crate::sync_wait(ready, 0);
+        let img = &swap_chain.images[index as usize].image;
 
         // transition image to GENERAL
         {
@@ -145,7 +140,7 @@ impl Device {
                     new_layout: vk::ImageLayout::GENERAL,
                     src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
                     dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
-                    image: img.image.handle,
+                    image: img.handle,
                     subresource_range: vk::ImageSubresourceRange {
                         aspect_mask: vk::ImageAspectFlags::COLOR,
                         base_mip_level: 0,
@@ -163,7 +158,7 @@ impl Device {
         //    this.raw.destroy_semaphore(ready, None);
         //});
 
-        Ok(img)
+        Ok((index as usize, img))
     }
 
     /// Resizes a swap chain.
@@ -226,7 +221,7 @@ impl Device {
         swapchain.height = height;
 
         // reset images & semaphores
-        for SwapchainImageInner { render_finished, .. } in swapchain.images.drain(..) {
+        for SwapchainImage { render_finished, .. } in swapchain.images.drain(..) {
             self.recycle_binary_semaphore(render_finished);
         }
         swapchain.images = Vec::with_capacity(image_count as usize);
@@ -238,7 +233,7 @@ impl Device {
             .unwrap();
         for image in images {
             let render_finished = self.get_or_create_semaphore();
-            swapchain.images.push(SwapchainImageInner {
+            swapchain.images.push(SwapchainImage {
                 image: self.register_swapchain_image(image, swapchain.format.format, width, height),
                 render_finished,
             });
