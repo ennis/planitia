@@ -248,7 +248,7 @@ pub fn load_graphics_pipeline(
     let archive_handle = load_pipeline_archive(archive_file);
 
     debug!(
-        "loading graphics pipeline '{}' from archive '{}'",
+        "loading pipeline `{}` (graphics) from `{}`",
         name,
         archive_file.as_str()
     );
@@ -272,7 +272,7 @@ pub fn load_compute_pipeline(
     let archive_handle = load_pipeline_archive(archive_file);
 
     debug!(
-        "loading compute pipeline '{}' from archive '{}'",
+        "loading pipeline `{}` (compute) from `{}`",
         name,
         archive_file.as_str()
     );
@@ -283,6 +283,7 @@ pub fn load_compute_pipeline(
         .ok_or_else(|| PipelineCreateError::PipelineNotFound(name.to_string()))?;
     Ok(create_compute_pipeline_from_archive(&*archive, entry)?)
 }
+
 
 /// Loads a graphics pipeline object from the specified archive file and pipeline name.
 pub fn get_graphics_pipeline(path: impl AsRef<VfsPath>) -> Handle<gpu::GraphicsPipeline> {

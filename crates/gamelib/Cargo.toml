@@ -28,12 +28,10 @@ renderdoc = "0.12.1"
 shader-bridge = { workspace = true }
 shader-archive = { workspace = true }
 ab_glyph = "0.2.31"
-serde_json = "1.0.145"
 anyhow = "1.0.100"
 notify-debouncer-mini = "0.7.0"
 shadertool = { workspace = true, optional = true }
 libloading = "0.9.0"
-toml = "0.9.11"
 ron = "0.12.0"
 
 [target.'cfg(target_os="windows")'.dependencies]

@@ -16,7 +16,7 @@ use ash::vk;
 use gpu_allocator::vulkan::AllocationCreateDesc;
 use log::{debug, error, trace};
 use slotmap::SlotMap;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::ffi::{c_void, CStr, CString};
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Relaxed;
@@ -58,7 +58,9 @@ unsafe impl Sync for DeviceThreadSafeState {}
 /// Submission-related device state locked during command buffer submission.
 pub(crate) struct DeviceSubmissionState {
     pub(crate) queue: vk::Queue,
+    /// Sorted by create_ticket, not by order of submission.
     pub(crate) active_submissions: VecDeque<ActiveSubmission>,
+
     // Pending writes not yet made visible.
     //pub(crate) writes: MemoryAccess,
     // Last access type tracked per resource. Used mostly to track image layouts.
@@ -107,10 +109,24 @@ pub struct Device {
     pub(crate) next_create_ticket: AtomicU64,
 
     /// Index of the next submission to be submitted.
-    pub(crate) next_submit_ticket: AtomicU64,
+    pub(crate) next_timeline_value: AtomicU64,
 
-    /// Resources that have a zero user reference count and that should be ready for deletion soon,
-    /// but we're waiting for the GPU to finish using them.
+    /// All command buffers with create_index <= than this value have completed execution.
+    ///
+    /// There might be some command buffers with a higher create_index that have also completed,
+    /// but this is the highest value for which we can guarantee that all lower-indexed command
+    /// buffers have completed.
+    pub(crate) completed_tickets: AtomicU64,
+
+    /// Destructors (or other function calls) that are delayed until associated command buffers
+    /// have completed execution.
+    ///
+    /// Note that the deletion queue is sorted by create_ticket, which is not necessarily the same as
+    /// submission order, in case the user submits command buffers out-of-order.
+    /// This means that even if a submission has completed execution, deletion of the associated
+    /// resources are delayed until all submissions **with a lower create_ticket** have also completed.
+    /// This is necessary to avoid unsound scenarios where resources are deleted while still in use
+    /// by the GPU, due to command buffers being submitted out-of-order.
     deletion_queue: Mutex<Vec<DeleteQueueEntry>>,
 
     pub(crate) sampler_cache: Mutex<HashMap<SamplerCreateInfoHashable, Sampler>>,
@@ -123,13 +139,13 @@ impl fmt::Debug for Device {
 }
 
 pub(crate) struct ActiveSubmission {
-    pub(crate) _create_ticket: u64,
-    pub(crate) submit_ticket: u64,
+    pub(crate) create_ticket: u64,
+    pub(crate) timeline_value: u64,
     pub(crate) command_pools: Vec<CommandPool>,
 }
 
 struct DeleteQueueEntry {
-    submission: u64,
+    create_ticket: u64,
     deleter: Option<Box<dyn FnOnce(&Device) + Send + Sync>>,
 }
 
@@ -511,10 +527,11 @@ impl Device {
             sampler_cache: Mutex::new(Default::default()),
             free_command_pools: Mutex::new(Default::default()),
             next_create_ticket: AtomicU64::new(1),
-            next_submit_ticket: AtomicU64::new(1),
+            next_timeline_value: AtomicU64::new(1),
             semaphores: Default::default(),
-            deletion_queue: Mutex::new(vec![]),
+            deletion_queue: Mutex::new(Vec::new()),
             upload_buffer: Mutex::new(UploadBuffer::new(BufferUsage::UNIFORM)),
+            completed_tickets: AtomicU64::new(0),
         })
     }
 
@@ -758,29 +775,49 @@ impl Device {
             .expect("failed to allocate device memory")
     }
 
+    fn ticket_completed(&self, ticket: u64) -> bool {
+        let last_completed_submission_index =
+            unsafe { self.raw.get_semaphore_counter_value(self.thread_safe.timeline).unwrap() };
+
+        if last_completed_submission_index == u64::MAX {
+            error!("GetSemaphoreCounterValue returned UINT64_MAX");
+            return false;
+        }
+
+        // find corresponding submission for ticket
+        let submission_state = self.submission_state.lock().unwrap();
+        for s in submission_state.active_submissions.iter() {
+            if s.create_ticket == ticket {
+                return s.timeline_value <= last_completed_submission_index;
+            }
+        }
+
+        ticket <= last_completed_submission_index
+    }
+
     /// Schedules a function call.
     ///
     /// The function will be called once the GPU has finished processing commands up to and
     /// including the specified submission index.
-    pub fn call_later(&self, submission_index: u64, f: impl FnOnce(&Self) + Send + Sync + 'static) {
-        // if the submission is already completed, call the function right away
-        let last_completed_submission_index =
-            unsafe { self.raw.get_semaphore_counter_value(self.thread_safe.timeline).unwrap() };
-        if last_completed_submission_index == u64::MAX {
-            error!("GetSemaphoreCounterValue returned UINT64_MAX");
-            return;
-        }
-        if submission_index <= last_completed_submission_index {
-            trace!("GPU: immediate call_later for submission {submission_index} (last_completed_submission_index={last_completed_submission_index})");
+    pub fn call_later(&self, ticket: u64, f: impl FnOnce(&Self) + Send + Sync + 'static) {
+        // if the command buffer has already completed execution, call the function right away
+        if ticket <= self.completed_tickets.load(Relaxed) {
+            trace!("GPU: immediate call_later for ticket={ticket})");
             f(self);
-            return;
+        } else {
+            // otherwise move it to the deferred deletion list
+            let mut deletion_queue = self.deletion_queue.lock().unwrap();
+            let pos = deletion_queue
+                .binary_search_by_key(&ticket, |e| e.create_ticket)
+                .unwrap_or_else(|p| p);
+            deletion_queue.insert(
+                pos,
+                DeleteQueueEntry {
+                    create_ticket: ticket,
+                    deleter: Some(Box::new(f)),
+                },
+            );
         }
-
-        // otherwise move it to the deferred deletion list
-        self.deletion_queue.lock().unwrap().push(DeleteQueueEntry {
-            submission: submission_index,
-            deleter: Some(Box::new(f)),
-        });
     }
 
     /// Schedules a resource for deletion after the current submission is complete.
@@ -790,8 +827,8 @@ impl Device {
         deleter: impl FnOnce(&Self) + Send + Sync + 'static,
     ) {
         // See comments in `delete_after_current_submission`.
-        let last_submission = self.next_create_ticket.load(Relaxed) - 1;
-        self.call_later(last_submission, move |device| {
+        let last_create_ticket = self.next_create_ticket.load(Relaxed) - 1;
+        self.call_later(last_create_ticket, move |device| {
             //trace!("GPU: deleting tracked resource {:?}", resource_id);
             Self::global().free_resource_id(resource_id);
             deleter(device);
@@ -800,14 +837,8 @@ impl Device {
 
     /// Schedules a function (destructor) to be called after the current submission is complete.
     pub(crate) fn delete_after_current_submission(&self, deleter: impl FnOnce(&Self) + Send + Sync + 'static) {
-        // All resources may potentially be used by the last opened submission (the last *created*
-        // CommandStream), which has index `next_submission_index - 1`.
-        //
-        // We used to track resource uses per-submission, but this required user input
-        // (`CommandStream::reference_resource`) and was error-prone.
-        // Now we just go with the pessimistic, but reliable, approach.
-        let last_submission = self.next_create_ticket.load(Relaxed) - 1;
-        self.call_later(last_submission, move |device| {
+        let last_ticket = self.next_create_ticket.load(Relaxed) - 1;
+        self.call_later(last_ticket, move |device| {
             deleter(device);
         })
     }
@@ -872,29 +903,17 @@ impl Device {
             error!("GetSemaphoreCounterValue returned UINT64_MAX");
             return;
         }
-        trace!("GPU: cleaning up to submission {last_completed_submission_index}");
 
-        let mut submission_state = self.submission_state.lock().unwrap();
-        let mut deletion_queue = self.deletion_queue.lock().unwrap();
+        //trace!("GPU: cleaning up to submission {last_completed_submission_index}");
 
-        // *** This invokes all delayed destructors for resources which are no longer in use by the GPU.
-        deletion_queue.retain_mut(|DeleteQueueEntry { submission, deleter }| {
-            if *submission > last_completed_submission_index {
-                return true;
-            }
-            let deleter = deleter.take().unwrap();
-            deleter(self);
-            false
-        });
-
-        // process all completed submissions, oldest to newest
+        // process all completed submissions
         let mut free_command_pools = self.free_command_pools.lock().unwrap();
-
+        let mut submission_state = self.submission_state.lock().unwrap();
         loop {
             let Some(submission) = submission_state.active_submissions.front() else {
                 break;
             };
-            if submission.submit_ticket > last_completed_submission_index {
+            if submission.timeline_value > last_completed_submission_index {
                 break;
             }
             let submission = submission_state.active_submissions.pop_front().unwrap();
@@ -905,7 +924,22 @@ impl Device {
                 }
                 free_command_pools.push(command_pool);
             }
+            // update completed tickets
+            self.completed_tickets.store(submission.create_ticket, Relaxed);
         }
+
+        let mut deletion_queue = self.deletion_queue.lock().unwrap();
+        let completed_tickets = self.completed_tickets.load(Relaxed);
+
+        // *** This invokes all delayed destructors for resources which are no longer in use by the GPU.
+        deletion_queue.retain_mut(|DeleteQueueEntry { create_ticket, deleter }| {
+            if *create_ticket > completed_tickets {
+                return true;
+            }
+            let deleter = deleter.take().unwrap();
+            deleter(self);
+            false
+        });
     }
 
     /// Creates a new, or returns an existing, binary semaphore that is in the unsignaled state,
@@ -1181,7 +1215,12 @@ impl Device {
         // ------ Dynamic states ------
 
         // TODO: this could be a static property of the pipeline interface
-        let mut dynamic_states = vec![vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR, vk::DynamicState::DEPTH_BIAS, vk::DynamicState::DEPTH_BIAS_ENABLE];
+        let mut dynamic_states = vec![
+            vk::DynamicState::VIEWPORT,
+            vk::DynamicState::SCISSOR,
+            vk::DynamicState::DEPTH_BIAS,
+            vk::DynamicState::DEPTH_BIAS_ENABLE,
+        ];
 
         if matches!(
             create_info.pre_rasterization_shaders,

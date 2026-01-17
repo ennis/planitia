@@ -146,7 +146,7 @@ BaseRenderFSOut base_render_fragment(BaseRenderVSOut i, uniform BaseRenderRootPa
     BaseRenderFSOut o;
     float3 normal = normalize(i.normal);
     float light_intensity = saturate(dot(normal, -normalize(u.main_light_direction)));
-    o.color = float4(light_intensity.xxx, 1.0);
+    o.color = float4(0.0, 0.0, 0.0, 1.0);
     o.normal = normal;
     // colorize per cluster
     //o.color.rgb = palette(float(i.meshlet_id) * 0.1, float3(0.5,0.5,0.5),float3(0.5,0.5,0.5),float3(1.0,1.0,1.0),float3(0.0,0.33,0.67));
@@ -352,37 +352,61 @@ CornerDetectionFSOut corner_detection_fragment_shader(
     uniform CornerDetectionRootParams* params)
 {
     int3 coord = int3(int2(frag_coord.xy), 0);
+    int2 size = int2(params.scene_info.screen_size);
+
+    static const int W = 3;
+    var accum = 0.0;
+    var weight_sum = 0.0;
+    for (int i = -W; i <= W; ++i) {
+        for (int j = -W; j <= W; ++j) {
+            let coord_ij = clamp(coord.xy + int2(i, j), int2(0,0), size - int2(1,1));
+            let data = params.angle_tex.Load(int3(coord_ij, 0));
+            let angle = (float(data.y) / 65535.0) * TAU;
+            let f = float2(cos(angle), sin(angle));
+            let n = normalize(float2(i, j));
+            let dp = dot(f, n);
+            accum += dp * data.a;
+            weight_sum += data.a;
+        }
+    }
+
+    let div = accum;
 
     let tex00 = params.angle_tex.Load(int3(coord.x, coord.y, 0));
-    let tex10 = params.angle_tex.Load(int3(coord.x + 1, coord.y, 0));
-    let tex01 = params.angle_tex.Load(int3(coord.x, coord.y + 1, 0));
-    let tex11 = params.angle_tex.Load(int3(coord.x + 1, coord.y + 1, 0));
-
-    let angle00 = (float(tex00.y) / 65535.0) * TAU;
-    let angle10 = (float(tex10.y) / 65535.0) * TAU;
-    let angle01 = (float(tex01.y) / 65535.0) * TAU;
-    let angle11 = (float(tex11.y) / 65535.0) * TAU;
-
-    let n00 = float3(cos(angle00), sin(angle00), 0.0);
-    let n10 = float3(cos(angle10), sin(angle10), 0.0);
-    let n01 = float3(cos(angle01), sin(angle01), 0.0);
-    let n11 = float3(cos(angle11), sin(angle11), 0.0);
-
-    let dnxdx = (n10.x - n00.x) * tex00.a * tex10.a;
-    let dnydy = (n01.y - n00.y) * tex00.a * tex01.a;
-    let div = dnxdx + dnydy;
+    //let tex10 = params.angle_tex.Load(int3(coord.x + 1, coord.y, 0));
+    //let tex01 = params.angle_tex.Load(int3(coord.x, coord.y + 1, 0));
+    //let tex11 = params.angle_tex.Load(int3(coord.x + 1, coord.y + 1, 0));
+    //let angle00 = (float(tex00.y) / 65535.0) * TAU;
+    //let angle10 = (float(tex10.y) / 65535.0) * TAU;
+    //let angle01 = (float(tex01.y) / 65535.0) * TAU;
+    //let angle11 = (float(tex11.y) / 65535.0) * TAU;
+    //let n00 = float3(cos(angle00), sin(angle00), 0.0);
+    //let n10 = float3(cos(angle10), sin(angle10), 0.0);
+    //let n01 = float3(cos(angle01), sin(angle01), 0.0);
+    //let n11 = float3(cos(angle11), sin(angle11), 0.0);
+    //let dnxdx = (n10.x - n00.x) * tex00.a * tex10.a;
+    //let dnydy = (n01.y - n00.y) * tex00.a * tex01.a;
+    //let div = dnxdx + dnydy;
 
     let jfa_value = int2(params.jfa_tex.Load(coord.xy));
     let ref_outline = params.angle_tex.Load(int3(jfa_value,0));
 
     let dist = length(float2(jfa_value - coord.xy));
-    let width = 5.0;
+    let width = 1.0;
     let aastep = fwidth(dist);
     let div_factor = smoothstep(width, width - aastep, dist);
-    let color = float4(colorize_id(ref_outline.r), div_factor);
+    var color = float4(colorize_id(ref_outline.r), tex00.a);
+
+    //color.rgb = colorize_1d(dist * 0.1);
+
+    //color.rgb = colorize_1d(div);
+
+    //let angle = (float(tex00.y) / 65535.0) * TAU;
+    //let f = float2(cos(angle), sin(angle));
+    //color.rgb = float3(f * 0.5 + 0.5, 0.0);
 
     //let normal = float3(cos(angle.r), sin(angle.r), 0.0);
-    //var color = float4(colorize_1d(div), 1.0);
+    //color.rgb = colorize_1d(dist);
     //var color = float4(float3(div), 1.0);
     //color.rgb = colorize_id(tex00.r);
     //color.rgb = float3(float2(jfa_value) / params.scene_info.screen_size, 0.0);

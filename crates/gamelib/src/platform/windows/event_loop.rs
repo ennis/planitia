@@ -141,6 +141,10 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
         let mut event = None;
         match window_event {
             WindowEvent::Resized(size) => {
+                // if resizing to zero, ignore; it's invalid to resize a swap chain to zero size
+                if size.width == 0 || size.height == 0 {
+                    return;
+                }
                 self.this
                     .window
                     .borrow_mut()

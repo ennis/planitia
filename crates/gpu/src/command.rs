@@ -210,15 +210,13 @@ pub enum RootParams<'a, T: Copy + 'static> {
     Immediate(&'a T),
 }
 
-impl<T: Copy+'static> From<Ptr<T>> for RootParams<'_, T>
-{
+impl<T: Copy + 'static> From<Ptr<T>> for RootParams<'_, T> {
     fn from(p: Ptr<T>) -> Self {
         RootParams::Ptr(p)
     }
 }
 
-impl<'a, T: Copy+'static> From<&'a T> for RootParams<'a, T>
-{
+impl<'a, T: Copy + 'static> From<&'a T> for RootParams<'a, T> {
     fn from(data: &'a T) -> Self {
         RootParams::Immediate(data)
     }
@@ -240,6 +238,15 @@ impl CommandBuffer {
         // in which order they were *submitted* to the GPU.
         // Eventually, when all created command streams have been submitted (i.e. there are no
         // live CommandStream objects), we normally have next_creation_ticket == next_submission_ticket.
+
+        // ISSUE: it's possible to delete resources while a command buffer using them is still pending:
+        //        1/ create command buffer A (create ticket 0)
+        //        2/ create command buffer B (create ticket 1)
+        //        3/ submit B (submission ticket 0)
+        //        4/ schedule deletion of resources used by A
+        //        5/ wait for device idle (submission ticket 0 signalled)
+        //        6/ cleanup: deletion of resources used by A happens here, but A is still pending submission
+        //        7/ submit A (submission ticket 1)
 
         let create_ticket = device.next_create_ticket.fetch_add(1, Relaxed);
         trace!("GPU: create CommandStream, create_ticket {}", create_ticket);
@@ -638,7 +645,12 @@ impl CommandBuffer {
     ) {
         let cb = self.get_or_create_command_buffer();
         unsafe {
-            self.set_root_params(cb, vk::PipelineBindPoint::COMPUTE, self.pipeline_layout, root_params.into());
+            self.set_root_params(
+                cb,
+                vk::PipelineBindPoint::COMPUTE,
+                self.pipeline_layout,
+                root_params.into(),
+            );
             Device::global()
                 .raw
                 .cmd_dispatch(cb, group_count_x, group_count_y, group_count_z);
@@ -834,11 +846,11 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
     // Timeline semaphore values depend on this.
     assert!(!cmd.submitted);
 
-    let submit_ticket = device.next_submit_ticket.fetch_add(1, Relaxed);
+    let timeline_value = device.next_timeline_value.fetch_add(1, Relaxed);
     trace!(
-        "GPU: submit CommandStream, create_ticket={}, submit_ticket={}",
+        "GPU: submit CommandStream, create_ticket={}, timeline_value={}",
         cmd.create_ticket,
-        submit_ticket
+        timeline_value
     );
 
     // flush pending writes
@@ -956,7 +968,7 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
     //----------------------
     // submit
     let signal_semaphores = vec![device.thread_safe.timeline];
-    let signal_semaphore_values = vec![submit_ticket];
+    let signal_semaphore_values = vec![timeline_value];
     let timeline_submit_info = vk::TimelineSemaphoreSubmitInfo {
         signal_semaphore_value_count: signal_semaphore_values.len() as u32,
         p_signal_semaphore_values: signal_semaphore_values.as_ptr(),
@@ -981,12 +993,20 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
             .raw
             .queue_submit(submission_state.queue, &[submit_info], vk::Fence::null());
 
-        submission_state.active_submissions.push_back(ActiveSubmission {
-            _create_ticket: cmd.create_ticket,
-            submit_ticket,
-            // SAFETY: submitted = false so the command pool is valid
-            command_pools: vec![ManuallyDrop::take(&mut cmd.command_pool)],
-        });
+        // active_submissions is sorted by ticket
+        let pos = submission_state
+            .active_submissions
+            .binary_search_by_key(&cmd.create_ticket, |s| s.create_ticket)
+            .unwrap_or_else(|p| p);
+        submission_state.active_submissions.insert(
+            pos,
+            ActiveSubmission {
+                create_ticket: cmd.create_ticket,
+                timeline_value,
+                // SAFETY: submitted = false so the command pool is valid
+                command_pools: vec![ManuallyDrop::take(&mut cmd.command_pool)],
+            },
+        );
     };
 
     cmd.submitted = true;
