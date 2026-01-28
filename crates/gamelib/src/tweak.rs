@@ -26,6 +26,16 @@ impl Tweakable for f32 {
     }
 }
 
+impl Tweakable for u32 {
+    fn ui(&mut self, ui: &mut Ui, options: &TweakOptions) {
+        if options.range.start().is_infinite() || options.range.end().is_infinite() {
+            ui.add(egui::DragValue::new(self).speed(1.0));
+        } else {
+            //ui.add(egui::Slider::new(self, options.range.clone()));
+        }
+    }
+}
+
 impl Tweakable for bool {
     fn ui(&mut self, ui: &mut Ui, _options: &TweakOptions) {
         ui.checkbox(self, "");

@@ -18,9 +18,13 @@ smallvec = "2.0.0-alpha.12"
 serde = { version = "1.0.228", features = ["derive"] }
 ron = "0.12"
 bytesize = "2.3.1"
+rand = "0.9.2"
 
 [build-dependencies]
 shadertool = { workspace = true }
+
+[dev-dependencies]
+rayon = "1.11.0"
 
 [features]
 hot_reload = ["gamelib/hot_reload"]

@@ -134,6 +134,9 @@
      In rust code, call `tweak::<T>(min, max)` to automatically show a slider in the GUI
  ☐ QoL: remember last application state and reload (geometry file, pipeline config)
  ☐ Global settings singleton
+ ☐ GPU: queries
+     Timestamp queries
+
 
 Render world:
     The "render world" holds all resources, pipelines, and is in charge of running the render passes. It also holds the current scene to draw.
@@ -176,6 +179,14 @@ Contours:
 What we have now: lineart map with: ss normal angle, group id
 Need to expand that into strokes. Possible approaches
 * compute distance field from lineart pixels
+
+Experiment
+* [compute shader] chain all contour edges into connected components
+    contour_extraction: outputs cluster index + two global point indices
+    chain_edges: sort edges by point indices
+
+* [compute shader] fuse close points
+* [compute shader] subdivide 
 
 Terrain rendering:
     ✔ Find out how to do the initial adaptive meshing @done (25-12-15 15:55)

@@ -1,5 +1,5 @@
 use crate::device::ActiveSubmission;
-use crate::{vk, CommandPool, ComputePipeline, Descriptor, Device, Ptr, SwapChain, SwapchainImage};
+use crate::{vk, Buffer, BufferUntyped, CommandPool, ComputePipeline, Descriptor, Device, Ptr, SwapChain, SwapchainImage};
 use ash::prelude::VkResult;
 use ash::vk::DeviceAddress;
 use bitflags::bitflags;
@@ -518,6 +518,10 @@ impl CommandBuffer {
         self.barrier_source = flags;
     }
 
+    pub fn barrier_dst(&mut self, flags: BarrierFlags) {
+        self.barrier(BarrierFlags::empty(), flags);
+    }
+
     /// Emits a pipeline barrier (if necessary) that ensures that all previous writes are
     /// visible to subsequent operations for the given memory access type.
     ///
@@ -525,14 +529,15 @@ impl CommandBuffer {
     /// writes are made available unconditionally.
     ///
     // TODO split in two parameters: one for global memory barrier, one for image layout transitions
-    pub fn barrier(&mut self, dest: BarrierFlags) {
+    pub fn barrier(&mut self, src: BarrierFlags, dest: BarrierFlags) {
         //let mut image_barriers = vec![];
+        let full_src = self.barrier_source | src;
 
-        if self.barrier_source.is_empty() && dest.is_empty() {
+        if full_src.is_empty() && dest.is_empty() {
             return;
         }
 
-        let (src_stage_mask, src_access_mask) = self.barrier_source.to_vk_barrier_src_flags();
+        let (src_stage_mask, src_access_mask) = full_src.to_vk_barrier_src_flags();
         let (dst_stage_mask, dst_access_mask) = dest.to_vk_barrier_dst_flags();
         let global_memory_barrier = vk::MemoryBarrier2 {
             src_access_mask,
@@ -554,6 +559,8 @@ impl CommandBuffer {
                 },
             );
         }
+
+        self.barrier_source = BarrierFlags::empty();
 
         /*for (image, access) in barrier.transitions {
             if let Some(entry) = self.tracked_images.get_mut(&image.id()) {
@@ -616,6 +623,20 @@ impl CommandBuffer {
         let cb = self.get_or_create_command_buffer();
         unsafe {
             self.do_cmd_push_descriptor_set(cb, vk::PipelineBindPoint::COMPUTE, self.pipeline_layout, set, bindings);
+        }
+    }
+
+    /// Writes values to a buffer.
+    pub unsafe fn update_buffer(&mut self, buffer: &BufferUntyped, offset: usize, data: &[u8]) {
+        let device = Device::global();
+        let cb = self.get_or_create_command_buffer();
+        unsafe {
+            device.raw.cmd_update_buffer(
+                cb,
+                buffer.handle(),
+                offset as u64,
+                data,
+            );
         }
     }
 
@@ -854,7 +875,7 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
     );
 
     // flush pending writes
-    cmd.barrier(BarrierFlags::empty());
+    cmd.barrier_dst(BarrierFlags::empty());
 
     // finish recording the current command buffer if not already done
     cmd.close_command_buffer();

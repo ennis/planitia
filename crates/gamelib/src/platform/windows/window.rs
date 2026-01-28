@@ -18,6 +18,7 @@ use winit::event_loop::ActiveEventLoop;
 use winit::platform::windows::WindowAttributesExtWindows;
 use winit::raw_window_handle::HasWindowHandle;
 use winit::window::WindowAttributes;
+use crate::util::env_flag;
 
 struct DCompState {
     composition_target: IDCompositionTarget,
@@ -50,7 +51,7 @@ pub(super) struct Window {
 impl Window {
     pub(super) fn new(event_loop: &ActiveEventLoop, title: &str, width: u32, height: u32) -> Result<Window, Error> {
 
-        let use_directcomposition = env::var("USE_DXGI").map(|v| v == "true" || v == "1").unwrap_or(false);
+        let use_directcomposition = env_flag("USE_DXGI");
 
         if use_directcomposition {
             info!("Using DXGI composition swap chain");

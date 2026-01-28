@@ -19,6 +19,7 @@ use std::sync::{LazyLock, OnceLock};
 use std::{mem, ptr};
 use threadbound::ThreadBound;
 use crate::tweak::show_tweaks_gui;
+use crate::util::env_flag;
 
 /// Holds the application's global objects and services.
 pub(crate) struct Context {
@@ -42,7 +43,6 @@ unsafe fn rdoc_instance_ptr() -> *mut c_void {
     }
 }
 
-#[cfg(debug_assertions)]
 fn load_renderdoc_dll() {
     #[cfg(target_os = "windows")]
     const DLL_PATH: &[&str] = &["renderdoc.dll", "C:\\Program Files\\RenderDoc\\renderdoc.dll"];
@@ -174,8 +174,9 @@ impl<H: AppHandler + Default + 'static> App<H> {
 
     pub fn run(&'static self, init_options: &InitOptions) {
         // load the renderdoc DLL asap
-        #[cfg(debug_assertions)]
-        load_renderdoc_dll();
+        if env_flag("RENDERDOC") {
+            load_renderdoc_dll();
+        }
 
         env_logger::builder()
             .parse_default_env()

@@ -57,18 +57,20 @@ pub const SUBGROUP_SIZE: u32 = 32;
 
 /// Device address of a GPU buffer containing elements of type `T` its associated type.
 #[repr(transparent)]
-pub struct Ptr<T: 'static> {
+pub struct Ptr<T: ?Sized + 'static> {
     pub raw: vk::DeviceAddress,
     pub _phantom: PhantomData<T>,
 }
 
-impl<T: 'static> Ptr<T> {
+impl<T: ?Sized + 'static> Ptr<T> {
     /// Null (invalid) device address.
     pub const NULL: Self = Ptr {
         raw: 0,
         _phantom: PhantomData,
     };
+}
 
+impl<T: 'static> Ptr<T> {
     pub fn offset(self, offset: usize) -> Self {
         Ptr {
             raw: self.raw + (offset * size_of::<T>()) as u64,
@@ -77,7 +79,7 @@ impl<T: 'static> Ptr<T> {
     }
 }
 
-impl<T: 'static> Clone for Ptr<T> {
+impl<T: ?Sized + 'static> Clone for Ptr<T> {
     fn clone(&self) -> Self {
         Ptr {
             raw: self.raw,
@@ -86,7 +88,7 @@ impl<T: 'static> Clone for Ptr<T> {
     }
 }
 
-impl<T: 'static> Copy for Ptr<T> {}
+impl<T: ?Sized + 'static> Copy for Ptr<T> {}
 
 /// Bindless handle to an image.
 #[derive(Copy, Clone, Debug)]

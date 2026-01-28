@@ -133,7 +133,7 @@ impl Renderer {
                 data,
             );
 
-            cmd.barrier(BarrierFlags::ALL_SHADER_STAGES | BarrierFlags::SAMPLED_READ);
+            cmd.barrier_dst(BarrierFlags::ALL_SHADER_STAGES | BarrierFlags::SAMPLED_READ);
         }
     }
 

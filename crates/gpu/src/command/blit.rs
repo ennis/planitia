@@ -8,7 +8,7 @@ use crate::{
 
 impl CommandBuffer {
     pub fn fill_buffer(&mut self, range: &BufferRangeUntyped, data: u32) {
-        self.barrier(BarrierFlags::TRANSFER);
+        self.barrier_dst(BarrierFlags::TRANSFER);
         let cb = self.get_or_create_command_buffer();
         unsafe {
             // SAFETY: FFI call and parameters are valid
@@ -21,7 +21,7 @@ impl CommandBuffer {
 
     // TODO specify subresources
     pub fn clear_image(&mut self, image: &Image, clear_color_value: ClearColorValue) {
-        self.barrier(BarrierFlags::TRANSFER);
+        self.barrier_dst(BarrierFlags::TRANSFER);
         let cb = self.get_or_create_command_buffer();
         unsafe {
             // SAFETY: FFI call and parameters are valid
@@ -43,7 +43,7 @@ impl CommandBuffer {
     }
 
     pub fn clear_depth_image(&mut self, image: &Image, depth: f32) {
-        self.barrier(BarrierFlags::TRANSFER);
+        self.barrier_dst(BarrierFlags::TRANSFER);
         let cb = self.get_or_create_command_buffer();
         unsafe {
             // SAFETY: FFI call and parameters are valid
@@ -73,7 +73,7 @@ impl CommandBuffer {
         // TODO: this is not required for multi-planar formats
         assert_eq!(source.aspect, destination.aspect);
 
-        self.barrier(BarrierFlags::TRANSFER_READ);
+        self.barrier_dst(BarrierFlags::TRANSFER_READ);
 
         let regions = [vk::ImageCopy {
             src_subresource: vk::ImageSubresourceLayers {
@@ -121,7 +121,7 @@ impl CommandBuffer {
         assert!(src_offset + size <= source.byte_size());
         assert!(dst_offset + size <= destination.byte_size());
 
-        self.barrier(BarrierFlags::TRANSFER_READ);
+        self.barrier_dst(BarrierFlags::TRANSFER_READ);
 
         // SAFETY: FFI call and parameters are valid
         let cb = self.get_or_create_command_buffer();
@@ -150,7 +150,7 @@ impl CommandBuffer {
         destination: ImageCopyView<'_>,
         copy_size: vk::Extent3D,
     ) {
-        self.barrier(BarrierFlags::TRANSFER_READ);
+        self.barrier_dst(BarrierFlags::TRANSFER_READ);
 
         let regions = [vk::BufferImageCopy {
             buffer_offset: source.layout.offset,
@@ -205,7 +205,7 @@ impl CommandBuffer {
         dst_region: Rect3D,
         filter: vk::Filter,
     ) {
-        self.barrier(BarrierFlags::TRANSFER_READ);
+        self.barrier_dst(BarrierFlags::TRANSFER_READ);
 
         let blits = [vk::ImageBlit {
             src_subresource: vk::ImageSubresourceLayers {

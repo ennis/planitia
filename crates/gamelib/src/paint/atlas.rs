@@ -187,7 +187,7 @@ impl Atlas {
     /// The image is prepared for shader read access.
     pub(crate) fn prepare_texture(&mut self, cmd: &mut gpu::CommandBuffer) -> gpu::TextureHandle {
         self.upload_to_gpu(cmd);
-        cmd.barrier(BarrierFlags::ALL_SHADER_STAGES | BarrierFlags::SAMPLED_READ);
+        cmd.barrier_dst(BarrierFlags::ALL_SHADER_STAGES | BarrierFlags::SAMPLED_READ);
         self.texture.texture_handle()
     }
 }

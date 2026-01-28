@@ -10,6 +10,7 @@ use std::ops::RangeBounds;
 use std::os::raw::c_void;
 use std::ptr::NonNull;
 use std::{mem, ptr, slice};
+use std::alloc::Layout;
 use ash::vk::{Handle, ObjectType};
 
 impl<T: ?Sized> Drop for Buffer<T> {
@@ -59,33 +60,21 @@ unsafe impl<T: ?Sized> Send for Buffer<T> {}
 // is done via unsafe methods, and the called should ensure proper synchronization).
 unsafe impl<T: ?Sized> Sync for Buffer<T> {}
 
-impl<T: Copy> Buffer<T> {
-    /// Creates a new buffer with the specified number of elements.
-    pub fn new(create_info: BufferCreateInfo) -> Self {
-        let buffer = Device::global().create_buffer(size_of::<T>(), create_info);
-        unsafe {
-            // SAFETY: the buffer is large enough to hold `len` elements of type `T`
-            buffer.cast()
-        }
-    }
-
-    /// Creates a CpuToGpu buffer and copies data into it.
-    pub fn from_slice(data: &[T]) -> Buffer<T> {
-        Buffer::from_slice_with_usage(BufferUsage::default(), data)
-    }
-
-    /// Creates a CpuToGpu buffer and copies data into it.
-    pub fn from_slice_with_usage(usage: BufferUsage, data: &[T]) -> Buffer<T> {
-        let buffer = Buffer::new(BufferCreateInfo {
-            len: data.len(),
-            usage,
+impl<T: ?Sized> Buffer<T> {
+    pub unsafe fn from_layout(layout: Layout) -> Buffer<T> {
+        // TODO ensure alignment
+        let buffer = Device::global().create_buffer(1, BufferCreateInfo {
+            len: layout.size(),
+            usage: BufferUsage::default(),
             memory_location: MemoryLocation::CpuToGpu,
         });
-        unsafe {
-            // copy data to mapped buffer
-            ptr::copy_nonoverlapping(data.as_ptr(), buffer.as_mut_ptr(), data.len());
-        }
-        buffer
+
+        buffer.cast_unsized()
+    }
+
+    /// Returns the size of the buffer in bytes.
+    pub fn byte_size(&self) -> u64 {
+        self.size
     }
 
     /// Returns the device address of the buffer, for use in shaders.
@@ -94,11 +83,6 @@ impl<T: Copy> Buffer<T> {
             raw: self.device_address,
             _phantom: PhantomData,
         }
-    }
-
-    /// Returns the size of the buffer in bytes.
-    pub fn byte_size(&self) -> u64 {
-        self.size
     }
 
     /// Returns the usage flags of the buffer.
@@ -122,6 +106,9 @@ impl<T: Copy> Buffer<T> {
     }
 
     /// Returns an untyped reference (`&Buffer<[u8]>`) of the buffer.
+    ///
+    /// FIXME: this should be unsafe, given that you could write invalid bit patterns for T, and
+    ///        read them back through the mapped pointer.
     pub fn as_bytes(&self) -> &BufferUntyped {
         // SAFETY: Buffer<T> where T:?Sized has the same layout as BufferUntyped (Buffer<[u8]>), and no stricter
         // alignment constraints for host pointers.
@@ -141,6 +128,52 @@ impl<T: Copy> Buffer<T> {
     pub fn as_mut_ptr(&self) -> *mut T {
         self.as_mut_ptr_u8() as *mut T
     }
+
+    /// Creates a new buffer with the specified number of elements.
+    pub fn new(create_info: BufferCreateInfo) -> Self {
+        let buffer = Device::global().create_buffer(size_of::<T>(), create_info);
+        unsafe {
+            // SAFETY: the buffer is large enough to hold `len` elements of type `T`
+            buffer.cast()
+        }
+    }
+
+    /// Discards the contents of this buffer and returns an identical buffer, except with a different size.
+    pub fn discard_resize(&mut self, new_len: usize) {
+        let buffer = Device::global().create_buffer(
+            size_of::<T>(),
+            BufferCreateInfo {
+                len: new_len,
+                usage: self.usage,
+                memory_location: self.memory_location,
+            },
+        );
+        unsafe {
+            *self = buffer.cast()
+        }
+    }
+
+    /// Creates a CpuToGpu buffer and copies data into it.
+    pub fn from_slice(data: &[T]) -> Buffer<T> {
+        Buffer::from_slice_with_usage(BufferUsage::default(), data)
+    }
+
+    /// Creates a CpuToGpu buffer and copies data into it.
+    pub fn from_slice_with_usage(usage: BufferUsage, data: &[T]) -> Buffer<T> {
+        let buffer = Buffer::new(BufferCreateInfo {
+            len: data.len(),
+            usage,
+            memory_location: MemoryLocation::CpuToGpu,
+        });
+        unsafe {
+            // copy data to mapped buffer
+            ptr::copy_nonoverlapping(data.as_ptr(), buffer.as_mut_ptr(), data.len());
+        }
+        buffer
+    }
+}
+
+impl<T: Copy> Buffer<T> {
 
     /// Returns the number of elements in the buffer.
     pub fn len(&self) -> usize {
@@ -178,7 +211,29 @@ impl<T: Copy> Buffer<T> {
     /// or if the host pointer is not correctly aligned for the element type.
     pub unsafe fn as_cast<U: Copy>(&self) -> &Buffer<U> {
         self.check_valid_cast::<U>();
-        // SAFETY: Buffer<T> and Buffer<U> have the same layout for all T and U
+        // SAFETY: &Buffer<T> and &Buffer<U> have the same layout for all T and U
+        mem::transmute(self)
+    }
+
+    /// Casts the buffer to an unsized type (slice or struct with trailing slice).
+    ///
+    /// Since the target type is unsized, and rust doesn't currently provide a lot of information
+    /// about the layout of unsized types, very few checks can be performed in the function.
+    ///
+    /// # Safety
+    ///
+    /// * `U` must be a slice or an unsized struct with a trailing slice (a.k.a "slice DST", e.g. `struct S { a: u32, b: [u8] }`).
+    ///     - while this is not strictly required, you probably want the slice DST to have a
+    ///       well-defined layout (`repr(C)`) so that you can allocate a byte buffer with the
+    ///       correct layout.
+    /// * The host pointer must be correctly aligned for `U`. Technically alignment is defined
+    ///   statically for slices and slice DSTs, but currently there's no way to get it without an
+    ///   instance of the type.
+    /// * it should be valid to reinterpret the buffer as `&U`. That's not very useful,
+    ///   but the rules are complex. Maybe take a look at [the documentation for the slice_dst crate](https://docs.rs/slice-dst/latest/slice_dst/)
+    ///   for an overview of slice DST layout rules.
+    pub unsafe fn as_cast_unsized<U: ?Sized>(&self) -> &Buffer<U> {
+        // SAFETY: &Buffer<T> and &Buffer<U> have the same layout for all T and U
         mem::transmute(self)
     }
 
@@ -199,6 +254,15 @@ impl<T: Copy> Buffer<T> {
     pub unsafe fn cast<U: Copy>(self) -> Buffer<U> {
         self.check_valid_cast::<U>();
         // SAFETY: Buffer<T> and Buffer<U> have the same layout for all T and U
+        mem::transmute(self)
+    }
+
+    /// Casts the buffer to an unsized type (slice or struct with trailing slice).
+    ///
+    /// See `as_cast_unsized` for safety requirements.
+    pub unsafe fn cast_unsized<U: ?Sized>(self) -> Buffer<U> {
+        // SAFETY: Buffer<T> and Buffer<U> have the same layout for all T and U;
+        //         and for the rest, see `as_cast_unsized`.
         mem::transmute(self)
     }
 

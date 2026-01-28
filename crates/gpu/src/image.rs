@@ -239,7 +239,7 @@ impl Image {
         }
     }
 
-    /// Resizes this image to the new dimensions.
+    /// Discards the contents of the image and resizes this image to the new dimensions.
     ///
     /// This effectively creates a new image and that replaces the old one.
     /// The contents of the existing image are discarded.
@@ -256,7 +256,7 @@ impl Image {
     /// - when called on an imported image (via e.g. create_imported_image_win32).
     /// - when the specified dimensions do not match the current dimensionality
     ///   (e.g. depth != 1 when image_type is Image2D).
-    pub fn resize(&mut self, new_size: Size3D) {
+    pub fn discard_resize(&mut self, new_size: Size3D) {
         assert!(!self.swapchain_image, "cannot resize a swap chain image");
         assert!(
             !matches!(

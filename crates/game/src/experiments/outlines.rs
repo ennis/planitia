@@ -7,26 +7,40 @@ use gamelib::input::InputEvent;
 use gamelib::pipeline_cache::{get_compute_pipeline, get_graphics_pipeline};
 use gamelib::{static_assets, tweak};
 use gpu::PrimitiveTopology::TriangleList;
-use gpu::{BarrierFlags, Buffer, BufferCreateInfo, DrawIndirectCommand, Image, MemoryLocation, Ptr, RootParams, Size3D};
+use gpu::{
+    BarrierFlags, Buffer, BufferCreateInfo, DrawIndirectCommand, Image, MemoryLocation, Ptr, RootParams, Size3D,
+};
 use hgeo::util::polygons_to_triangle_mesh;
 use log::{info, warn};
-use math::Vec3;
+use math::{Mat4, Vec3};
 use smallvec::{SmallVec, smallvec};
+use std::alloc::Layout;
 use std::collections::{HashMap, HashSet};
-use std::fmt;
 use std::ops::Range;
 use std::path::Path;
+use std::{fmt, ptr};
+use math::geom::Camera;
 
 /// Vertices emitted by the outline extraction compute shader.
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub(crate) struct OutlineVertex {
+pub(crate) struct ContourVertex {
     pub(crate) clip_pos: math::Vec4,
     pub(crate) angle: f32,
     pub(crate) flags: u16,
     pub(crate) group_id: u16,
     pub(crate) pointy: f32,
     pub(crate) reserved_0: f32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct ContourEdge {
+    position_0: Vec3,
+    point_0: u32,
+    position_1: Vec3,
+    point_1: u32,
+    group_id: u16,
 }
 
 /// Loads geometry from the specified file path.
@@ -36,13 +50,26 @@ pub struct OutlineExperiment {
     processed_mesh: Option<ProcessedMesh>,
 
     // --- GPU pipeline resources ---
-    outline_vertices: Buffer<OutlineVertex>,
-    outline_indices: Buffer<u32>,
 
+    // contour extraction
+    contour_vertices: Buffer<ContourVertex>,
+    contour_indices: Buffer<u32>,
+    contour_edges: Buffer<ContourEdgeBuffer>,
+
+    // edge linking
+    contour_point_list: Buffer<u32>,        // global point index -> contour point index
+    contour_rank_successors: Buffer<u64>, // low 32 bits: rank, high 32 bits: successor index, root index after list ranking pass
+    contour_rank_successors_1: Buffer<u64>, // low 32 bits: rank, high 32 bits: successor index, root index after list ranking pass
+
+    // contour rendering
+    contour_draw_indirect_command: Buffer<DrawIndirectCommand>,
     angle_texture: Image,
     normal_texture: Image,
     jfa_0: Image,
     jfa_1: Image,
+
+    lock_view: bool,
+    locked_view_matrix: Mat4,
 }
 
 #[repr(C)]
@@ -68,8 +95,8 @@ const JFA_TILE_SIZE: u32 = 16;
 #[repr(C)]
 #[derive(Copy, Clone, Default)]
 struct MeshEdge {
-    normal_a: u16,
-    normal_b: u16,
+    normal_cw: u16,
+    normal_ccw: u16,
     vertex_0: u16,
     vertex_1: u16,
 }
@@ -82,7 +109,7 @@ impl fmt::Debug for MeshEdge {
         write!(
             f,
             "(na={},nb={},v0={},v1={})",
-            self.normal_a, self.normal_b, self.vertex_0, self.vertex_1
+            self.normal_cw, self.normal_ccw, self.vertex_0, self.vertex_1
         )
     }
 }
@@ -91,6 +118,7 @@ impl fmt::Debug for MeshEdge {
 #[derive(Copy, Clone, Default, Debug)]
 struct MeshVertex {
     position: Vec3,
+    point_index: u32,
     normal: Vec3,
     pointy: f32,
 }
@@ -176,9 +204,9 @@ struct Edge {
     /// 2nd point index
     p1: u32,
     /// 1st adjacent face index
-    f0: u32,
+    f_cw: u32,
     /// 2nd adjacent face index
-    f1: u32,
+    f_ccw: u32,
     /// Current cluster
     cluster: usize,
 }
@@ -229,15 +257,15 @@ impl Mesh {
                 *edge_map
                     .entry((pa.min(pb), pa.max(pb)))
                     .and_modify(|edge_index: &mut u32| {
-                        edges[*edge_index as usize].f1 = face;
+                        edges[*edge_index as usize].f_ccw = face;
                     })
                     .or_insert_with(|| {
                         let edge_index = edges.len() as u32;
                         edges.push(Edge {
-                            p0: pa.min(pb),
-                            p1: pa.max(pb),
-                            f0: face,
-                            f1: NO_FACE,
+                            p0: pa,
+                            p1: pb,
+                            f_cw: face,
+                            f_ccw: NO_FACE,
                             cluster: 0,
                         });
                         edge_index
@@ -294,8 +322,8 @@ fn compute_normal_cone(mesh: &Mesh, cluster_edges: &[u32]) -> NormalCone {
 
     for edge_index in cluster_edges {
         let edge = &mesh.edges[*edge_index as usize];
-        count += accumulate(edge.f0);
-        count += accumulate(edge.f1);
+        count += accumulate(edge.f_cw);
+        count += accumulate(edge.f_ccw);
     }
 
     n /= count as f32;
@@ -320,8 +348,8 @@ fn compute_normal_cone(mesh: &Mesh, cluster_edges: &[u32]) -> NormalCone {
     let mut center = Vec3::ZERO;
     for edge_index in cluster_edges {
         let edge = &mesh.edges[*edge_index as usize];
-        update_min(edge.f0);
-        update_min(edge.f1);
+        update_min(edge.f_cw);
+        update_min(edge.f_ccw);
         let midpoint = (mesh.points[edge.p0 as usize].position + mesh.points[edge.p1 as usize].position) / 2.0;
         center += midpoint;
     }
@@ -509,6 +537,7 @@ fn convert_edge_clusters_to_meshlets(mesh: &Mesh, clusters: &[EdgeCluster]) -> P
                     partitioned_vertices.push(MeshVertex {
                         position: mesh.points[vertex.point as usize].position,
                         normal: vertex.normal,
+                        point_index: vertex.point,
                         pointy: mesh.points[vertex.point as usize].pointy,
                     });
                     (partitioned_vertices.len() as u32 - 1 - base_vertex) as u16
@@ -524,7 +553,7 @@ fn convert_edge_clusters_to_meshlets(mesh: &Mesh, clusters: &[EdgeCluster]) -> P
 
             let mut incident_face_normals = [0; 2];
 
-            for (i, &fi) in [edge.f0, edge.f1].iter().enumerate() {
+            for (i, &fi) in [edge.f_cw, edge.f_ccw].iter().enumerate() {
                 if fi == NO_FACE {
                     incident_face_normals[i] = 0xFFFF;
                 } else {
@@ -537,11 +566,11 @@ fn convert_edge_clusters_to_meshlets(mesh: &Mesh, clusters: &[EdgeCluster]) -> P
                 }
             }
 
-            let fi = match (edge.f0, edge.f1) {
+            let fi = match (edge.f_cw, edge.f_ccw) {
                 (NO_FACE, NO_FACE) => panic!("edge has no incident faces"),
-                (NO_FACE, _) => edge.f1,
-                (_, NO_FACE) => edge.f0,
-                _ => edge.f0,
+                (NO_FACE, _) => edge.f_ccw,
+                (_, NO_FACE) => edge.f_cw,
+                _ => edge.f_cw,
             } as usize;
 
             // find vertices that corresponds to the edge endpoints
@@ -563,8 +592,8 @@ fn convert_edge_clusters_to_meshlets(mesh: &Mesh, clusters: &[EdgeCluster]) -> P
             let vertex_1 = emit_local_vertex(edge_v1);
 
             partitioned_edges.push(MeshEdge {
-                normal_a: incident_face_normals[0],
-                normal_b: incident_face_normals[1],
+                normal_cw: incident_face_normals[0],
+                normal_ccw: incident_face_normals[1],
                 vertex_0,
                 vertex_1,
             });
@@ -656,17 +685,87 @@ fn convert_edge_clusters_to_meshlets(mesh: &Mesh, clusters: &[EdgeCluster]) -> P
 }
 
 #[repr(C)]
+struct ContourEdgeBuffer {
+    count: u32,
+    edges: [ContourEdge], // unsized
+}
+
+impl ContourEdgeBuffer {
+    fn layout(count: usize) -> Layout {
+        let (layout, _array_offset) = Layout::new::<u32>()
+            .extend(Layout::array::<ContourEdge>(count).unwrap())
+            .unwrap();
+        layout.pad_to_align()
+    }
+}
+
+/*
+struct ContourRootParams {
+    // input mesh
+    SceneInfo* scene_info;
+    MeshData mesh;
+    uint cluster_count;
+    uint vertex_count;
+
+    // contour extraction output
+    ContourEdgeBuffer* contour_edges;
+    uint contour_point_count;
+    uint* contour_point_list;     // successor list of contour points: global point index -> successor point index
+
+    // contour ranking data
+    uint64_t* contours_rank_successors_0;
+    uint64_t* contours_rank_successors_1;
+
+    // expanded contour data
+    OutlineVertex* expanded_contour_vertices;
+    uint* expanded_contour_indices;
+    DrawIndirectCommand* expanded_contours_draw_command;
+
+    // shading
+    float3 main_light_direction;    // in world space
+}*/
+
+#[repr(C)]
 #[derive(Copy, Clone)]
-struct ExtractOutlinesRootParams {
+struct ContoursRootParams {
     scene_info: Ptr<SceneInfoUniforms>,
     mesh_data: MeshData,
     meshlet_count: u32,
-    vertex_count: u32,
-    out_vertices: Ptr<OutlineVertex>,
-    out_indices: Ptr<u32>,
-    out_draw_command: Ptr<DrawIndirectCommand>,
+
+    contour_edges: Ptr<ContourEdgeBuffer>,
+    contour_point_count: u32,
+    contour_point_list: Ptr<u32>,
+
+    contour_rank_successors_0: Ptr<u64>,
+    contour_rank_successors_1: Ptr<u64>,
+
+    expanded_contour_vertex_count: u32,
+    expanded_contour_vertices: Ptr<ContourVertex>,
+    expanded_contour_indices: Ptr<u32>,
+    expanded_contours_draw_command: Ptr<DrawIndirectCommand>,
+
+    main_light_direction: Vec3,
+
+    depth_texture: gpu::TextureHandle,
+    angle_texture: gpu::TextureHandle,
+    normal_texture: gpu::TextureHandle,
+
+    jfa_result: gpu::StorageImageHandle,
+    jfa_in_texture: gpu::StorageImageHandle,
+    jfa_out_texture: gpu::StorageImageHandle,
+    jfa_step_size: u32,
 }
 
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct RankContoursRootParams {
+    common: Ptr<ContoursRootParams>,
+    len: u32,
+    contour_rank_successors_0: Ptr<u64>,
+    contour_rank_successors_1: Ptr<u64>,
+}
+
+/*
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct DepthPassRootParams {
@@ -686,11 +785,11 @@ struct BaseRenderRootParams {
 #[derive(Clone, Copy)]
 pub(crate) struct RenderOutlinesRootParams {
     pub(crate) scene_info: gpu::Ptr<SceneInfoUniforms>,
-    pub(crate) vertices: gpu::Ptr<OutlineVertex>,
+    pub(crate) vertices: gpu::Ptr<ContourVertex>,
     pub(crate) indices: gpu::Ptr<u32>,
-    pub(crate) depth_texture: gpu::TextureHandle,
-}
+}*/
 
+/*
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct CornerDetectionRootParams {
@@ -716,25 +815,44 @@ struct JfaStepRootParams {
     pub(crate) jfa_out_tex: gpu::StorageImageHandle,
     pub(crate) step_size: u32,
 }
-
+*/
 
 static_assets! {
-    static EXTRACT_OUTLINES: gpu::ComputePipeline = "/shaders/game_shaders.sharc#extract_outlines";
+    static EXTRACT_CONTOURS: gpu::ComputePipeline = "/shaders/game_shaders.sharc#extract_contours";
+    static EXPAND_CONTOURS: gpu::ComputePipeline = "/shaders/game_shaders.sharc#expand_contours";
     static RENDER_OUTLINES: gpu::GraphicsPipeline = "/shaders/game_shaders.sharc#render_outlines";
     static DEPTH_PASS: gpu::GraphicsPipeline = "/shaders/game_shaders.sharc#depth_pass";
     static CORNER_DETECTION: gpu::GraphicsPipeline = "/shaders/game_shaders.sharc#corner_detection";
     static BASE_RENDER: gpu::GraphicsPipeline = "/shaders/game_shaders.sharc#base_render";
     static JFA_INIT: gpu::ComputePipeline = "/shaders/game_shaders.sharc#jfa_init";
     static JFA_STEP: gpu::ComputePipeline = "/shaders/game_shaders.sharc#jfa_step";
+
+    static BREAK_CONTOURS_INIT: gpu::ComputePipeline = "/shaders/game_shaders.sharc#break_contours_init";
+    static BREAK_CONTOURS_STEP: gpu::ComputePipeline = "/shaders/game_shaders.sharc#break_contours_step";
+    static RANK_CONTOURS_INIT: gpu::ComputePipeline = "/shaders/game_shaders.sharc#rank_contours_init";
+    static RANK_CONTOURS_STEP: gpu::ComputePipeline = "/shaders/game_shaders.sharc#rank_contours_step";
 }
+
+const RANK_CONTOURS_GROUP_SIZE: u32 = 256;
+const EXPAND_CONTOURS_GROUP_SIZE: u32 = 256;
 
 impl OutlineExperiment {
     pub fn new() -> Self {
         Self {
             mesh: Mesh::default(),
             processed_mesh: None,
-            outline_vertices: gpu::Buffer::from_slice(&[]),
-            outline_indices: gpu::Buffer::from_slice(&[]),
+            contour_vertices: gpu::Buffer::from_slice(&[]),
+            contour_indices: gpu::Buffer::from_slice(&[]),
+            contour_edges: unsafe { gpu::Buffer::from_layout(ContourEdgeBuffer::layout(1)) },
+            contour_point_list: gpu::Buffer::from_slice(&[]),
+            contour_rank_successors: gpu::Buffer::from_slice(&[]),
+            contour_rank_successors_1: gpu::Buffer::from_slice(&[]),
+            contour_draw_indirect_command: gpu::Buffer::from_slice(&[DrawIndirectCommand {
+                vertex_count: 0,
+                instance_count: 1,
+                first_vertex: 0,
+                first_instance: 0,
+            }]),
             angle_texture: Image::new(gpu::ImageCreateInfo {
                 width: 1,
                 height: 1,
@@ -763,6 +881,8 @@ impl OutlineExperiment {
                 usage: gpu::ImageUsage::STORAGE,
                 ..
             }),
+            lock_view: false,
+            locked_view_matrix: Default::default(),
         }
     }
 
@@ -811,12 +931,24 @@ impl OutlineExperiment {
         let edge_clusters = cluster_edges(&mut mesh, 10.0);
         let processed_mesh = convert_edge_clusters_to_meshlets(&mesh, &edge_clusters);
 
+        self.contour_vertices.discard_resize(mesh.vertices.len());
+        self.contour_indices.discard_resize(mesh.vertices.len());
+        self.contour_edges = unsafe { gpu::Buffer::from_layout(ContourEdgeBuffer::layout(mesh.edges.len())) };
+        self.contour_point_list.discard_resize(mesh.points.len());
+        self.contour_rank_successors.discard_resize(mesh.points.len());
+        self.contour_rank_successors_1.discard_resize(mesh.points.len());
+
+
         let total_gpu_size = processed_mesh.vertices.byte_size()
             + processed_mesh.edges.byte_size()
             + processed_mesh.faces.byte_size()
             + processed_mesh.face_normals.byte_size()
             + processed_mesh.meshlets.byte_size()
-            + processed_mesh.draw_commands.byte_size();
+            + processed_mesh.draw_commands.byte_size()
+            + self.contour_point_list.byte_size()
+            + self.contour_rank_successors.byte_size()
+            + self.contour_rank_successors_1.byte_size()
+            + self.contour_edges.byte_size();
 
         info!(
             "loaded mesh from {}:
@@ -827,6 +959,9 @@ impl OutlineExperiment {
     edges          {:<8}     {:<8} ({} B per elem)
     meshlets       {:<8}     {:<8} ({} B per elem)
     draw cmds      {:<8}     {:<8} ({} B per elem)
+    contour list   {:<8}     {:<8} ({} B per elem)
+    contour ranks  {:<8}     {:<8} ({} B per elem)
+    contour edges               {:<8}
     Total:                      {}",
             path.display(),
             processed_mesh.vertices.len(),
@@ -847,20 +982,18 @@ impl OutlineExperiment {
             processed_mesh.draw_commands.len(),
             ByteSize::b(processed_mesh.draw_commands.byte_size()).display().si(),
             processed_mesh.draw_commands.byte_size() / processed_mesh.draw_commands.len() as u64,
-            ByteSize::b(total_gpu_size).display().si()
+            self.contour_point_list.len(),
+            ByteSize::b(self.contour_point_list.byte_size()).display().si(),
+            self.contour_point_list.byte_size() / self.contour_point_list.len() as u64,
+            self.contour_rank_successors.len(),
+            ByteSize::b(self.contour_rank_successors.byte_size()).display().si(),
+            self.contour_rank_successors.byte_size() / self.contour_rank_successors.len() as u64,
+            ByteSize::b(self.contour_edges.byte_size()).display().si(),
+            ByteSize::b(total_gpu_size).display().si(),
         );
 
         self.processed_mesh = Some(processed_mesh);
         self.mesh = mesh;
-
-        self.outline_vertices = gpu::Buffer::new(gpu::BufferCreateInfo {
-            len: self.mesh.vertices.len() * 20, // not great
-            ..
-        });
-        self.outline_indices = gpu::Buffer::new(gpu::BufferCreateInfo {
-            len: self.mesh.vertices.len() * 40, // no idea
-            ..
-        });
     }
 
     pub(crate) fn input(&mut self, input_event: &InputEvent) {
@@ -875,10 +1008,10 @@ impl OutlineExperiment {
     }
 
     pub(crate) fn resize(&mut self, width: u32, height: u32) {
-        self.angle_texture.resize(Size3D::new(width, height, 1));
-        self.normal_texture.resize(Size3D::new(width, height, 1));
-        self.jfa_0.resize(Size3D::new(width, height, 1));
-        self.jfa_1.resize(Size3D::new(width, height, 1));
+        self.angle_texture.discard_resize(Size3D::new(width, height, 1));
+        self.normal_texture.discard_resize(Size3D::new(width, height, 1));
+        self.jfa_0.discard_resize(Size3D::new(width, height, 1));
+        self.jfa_1.discard_resize(Size3D::new(width, height, 1));
     }
 
     pub(crate) fn render(
@@ -892,19 +1025,52 @@ impl OutlineExperiment {
             return Ok(());
         };
 
+        self.lock_view = tweak!(lock_view = false);
+
+        let root_params = cmd.upload(&ContoursRootParams {
+            scene_info: scene_info.gpu,
+            mesh_data: mesh.gpu,
+            meshlet_count: mesh.meshlets.len() as u32,
+
+            contour_edges: self.contour_edges.ptr(),
+            contour_point_count: self.mesh.points.len() as u32,
+            contour_point_list: self.contour_point_list.ptr(),
+
+            contour_rank_successors_0: self.contour_rank_successors.ptr(),
+            contour_rank_successors_1: self.contour_rank_successors_1.ptr(),
+
+            expanded_contour_vertex_count: 0,
+            expanded_contour_vertices: self.contour_vertices.ptr(),
+            expanded_contour_indices: self.contour_indices.ptr(),
+            expanded_contours_draw_command: self.contour_draw_indirect_command.ptr(),
+
+            main_light_direction: tweak!(main_light_direction = Vec3::new(0.5, -1.0, 0.5).normalize()),
+
+            depth_texture: depth_target.texture_handle(),
+            angle_texture: self.angle_texture.texture_handle(),
+            normal_texture: self.normal_texture.texture_handle(),
+
+            jfa_result: self.jfa_0.storage_handle(),
+            jfa_in_texture: self.jfa_0.storage_handle(),
+            jfa_out_texture: self.jfa_1.storage_handle(),
+            jfa_step_size: 1,
+        });
+
         /////////////////////////////////////////////////////////
         // base render & depth pass
         {
-            cmd.barrier(BarrierFlags::DEPTH_STENCIL);
+            cmd.barrier_dst(BarrierFlags::DEPTH_STENCIL);
             let mut encoder = cmd.begin_rendering(
-                &[gpu::ColorAttachment {
-                    image: color_target,
-                    clear_value: None,
-                },
-                gpu::ColorAttachment {
-                    image: &self.normal_texture,
-                    clear_value: Some([0.0, 0.0, 0.0, 0.0])
-                }],
+                &[
+                    gpu::ColorAttachment {
+                        image: color_target,
+                        clear_value: None,
+                    },
+                    gpu::ColorAttachment {
+                        image: &self.normal_texture,
+                        clear_value: Some([0.0, 0.0, 0.0, 0.0]),
+                    },
+                ],
                 Some(gpu::DepthStencilAttachment {
                     image: &depth_target,
                     depth_clear_value: None,
@@ -917,52 +1083,115 @@ impl OutlineExperiment {
                 None,
                 &mesh.draw_commands,
                 0..mesh.draw_commands.len() as u32,
-                &BaseRenderRootParams {
-                    scene_info: scene_info.gpu,
-                    mesh_data: mesh.gpu,
-                    main_light_direction: tweak!(main_light_direction = Vec3::new(0.5, -1.0, 0.5).normalize()),
-                },
+                root_params,
             );
             encoder.finish();
         }
 
+        unsafe {
+            // clear DrawIndirectCommand::vertex
+            cmd.update_buffer(&self.contour_draw_indirect_command.as_bytes(), 0, &[0; 4]);
+        }
+
         /////////////////////////////////////////////////////////
         // contour extraction
-        cmd.bind_compute_pipeline(&*EXTRACT_OUTLINES.read()?);
+        if !self.lock_view {
+            cmd.bind_compute_pipeline(&*EXTRACT_CONTOURS.read()?);
 
-        let draw_indirect_command_buffer = gpu::Buffer::from_slice(&[gpu::DrawIndirectCommand {
-            vertex_count: 0,
-            instance_count: 1,
-            first_vertex: 0,
-            first_instance: 0,
-        }]);
+            unsafe {
+                // clear ContourEdgeBuffer::count
+                // not very pretty
+                cmd.update_buffer(&self.contour_edges.as_bytes(), 0, &[0; 4]);
+                cmd.fill_buffer(&self.contour_point_list.as_bytes().slice(..), 0xFFFF_FFFF);
+                cmd.barrier(BarrierFlags::TRANSFER_WRITE, BarrierFlags::COMPUTE_SHADER | BarrierFlags::STORAGE);
+            }
 
-        cmd.dispatch(
-            mesh.meshlets.len() as u32,
-            1,
-            1,
-            &ExtractOutlinesRootParams {
-                scene_info: scene_info.gpu,
-                mesh_data: mesh.gpu,
-                meshlet_count: mesh.meshlets.len() as u32,
-                vertex_count: 0,
-                out_vertices: self.outline_vertices.ptr(),
-                out_indices: self.outline_indices.ptr(),
-                out_draw_command: draw_indirect_command_buffer.ptr(),
-            },
-        );
+            cmd.dispatch(mesh.meshlets.len() as u32, 1, 1, root_params);
 
-        cmd.barrier_source(BarrierFlags::COMPUTE_SHADER | BarrierFlags::STORAGE | BarrierFlags::DEPTH_STENCIL);
-        cmd.barrier(
-            BarrierFlags::FRAGMENT_SHADER
-                | BarrierFlags::SAMPLED_READ
-                | BarrierFlags::STORAGE
-                | BarrierFlags::INDIRECT_READ,
-        );
+            cmd.barrier(
+                BarrierFlags::COMPUTE_SHADER | BarrierFlags::STORAGE | BarrierFlags::DEPTH_STENCIL,
+                BarrierFlags::COMPUTE_SHADER |
+                    BarrierFlags::FRAGMENT_SHADER
+                    | BarrierFlags::SAMPLED_READ
+                    | BarrierFlags::STORAGE
+                    | BarrierFlags::INDIRECT_READ,
+            );
+
+            /////////////////////////////////////////////////////////
+            // contour loop breaking
+            // find contour loops and determine a "break" point for each loop that defines the starting
+            // point for ranking the list
+            {
+                // init
+
+                let n = self.contour_point_list.len() as u32;
+                let groups_count = n.div_ceil(RANK_CONTOURS_GROUP_SIZE) as u32;
+
+                cmd.bind_compute_pipeline(&*BREAK_CONTOURS_INIT.read()?);
+                let mut params = RankContoursRootParams {
+                    common: root_params,
+                    len: n,
+                    contour_rank_successors_0: self.contour_rank_successors.ptr(),
+                    contour_rank_successors_1: self.contour_rank_successors_1.ptr(),
+                };
+                cmd.dispatch(groups_count, 1, 1, &params);
+
+                let cs_barrier = BarrierFlags::COMPUTE_SHADER | BarrierFlags::STORAGE;
+
+                cmd.barrier(cs_barrier, cs_barrier);
+
+                let mut rank_steps = (n as f32).log2().ceil() as u32 + tweak!(extra_ranking_steps = 0u32);
+                eprintln!("extra_ranking_steps = {}", rank_steps);
+                // round up to an even number so that we end up writing to the correct buffer
+                if rank_steps % 2 != 0 {
+                    rank_steps += 1;
+                }
+
+                cmd.bind_compute_pipeline(&*BREAK_CONTOURS_STEP.read()?);
+                for _ in 0..rank_steps {
+                    cmd.dispatch(groups_count, 1, 1, &params);
+                    std::mem::swap(
+                        &mut params.contour_rank_successors_0,
+                        &mut params.contour_rank_successors_1,
+                    );
+                    cmd.barrier(cs_barrier, cs_barrier);
+                }
+
+                // contour ranking
+                cmd.bind_compute_pipeline(&*RANK_CONTOURS_INIT.read()?);
+                cmd.dispatch(groups_count, 1, 1, &params);
+
+                cmd.barrier(cs_barrier, cs_barrier);
+
+                cmd.bind_compute_pipeline(&*RANK_CONTOURS_STEP.read()?);
+                for _ in 0..rank_steps {
+                    cmd.dispatch(groups_count, 1, 1, &params);
+                    std::mem::swap(
+                        &mut params.contour_rank_successors_0,
+                        &mut params.contour_rank_successors_1,
+                    );
+                    cmd.barrier(cs_barrier, cs_barrier);
+                }
+            }
+        }
+
+        /////////////////////////////////////////////////////////
+        // expand contours to quad geometry
+        {
+            let n = self.mesh.edges.len() as u32;
+            let groups_count = n.div_ceil(EXPAND_CONTOURS_GROUP_SIZE);
+            cmd.bind_compute_pipeline(&*EXPAND_CONTOURS.read()?);
+            cmd.dispatch(groups_count, 1, 1, root_params);
+            cmd.barrier_source(
+                BarrierFlags::COMPUTE_SHADER | BarrierFlags::STORAGE,
+            );
+        }
 
         /////////////////////////////////////////////////////////
         // render contours
         {
+            cmd.barrier_dst(BarrierFlags::VERTEX_SHADER | BarrierFlags::STORAGE | BarrierFlags::INDIRECT_READ);
+
             let mut encoder = cmd.begin_rendering(
                 &[gpu::ColorAttachment {
                     image: &self.angle_texture,
@@ -973,25 +1202,13 @@ impl OutlineExperiment {
             );
 
             encoder.bind_graphics_pipeline(&*RENDER_OUTLINES.read()?);
-            encoder.draw_indirect(
-                TriangleList,
-                None,
-                &draw_indirect_command_buffer,
-                0..1,
-                &RenderOutlinesRootParams {
-                    scene_info: scene_info.gpu,
-                    vertices: self.outline_vertices.ptr(),
-                    indices: self.outline_indices.ptr(),
-                    depth_texture: depth_target.texture_handle(),
-                },
-            );
+            encoder.draw_indirect(TriangleList, None, &self.contour_draw_indirect_command, 0..1, root_params);
             encoder.finish();
 
             cmd.barrier_source(BarrierFlags::FRAGMENT_SHADER | BarrierFlags::COLOR_ATTACHMENT);
         }
 
-
-        /////////////////////////////////////////////////////////
+        /*/////////////////////////////////////////////////////////
         // Jump flooding
         {
             let w = self.angle_texture.width();
@@ -1005,11 +1222,16 @@ impl OutlineExperiment {
 
             // init
             cmd.bind_compute_pipeline(&*JFA_INIT.read()?);
-            cmd.dispatch(ntiles_x, ntiles_y, 1, &JfaInitRootParams {
-                scene_info: scene_info.gpu,
-                angle_tex: self.angle_texture.storage_handle(),
-                jfa_init_tex: self.jfa_0.storage_handle(),
-            });
+            cmd.dispatch(
+                ntiles_x,
+                ntiles_y,
+                1,
+                &JfaInitRootParams {
+                    scene_info: scene_info.gpu,
+                    angle_tex: self.angle_texture.storage_handle(),
+                    jfa_init_tex: self.jfa_0.storage_handle(),
+                },
+            );
             let bf = BarrierFlags::COMPUTE_SHADER | BarrierFlags::STORAGE;
             cmd.barrier_source(bf);
 
@@ -1017,13 +1239,18 @@ impl OutlineExperiment {
             let mut swapped = false;
             let mut extra_passes = 0;
             loop {
-                cmd.barrier(bf);
-                cmd.dispatch(ntiles_x, ntiles_y, 1, &JfaStepRootParams {
-                    scene_info: scene_info.gpu,
-                    jfa_in_tex: self.jfa_0.storage_handle(),
-                    jfa_out_tex: self.jfa_1.storage_handle(),
-                    step_size,
-                });
+                cmd.barrier_dst(bf);
+                cmd.dispatch(
+                    ntiles_x,
+                    ntiles_y,
+                    1,
+                    &JfaStepRootParams {
+                        scene_info: scene_info.gpu,
+                        jfa_in_tex: self.jfa_0.storage_handle(),
+                        jfa_out_tex: self.jfa_1.storage_handle(),
+                        step_size,
+                    },
+                );
                 if step_size == 1 {
                     extra_passes += 1;
                     if extra_passes > 2 {
@@ -1040,14 +1267,12 @@ impl OutlineExperiment {
             if swapped {
                 std::mem::swap(&mut self.jfa_0, &mut self.jfa_1);
             }
-
-        }
-
+        }*/
 
         /////////////////////////////////////////////////////////
         // corner detection
         if tweak!(show_corner_detection = true) {
-            cmd.barrier(BarrierFlags::FRAGMENT_SHADER | BarrierFlags::SAMPLED_READ);
+            cmd.barrier_dst(BarrierFlags::FRAGMENT_SHADER | BarrierFlags::SAMPLED_READ);
             let mut encoder = cmd.begin_rendering(
                 &[gpu::ColorAttachment {
                     image: color_target,
@@ -1065,12 +1290,7 @@ impl OutlineExperiment {
                 None,
                 0..6,
                 0..1,
-                &CornerDetectionRootParams {
-                    scene_info: scene_info.gpu,
-                    angle_tex: self.angle_texture.texture_handle(),
-                    normal_tex: self.normal_texture.texture_handle(),
-                    jfa_result: self.jfa_1.storage_handle(),
-                },
+                root_params,
             );
             encoder.finish();
         }
@@ -1133,5 +1353,178 @@ impl OutlineExperiment {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rand::prelude::SliceRandom;
+    use rand::rng;
+    use rayon::iter::ParallelIterator;
+    use rayon::prelude::IntoParallelIterator;
+    use std::collections::HashMap;
+    use std::sync::atomic::Ordering::Relaxed;
+    use std::sync::atomic::{AtomicU64, AtomicUsize};
+
+    #[test]
+    fn test_edge_linking() {
+        let mut edges = {
+            let mut rng = rng();
+            let mut edges = Vec::new();
+            let n = 20;
+            let nloops = 10;
+            let mut points = (0..200000).collect::<Vec<_>>();
+            points.shuffle(&mut rng);
+
+            let mut i = 0;
+
+            for _ in 0..nloops {
+                let loop_base = i;
+                while (i - loop_base) < n {
+                    let p0 = points[i];
+                    let p1 = points[loop_base + (i - loop_base + 1) % n];
+                    edges.push((p0, p1));
+                    i += 1;
+                }
+            }
+
+            edges.shuffle(&mut rng);
+            edges
+        };
+
+        fn print(edges: &[(usize, usize)]) {
+            for (i, (p0, p1)) in edges.iter().enumerate() {
+                eprintln!("{:>5} -> {:<5}", p0, p1);
+            }
+        }
+
+        // print(&edges);
+
+        //-------------------------------------------
+        // 1st pass: renumber edges to have indices 0..N
+
+        const NULL: usize = usize::MAX;
+
+        let max_point = edges.iter().map(|&(p0, p1)| p0.max(p1)).max().unwrap();
+        let mut point_map: Vec<usize> = vec![NULL; max_point + 1];
+
+        // compact point indices
+        for (i, &(p0, _)) in edges.iter().enumerate() {
+            point_map[p0] = i;
+        }
+        for (i, edge) in edges.iter_mut().enumerate() {
+            edge.0 = point_map[edge.0];
+            edge.1 = point_map[edge.1];
+        }
+
+        eprintln!("Compacted edges");
+        //print(&edges);
+
+        // pointer jumping
+        {
+            let mut s = vec![NULL; edges.len() * 2];
+            //let mut ss = vec![NULL; edges.len() * 2];
+            let mut x = vec![0; edges.len() * 2];
+
+            for &(p0, p1) in &edges {
+                s[p0] = p1;
+                x[p0] = 1;
+                x[p1] = 1;
+            }
+            //
+            //eprintln!("Successor map");
+            //for (i, s) in s.iter().enumerate() {
+            //    eprintln!("{:>5} -> {}", i, s);
+            //}
+
+            let start = std::time::Instant::now();
+            for i in 0..s.len() {
+                loop {
+                    if s[i] == NULL || s[s[i]] == NULL || s[i] == s[s[i]] {
+                        break;
+                    }
+                    // atomic
+                    //dbg!((i, s[i], s[s[i]], x[i], x[s[i]]));
+                    x[i] += x[s[i]];
+                    s[i] = s[s[i]];
+                }
+            }
+            let duration = start.elapsed();
+            eprintln!("Pointer jumping: {}us", duration.as_micros());
+
+            //
+            eprintln!("Ranks:");
+            for (i, rank) in x.iter().enumerate() {
+                eprintln!("{:>5}: {} root={}", i, rank, s[i]);
+            }
+
+            edges.sort_by(|&(p0a, _), &(p0b, _)| (s[p0b], x[p0b]).cmp(&(s[p0a], x[p0a])));
+
+            eprintln!("sorted edges:");
+            print(&edges);
+        }
+
+        // parallel ver.
+        {
+            let mut sx: Vec<AtomicU64> = vec![0xFFFF_FFFF_0000_0000; edges.len() * 2]
+                .into_iter()
+                .map(AtomicU64::new)
+                .collect();
+
+            const NULL32: usize = 0xFFFF_FFFF;
+            for &(p0, p1) in &edges {
+                sx[p0].store(1u64 | (p1 as u64) << 32, Relaxed);
+                //sx[p1].store(1u64 | (NULL32 as u64) << 32, Relaxed);
+            }
+
+            let start = std::time::Instant::now();
+            (0..sx.len()).into_par_iter().for_each(|i| {
+                loop {
+                    let sxi = sx[i].load(Relaxed);
+                    let si = (sxi >> 32) as usize;
+                    let xi = (sxi & 0xFFFF_FFFF) as usize;
+
+                    if si == NULL32 {
+                        break;
+                    }
+
+                    let ssxi = sx[si].load(Relaxed);
+                    let xsi = (ssxi & 0xFFFF_FFFF) as usize;
+                    let ssi = (ssxi >> 32) as usize;
+
+                    if ssi == NULL32 || si == ssi {
+                        break;
+                    }
+
+                    // atomic
+                    //dbg!((i, s[i], s[s[i]], x[i], x[s[i]]));
+
+                    //x[i] += x[s[i]];
+                    //s[i] = s[s[i]];
+
+                    let new_sxi = (xi + xsi) as u64 | (ssi as u64) << 32;
+                    sx[i].store(new_sxi, Relaxed);
+                }
+            });
+            let duration = start.elapsed();
+            eprintln!("Parallel pointer jumping: {}us", duration.as_micros());
+
+            eprintln!("Ranks (parallel):");
+            for (i, rank) in sx.iter().enumerate() {
+                let sx = rank.load(Relaxed);
+                let xi = (sx & 0xFFFF_FFFF) as usize;
+                let si = (sx >> 32) as usize;
+                eprintln!("{:>5}: rank={}, s={}", i, xi, si);
+            }
+
+            edges.sort_by(|&(p0a, _), &(p0b, _)| {
+                let sxa = sx[p0a].load(Relaxed);
+                let sxb = sx[p0b].load(Relaxed);
+                sxb.cmp(&sxa)
+            });
+
+            eprintln!("sorted edges (parallel):");
+            print(&edges);
+        }
     }
 }
