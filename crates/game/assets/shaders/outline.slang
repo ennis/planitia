@@ -79,6 +79,11 @@ struct ContourEdgeBuffer {
     ContourEdge edges[];
 }
 
+struct ContourPoint {
+    float3 position;
+    uint index;
+}
+
 static const uint MAX_EDGES = 128;
 
 // Common root params for contour extraction and rendering
@@ -257,6 +262,8 @@ void extract_contours(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_Gro
         );
 
         // insert points in index map
+
+
         var p0_index = u.mesh.vertices[base_vertex + edge.vertex_0].point_index;
         var p1_index = u.mesh.vertices[base_vertex + edge.vertex_1].point_index;
         if (reverse_edge) {
@@ -267,6 +274,15 @@ void extract_contours(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_Gro
         // FIXME: bifurcations in the contour means that p0 might have more than one successor
         //        ideally, there should be one entry per edge, not per point
         u.contour_point_list[p0_index] = p1_index;
+
+        /*//
+        uint new_index;
+        uint index;
+        InterlockedCompareExchange(u.contour_index_map[p0_index], 0xFFFFFFFF, new_index, index);
+        if (index != 0xFFFFFFFF) {
+            InterlockedAdd(u.contour_point_index, -1, new_index); // release index
+        }*/
+
     }
 }
 
@@ -315,13 +331,14 @@ void break_contours_step(uint3 thread_id : SV_DispatchThreadID, uniform RankCont
     let sr = u.contours_rank_successors_0[i];
     let s = uint(sr >> 32);
     let r = uint(sr & 0xFFFFFFFF);
-    if (s == SENTINEL || s == i) return;
+    if (s == SENTINEL || s == i) {
+        u.contours_rank_successors_1[i] = sr;
+        return;
+    }
 
     let ssr = u.contours_rank_successors_0[s];
     let ss = uint(ssr >> 32);
     let rr = uint(ssr & 0xFFFFFFFF);
-    if (ss == SENTINEL || ss == s) return;
-
     u.contours_rank_successors_1[i] = (uint64_t(ss) << 32) | min(r, rr);
 }
 
@@ -347,21 +364,22 @@ void rank_contours_init(uint3 thread_id : SV_DispatchThreadID, uniform RankConto
 [numthreads(RANK_BLOCK_SIZE, 1, 1)]
 [pass("rank_contours_step")]
 void rank_contours_step(uint3 thread_id : SV_DispatchThreadID, uniform RankContoursRootParams* u) {
-   let i = thread_id.x;
-   if (i >= u.len)
+    let i = thread_id.x;
+    if (i >= u.len)
        return;
 
-   let sr = u.contours_rank_successors_0[i];
-   let s = uint(sr >> 32);
-   let r = uint(sr & 0xFFFFFFFF);
-   if (s == SENTINEL || s == i) return;
+    let sr = u.contours_rank_successors_0[i];
+    let s = uint(sr >> 32);
+    let r = uint(sr & 0xFFFFFFFF);
+    if (s == SENTINEL || s == i) {
+        u.contours_rank_successors_1[i] = sr;
+        return;
+    }
 
-   let ssr = u.contours_rank_successors_0[s];
-   let ss = uint(ssr >> 32);
-   let rr = uint(ssr & 0xFFFFFFFF);
-   if (ss == SENTINEL || ss == s) return;
-
-   u.contours_rank_successors_1[i] = (uint64_t(ss) << 32) | (r + rr);
+    let ssr = u.contours_rank_successors_0[s];
+    let ss = uint(ssr >> 32);
+    let rr = uint(ssr & 0xFFFFFFFF);
+    u.contours_rank_successors_1[i] = (uint64_t(ss) << 32) | (r + rr);
 }
 
 [shader("compute")]
@@ -380,9 +398,9 @@ void rank_contours_finalize(uint3 thread_id : SV_DispatchThreadID, uniform RankC
 
 static const uint EXPAND_CONTOURS_GROUP_SIZE = 256;
 
+[pass("expand_contours")]
 [shader("compute")]
 [numthreads(EXPAND_CONTOURS_GROUP_SIZE, 1, 1)]
-[pass("expand_contours")]
 void expand_contours(uint3 thread_id : SV_DispatchThreadID, uniform ContourRootParams* u) {
     let i = thread_id.x;
     if (i >= u.contour_edges.count) {
@@ -420,8 +438,10 @@ void expand_contours(uint3 thread_id : SV_DispatchThreadID, uniform ContourRootP
 
     let pointy_0 = 0.0; //u.mesh.vertices[base_vertex + edge.vertex_0].pointy;
     let pointy_1 = 0.0; //u.mesh.vertices[base_vertex + edge.vertex_1].pointy;
-    let rank_0 = u.contours_rank_successors_0[min(edge.point_0, u.contour_point_count)] & 0xFFFFFFFF;
-    let rank_1 = u.contours_rank_successors_0[min(edge.point_1, u.contour_point_count)] & 0xFFFFFFFF;
+    let rank_0 = u.contours_rank_successors_0[min(edge.point_0, u.contour_point_count - 1)] & 0xFFFFFFFF;
+    let rank_1 = u.contours_rank_successors_0[min(edge.point_1, u.contour_point_count - 1)] & 0xFFFFFFFF;
+    let root_0 = u.contours_rank_successors_0[min(edge.point_0, u.contour_point_count - 1)] >> 32;
+    let root_1 = u.contours_rank_successors_0[min(edge.point_1, u.contour_point_count - 1)] >> 32;
 
     u.expanded_contour_vertices[vtx_ptr] = OutlineVertex(v0, angle, flags, edge.group_id, pointy_0, rank_0);
     u.expanded_contour_vertices[vtx_ptr+1] = OutlineVertex(v1, angle, flags, edge.group_id, pointy_1, rank_1);
@@ -437,6 +457,21 @@ void expand_contours(uint3 thread_id : SV_DispatchThreadID, uniform ContourRootP
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// Subdivide contours
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+[pass("subdivide_contours")]
+[shader("compute")]
+[numthreads(EXPAND_CONTOURS_GROUP_SIZE, 1, 1)]
+void subdivide_contours(uint3 thread_id : SV_DispatchThreadID, uniform ContourRootParams* u) {
+    let i = thread_id.x;
+    if (i >= u.contour_edges.count) {
+        return;
+    }
+    // ...
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // Render outlines
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -445,7 +480,7 @@ struct RenderOutlinesVSOut {
     float angle;
     float pointy;
     nointerpolation uint group_id;
-    float rank;
+    uint rank;
 };
 
 [pass("render_outlines")]
@@ -571,7 +606,8 @@ CornerDetectionFSOut corner_detection_fragment_shader(
     let div_factor = smoothstep(width, width - aastep, dist);
 
     var color = float4(colorize_id(tex00.r), tex00.a);
-    color = float4(angle_to_color(float(tex00.b)/10.0).rgb, tex00.a);
+    //color = float4(angle_to_color(float(tex00.b)/10.0).rgb, tex00.a);
+    color = float4(colorize_id(tex00.b).rgb, tex00.a);
 
     //color.rgb = colorize_1d(dist * 0.1);
 
