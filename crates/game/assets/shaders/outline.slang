@@ -81,6 +81,7 @@ struct ContourEdgeBuffer {
 
 struct ContourPoint {
     float3 position;
+    uint group_id;
     uint next;
 }
 
@@ -284,15 +285,10 @@ void extract_contours(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_Gro
 
         u.global_to_contour_index_map[p0_index] = contour_p0_index;
         u.contour_point_list[contour_p0_index].position = p0_pos;
+        u.contour_point_list[contour_p0_index].group_id = m.group_id;
         u.contour_point_list[contour_p0_index].next = p1_index;   // replaced with contour point index in a later pass
     }
 }
-
-// extract contours output
-// - successor_index[global_point_index]
-// - edges[edge_index] = { pos0, point0, pos1, point1, group_id }
-// - edge_map[global_point_index] = <edge_index>
-// Issue: bifurcations
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -428,6 +424,7 @@ void subdivide_contours(uint3 thread_id : SV_DispatchThreadID, uniform Subdivide
     }
 
     let a = u.common.contour_point_list[i];
+    let group_id = a.group_id;
     if (a.next == SENTINEL) {
         return;
     }
@@ -442,8 +439,10 @@ void subdivide_contours(uint3 thread_id : SV_DispatchThreadID, uniform Subdivide
 
     // Update positions and links
     u.common.contour_point_list_subdiv[i].position = a_position;
+    u.common.contour_point_list_subdiv[i].group_id = group_id;
     u.common.contour_point_list_subdiv[i].next = c_index;
     u.common.contour_point_list_subdiv[c_index].position = c_position;
+    u.common.contour_point_list_subdiv[c_index].group_id = group_id;
     u.common.contour_point_list_subdiv[c_index].next = a.next;
 }
 
@@ -517,10 +516,10 @@ void expand_contours(uint3 thread_id : SV_DispatchThreadID, uniform ContourRootP
     let root_0 = u.contours_rank_successors_0[p0] >> 32;
     let root_1 = u.contours_rank_successors_0[p1] >> 32;
 
-    u.expanded_contour_vertices[vtx_ptr] = OutlineVertex(v0, angle, flags, 0, pointy_0, rank_0);
-    u.expanded_contour_vertices[vtx_ptr+1] = OutlineVertex(v1, angle, flags, 0, pointy_1, rank_1);
-    u.expanded_contour_vertices[vtx_ptr+2] = OutlineVertex(v0offset, angle, flags, 0, pointy_0, rank_0);
-    u.expanded_contour_vertices[vtx_ptr+3] = OutlineVertex(v1offset, angle, flags, 0, pointy_1, rank_1);
+    u.expanded_contour_vertices[vtx_ptr] = OutlineVertex(v0, angle, flags, edge_a.group_id, pointy_0, rank_0);
+    u.expanded_contour_vertices[vtx_ptr+1] = OutlineVertex(v1, angle, flags, edge_b.group_id, pointy_1, rank_1);
+    u.expanded_contour_vertices[vtx_ptr+2] = OutlineVertex(v0offset, angle, flags, edge_a.group_id, pointy_0, rank_0);
+    u.expanded_contour_vertices[vtx_ptr+3] = OutlineVertex(v1offset, angle, flags, edge_b.group_id, pointy_1, rank_1);
 
     u.expanded_contour_indices[idx_ptr] = vtx_ptr;
     u.expanded_contour_indices[idx_ptr+1] = vtx_ptr + 1;
@@ -666,7 +665,7 @@ CornerDetectionFSOut corner_detection_fragment_shader(
 
     var color = float4(colorize_id(tex00.r), tex00.a);
     //color = float4(angle_to_color(float(tex00.b)/10.0).rgb, tex00.a);
-    color = float4(colorize_1d(tex00.b / 65535.0).rgb, tex00.a);
+    //color = float4(colorize_1d(tex00.b / 65535.0).rgb, tex00.a);
 
     //color.rgb = colorize_1d(dist * 0.1);
 

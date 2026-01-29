@@ -731,6 +731,7 @@ struct ContourRootParams {
 #[derive(Copy, Clone)]
 struct ContourPoint {
     position: Vec3,
+    group_id: u32,
     next: u32,
 }
 
@@ -1136,7 +1137,6 @@ impl OutlineExperiment {
 
         /////////////////////////////////////////////////////////
         // contour extraction
-        cmd.bind_compute_pipeline(&*EXTRACT_CONTOURS.read()?);
 
         unsafe {
             // clear ContourEdgeBuffer::count
@@ -1148,6 +1148,7 @@ impl OutlineExperiment {
             cmd.barrier(BarrierFlags::TRANSFER_WRITE, BarrierFlags::COMPUTE_SHADER | BarrierFlags::STORAGE);
         }
 
+        cmd.bind_compute_pipeline(&*EXTRACT_CONTOURS.read()?);
         cmd.dispatch(mesh.meshlets.len() as u32, 1, 1, root_params);
 
         cmd.barrier(
