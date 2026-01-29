@@ -136,6 +136,17 @@
  ☐ Global settings singleton
  ☐ GPU: queries
      Timestamp queries
+ ☐ GPU API streamline: resource sizes in shaders
+     It would be extremely useful to specify the required sizes for intermediate buffers directly in shaders, next to where they are used.
+     Size of intermediate resources are usually a multiple of some application value, like the number of vertices in the geometry, or the size of the screen.
+     Thus shaders would pass an expression (or a multiple) to determine the size of a buffer.
+ ☐ GPU streamlined: allocate buffers in compute shaders
+     Another option would be to allocate resources directly in the shaders. Basically a memory allocator, but on the device timeline.
+     A simple per-frame bump allocator, with a limit. 
+     Single-thread compute shader runs to perform the allocation and initialize pointers.
+     Also, kick off rendering and other compute passes from compute shaders, with DrawIndirect/DispatchIndirect
+         In compute shader, `DispatchIndirect(pass_id, 1, 1, 1)` will write to a DispatchParams command and 
+     Basically investigate VK_EXT_device_generated_commands
 
 
 Render world:
@@ -184,6 +195,7 @@ Experiment
 * [compute shader] chain all contour edges into connected components
     contour_extraction: outputs cluster index + two global point indices
     chain_edges: sort edges by point indices
+        sorting isn't correct: you can have loops
 
 * [compute shader] fuse close points
 * [compute shader] subdivide 
