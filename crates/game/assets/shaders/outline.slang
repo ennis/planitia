@@ -699,6 +699,7 @@ CornerDetectionFSOut corner_detection_fragment_shader(
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 static const uint JFA_TILE_SIZE = 16;
 
+
 [shader("compute")]
 [pass("jfa_init")]
 [numthreads(JFA_TILE_SIZE, JFA_TILE_SIZE, 1)]

@@ -1,6 +1,7 @@
 mod build;
 mod manifest;
 
+use std::fmt;
 use anyhow::Context;
 pub use manifest::*;
 use std::path::Path;
@@ -31,6 +32,7 @@ impl Error {
     }
 }
 
+
 /// Build all pipelines defined in the manifest at the given path.
 ///
 /// # Arguments
@@ -43,6 +45,8 @@ pub fn build_pipeline(manifest_path: impl AsRef<Path>, options: &BuildOptions) -
                 return Err(err).with_context(|| format!("failed to load manifest from {}", manifest_path.display()));
             }
         };
+
+        eprintln!("loaded manifest from {}", manifest_path.display());
 
         manifest.build(options)?;
         //.with_context(|| format!("building from manifest {}", manifest_path.display()))?;

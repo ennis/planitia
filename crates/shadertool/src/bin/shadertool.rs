@@ -128,7 +128,7 @@ fn main() {
         match shadertool::build_pipeline(&manifest_path, &build_options) {
             Ok(()) => {}
             Err(err) => {
-                ceprintln!("<r,bold>error:</> {err}");
+                ceprintln!("<r,bold>error:</> {err:#}");
                 std::process::exit(1);
             }
         }

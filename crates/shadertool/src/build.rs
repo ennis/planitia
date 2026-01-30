@@ -369,8 +369,11 @@ fn load_module_entry_point(
 }
 
 impl BuildManifest {
-    fn create_slang_session(&self, include_paths: &[String]) -> slang::Session {
+    fn create_slang_session(&self, include_paths: &[String], options: &BuildOptions) -> slang::Session {
         let global_session = get_slang_global_session();
+
+        // debug info can be requested either in the manifest or via build options
+        let emit_debug_information = self.compiler.debug | options.emit_debug_information;
 
         let mut search_paths_cstr = vec![];
         for path in include_paths.iter() {
@@ -384,7 +387,7 @@ impl BuildManifest {
             .matrix_layout_column(true)
             .optimization(slang::OptimizationLevel::Default)
             .vulkan_use_entry_point_name(true)
-            .debug_information(if self.compiler.debug {
+            .debug_information(if emit_debug_information {
                 DebugInfoLevel::Maximal
             } else {
                 DebugInfoLevel::None
@@ -419,10 +422,13 @@ impl BuildManifest {
         options: &BuildOptions,
         entry_points: &mut Vec<EntryPoint>,
     ) -> anyhow::Result<()> {
-        let session = self.create_slang_session(include_paths);
+        let session = self.create_slang_session(include_paths, options);
         let (_canonical_path, file_mtime) = get_file_mtime(file)?;
 
         // load slang module file
+        //eprintln!("Include paths: {:?}", include_paths);
+        //eprintln!("Loading module: {}", file.display());
+        //eprintln!("current dir: {}", env::current_dir()?.display());
         let module = session.load_module(&file.to_string_lossy()).map_err(SlangError::from)?;
 
         //let linked_module = module.downcast().link().map_err(SlangError::from)?;
@@ -588,9 +594,17 @@ impl BuildManifest {
     fn resolve_glob_file_paths(&self, patterns: &[String]) -> anyhow::Result<Vec<PathBuf>> {
         // relative paths in the manifest are relative to the manifest directory, so set
         // the current directory to that for glob resolution
-        let prev_current_dir = env::current_dir()?.canonicalize()?;
+        let prev_current_dir = env::current_dir()?;
+        let prev_current_dir_canonical = prev_current_dir.canonicalize()?;
         if let Some(manifest_dir) = self.manifest_path.parent() {
-            env::set_current_dir(manifest_dir)?;
+            if !manifest_dir.as_os_str().is_empty() {
+                env::set_current_dir(manifest_dir).with_context(|| {
+                    format!(
+                        "failed to set current directory `{}` for glob resolution",
+                        manifest_dir.display()
+                    )
+                })?;
+            }
         }
 
         let mut paths = Vec::new();
@@ -608,7 +622,10 @@ impl BuildManifest {
                         //    canonical_path.display(),
                         //    prev_current_dir.display()
                         //);
-                        let relative_path = canonical_path.strip_prefix(&prev_current_dir).unwrap().to_path_buf();
+                        let relative_path = canonical_path
+                            .strip_prefix(&prev_current_dir_canonical)
+                            .unwrap()
+                            .to_path_buf();
                         paths.push(relative_path);
                     }
                     Err(err) => {
@@ -618,6 +635,11 @@ impl BuildManifest {
             }
         }
 
+        // NOTE: be careful not to set canonicalized paths as current directories: on Windows they
+        //       start with the extended-length prefix ("\\?\") and this confuses tools down the line.
+        //       Previously we were setting canonicalized paths here, which caused issues with SPIR-V
+        //       debug information generation (extended-length paths ended up in the SPIR-V debug info
+        //       and some tools, like nvidia nsight, don't handle them properly).
         env::set_current_dir(prev_current_dir)?;
         Ok(paths)
     }
@@ -665,7 +687,9 @@ impl BuildManifest {
     /// Scans shader source files for shader definitions and collects a list of shader pipelines and entry points to compile.
     pub(crate) fn build(&self, options: &BuildOptions) -> anyhow::Result<()> {
         // resolve paths
-        let files = self.resolve_glob_file_paths(&self.input_files)?;
+        let files = self
+            .resolve_glob_file_paths(&self.input_files)
+            .context("error resolving input files")?;
         let output_file = self.resolve_path(&self.output_file);
         let spirv_dump_path = output_file.parent().unwrap().join("spirv");
         let include_paths: Vec<String> = self
