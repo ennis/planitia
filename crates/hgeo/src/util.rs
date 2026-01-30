@@ -12,7 +12,7 @@ pub fn polygons_to_triangle_mesh<VertexFn, TriangleFn>(
     mut emit_vertex: VertexFn,
     mut emit_triangle: TriangleFn,
 ) where
-    VertexFn: FnMut(&Geo, u32) -> u32,
+    VertexFn: FnMut(&Geo, u32, u32) -> u32,
     TriangleFn: FnMut(u32, u32, u32),
 {
     // whether the point index has been added to the vertex list
@@ -27,7 +27,7 @@ pub fn polygons_to_triangle_mesh<VertexFn, TriangleFn>(
         }
 
         for (i, vi) in prim.vertices().enumerate() {
-            let vertex_index = emit_vertex(g, vi);
+            let vertex_index = emit_vertex(g, vi, prim.primitive_index);
             cur_indices.push(vertex_index);
 
             if i >= 2 {

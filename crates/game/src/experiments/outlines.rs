@@ -12,6 +12,7 @@ use gpu::{
 };
 use hgeo::util::polygons_to_triangle_mesh;
 use log::{info, warn};
+use math::geom::Camera;
 use math::{Mat4, Vec3};
 use smallvec::{SmallVec, smallvec};
 use std::alloc::Layout;
@@ -19,7 +20,6 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 use std::path::Path;
 use std::{fmt, ptr};
-use math::geom::Camera;
 
 /// Vertices emitted by the outline extraction compute shader.
 #[repr(C)]
@@ -129,6 +129,7 @@ struct MeshVertex {
 #[derive(Copy, Clone, Default)]
 struct MeshFace {
     vertices: [u16; 3],
+    edges: [u16; 3],
 }
 
 #[repr(C)]
@@ -251,6 +252,12 @@ impl Mesh {
                 let edge2 = p2.position - p0.position;
                 Vec3::cross(edge1, edge2).normalize()
             };
+            //let normal = {
+            //    let n0 = vertices[v0 as usize].normal;
+            //    let n1 = vertices[v1 as usize].normal;
+            //    let n2 = vertices[v2 as usize].normal;
+            //    (n0 + n1 + n2).normalize()
+            //};
 
             let mut insert_edge = |va: u32, vb: u32, face| -> u32 {
                 let pa = vertices[va as usize].point;
@@ -609,8 +616,19 @@ fn convert_edge_clusters_to_meshlets(mesh: &Mesh, clusters: &[EdgeCluster]) -> P
             let lv1 = emit_local_vertex(face.vertices[1]);
             let lv2 = emit_local_vertex(face.vertices[2]);
 
+            let find_edge = |v0: u16, v1: u16| -> Option<u16> {
+                Some(partitioned_edges[base_edge as usize..]
+                    .iter()
+                    .position(|e| (e.vertex_0 == v0 && e.vertex_1 == v1) || (e.vertex_0 == v1 && e.vertex_1 == v0))? as u16)
+            };
+
+            //let Some(e01) = find_edge(lv0, lv1) else { continue };
+            //let Some(e12) = find_edge(lv1, lv2) else { continue };
+            //let Some(e20) = find_edge(lv2, lv0) else { continue };
+
             partitioned_faces.push(MeshFace {
                 vertices: [lv0, lv1, lv2],
+                edges: [0, 0, 0],
             });
 
             // check group ID consistency
@@ -762,6 +780,7 @@ struct ContoursRootParams {
     expanded_contours_draw_command: Ptr<DrawIndirectCommand>,
 
     main_light_direction: Vec3,
+    silhouette_color: Srgba8,
 
     depth_texture: gpu::TextureHandle,
     angle_texture: gpu::TextureHandle,
@@ -851,6 +870,9 @@ static_assets! {
     static JFA_INIT: gpu::ComputePipeline = "/shaders/game_shaders.sharc#jfa_init";
     static JFA_STEP: gpu::ComputePipeline = "/shaders/game_shaders.sharc#jfa_step";
 
+    static EXTRACT_INTERPOLATED_CONTOURS: gpu::ComputePipeline = "/shaders/game_shaders.sharc#extract_interpolated_contours";
+    static EXPAND_INTERPOLATED_CONTOURS: gpu::ComputePipeline = "/shaders/game_shaders.sharc#expand_interpolated_contours";
+
     static BREAK_CONTOURS_INIT: gpu::ComputePipeline = "/shaders/game_shaders.sharc#break_contours_init";
     static BREAK_CONTOURS_STEP: gpu::ComputePipeline = "/shaders/game_shaders.sharc#break_contours_step";
     static RANK_CONTOURS_INIT: gpu::ComputePipeline = "/shaders/game_shaders.sharc#rank_contours_init";
@@ -930,14 +952,14 @@ impl OutlineExperiment {
             })
             .collect::<Vec<_>>();
 
-        geo.point_attribute_typed::<Vec3>("P").unwrap().as_slice().to_vec();
+        //geo.point_attribute_typed::<Vec3>("P").unwrap().as_slice().to_vec();
 
         let (vertices, indices) = {
             let mut vertices = Vec::new();
             let mut indices = Vec::new();
             hgeo::util::polygons_to_triangle_mesh(
                 &geo,
-                |g, vtxnum| {
+                |g, vtxnum, primnum| {
                     let normal: Vec3 = g.vertex(vtxnum, "N");
                     let point = g.vertexpoint(vtxnum);
                     //let point = g.vertexpoint(vtxnum);
@@ -1087,6 +1109,7 @@ impl OutlineExperiment {
             expanded_contours_draw_command: self.expanded_contours_draw_command.ptr(),
 
             main_light_direction: tweak!(main_light_direction = Vec3::new(0.5, -1.0, 0.5).normalize()),
+            silhouette_color: tweak!(silhouette_color = Srgba8::new(0, 0, 0, 0)),
 
             depth_texture: depth_target.texture_handle(),
             angle_texture: self.angle_texture.texture_handle(),
@@ -1145,16 +1168,26 @@ impl OutlineExperiment {
             cmd.fill_buffer(&self.global_to_contour_index_map.as_bytes().slice(..), 0xFFFF_FFFF);
             cmd.fill_buffer(&self.contour_point_list.as_bytes().slice(..), 0xFFFF_FFFF);
             cmd.fill_buffer(&self.contour_point_list_subdiv.as_bytes().slice(..), 0xFFFF_FFFF);
-            cmd.barrier(BarrierFlags::TRANSFER_WRITE, BarrierFlags::COMPUTE_SHADER | BarrierFlags::STORAGE);
+            cmd.barrier(
+                BarrierFlags::TRANSFER_WRITE,
+                BarrierFlags::COMPUTE_SHADER | BarrierFlags::STORAGE,
+            );
         }
 
-        cmd.bind_compute_pipeline(&*EXTRACT_CONTOURS.read()?);
-        cmd.dispatch(mesh.meshlets.len() as u32, 1, 1, root_params);
+        let use_interpolated_contours = tweak!(use_interpolated_contours = false);
+
+        if use_interpolated_contours {
+            cmd.bind_compute_pipeline(&*EXTRACT_INTERPOLATED_CONTOURS.read()?);
+            cmd.dispatch(mesh.meshlets.len() as u32, 1, 1, root_params);
+        } else {
+            cmd.bind_compute_pipeline(&*EXTRACT_CONTOURS.read()?);
+            cmd.dispatch(mesh.meshlets.len() as u32, 1, 1, root_params);
+        }
 
         cmd.barrier(
             BarrierFlags::COMPUTE_SHADER | BarrierFlags::STORAGE | BarrierFlags::DEPTH_STENCIL,
-            BarrierFlags::COMPUTE_SHADER |
-                BarrierFlags::FRAGMENT_SHADER
+            BarrierFlags::COMPUTE_SHADER
+                | BarrierFlags::FRAGMENT_SHADER
                 | BarrierFlags::SAMPLED_READ
                 | BarrierFlags::STORAGE
                 | BarrierFlags::INDIRECT_READ,
@@ -1218,10 +1251,9 @@ impl OutlineExperiment {
 
         /////////////////////////////////////////////////////////
         // contour subdivision
-        {
+        if !use_interpolated_contours {
             let point_count = self.contour_point_list.len() as u32;
             let groups_count = point_count.div_ceil(SUBDIVIDE_CONTOURS_GROUP_SIZE);
-
 
             let subdivision_levels = tweak!(contour_subdivision_levels = 0u32);
             for _ in 0..subdivision_levels {
@@ -1243,18 +1275,20 @@ impl OutlineExperiment {
             }
         }
 
-
-
         /////////////////////////////////////////////////////////
         // expand contours to quad geometry
-        {
+        if use_interpolated_contours {
             let n = self.mesh.edges.len() as u32;
+            let groups_count = n.div_ceil(EXPAND_CONTOURS_GROUP_SIZE);
+            cmd.bind_compute_pipeline(&*EXPAND_INTERPOLATED_CONTOURS.read()?);
+            cmd.dispatch(groups_count, 1, 1, root_params);
+            cmd.barrier_source(BarrierFlags::COMPUTE_SHADER | BarrierFlags::STORAGE);
+        } else {
+            let n = self.contour_point_list.len() as u32;
             let groups_count = n.div_ceil(EXPAND_CONTOURS_GROUP_SIZE);
             cmd.bind_compute_pipeline(&*EXPAND_CONTOURS.read()?);
             cmd.dispatch(groups_count, 1, 1, root_params);
-            cmd.barrier_source(
-                BarrierFlags::COMPUTE_SHADER | BarrierFlags::STORAGE,
-            );
+            cmd.barrier_source(BarrierFlags::COMPUTE_SHADER | BarrierFlags::STORAGE);
         }
 
         /////////////////////////////////////////////////////////
@@ -1272,7 +1306,13 @@ impl OutlineExperiment {
             );
 
             encoder.bind_graphics_pipeline(&*RENDER_OUTLINES.read()?);
-            encoder.draw_indirect(TriangleList, None, &self.expanded_contours_draw_command, 0..1, root_params);
+            encoder.draw_indirect(
+                TriangleList,
+                None,
+                &self.expanded_contours_draw_command,
+                0..1,
+                root_params,
+            );
             encoder.finish();
 
             cmd.barrier_source(BarrierFlags::FRAGMENT_SHADER | BarrierFlags::COLOR_ATTACHMENT);
@@ -1355,13 +1395,7 @@ impl OutlineExperiment {
                 }),
             );
             encoder.bind_graphics_pipeline(&*CORNER_DETECTION.read()?);
-            encoder.draw(
-                TriangleList,
-                None,
-                0..6,
-                0..1,
-                root_params,
-            );
+            encoder.draw(TriangleList, None, 0..6, 0..1, root_params);
             encoder.finish();
         }
 

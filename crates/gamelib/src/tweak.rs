@@ -6,6 +6,7 @@ use std::ops::RangeInclusive;
 use std::panic::Location;
 use std::sync::{LazyLock, Mutex};
 use egui::{Ui};
+use color::Srgba8;
 use math::{Vec2, Vec3, Vec4};
 
 pub trait Tweakable: Any + Send + Sync {
@@ -39,6 +40,18 @@ impl Tweakable for u32 {
 impl Tweakable for bool {
     fn ui(&mut self, ui: &mut Ui, _options: &TweakOptions) {
         ui.checkbox(self, "");
+    }
+}
+
+impl Tweakable for Srgba8 {
+    fn ui(&mut self, ui: &mut Ui, _options: &TweakOptions) {
+        let mut color = egui::Color32::from_rgba_unmultiplied(self.r, self.g, self.b, self.a);
+        if ui.color_edit_button_srgba(&mut color).changed() {
+            self.r = color.r();
+            self.g = color.g();
+            self.b = color.b();
+            self.a = color.a();
+        }
     }
 }
 
