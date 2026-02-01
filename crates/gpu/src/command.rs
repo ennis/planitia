@@ -1,5 +1,5 @@
 use crate::device::ActiveSubmission;
-use crate::{vk, Buffer, BufferUntyped, CommandPool, ComputePipeline, Descriptor, Device, Ptr, SwapChain, SwapchainImage};
+use crate::{vk, BufferUntyped, CommandPool, ComputePipeline, Descriptor, Device, Ptr, SwapChain};
 use ash::prelude::VkResult;
 use ash::vk::DeviceAddress;
 use bitflags::bitflags;

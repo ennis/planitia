@@ -107,7 +107,7 @@ FSOut draw_lines_fragment(VSOut v, uniform DrawLinesRootParams* u) {
     float y = abs(v.local_pos.y);
     //float filter_width = 1.5;
     float half_filter_width = v.filter_width * 0.5;
-    float alpha = (clamp((y + h + half_filter_width), 0., width1) - clamp((y + h - half_filter_width), 0., width1)) / v.width;
+    float alpha = (clamp((y + h + half_filter_width), 0., width1) - clamp((y + h - half_filter_width), 0., width1)) / v.filter_width;
     alpha *= min(v.width, 1.0);
     o.color = v.color;
     o.color.a *= alpha;

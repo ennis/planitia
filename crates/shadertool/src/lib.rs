@@ -1,7 +1,6 @@
 mod build;
 mod manifest;
 
-use std::fmt;
 use anyhow::Context;
 pub use manifest::*;
 use std::path::Path;

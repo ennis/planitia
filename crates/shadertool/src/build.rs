@@ -5,7 +5,7 @@ use log::warn;
 use shader_archive::archive::{ArchiveWriter, Offset};
 use shader_archive::gpu::{ImageUsage, is_depth_format, vk};
 use shader_archive::zstring::ZString64;
-use shader_archive::{FileDependency, PipelineEntryData, RootParamInfo, RootParamLayout, ShaderData, gpu};
+use shader_archive::{FileDependency, PipelineEntryData, RootParamInfo, RootParamLayout, ShaderData};
 use slang::reflection::TypeLayout;
 use slang::{DebugInfoLevel, Downcast};
 use std::cell::OnceCell;

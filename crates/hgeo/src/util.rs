@@ -1,5 +1,4 @@
 use crate::Geo;
-use std::collections::HashMap;
 
 /// Helper function to convert polygons into a triangle mesh.
 ///

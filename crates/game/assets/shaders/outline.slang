@@ -20,7 +20,7 @@ struct ClusterVertex {
 
 struct ClusterFace {
     uint16_t3 vertices;
-    uint16_t3 edges;
+    uint3 edges;
 }
 
 struct Meshlet {
@@ -61,10 +61,7 @@ struct OutlineVertex {
     uint16_t flags;
     // sub-object ID
     uint16_t group_id;
-    // Spikiness
-    float pointy;
-    // Global point index
-    uint32_t rank;
+    float2 local_pos;
 }
 
 struct ContourEdge {
@@ -117,6 +114,8 @@ struct ContourRootParams {
     // shading
     float3 main_light_direction;    // in world space
     Srgba8 silhouette_color;
+    float line_width;
+    float filter_width;
 
     // textures
     Texture2D.Handle depth_texture;
@@ -261,7 +260,7 @@ void extract_contours(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_Gro
         }
     }
 
-    if (is_contour || is_boundary) {
+    if (is_boundary) {
         //// write edge
         //uint edge_ptr;
         //InterlockedAdd(u.contour_edges.count, 1, edge_ptr);
@@ -562,9 +561,9 @@ void expand_contours(uint3 thread_id : SV_DispatchThreadID, uniform ContourRootP
     let p1 = edge_a.next;
 
     float2 px_size = 2. / u.scene_info.screen_size;
-    float width = 1.0;
-    float filter_width = 0.7;
-    float hw_aa = max(width, 1.) * .5; //+ filter_width * sqrt(2.);
+    float width = u.line_width;
+    float filter_width = u.filter_width;
+    float hw_aa = max(width, 1.) * .5 + filter_width * sqrt(2.);
 
     var v0 = mul(u.scene_info.view_proj_matrix, float4(edge_a.position, 1.));
     var v1 = mul(u.scene_info.view_proj_matrix, float4(edge_b.position, 1.));
@@ -595,10 +594,10 @@ void expand_contours(uint3 thread_id : SV_DispatchThreadID, uniform ContourRootP
     let root_0 = u.contours_rank_successors_0[p0] >> 32;
     let root_1 = u.contours_rank_successors_0[p1] >> 32;
 
-    u.expanded_contour_vertices[vtx_ptr] = OutlineVertex(v0, angle, flags, edge_a.group_id, pointy_0, rank_0);
-    u.expanded_contour_vertices[vtx_ptr+1] = OutlineVertex(v1, angle, flags, edge_b.group_id, pointy_1, rank_1);
-    u.expanded_contour_vertices[vtx_ptr+2] = OutlineVertex(v0offset, angle, flags, edge_a.group_id, pointy_0, rank_0);
-    u.expanded_contour_vertices[vtx_ptr+3] = OutlineVertex(v1offset, angle, flags, edge_b.group_id, pointy_1, rank_1);
+    u.expanded_contour_vertices[vtx_ptr] = OutlineVertex(v0, angle, flags, edge_a.group_id, float2(0.0, -hw_aa));
+    u.expanded_contour_vertices[vtx_ptr+1] = OutlineVertex(v1, angle, flags, edge_b.group_id, float2(0.0, -hw_aa));
+    u.expanded_contour_vertices[vtx_ptr+2] = OutlineVertex(v0offset, angle, flags, edge_a.group_id, float2(1.0, hw_aa));
+    u.expanded_contour_vertices[vtx_ptr+3] = OutlineVertex(v1offset, angle, flags, edge_b.group_id, float2(1.0, hw_aa));
 
     u.expanded_contour_indices[idx_ptr] = vtx_ptr;
     u.expanded_contour_indices[idx_ptr+1] = vtx_ptr + 1;
@@ -621,9 +620,9 @@ void expand_interpolated_contours(uint3 thread_id : SV_DispatchThreadID, uniform
     let edge = u.contour_edges_old.edges[i];
 
     float2 px_size = 2. / u.scene_info.screen_size;
-    float width = 1.0;
-    float filter_width = 0.7;
-    float hw_aa = max(width, 1.) * .5; //+ filter_width * sqrt(2.);
+    float width = u.line_width;
+    float filter_width = u.filter_width;
+    float hw_aa = max(width, 1.) * .5 + filter_width * sqrt(2.);
 
     var v0 = mul(u.scene_info.view_proj_matrix, float4(edge.position_0, 1.));
     var v1 = mul(u.scene_info.view_proj_matrix, float4(edge.position_1, 1.));
@@ -650,10 +649,10 @@ void expand_interpolated_contours(uint3 thread_id : SV_DispatchThreadID, uniform
     let pointy_0 = 0.0; //u.mesh.vertices[base_vertex + edge.vertex_0].pointy;
     let pointy_1 = 1.0; //u.mesh.vertices[base_vertex + edge.vertex_1].pointy;
 
-    u.expanded_contour_vertices[vtx_ptr] = OutlineVertex(v0, angle, flags, edge.group_id, pointy_0, 0);
-    u.expanded_contour_vertices[vtx_ptr+1] = OutlineVertex(v1, angle, flags, edge.group_id, pointy_1, 0);
-    u.expanded_contour_vertices[vtx_ptr+2] = OutlineVertex(v0offset, angle, flags, edge.group_id, pointy_0, 0);
-    u.expanded_contour_vertices[vtx_ptr+3] = OutlineVertex(v1offset, angle, flags, edge.group_id, pointy_1, 0);
+    u.expanded_contour_vertices[vtx_ptr] = OutlineVertex(v0, angle, flags, edge.group_id, float2(0.0, -hw_aa));
+    u.expanded_contour_vertices[vtx_ptr+1] = OutlineVertex(v1, angle, flags, edge.group_id, float2(1.0, -hw_aa));
+    u.expanded_contour_vertices[vtx_ptr+2] = OutlineVertex(v0offset, angle, flags, edge.group_id, float2(0.0, hw_aa));
+    u.expanded_contour_vertices[vtx_ptr+3] = OutlineVertex(v1offset, angle, flags, edge.group_id, float2(1.0, hw_aa));
 
     u.expanded_contour_indices[idx_ptr] = vtx_ptr;
     u.expanded_contour_indices[idx_ptr+1] = vtx_ptr + 1;
@@ -669,10 +668,10 @@ void expand_interpolated_contours(uint3 thread_id : SV_DispatchThreadID, uniform
 
 struct RenderOutlinesVSOut {
     float4 pos: SV_Position;
-    float angle;
-    float pointy;
-    nointerpolation uint group_id;
-    uint rank;
+    [[vk::location(0)]] float4 color;
+    [[vk::location(1)]] float2 local_pos;
+    [[vk::location(2)]] nointerpolation float width;
+    [[vk::location(3)]] nointerpolation float filter_width;
 };
 
 [pass("render_outlines")]
@@ -683,15 +682,15 @@ RenderOutlinesVSOut render_outlines_vertex(uint vertex_id : SV_VertexID, uniform
     let vertex = u.expanded_contour_vertices[index];
     RenderOutlinesVSOut o;
     o.pos = vertex.clip_position;
-    o.angle = vertex.angle;
-    o.pointy = vertex.pointy;
-    o.group_id = vertex.group_id;
-    o.rank = vertex.rank;
+    o.local_pos = vertex.local_pos;
+    o.color = float4(colorize_id(vertex.group_id), 1.0);
+    o.width = u.line_width;
+    o.filter_width = u.filter_width;
     return o;
 }
 
 struct RenderOutlinesFSOut {
-    [[vk::location(0)]] uint4 color;
+    [[vk::location(0)]] float4 color;
     float depth: SV_Depth;
 };
 
@@ -704,28 +703,41 @@ RenderOutlinesFSOut render_outlines_fragment(
 {
     int3 coord = int3(int2(frag_coord.xy), 0);
 
-    int test = 0;
-    const float ref_depth = frag_coord.z;
-    test += (ref_depth <= params.depth_texture.Load(int3(coord.x - 1, coord.y - 1, 0), 0).r) ? 1 : 0;
-    test += (ref_depth <= params.depth_texture.Load(int3(coord.x,     coord.y - 1, 0), 0).r) ? 1 : 0;
-    test += (ref_depth <= params.depth_texture.Load(int3(coord.x + 1, coord.y - 1, 0), 0).r) ? 1 : 0;
-    test += (ref_depth <= params.depth_texture.Load(int3(coord.x - 1, coord.y,     0), 0).r) ? 1 : 0;
-    test += (ref_depth <= params.depth_texture.Load(int3(coord.x,     coord.y,     0), 0).r) ? 1 : 0;
-    test += (ref_depth <= params.depth_texture.Load(int3(coord.x + 1, coord.y,     0), 0).r) ? 1 : 0;
-    test += (ref_depth <= params.depth_texture.Load(int3(coord.x - 1, coord.y + 1, 0), 0).r) ? 1 : 0;
-    test += (ref_depth <= params.depth_texture.Load(int3(coord.x,     coord.y + 1, 0), 0).r) ? 1 : 0;
-    test += (ref_depth <= params.depth_texture.Load(int3(coord.x + 1, coord.y + 1, 0), 0).r) ? 1 : 0;
-
+    //int test = 0;
+    //const float ref_depth = frag_coord.z;
+    //test += (ref_depth <= params.depth_texture.Load(int3(coord.x - 1, coord.y - 1, 0), 0).r) ? 1 : 0;
+    //test += (ref_depth <= params.depth_texture.Load(int3(coord.x,     coord.y - 1, 0), 0).r) ? 1 : 0;
+    //test += (ref_depth <= params.depth_texture.Load(int3(coord.x + 1, coord.y - 1, 0), 0).r) ? 1 : 0;
+    //test += (ref_depth <= params.depth_texture.Load(int3(coord.x - 1, coord.y,     0), 0).r) ? 1 : 0;
+    //test += (ref_depth <= params.depth_texture.Load(int3(coord.x,     coord.y,     0), 0).r) ? 1 : 0;
+    //test += (ref_depth <= params.depth_texture.Load(int3(coord.x + 1, coord.y,     0), 0).r) ? 1 : 0;
+    //test += (ref_depth <= params.depth_texture.Load(int3(coord.x - 1, coord.y + 1, 0), 0).r) ? 1 : 0;
+    //test += (ref_depth <= params.depth_texture.Load(int3(coord.x,     coord.y + 1, 0), 0).r) ? 1 : 0;
+    //test += (ref_depth <= params.depth_texture.Load(int3(coord.x + 1, coord.y + 1, 0), 0).r) ? 1 : 0;
     //float4 color = vsout.color;
-    if (test < 2) {
+    //if (test < 2) {
         //discard;
         //color = float4(0.3, 0.3, 0.6, 1);
-    }
+    //}
 
     RenderOutlinesFSOut o;
-    o.color = uint4(vsout.group_id, uint((vsout.angle / TAU) * 65535.), vsout.pointy * 65535, 1);
-    o.depth = frag_coord.z-0.1;
+    // clamped width
+    float width1 = max(vsout.width, 1.0);
+    float h = width1 * 0.5;
+    float y = abs(vsout.local_pos.y);
+    //float filter_width = 1.5;
+    float half_filter_width = vsout.filter_width * 0.5;
+    float alpha = (clamp((y + h + half_filter_width), 0., width1) - clamp((y + h - half_filter_width), 0., width1)) / vsout.filter_width;
+    alpha *= min(vsout.width, 1.0);
+    o.color = vsout.color;
+    o.color.a *= alpha;
+    //o.color = float4(0.0, 1.0, 0.0, 1.0);
     return o;
+
+    //RenderOutlinesFSOut o;
+    //o.color = uint4(vsout.group_id, uint((vsout.angle / TAU) * 65535.), vsout.pointy * 65535, 1);
+    //o.depth = frag_coord.z-0.1;
+    //return o;
 }
 
 
@@ -797,7 +809,7 @@ CornerDetectionFSOut corner_detection_fragment_shader(
     let aastep = fwidth(dist);
     let div_factor = smoothstep(width, width - aastep, dist);
 
-    var color = float4(colorize_id(tex00.r*10), tex00.a);
+    var color = float4(colorize_id(tex00.r*9), tex00.a);
     //color = float4(angle_to_color(float(tex00.b)/10.0).rgb, tex00.a);
     //color = float4(colorize_1d(tex00.b / 65535.0).rgb, tex00.a);
 

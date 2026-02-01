@@ -7,7 +7,7 @@ use crate::device::upload_buffer::{UploadBuffer, UPLOAD_BUFFER_CHUNK_SIZE};
 use crate::instance::vk_khr_surface;
 use crate::platform::PlatformExtensions;
 use crate::{
-    get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, BufferCreateInfo, BufferUntyped, BufferUsage,
+    get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, BufferUsage,
     CommandPool, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error, GraphicsPipeline,
     GraphicsPipelineCreateInfo, PreRasterizationShaders, Ptr, Sampler, SamplerCreateInfo, SamplerCreateInfoHashable,
     VulkanObject, SUBGROUP_SIZE,
@@ -16,7 +16,7 @@ use ash::vk;
 use gpu_allocator::vulkan::AllocationCreateDesc;
 use log::{debug, error, trace};
 use slotmap::SlotMap;
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::ffi::{c_void, CStr, CString};
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Relaxed;

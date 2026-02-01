@@ -34,9 +34,9 @@ depth_stencil_attachment = { bind = "depth_buffer", clear_depth = 1.0 }
 
 [pass.render_outlines]
 depth_stencil.write_enable = false
-color_targets = [
-    { format = "RGBA16UI", blend = "disabled" }
-]
+#color_targets = [
+#    { format = "RGBA8", blend = "disabled" }
+#]
 
 [pass.corner_detection]
 depth_stencil.write_enable = false

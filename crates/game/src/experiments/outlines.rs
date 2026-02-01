@@ -129,7 +129,7 @@ struct MeshVertex {
 #[derive(Copy, Clone, Default)]
 struct MeshFace {
     vertices: [u16; 3],
-    edges: [u16; 3],
+    edges: [u32; 3],        // global edge indices
 }
 
 #[repr(C)]
@@ -628,7 +628,7 @@ fn convert_edge_clusters_to_meshlets(mesh: &Mesh, clusters: &[EdgeCluster]) -> P
 
             partitioned_faces.push(MeshFace {
                 vertices: [lv0, lv1, lv2],
-                edges: [0, 0, 0],
+                edges: face.edges,
             });
 
             // check group ID consistency
@@ -781,6 +781,8 @@ struct ContoursRootParams {
 
     main_light_direction: Vec3,
     silhouette_color: Srgba8,
+    line_width: f32,
+    filter_width: f32,
 
     depth_texture: gpu::TextureHandle,
     angle_texture: gpu::TextureHandle,
@@ -1110,6 +1112,8 @@ impl OutlineExperiment {
 
             main_light_direction: tweak!(main_light_direction = Vec3::new(0.5, -1.0, 0.5).normalize()),
             silhouette_color: tweak!(silhouette_color = Srgba8::new(0, 0, 0, 0)),
+            line_width: tweak!(line_width = 1.0),
+            filter_width: tweak!(filter_width = 0.7),
 
             depth_texture: depth_target.texture_handle(),
             angle_texture: self.angle_texture.texture_handle(),
@@ -1174,15 +1178,17 @@ impl OutlineExperiment {
             );
         }
 
-        let use_interpolated_contours = tweak!(use_interpolated_contours = false);
+        let use_interpolated_contours = tweak!(use_interpolated_contours = true);
 
-        if use_interpolated_contours {
-            cmd.bind_compute_pipeline(&*EXTRACT_INTERPOLATED_CONTOURS.read()?);
-            cmd.dispatch(mesh.meshlets.len() as u32, 1, 1, root_params);
-        } else {
-            cmd.bind_compute_pipeline(&*EXTRACT_CONTOURS.read()?);
-            cmd.dispatch(mesh.meshlets.len() as u32, 1, 1, root_params);
-        }
+        cmd.bind_compute_pipeline(&*EXTRACT_INTERPOLATED_CONTOURS.read()?);
+        cmd.dispatch(mesh.meshlets.len() as u32, 1, 1, root_params);
+
+        let cs_barrier = BarrierFlags::COMPUTE_SHADER | BarrierFlags::STORAGE;
+        cmd.barrier(cs_barrier, cs_barrier);
+
+        // extract boundary contours
+        cmd.bind_compute_pipeline(&*EXTRACT_CONTOURS.read()?);
+        cmd.dispatch(mesh.meshlets.len() as u32, 1, 1, root_params);
 
         cmd.barrier(
             BarrierFlags::COMPUTE_SHADER | BarrierFlags::STORAGE | BarrierFlags::DEPTH_STENCIL,
@@ -1277,19 +1283,23 @@ impl OutlineExperiment {
 
         /////////////////////////////////////////////////////////
         // expand contours to quad geometry
-        if use_interpolated_contours {
+        //if use_interpolated_contours {
+        {
             let n = self.mesh.edges.len() as u32;
             let groups_count = n.div_ceil(EXPAND_CONTOURS_GROUP_SIZE);
             cmd.bind_compute_pipeline(&*EXPAND_INTERPOLATED_CONTOURS.read()?);
             cmd.dispatch(groups_count, 1, 1, root_params);
             cmd.barrier_source(BarrierFlags::COMPUTE_SHADER | BarrierFlags::STORAGE);
-        } else {
+        }
+        //} else {
+        {
             let n = self.contour_point_list.len() as u32;
             let groups_count = n.div_ceil(EXPAND_CONTOURS_GROUP_SIZE);
             cmd.bind_compute_pipeline(&*EXPAND_CONTOURS.read()?);
             cmd.dispatch(groups_count, 1, 1, root_params);
             cmd.barrier_source(BarrierFlags::COMPUTE_SHADER | BarrierFlags::STORAGE);
         }
+        //}
 
         /////////////////////////////////////////////////////////
         // render contours
@@ -1298,11 +1308,14 @@ impl OutlineExperiment {
 
             let mut encoder = cmd.begin_rendering(
                 &[gpu::ColorAttachment {
-                    image: &self.angle_texture,
-                    clear_value: Some([0.0, 0.0, 0.0, 0.0]),
+                    image: &color_target,
                     ..
                 }],
                 None,
+                //Some(gpu::DepthStencilAttachment {
+                //    image: &depth_target,
+                //    ..
+                //}),
             );
 
             encoder.bind_graphics_pipeline(&*RENDER_OUTLINES.read()?);
@@ -1381,7 +1394,7 @@ impl OutlineExperiment {
 
         /////////////////////////////////////////////////////////
         // corner detection
-        if tweak!(show_corner_detection = true) {
+        /*if tweak!(show_corner_detection = true) {
             cmd.barrier_dst(BarrierFlags::FRAGMENT_SHADER | BarrierFlags::SAMPLED_READ);
             let mut encoder = cmd.begin_rendering(
                 &[gpu::ColorAttachment {
@@ -1397,7 +1410,7 @@ impl OutlineExperiment {
             encoder.bind_graphics_pipeline(&*CORNER_DETECTION.read()?);
             encoder.draw(TriangleList, None, 0..6, 0..1, root_params);
             encoder.finish();
-        }
+        }*/
 
         if tweak!(show_edge_clusters = false) {
             let mut encoder = cmd.begin_rendering(

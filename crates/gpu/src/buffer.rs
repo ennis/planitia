@@ -11,7 +11,6 @@ use std::os::raw::c_void;
 use std::ptr::NonNull;
 use std::{mem, ptr, slice};
 use std::alloc::Layout;
-use ash::vk::{Handle, ObjectType};
 
 impl<T: ?Sized> Drop for Buffer<T> {
     fn drop(&mut self) {
