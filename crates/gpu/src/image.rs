@@ -1,8 +1,5 @@
 use crate::device::get_vk_sample_count;
-use crate::{
-    aspects_for_format, BufferUntyped, CommandBuffer, Descriptor, Device, Format, ResourceAllocation,
-    ResourceDescriptorIndex, ResourceId, Size3D, StorageImageHandle, TextureHandle, TrackedResource, VulkanObject,
-};
+use crate::{aspects_for_format, BufferUntyped, ColorAttachment, CommandBuffer, DepthStencilAttachment, Descriptor, Device, Format, ResourceAllocation, ResourceDescriptorIndex, ResourceId, Size3D, StorageImageHandle, TextureHandle, TrackedResource, VulkanObject};
 use ash::vk;
 use ash::vk::Handle;
 use bitflags::bitflags;
@@ -159,9 +156,53 @@ impl VulkanObject for Image {
 }
 
 impl Image {
+    // TODO: a less verbose `new`.
+
     /// Creates a new image resource.
     pub fn new(image_info: ImageCreateInfo) -> Image {
         Device::global().create_image(&image_info)
+    }
+
+    /// Shorthand for creating a 2D image suitable for sampling and storage uses with the specified properties.
+    ///
+    /// Equivalent to `Image::new` with `usage: ImageUsage::SAMPLED | ImageUsage::STORAGE`.
+    pub fn new_texture(width: u32, height: u32, format: Format) -> Image {
+        Self::new(ImageCreateInfo {
+            type_: ImageType::Image2D,
+            usage: ImageUsage::SAMPLED | ImageUsage::STORAGE,
+            format,
+            width,
+            height,
+            ..
+        })
+    }
+
+    /// Shorthand for creating a 2D image suitable for use as a color attachment, and for sampling and storage, with the specified properties.
+    ///
+    /// Equivalent to `Image::new` with `usage: ImageUsage::SAMPLED | ImageUsage::STORAGE | ImageUsage::COLOR_ATTACHMENT`.
+    pub fn new_color_attachment(width: u32, height: u32, format: Format) -> Image {
+        Self::new(ImageCreateInfo {
+            type_: ImageType::Image2D,
+            usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED | ImageUsage::STORAGE,
+            format,
+            width,
+            height,
+            ..
+        })
+    }
+
+    /// Shorthand for creating a 2D image suitable for use as a depth-stencil attachment, and for sampling and storage, with the specified properties.
+    ///
+    /// Equivalent to `Image::new` with `usage: ImageUsage::SAMPLED | ImageUsage::STORAGE | ImageUsage::DEPTH_STENCIL_ATTACHMENT`.
+    pub fn new_depth_stencil_attachment(width: u32, height: u32, format: Format) -> Image {
+        Self::new(ImageCreateInfo {
+            type_: ImageType::Image2D,
+            usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT | ImageUsage::SAMPLED | ImageUsage::STORAGE,
+            format,
+            width,
+            height,
+            ..
+        })
     }
 
     /// Returns the type (dimensionality) of the image.

@@ -47,13 +47,36 @@ depth_stencil.write_enable = false
 [pass.base_render]
 color_targets = [
     { format = "RGBA8", blend = "over" },           # color
-    { format = "RGB10_A2", blend = "disabled" }      # normal
+    { format = "RGB10_A2", blend = "disabled" },      # normal
+    { format = "RGBA16UI", blend = "disabled" }      # auxiliary
 ]
 
 [pass.background]
 depth_stencil.compare_op = "always"
 depth_stencil.write_enable = false
 
+##
+# Automaton
+##
+
+[pass.automaton_base_render]
+color_targets = [
+    { format = "RGBA8", blend = "over" },           # color
+    { format = "RGB10_A2", blend = "disabled" },      # normal
+    { format = "RGBA16UI", blend = "disabled" }      # auxiliary
+]
+
+[pass.contour_detection]
+color_targets = [
+    { format = "RGBA32F", blend = "disabled" }
+]
+depth_stencil.write_enable = false
+
+[pass.sim_render]
+depth_stencil.write_enable = false
+
+[pass.automaton_debug]
+depth_stencil.write_enable = false
 
 ######################################################################
 # Resources

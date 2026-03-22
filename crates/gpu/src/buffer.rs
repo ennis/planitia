@@ -137,7 +137,9 @@ impl<T: Copy> Buffer<T> {
         }
     }
 
-    /// Discards the contents of this buffer and returns an identical buffer, except with a different size.
+    /// Discards the contents of this buffer and replaces it with a buffer of a different size.
+    ///
+    /// All other properties of the buffer (usage flags, memory location, etc.) are preserved.
     pub fn discard_resize(&mut self, new_len: usize) {
         let buffer = Device::global().create_buffer(
             size_of::<T>(),

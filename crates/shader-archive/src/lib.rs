@@ -13,6 +13,8 @@
 
 #![feature(default_field_values)]
 
+pub mod reflection;
+
 use gpu::vk;
 use gpu::vk::{CullModeFlags, PolygonMode};
 use std::borrow::Cow;

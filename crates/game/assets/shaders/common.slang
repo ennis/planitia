@@ -142,10 +142,10 @@ public float3 hsv2rgb(float3 c)
     return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
 }
 
-public float4 angle_to_color(float angle)
+public float3 colorize_angle(float angle)
 {
     float hue = fmod(angle / (2.0 * PI), 1.0);
-    return float4(hsv2rgb(float3(hue, 1.0, 1.0)), 1.0);
+    return hsv2rgb(float3(hue, 1.0, 1.0));
 }
 
 // https://c0de517e.blogspot.com/2017/11/coder-color-palettes-for-data.html
@@ -161,6 +161,10 @@ public float3 colorize_1d(float x)
 public float3 colorize_id(int id)
 {
     return palette(float(id) * 0.0247, float3(0.5,0.5,0.5),float3(0.5,0.5,0.5),float3(1.0,1.0,1.0),float3(0.0,0.33,0.67));
+}
+
+public T threshold<T: __BuiltinFloatingPointType>(T value, T threshold, T edge) {
+    return smoothstep(threshold - edge, threshold + edge, value);
 }
 
 //////////////////////////////////////////////////////////////////

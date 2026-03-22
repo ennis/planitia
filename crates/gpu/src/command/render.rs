@@ -333,6 +333,16 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
+    pub fn draw_screen_quad<'params, T: Copy + 'static>(&mut self, root_params: impl Into<RootParams<'params, T>>) {
+        self.draw(
+            PrimitiveTopology::TriangleList,
+            None,
+            0..6,
+            0..1,
+            root_params,
+        );
+    }
+
     pub fn draw<'params, T: Copy + 'static>(
         &mut self,
         topology: PrimitiveTopology,
@@ -509,6 +519,8 @@ impl<'a> Drop for RenderEncoder<'a> {
 }
 
 impl CommandBuffer {
+
+
     /// Starts a rendering pass.
     ///
     /// The render area is set to cover the entire size of the attachments.
@@ -553,7 +565,7 @@ impl CommandBuffer {
                     image_view: a.image.view_handle(),
                     image_layout: vk::ImageLayout::GENERAL,
                     resolve_mode: vk::ResolveModeFlags::NONE,
-                    load_op: if a.clear_value.is_some() {
+                    load_op: if a.clear.is_some() {
                         vk::AttachmentLoadOp::CLEAR
                     } else {
                         vk::AttachmentLoadOp::LOAD
@@ -577,7 +589,7 @@ impl CommandBuffer {
                 image_view: depth.image.view_handle(),
                 image_layout: vk::ImageLayout::GENERAL,
                 resolve_mode: vk::ResolveModeFlags::NONE,
-                load_op: if depth.depth_clear_value.is_some() {
+                load_op: if depth.depth_clear.is_some() {
                     vk::AttachmentLoadOp::CLEAR
                 } else {
                     vk::AttachmentLoadOp::LOAD
@@ -596,7 +608,7 @@ impl CommandBuffer {
                     image_view: depth.image.view_handle(),
                     image_layout: vk::ImageLayout::GENERAL,
                     resolve_mode: vk::ResolveModeFlags::NONE,
-                    load_op: if depth.stencil_clear_value.is_some() {
+                    load_op: if depth.stencil_clear.is_some() {
                         vk::AttachmentLoadOp::CLEAR
                     } else {
                         vk::AttachmentLoadOp::LOAD

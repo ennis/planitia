@@ -96,6 +96,7 @@ pub fn load_pipeline_archive(path: impl AsRef<VfsPath>) -> Handle<ShaderArchive>
                         emit_cargo_deps: false,
                         emit_debug_information: true, // TODO
                         emit_spirv_binaries: true,
+                        ..
                     },
                 )?;
             }

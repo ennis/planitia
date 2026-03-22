@@ -87,16 +87,16 @@ pub unsafe fn blit_images(
 #[macro_export]
 macro_rules! root_params {
     ( $( $field:ident : $ty:ty = $val:expr ),* ) => {
-        {
+        $crate::RootParams::Immediate(&{
             #[repr(C)]
             #[derive(Copy, Clone)]
             struct Params {
                 $( $field: $ty, )*
             }
-            $crate::RootParams::Immediate(&Params {
+            Params {
                 $( $field: $val, )*
-            })
-        }
+            }
+        })
     };
 }
 

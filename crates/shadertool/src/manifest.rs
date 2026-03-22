@@ -521,6 +521,7 @@ fn get_format(fmtstr: &str) -> Result<vk::Format, Error> {
         "RGB10_A2" => Ok(vk::Format::A2B10G10R10_UNORM_PACK32),
         "R32F" => Ok(vk::Format::R32_SFLOAT),
         "RG32F" => Ok(vk::Format::R32G32_SFLOAT),
+        "RGBA32F" => Ok(vk::Format::R32G32B32A32_SFLOAT),
         "D32F" => Ok(vk::Format::D32_SFLOAT),
         "D32F_S8UI" => Ok(vk::Format::D32_SFLOAT_S8_UINT),
         _ => {

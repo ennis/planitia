@@ -106,6 +106,7 @@ struct Game {
     start_time: std::time::Instant,
     coat_experiment: experiments::coat::CoatExperiment,
     outline_experiment: experiments::outlines::OutlineExperiment,
+    automaton_experiment: experiments::automaton::AutomatonExperiment,
     cfg: Config,
 }
 
@@ -137,6 +138,7 @@ impl Default for Game {
             start_time: std::time::Instant::now(),
             coat_experiment: experiments::coat::CoatExperiment::new(),
             outline_experiment: experiments::outlines::OutlineExperiment::new(),
+            automaton_experiment: experiments::automaton::AutomatonExperiment::new(),
             cfg: Config::load(),
         }
     }
@@ -160,7 +162,7 @@ impl Game {
                         scene_uniforms: Ptr<SceneInfoUniforms> = scene_info.gpu,
                         bottom_color: Srgba8 = bottom_color,
                         top_color: Srgba8 = top_color
-                    },
+                    }
                 );
             }
         }
@@ -262,7 +264,8 @@ impl AppHandler for Game {
 
         // --- experiments ---
         //self.coat_experiment.input(&input_event);
-        self.outline_experiment.input(&input_event);
+        //self.outline_experiment.input(&input_event);
+        self.automaton_experiment.input(&input_event);
     }
 
     fn event(&mut self, event: UserEvent) {
@@ -276,7 +279,8 @@ impl AppHandler for Game {
         self.height = height;
         self.camera_control.resize(width, height);
         self.depth_stencil_buffer = create_depth_buffer(width, height);
-        self.outline_experiment.resize(width, height);
+        //self.outline_experiment.resize(width, height);
+        self.automaton_experiment.resize(width, height);
     }
 
     fn vsync(&mut self) {}
@@ -312,12 +316,12 @@ impl AppHandler for Game {
 
             let mut encoder = cmd.begin_rendering(&[gpu::ColorAttachment {
                     image: target.image,
-                    clear_value: Some([0.0, 0.0, 0.0, 1.0]),
+                    clear: Some([0.0, 0.0, 0.0, 1.0]),
                 }],
                 Some(gpu::DepthStencilAttachment {
                     image: &self.depth_stencil_buffer,
-                    depth_clear_value: Some(1.0),
-                    stencil_clear_value: Some(0),
+                    depth_clear: Some(1.0),
+                    stencil_clear: Some(0),
                 }));
 
             self.render_scene(&mut encoder, &camera, &scene_info);
@@ -325,7 +329,9 @@ impl AppHandler for Game {
 
             //self.coat_experiment
             //    .render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
-            self.outline_experiment
+            // self.outline_experiment
+            //    .render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
+            let _ = self.automaton_experiment
                 .render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
         }
 
@@ -382,6 +388,8 @@ impl AppHandler for Game {
                     ui.end_row();
                 });
         });
+
+        self.automaton_experiment.ui(ctx);
     }
 
     fn exiting(&mut self) {

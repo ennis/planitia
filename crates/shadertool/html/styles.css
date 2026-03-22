@@ -1,5 +1,6 @@
 :root {
     --accent: #ffca4c;
+    box-sizing: border-box;
 }
 
 body {
@@ -41,4 +42,68 @@ h1 {
 .prop-value {
     grid-column: 2;
     justify-self: start;
+}
+
+.pass {
+    margin-top: -1px;
+    padding: 5px;
+    border: 1px solid #393939;
+    max-width: 400px;
+    position: relative;
+}
+
+.pass-title {
+    font-weight: bold;
+    font-size: larger;
+    font-family: monospace;
+}
+
+.pass-graphics {
+    background-color: #032a00;
+}
+
+.pass-compute {
+    background-color: #00042a;
+}
+
+.pass-barrier {
+    /* background is diagonal 45deg stripes of #2a2a2a and #1a1a1a, each stripe is 25% of the width */
+    background: repeating-linear-gradient(
+        -45deg,
+        #2a2a2a,
+        #2a2a2a 10%,
+        #1a1a1a 10%,
+        #1a1a1a 20%
+    );
+}
+
+.pass-action-box {
+    position: absolute;
+    right: -1px;
+    top: -1px;
+    border: 1px solid #393939;
+    width: 40px;
+    height: 20px;
+}
+
+.pass-compute-title {
+    font-weight: bold;
+    font-size: larger;
+}
+
+.pass-compute-group-line {
+    font-family: monospace;
+    font-size: smaller;
+}
+
+.pass-graphics-summary-line {
+    font-family: monospace;
+    font-size: smaller;
+}
+
+.pass-barrier-title {
+}
+
+.pass-barrier-invalidate-flags {
+    font-family: monospace;
 }

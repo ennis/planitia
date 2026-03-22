@@ -35,6 +35,20 @@ pub struct CommandBuffer {
 }
 
 bitflags! {
+
+    /// Describes the memory types to invalidate during a barrier operation.
+    pub struct InvalidateFlags: u32 {
+        /// Invalidate any cache related to shader storage memory.
+        const STORAGE = 1 << 0;
+        /// Invalidate any cache related to texture memory.
+        const TEXTURE = 1 << 1;
+        /// Invalidate any cache related to indirect command data.
+        const INDIRECT = 1 << 2;
+        /// Invalidate any cache related to uniform buffer memory.
+        const UNIFORM = 1 << 3;
+    }
+
+    /// Describes the scope (memory and execution) of one side of a barrier operation.
     #[derive(Copy,Clone,Debug,PartialEq,Eq,Hash)]
     pub struct BarrierFlags: u64 {
 
@@ -95,6 +109,26 @@ bitflags! {
 
         /// Index input stage & index read.
         const INDEX_READ = 1 << 13;
+
+    }
+}
+
+impl InvalidateFlags {
+    fn to_access_flags(self) -> vk::AccessFlags2 {
+        let mut flags = vk::AccessFlags2::empty();
+        if self.contains(Self::STORAGE) {
+            flags |= vk::AccessFlags2::SHADER_STORAGE_READ;
+        }
+        if self.contains(Self::TEXTURE) {
+            flags |= vk::AccessFlags2::SHADER_SAMPLED_READ;
+        }
+        if self.contains(Self::INDIRECT) {
+            flags |= vk::AccessFlags2::INDIRECT_COMMAND_READ;
+        }
+        if self.contains(Self::UNIFORM) {
+            flags |= vk::AccessFlags2::UNIFORM_READ;
+        }
+        flags
     }
 }
 
@@ -190,14 +224,6 @@ impl BarrierFlags {
         }
 
         (stages, access)
-    }
-}
-
-bitflags! {
-    #[derive(Copy,Clone,Debug,PartialEq,Eq,Hash)]
-    pub struct MemoryFlags: u32 {
-        const STORAGE_WRITE = 0;
-        const DEPTH_STENCIL_ATTACHMENT_WRITE = 0;
     }
 }
 
@@ -458,6 +484,9 @@ impl CommandBuffer {
         }
     }*/
 
+    /// Internal function to emit an image memory barrier.
+    ///
+    /// Mostly used for image layout transitions.
     pub(crate) unsafe fn image_barrier(&mut self, barrier: &vk::ImageMemoryBarrier2) {
         unsafe {
             let cb = self.get_or_create_command_buffer();
@@ -506,30 +535,8 @@ impl CommandBuffer {
         }
     }
 
-    /// Tells future barriers to wait for the specified producer stages.
-    ///
-    /// Typically, if you want future barriers to wait for all prior work to complete, you would call this
-    /// with the stages that are writing data in the previous commands.
-    ///
-    /// The "memory" parameter tells which types of non-coherent memory accesses should be made
-    /// available at the next barrier. This should be set if prior commands write to non-coherent
-    /// caches (e.g. ???) and you want to ensure that subsequent commands see the results of those writes.
-    pub fn barrier_source(&mut self, flags: BarrierFlags) {
-        self.barrier_source = flags;
-    }
-
-    pub fn barrier_dst(&mut self, flags: BarrierFlags) {
-        self.barrier(BarrierFlags::empty(), flags);
-    }
-
-    /// Emits a pipeline barrier (if necessary) that ensures that all previous writes are
-    /// visible to subsequent operations for the given memory access type.
-    ///
-    /// Note that it's not possible to make only one specific type of write available. All pending
-    /// writes are made available unconditionally.
-    ///
-    // TODO split in two parameters: one for global memory barrier, one for image layout transitions
-    pub fn barrier(&mut self, src: BarrierFlags, dest: BarrierFlags) {
+    /*
+    pub fn pipeline_barrier(&mut self, src: BarrierFlags, dest: BarrierFlags) {
         //let mut image_barriers = vec![];
         let full_src = self.barrier_source | src;
 
@@ -599,10 +606,56 @@ impl CommandBuffer {
                 );
             }
         }*/
+    }*/
+
+    /// Emits a pipeline barrier.
+    ///
+    /// The barrier introduces an unconditional execution dependency between all previous
+    /// and subsequent commands (equivalent to an ALL_COMMANDS -> ALL_COMMANDS execution dependency
+    /// in Vulkan).
+    ///
+    /// The `flags` specify the memory access types that should be made available to subsequent commands.
+    /// You can think of it as a list of non-coherent caches that should be invalidated as a result
+    /// of previous commands.
+    ///
+    /// The barrier makes all previous writes visible unconditionally (equivalent to
+    /// src_access_mask = MEMORY_WRITE).
+    pub fn barrier(&mut self, flags: InvalidateFlags) {
+        // This simplified barrier API just includes all previous stages and memory write types
+        // in the source scope.
+        // On nvidia, stage execution dependencies seem to be ignored anyway.
+        // On AMD this may affect performance, but I'm not sure.
+        let src_stage_mask = vk::PipelineStageFlags2::ALL_COMMANDS;
+        let src_access_mask = vk::AccessFlags2::MEMORY_WRITE;
+        let dst_stage_mask = vk::PipelineStageFlags2::ALL_COMMANDS;
+        let dst_access_mask = flags.to_access_flags();
+
+        let global_memory_barrier = vk::MemoryBarrier2 {
+            src_access_mask,
+            dst_access_mask,
+            src_stage_mask,
+            dst_stage_mask,
+            ..Default::default()
+        };
+
+        let command_buffer = self.get_or_create_command_buffer();
+        unsafe {
+            Device::global().raw.cmd_pipeline_barrier2(
+                command_buffer,
+                &vk::DependencyInfo {
+                    dependency_flags: Default::default(),
+                    memory_barrier_count: 1,
+                    p_memory_barriers: &global_memory_barrier,
+                    ..Default::default()
+                },
+            );
+        }
     }
 
+    #[deprecated(note = "use root params and bindless resources instead")]
     pub unsafe fn bind_descriptor_set(&mut self, index: u32, set: vk::DescriptorSet) {
         let cb = self.get_or_create_command_buffer();
+        // FIXME: why is it COMPUTE?
         Device::global().raw.cmd_bind_descriptor_sets(
             cb,
             vk::PipelineBindPoint::COMPUTE,
@@ -614,6 +667,7 @@ impl CommandBuffer {
     }
 
     /// Sets push descriptors.
+    #[deprecated(note = "use root params and bindless resources instead")]
     pub fn push_descriptors(&mut self, set: u32, bindings: &[(u32, Descriptor)]) {
         assert!(
             self.pipeline_layout != vk::PipelineLayout::null(),
@@ -622,6 +676,7 @@ impl CommandBuffer {
 
         let cb = self.get_or_create_command_buffer();
         unsafe {
+            // FIXME: why is it COMPUTE?
             self.do_cmd_push_descriptor_set(cb, vk::PipelineBindPoint::COMPUTE, self.pipeline_layout, set, bindings);
         }
     }
@@ -631,12 +686,7 @@ impl CommandBuffer {
         let device = Device::global();
         let cb = self.get_or_create_command_buffer();
         unsafe {
-            device.raw.cmd_update_buffer(
-                cb,
-                buffer.handle(),
-                offset as u64,
-                data,
-            );
+            device.raw.cmd_update_buffer(cb, buffer.handle(), offset as u64, data);
         }
     }
 
@@ -653,10 +703,18 @@ impl CommandBuffer {
             }
         }
         self.pipeline_layout = pipeline.pipeline_layout;
-
         // TODO: we need to hold a reference to the pipeline until the command buffers are submitted
     }
 
+    /// Dispatches compute work items.
+    ///
+    /// # Arguments
+    ///
+    /// * `group_count_x` - Number of workgroups to dispatch in the X dimension.
+    /// * `group_count_y` - Number of workgroups to dispatch in the Y dimension.
+    /// * `group_count_z` - Number of workgroups to dispatch in the Z dimension.
+    /// * `root_params` - Root parameters to bind for the dispatch.
+    ///
     pub fn dispatch<'params, T: Copy + 'static>(
         &mut self,
         group_count_x: u32,
@@ -704,6 +762,7 @@ impl CommandBuffer {
         }
     }
 
+    /// Surrounds a set of commands with a debug group.
     pub fn debug_group(&mut self, label: &str, f: impl FnOnce(&mut Self)) {
         self.push_debug_group(label);
         f(self);
@@ -875,7 +934,7 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
     );
 
     // flush pending writes
-    cmd.barrier_dst(BarrierFlags::empty());
+    cmd.barrier(InvalidateFlags::empty());
 
     // finish recording the current command buffer if not already done
     cmd.close_command_buffer();

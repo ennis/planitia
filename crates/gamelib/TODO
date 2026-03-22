@@ -147,6 +147,13 @@
      Also, kick off rendering and other compute passes from compute shaders, with DrawIndirect/DispatchIndirect
          In compute shader, `DispatchIndirect(pass_id, 1, 1, 1)` will write to a DispatchParams command and 
      Basically investigate VK_EXT_device_generated_commands
+ ☐ GPU streamline: async command buffers
+     Command buffers are not generated ahead of time, but on the fly in an async task. The async task can yield while waiting for 
+     GPU readback. In the async task, CPU can synchronize with GPU, and do readback, and emit commands that depend on the result of
+     the readback, without needing to block the CPU. We would need to wait for fences though.
+     Significantly more involved and perf is unpredictable.
+     Benefits: can interleave GPU and CPU tasks within a frame
+
 
 
 Render world:
@@ -168,6 +175,8 @@ Models:
             * a vertex index to query vertex level attributes
             * a point index for point attributes
             This requires two lookups. Most of the time, point == vertex index
+        Split meshes into smooth components: no adjacency information across crease edges
+
 
 Contours:
     ☐ Differentiate boundaries from outlines
@@ -199,6 +208,49 @@ Experiment
 
 * [compute shader] fuse close points
 * [compute shader] subdivide 
+
+Why do we want geometric contours?
+Possible to get a parametrization, more opportunities for stylization
+    -> however, difficult to get a stable parametrization
+Analytical AA possible
+    -> this is the main reason to choose geometry instead of pixel based contours
+Refinement possible
+    -> smooth contours with subdivision
+Easier to adjust width of resulting strokes
+    -> SSO methods would require dilation which is not super flexible and annoying on T-junctions
+
+Idea: derive the parametrization from object-space coordinates
+
+Requirements
+- geometric contours (lines): for anti-aliasing
+- hidden contours available
+- linked into polylines
+
+Issue: there are 3 kinds of contours: visible outlines (VO), hidden outlines (HO), mesh intersections (IS). And two approaches: screen-space outlines (SSO) or mesh contours (GEO)
+GEO works well for VO/HO but is unusable for IS, whereas
+SSO works well for VO/IS but unusable for HO.
+
+Thus, either we need both a geometric pass and an image pass, or we need to sacrifice either HO or IS.
+
+Idea: use both, output is a unified representation: feature line + normals, lines can degen to points for SSO pass
+Output of the first passes is line soup
+
+2nd step: linkage
+Link lines together
+
+"Tracing automatas"
+Simulation process that traces contours from pixel-based guides
+
+
+Dynamic rendering pipelines:
+
+Need to specify full rendering pipelines dynamically.
+Application exposes sources of data: current mesh (in various formats).
+Those are accessible as predefined input buffers in shaders.
+Uniforms are initialized within shaders, or explicitly in the application. By default they are initialized to zero.
+
+Shader signatures: they take pointers to param buffers in global memory. Application-provided buffers are detected and provided by the system; for user params, they are cleared to zero, and editable in the interface.
+
 
 Terrain rendering:
     ✔ Find out how to do the initial adaptive meshing @done (25-12-15 15:55)

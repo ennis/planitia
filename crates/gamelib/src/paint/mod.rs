@@ -363,12 +363,12 @@ impl<'a> PaintScene<'a> {
         let mut encoder = cmd.begin_rendering(
             &[gpu::ColorAttachment {
                 image: &params.color_target,
-                clear_value: None,
+                clear: None,
             }],
             params.depth_target.as_ref().map(|d| gpu::DepthStencilAttachment {
                 image: d,
-                depth_clear_value: None,
-                stencil_clear_value: None,
+                depth_clear: None,
+                stencil_clear: None,
             }));
 
         let width = params.color_target.width();

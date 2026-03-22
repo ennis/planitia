@@ -1,5 +1,6 @@
 import common;
 import scene_info;
+import ridge_detection;
 
 static const uint16_t CLUSTER_EDGE_FLAG_BORDER = 1 << 0;
 static const uint16_t CLUSTER_EDGE_FLAG_CREASE = 1 << 1;
@@ -43,6 +44,36 @@ struct MeshData {
     ClusterFace* faces;
     float3* face_normals;
     Meshlet* meshlets;
+}
+
+struct WingedEdgeFace {
+    uint edges[3];
+}
+
+struct WingedEdgeFaceVertex {
+    float3 normal;
+    uint vertex;
+    uint incident_edge;
+}
+
+struct WingedEdge {
+    uint src_vtx;
+    uint dst_vtx;
+    uint r_face;
+    uint l_face;
+    uint r_cw_edge;
+    uint r_ccw_edge;
+    uint l_ccw_edge;
+    uint l_cw_edge;
+}
+
+struct WingedEdgeMeshData {
+    float3 *vertices;
+    WingedEdgeFaceVertex *face_vertices;
+    WingedEdge *edges;
+    WingedEdgeFace *faces;
+    uint face_vertex_count;
+    uint padding;
 }
 
 struct NormalCone {
@@ -90,6 +121,7 @@ struct ContourRootParams {
     // input mesh
     SceneInfo* scene_info;
     MeshData mesh;
+    WingedEdgeMeshData we_mesh;
     uint cluster_count;
     float3 eye;
 
@@ -121,6 +153,7 @@ struct ContourRootParams {
     Texture2D.Handle depth_texture;
     Texture2D<uint16_t4>.Handle angle_texture;
     Texture2D<float4>.Handle normal_texture;
+    Texture2D<float4>.Handle shading_texture;
 
     // JFA
     RWTexture2D<int16_t2>.Handle jfa_result;
@@ -170,14 +203,17 @@ void depth_pass_fragment(DepthPassVertexOutput i) {
 
 struct BaseRenderVSOut {
     float4 pos: SV_Position;
-    [[vk::location(0)]] float4 color;
-    [[vk::location(1)]] float3 normal;
-    [[vk::location(2)]] nointerpolation int meshlet_id;
+    float4 color;
+    float3 normal;
+    float3 view;
+    nointerpolation int meshlet_id;
+    nointerpolation int group_id;
 }
 
 struct BaseRenderFSOut {
     [[vk::location(0)]] float4 color;
     [[vk::location(1)]] float3 normal;
+    [[vk::location(2)]] uint16_t4 aux;
 }
 
 
@@ -188,8 +224,11 @@ BaseRenderVSOut base_render_vertex(uint vertex_id : SV_VertexID, uint draw_id: S
     let vertex = fetch_mesh_vertex(u.mesh, draw_id, vertex_id);
     BaseRenderVSOut o;
     o.pos = mul(u.scene_info.view_proj_matrix, float4(vertex.position, 1.0));
-    o.normal = vertex.normal;// mul(float3x3(u.scene_info.view_matrix), vertex.normal);
+    o.normal = mul(float3x3(u.scene_info.view_matrix), vertex.normal);
     o.meshlet_id = draw_id;
+    o.group_id = u.mesh.meshlets[draw_id].group_id;
+    let pos_view = mul(u.scene_info.view_matrix, float4(vertex.position, 1.0)).xyz;
+    o.view = normalize(pos_view);
     return o;
 }
 
@@ -198,6 +237,55 @@ BaseRenderVSOut base_render_vertex(uint vertex_id : SV_VertexID, uint draw_id: S
 BaseRenderFSOut base_render_fragment(BaseRenderVSOut i, uniform ContourRootParams* u) {
     BaseRenderFSOut o;
     float3 normal = normalize(i.normal);
+    let light_dir = -i.view;
+    //let light_dir = -normalize(u.main_light_direction);
+    float light_intensity = saturate(dot(normal, light_dir));
+    o.color = srgba8_to_float4(u.silhouette_color);
+    o.color.rgb *= light_intensity;
+    o.normal = normal;
+    o.aux = uint16_t4(i.group_id, i.meshlet_id, 0, 0);
+    // colorize per cluster
+    //o.color.rgb = palette(float(i.meshlet_id) * 0.1, float3(0.5,0.5,0.5),float3(0.5,0.5,0.5),float3(1.0,1.0,1.0),float3(0.0,0.33,0.67));
+    return o;
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Base render + depth pre-pass (Winged edge repr)
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+struct WEBaseRenderVSOut {
+    float4 pos: SV_Position;
+    [[vk::location(0)]] float4 color;
+    [[vk::location(1)]] float3 normal;
+}
+
+struct WEBaseRenderFSOut {
+    [[vk::location(0)]] float4 color;
+    [[vk::location(1)]] float3 normal;
+}
+
+
+[shader("vertex")]
+[pass("we_base_render")]
+WEBaseRenderVSOut we_base_render_vertex(uint vertex_id : SV_VertexID, uint draw_id: SV_DrawIndex, uniform ContourRootParams* u)
+{
+    let fi = vertex_id / 3;
+    let fvi = u.we_mesh.faces[fi].edges[vertex_id % 3]; // read 1
+    let face_vertex = u.we_mesh.face_vertices[fvi];     // read 2
+    let position = u.we_mesh.vertices[face_vertex.vertex]; // read 3
+
+    WEBaseRenderVSOut o;
+    o.pos = mul(u.scene_info.view_proj_matrix, float4(position, 1.0));
+    o.normal = face_vertex.normal;// mul(float3x3(u.scene_info.view_matrix), vertex.normal);
+    return o;
+}
+
+[shader("fragment")]
+[pass("we_base_render")]
+WEBaseRenderFSOut we_base_render_fragment(WEBaseRenderVSOut vsout, uniform ContourRootParams* u) {
+    WEBaseRenderFSOut o;
+    float3 normal = normalize(vsout.normal);
     float light_intensity = saturate(dot(normal, -normalize(u.main_light_direction)));
     o.color = srgba8_to_float4(u.silhouette_color);
     o.normal = normal;
@@ -206,6 +294,7 @@ BaseRenderFSOut base_render_fragment(BaseRenderVSOut i, uniform ContourRootParam
     o.color.rgb = normal;
     return o;
 }
+
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -325,9 +414,11 @@ void extract_interpolated_contours(uint3 group_id : SV_GroupID, uint3 group_thre
     let v1 = u.mesh.vertices[base_vertex + face.vertices.x];
     let v2 = u.mesh.vertices[base_vertex + face.vertices.y];
     let v3 = u.mesh.vertices[base_vertex + face.vertices.z];
-    let o1 = point_orientation(v1.position, u.eye, v1.normal);
-    let o2 = point_orientation(v2.position, u.eye, v2.normal);
-    let o3 = point_orientation(v3.position, u.eye, v3.normal);
+    var eye = u.eye;
+
+    let o1 = point_orientation(v1.position, eye, v1.normal);
+    let o2 = point_orientation(v2.position, eye, v2.normal);
+    let o3 = point_orientation(v3.position, eye, v3.normal);
     if (sign(o1) == sign(o2) && sign(o2) == sign(o3)) {
         // no contour crossing
         return;
@@ -567,14 +658,18 @@ void expand_contours(uint3 thread_id : SV_DispatchThreadID, uniform ContourRootP
 
     var v0 = mul(u.scene_info.view_proj_matrix, float4(edge_a.position, 1.));
     var v1 = mul(u.scene_info.view_proj_matrix, float4(edge_b.position, 1.));
-    var v0offset = v0;
-    var v1offset = v1;
 
     float2 v = (v0.xy/v0.w - v1.xy/v1.w) / px_size;
+    float2 vn = px_size * normalize(v);
     float2 n = px_size * normalize(float2(-v.y, v.x));
 
     let angle = atan(n.y / n.x);
 
+    v0.xy += hw_aa * vn * v0.w;
+    v1.xy -= hw_aa * vn * v1.w;
+
+    var v0offset = v0;
+    var v1offset = v1;
     v0.xy -= hw_aa * n * v0.w;
     v1.xy -= hw_aa * n * v1.w;
     v0offset.xy += hw_aa * n * v0offset.w;
@@ -626,14 +721,18 @@ void expand_interpolated_contours(uint3 thread_id : SV_DispatchThreadID, uniform
 
     var v0 = mul(u.scene_info.view_proj_matrix, float4(edge.position_0, 1.));
     var v1 = mul(u.scene_info.view_proj_matrix, float4(edge.position_1, 1.));
-    var v0offset = v0;
-    var v1offset = v1;
 
     float2 v = (v0.xy/v0.w - v1.xy/v1.w) / px_size;
+    float2 vn = px_size * normalize(v);
     float2 n = px_size * normalize(float2(-v.y, v.x));
 
     let angle = atan(n.y / n.x);
 
+    //v0.xy += hw_aa * vn * v0.w;
+    //v1.xy -= hw_aa * vn * v1.w;
+
+    var v0offset = v0;
+    var v1offset = v1;
     v0.xy -= hw_aa * n * v0.w;
     v1.xy -= hw_aa * n * v1.w;
     v0offset.xy += hw_aa * n * v0offset.w;
@@ -644,7 +743,7 @@ void expand_interpolated_contours(uint3 thread_id : SV_DispatchThreadID, uniform
     InterlockedAdd(u.expanded_contour_vertex_count, 4, vtx_ptr);
     InterlockedAdd(u.expanded_contours_draw_command.vertex_count, 6, idx_ptr);
 
-    uint16_t flags = /*is_outside_edge ? CLUSTER_EDGE_FLAG_BORDER :*/ 0;
+    uint16_t flags = i /*is_outside_edge ? CLUSTER_EDGE_FLAG_BORDER :*/;
 
     let pointy_0 = 0.0; //u.mesh.vertices[base_vertex + edge.vertex_0].pointy;
     let pointy_1 = 1.0; //u.mesh.vertices[base_vertex + edge.vertex_1].pointy;
@@ -731,8 +830,12 @@ RenderOutlinesFSOut render_outlines_fragment(
     alpha *= min(vsout.width, 1.0);
     o.color = vsout.color;
     o.color.a *= alpha;
-    //o.color = float4(0.0, 1.0, 0.0, 1.0);
+
+    //o.color = float4(0.0, 0.0, 0.0, 0.0);
+
     return o;
+
+    
 
     //RenderOutlinesFSOut o;
     //o.color = uint4(vsout.group_id, uint((vsout.angle / TAU) * 65535.), vsout.pointy * 65535, 1);
@@ -757,6 +860,7 @@ struct CornerDetectionFSOut {
     [[vk::location(0)]] float4 color;
 }
 
+
 [pass("corner_detection")]
 [shader("fragment")]
 CornerDetectionFSOut corner_detection_fragment_shader(
@@ -764,80 +868,46 @@ CornerDetectionFSOut corner_detection_fragment_shader(
     ScreenQuadVSOut vertex_output,
     uniform ContourRootParams* params)
 {
-    int3 coord = int3(int2(frag_coord.xy), 0);
+    int2 coords = int2(frag_coord.xy);
     int2 size = int2(params.scene_info.screen_size);
+    let base = params.normal_texture.Load(int3(coords, 0));
 
-    static const int W = 3;
-    var accum = 0.0;
-    var weight_sum = 0.0;
-    for (int i = -W; i <= W; ++i) {
-        for (int j = -W; j <= W; ++j) {
-            let coord_ij = clamp(coord.xy + int2(i, j), int2(0,0), size - int2(1,1));
-            let data = params.angle_texture.Load(int3(coord_ij, 0));
-            let angle = (float(data.y) / 65535.0) * TAU;
-            let f = float2(cos(angle), sin(angle));
-            let n = normalize(float2(i, j));
-            let dp = dot(f, n);
-            accum += dp * data.a;
-            weight_sum += data.a;
-        }
-    }
+    float max_curv;
+    float axis_dist;
+    float2 axis;
 
-    let div = accum;
+    compute_ridge_properties(
+        params->normal_texture,
+        params->depth_texture,
+        params->angle_texture,
+        coords,
+        size,
+        max_curv,
 
-    let tex00 = params.angle_texture.Load(int3(coord.x, coord.y, 0));
-    //let tex10 = params.angle_tex.Load(int3(coord.x + 1, coord.y, 0));
-    //let tex01 = params.angle_tex.Load(int3(coord.x, coord.y + 1, 0));
-    //let tex11 = params.angle_tex.Load(int3(coord.x + 1, coord.y + 1, 0));
-    //let angle00 = (float(tex00.y) / 65535.0) * TAU;
-    //let angle10 = (float(tex10.y) / 65535.0) * TAU;
-    //let angle01 = (float(tex01.y) / 65535.0) * TAU;
-    //let angle11 = (float(tex11.y) / 65535.0) * TAU;
-    //let n00 = float3(cos(angle00), sin(angle00), 0.0);
-    //let n10 = float3(cos(angle10), sin(angle10), 0.0);
-    //let n01 = float3(cos(angle01), sin(angle01), 0.0);
-    //let n11 = float3(cos(angle11), sin(angle11), 0.0);
-    //let dnxdx = (n10.x - n00.x) * tex00.a * tex10.a;
-    //let dnydy = (n01.y - n00.y) * tex00.a * tex01.a;
-    //let div = dnxdx + dnydy;
+        axis_dist,
+        axis
+    );
 
-    let jfa_value = int2(params.jfa_result.Load(coord.xy));
-    let ref_outline = params.angle_texture.Load(int3(jfa_value,0));
+    float angle = atan2(axis.y, axis.x);
 
-    let dist = length(float2(jfa_value - coord.xy));
-    let width = 1.0;
-    let aastep = fwidth(dist);
-    let div_factor = smoothstep(width, width - aastep, dist);
+    //static const int W = 1;
+    //float3 accum = float3(0.0);
+    //var weight_sum = 0.0;
 
-    var color = float4(colorize_id(tex00.r*9), tex00.a);
-    //color = float4(angle_to_color(float(tex00.b)/10.0).rgb, tex00.a);
-    //color = float4(colorize_1d(tex00.b / 65535.0).rgb, tex00.a);
-
-    //color.rgb = colorize_1d(dist * 0.1);
-
-    //color.rgb = colorize_1d(div);
-
-    //let angle = (float(tex00.y) / 65535.0) * TAU;
-    //let f = float2(cos(angle), sin(angle));
-    //color.rgb = float3(f * 0.5 + 0.5, 0.0);
-
-    //let normal = float3(cos(angle.r), sin(angle.r), 0.0);
-    //color.rgb = colorize_1d(dist);
-    //var color = float4(float3(div), 1.0);
-    //color.rgb = colorize_id(tex00.r);
-    //color.rgb = float3(float2(jfa_value) / params.scene_info.screen_size, 0.0);
-    //color.a = 1.0;
-    //color.a = tex00.a;
-    //color.rgb = params.normal_tex.Load(coord, 0).rgb;
-
-    //if (test < 2) {
-    //    discard;
-    //    //color = float4(0.3, 0.3, 0.6, 1);
+    //for (int i = -W; i <= W; ++i) {
+    //    for (int j = -W; j <= W; ++j) {
+    //        accum += fetch_image_value(params, coord.xy + int2(i, j));
+    //        weight_sum += 1.0;
+    //    }
     //}
 
+
     CornerDetectionFSOut o;
-    o.color = color;
+    o.color = float4(colorize_1d(max_curv * 5), 1.0);
+    //o.color = float4(colorize_angle(angle) * max_curv * 5. , 1.0);
+   //o.color = float4(base.rgb, 1.0);
     return o;
+
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

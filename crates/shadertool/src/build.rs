@@ -1,7 +1,8 @@
+use crate::reflection::CollectedReflectionData;
 use crate::{BuildManifest, BuildOptions, GraphicsState, Pass};
 use anyhow::{Context, anyhow, bail};
 use color_print::{ceprintln, cprintln};
-use log::warn;
+use log::{trace, warn};
 use shader_archive::archive::{ArchiveWriter, Offset};
 use shader_archive::gpu::{ImageUsage, is_depth_format, vk};
 use shader_archive::zstring::ZString64;
@@ -306,6 +307,7 @@ struct EntryPoint {
     name: String,
     pass: Option<String>,
     stage: vk::ShaderStageFlags,
+    program: slang::ComponentType,
     push_constants_size: usize,
     root_params: Vec<RootParamInfo>,
     work_group_size: [u32; 3],
@@ -318,7 +320,7 @@ fn load_module_entry_point(
     file: &Path,
     file_mtime: u64,
     index: u32,
-    _options: &BuildOptions,
+    options: &BuildOptions,
 ) -> anyhow::Result<EntryPoint> {
     let mut pass = None;
     {
@@ -336,6 +338,12 @@ fn load_module_entry_point(
     }
 
     // compile entry point
+    if options.verbosity >= 2 {
+        cprintln!(
+            "    load_module_entry_point: {}",
+            module.entry_point_by_index(index).unwrap().function_reflection().name()
+        );
+    }
     let program = link_entry_point(&session, &module, index)?;
 
     // retrieve SPIR-V blob
@@ -360,6 +368,7 @@ fn load_module_entry_point(
         file: file.to_path_buf(),
         file_mtime,
         stage: slang_stage_to_stage_flags(entry_point.stage()),
+        program,
         push_constants_size,
         root_params,
         pass,
@@ -415,20 +424,20 @@ impl BuildManifest {
     }
 
     /// Loads a shader module from a file and extracts its entry points.
-    fn load_module(
+    fn load_slang_module(
         &self,
+        session: &slang::Session,
         file: &Path,
-        include_paths: &[String],
         options: &BuildOptions,
         entry_points: &mut Vec<EntryPoint>,
+        collected_reflection: &mut CollectedReflectionData,
     ) -> anyhow::Result<()> {
-        let session = self.create_slang_session(include_paths, options);
+        //let session = self.create_slang_session(include_paths, options);
         let (_canonical_path, file_mtime) = get_file_mtime(file)?;
 
-        // load slang module file
-        //eprintln!("Include paths: {:?}", include_paths);
-        //eprintln!("Loading module: {}", file.display());
-        //eprintln!("current dir: {}", env::current_dir()?.display());
+        //if options.verbosity >= 2 {
+        //    cprintln!("load_slang_module: {}", file.display());
+        //}
         let module = session.load_module(&file.to_string_lossy()).map_err(SlangError::from)?;
 
         //let linked_module = module.downcast().link().map_err(SlangError::from)?;
@@ -437,8 +446,14 @@ impl BuildManifest {
         // compile all entry points
         let mut errors = String::new();
         for i in 0..module.entry_point_count() {
+            // TODO: instead of compiling one SPIR-V blob per entry point, it might be possible to
+            //       compose the module and _all_ its entry points together, and ask slang to
+            //       compile that to a big SPIR-V blob containing all entry points.
+            //       I think I tried that at some point and ran into problems, but it might
+            //       be worth trying again.
             match load_module_entry_point(&session, &module, file, file_mtime, i, options) {
                 Ok(entry_point) => {
+                    collected_reflection.reflect_shader(entry_point.program.layout(0).map_err(SlangError::from)?);
                     entry_points.push(entry_point);
                 }
                 Err(err) => {
@@ -702,9 +717,14 @@ impl BuildManifest {
             println!("cargo:rerun-if-changed={}", self.manifest_path.display());
         }
 
+        let compiler_session = self.create_slang_session(&include_paths, options);
+
         let mut got_errors = false;
         // load all slang modules and compile all entry points
+        let mut archive = ArchiveWriter::new();
         let mut entry_points = Vec::new();
+        let mut collected_reflection_data = CollectedReflectionData::new(&mut archive, options);
+
         for file in files {
             let absolute_file_path = file.canonicalize()?;
 
@@ -715,7 +735,13 @@ impl BuildManifest {
                 println!("cargo:rerun-if-changed={}", absolute_file_path.display());
             }
 
-            match self.load_module(&file, &include_paths, options, &mut entry_points) {
+            match self.load_slang_module(
+                &compiler_session,
+                &file,
+                options,
+                &mut entry_points,
+                &mut collected_reflection_data,
+            ) {
                 Ok(_) => {}
                 Err(err) => {
                     if options.emit_cargo_deps {
@@ -797,7 +823,6 @@ impl BuildManifest {
         }
 
         // emit pipelines
-        let mut archive = ArchiveWriter::new();
         let pipelines_offset = {
             let mut entries = Vec::new();
             for (&pipeline_name, entry_points) in pipelines.iter() {

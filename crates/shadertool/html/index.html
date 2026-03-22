@@ -47,8 +47,17 @@
             }
         }
 
-
         document.addEventListener("DOMContentLoaded", afterLoad);
+
+        function t_compute_pass(desc) {
+
+            `
+            <div class="compute-pass">
+            <h2>${desc.name}</h2>
+
+            </div>
+            `
+        }
 
     </script>
 
@@ -62,6 +71,11 @@
                 <option value="d32float">D32F</option>
             </select>
         </div>
+    </template>
+
+    <template id="t-compute-pass">
+        <h2>Name</h2>
+
     </template>
 
 </head>
@@ -175,6 +189,52 @@
 
     <button id="savePipelineButton">Save Config</button>
     <button id="exportPipelineButton">Export Pipeline Archive</button>
+
+    <table>
+
+    </table>
+    <div class="pass pass-compute">
+        <div class="pass-title pass-compute-title">sim_init</div>
+        <div class="pass-action-box">B D</div>
+        <div class="pass-compute-group-line">
+            <span>Compute • </span><span>thread size: 32×32 • wg count: (53,23,1)</span>
+        </div>
+    </div>
+
+    <div class="pass pass-compute">
+        <div class="pass-title pass-compute-title">sim_step</div>
+        <div class="pass-compute-group-line">
+            <span>Compute • </span><span>thread size: 32×32 • wg count: (53,23,1)</span>
+        </div>
+    </div>
+
+    <div class="pass pass-graphics">
+        <div class="pass-title pass-compute-title">render_outlines</div>
+        <div class="pass-graphics-summary-line">
+            <span>Graphics • C: {RGBA8, RGBA16_UI}, DS: D32S8 </span>
+        </div>
+    </div>
+
+    <div class="pass pass-barrier">
+        <!-- <div class="pass-title pass-barrier-title">BARRIER</div> -->
+        <div class="pass-barrier-invalidate-flags">
+            BARRIER: STORAGE | INDIRECT | TEXTURE
+        </div>
+    </div>
+
+    <div class="resource resource-image">
+        <div class="resource-title resource-image-title">shading_texture</div>
+        <div class="resource-image-summary-line">
+            <span>Texture • RGBA16F • 1024×1024</span>
+        </div>
+    </div>
+
+    <div class="sampler">
+        <div class="sampler-title">Sampler State</div>
+        <div class="sampler-summary-line">
+            <span>Linear, Linear, Linear • ClampToEdge</span>
+        </div>
+    </div>
 
 </div>
 

@@ -3,6 +3,9 @@ mod dcel;
 pub mod lines;
 pub mod outlines;
 mod sweep;
+mod winged_edge_mesh;
+mod ss_contours;
+pub mod automaton;
 
 use color::Srgba8;
 use gamelib::paint::{DrawGlyphRunOptions, PaintRenderParams, Painter, TextFormat, TextLayout};

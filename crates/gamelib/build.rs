@@ -1,3 +1,5 @@
+#![feature(default_field_values)]
+
 use shader_bridge::{compile_and_embed_shaders, rustfmt_file};
 use std::env;
 use std::fs::File;
@@ -43,6 +45,7 @@ fn main() {
             emit_cargo_deps: true,
             emit_debug_information: false,
             emit_spirv_binaries: false,
+            ..
         },
     ) {
         err.print_cargo_error();

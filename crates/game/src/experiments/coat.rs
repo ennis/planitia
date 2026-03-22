@@ -254,12 +254,12 @@ impl CoatExperiment {
         let mut encoder = cmd.begin_rendering(
             &[gpu::ColorAttachment {
                 image: color_target,
-                clear_value: None,
+                clear: None,
             }],
             Some(gpu::DepthStencilAttachment {
                 image: &depth_target,
-                depth_clear_value: None,
-                stencil_clear_value: None,
+                depth_clear: None,
+                stencil_clear: None,
             }));
         
         encoder.bind_graphics_pipeline(&*debug_stroke_pipeline);

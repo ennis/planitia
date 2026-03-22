@@ -12,6 +12,23 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use std::{fs, mem};
 
+pub struct ImGui<'a>
+{
+    egui: &'a mut egui::Ui,
+}
+
+pub struct Slider<'a> {
+    pub label: &'a str,
+    pub value: &'a mut f32,
+    pub range: std::ops::RangeInclusive<f32> = 0.0..=1.0,
+    pub step: Option<f32> = None,
+}
+
+pub struct Button<'a> {
+    pub label: &'a str,
+    pub enabled: bool = true,
+}
+
 // see https://github.com/rerun-io/rerun/blob/main/crates/re_ui/src/lib.rs#L599
 fn generic_list_header<R>(ui: &mut egui::Ui, label: &str, right_buttons: impl Fn(&mut egui::Ui) -> R) {
     ui.allocate_ui_with_layout(

@@ -8,7 +8,6 @@ use crate::{
 
 impl CommandBuffer {
     pub fn fill_buffer(&mut self, range: &BufferRangeUntyped, data: u32) {
-        self.barrier_dst(BarrierFlags::TRANSFER);
         let cb = self.get_or_create_command_buffer();
         unsafe {
             // SAFETY: FFI call and parameters are valid
@@ -16,12 +15,10 @@ impl CommandBuffer {
                 .raw
                 .cmd_fill_buffer(cb, range.buffer.handle(), range.byte_offset, range.byte_size, data);
         }
-        self.barrier_source(BarrierFlags::TRANSFER_WRITE)
     }
 
     // TODO specify subresources
     pub fn clear_image(&mut self, image: &Image, clear_color_value: ClearColorValue) {
-        self.barrier_dst(BarrierFlags::TRANSFER);
         let cb = self.get_or_create_command_buffer();
         unsafe {
             // SAFETY: FFI call and parameters are valid
@@ -39,11 +36,9 @@ impl CommandBuffer {
                 }],
             );
         }
-        self.barrier_source(BarrierFlags::TRANSFER)
     }
 
     pub fn clear_depth_image(&mut self, image: &Image, depth: f32) {
-        self.barrier_dst(BarrierFlags::TRANSFER);
         let cb = self.get_or_create_command_buffer();
         unsafe {
             // SAFETY: FFI call and parameters are valid
@@ -61,7 +56,6 @@ impl CommandBuffer {
                 }],
             );
         }
-        self.barrier_source(BarrierFlags::TRANSFER)
     }
 
     pub fn copy_image_to_image(
@@ -72,8 +66,6 @@ impl CommandBuffer {
     ) {
         // TODO: this is not required for multi-planar formats
         assert_eq!(source.aspect, destination.aspect);
-
-        self.barrier_dst(BarrierFlags::TRANSFER_READ);
 
         let regions = [vk::ImageCopy {
             src_subresource: vk::ImageSubresourceLayers {
@@ -105,8 +97,6 @@ impl CommandBuffer {
                 &regions,
             );
         }
-
-        self.barrier_source(BarrierFlags::TRANSFER_WRITE)
     }
 
     /// Copies data from one buffer to another.
@@ -120,8 +110,6 @@ impl CommandBuffer {
     ) {
         assert!(src_offset + size <= source.byte_size());
         assert!(dst_offset + size <= destination.byte_size());
-
-        self.barrier_dst(BarrierFlags::TRANSFER_READ);
 
         // SAFETY: FFI call and parameters are valid
         let cb = self.get_or_create_command_buffer();
@@ -137,8 +125,6 @@ impl CommandBuffer {
                 }],
             );
         }
-
-        self.barrier_source(BarrierFlags::TRANSFER_WRITE);
     }
 
     /// Copies data from a buffer to an image.
@@ -150,8 +136,6 @@ impl CommandBuffer {
         destination: ImageCopyView<'_>,
         copy_size: vk::Extent3D,
     ) {
-        self.barrier_dst(BarrierFlags::TRANSFER_READ);
-
         let regions = [vk::BufferImageCopy {
             buffer_offset: source.layout.offset,
             buffer_row_length: source.layout.texel_row_length.unwrap_or(0),
@@ -181,8 +165,6 @@ impl CommandBuffer {
                 &regions,
             );
         }
-
-        self.barrier_source(BarrierFlags::TRANSFER_WRITE);
     }
 
     /// Copies data from an image to a buffer.
@@ -205,8 +187,6 @@ impl CommandBuffer {
         dst_region: Rect3D,
         filter: vk::Filter,
     ) {
-        self.barrier_dst(BarrierFlags::TRANSFER_READ);
-
         let blits = [vk::ImageBlit {
             src_subresource: vk::ImageSubresourceLayers {
                 aspect_mask: src_subresource.aspect.to_aspect(src.format),
@@ -259,7 +239,5 @@ impl CommandBuffer {
                 filter,
             );
         }
-
-        self.barrier_source(BarrierFlags::TRANSFER_WRITE);
     }
 }

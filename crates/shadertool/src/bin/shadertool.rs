@@ -110,9 +110,23 @@ struct Args {
     /// Open graphical editor.
     #[clap(long)]
     editor: bool,
+    /// Verbosity level (0-3).
+    #[arg(
+        long,
+        short = 'v',
+        action = clap::ArgAction::Count,
+        global = true,
+    )]
+    verbose: u8,
 }
 
 fn main() {
+    env_logger::builder()
+        .parse_default_env()
+        .format_target(false)
+        .format_timestamp(None)
+        .init();
+
     let args = Args::parse();
 
     if args.editor {
@@ -124,6 +138,7 @@ fn main() {
             emit_cargo_deps: args.emit_cargo_deps,
             emit_debug_information: args.debug,
             emit_spirv_binaries: args.dump_spirv,
+            verbosity: args.verbose,
         };
         match shadertool::build_pipeline(&manifest_path, &build_options) {
             Ok(()) => {}

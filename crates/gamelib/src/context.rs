@@ -167,6 +167,7 @@ pub struct App<H: 'static>(OnceLock<AppInner<H>>);
 // Holds the currently running App instance.
 //static CURRENT_APP: OnceLock<&'static App<dyn AppHandler>> = OnceLock::new();
 
+
 impl<H: AppHandler + Default + 'static> App<H> {
     pub const fn new() -> Self {
         App(OnceLock::new())

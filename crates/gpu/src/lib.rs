@@ -512,12 +512,12 @@ pub type BufferRangeUntyped<'a> = BufferRange<'a, u8>;
 #[derive(Clone)]
 pub struct ColorAttachment<'a> {
     pub image: &'a Image,
-    pub clear_value: Option<[f64; 4]> = None,
+    pub clear: Option<[f64; 4]> = None,
 }
 
 impl ColorAttachment<'_> {
     pub(crate) fn get_vk_clear_color_value(&self) -> vk::ClearColorValue {
-        if let Some(clear_value) = self.clear_value {
+        if let Some(clear_value) = self.clear {
             match format_numeric_type(self.image.format()) {
                 FormatNumericType::UInt => vk::ClearColorValue {
                     uint32: [
@@ -553,15 +553,15 @@ impl ColorAttachment<'_> {
 #[derive(Clone)]
 pub struct DepthStencilAttachment<'a> {
     pub image: &'a Image,
-    pub depth_clear_value: Option<f64> = None,
-    pub stencil_clear_value: Option<u32> = None,
+    pub depth_clear: Option<f64> = None,
+    pub stencil_clear: Option<u32> = None,
 }
 
 impl DepthStencilAttachment<'_> {
     pub(crate) fn get_vk_clear_depth_stencil_value(&self) -> vk::ClearDepthStencilValue {
         vk::ClearDepthStencilValue {
-            depth: self.depth_clear_value.unwrap_or(0.0) as f32,
-            stencil: self.stencil_clear_value.unwrap_or(0),
+            depth: self.depth_clear.unwrap_or(0.0) as f32,
+            stencil: self.stencil_clear.unwrap_or(0),
         }
     }
 }

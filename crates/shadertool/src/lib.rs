@@ -1,5 +1,7 @@
+#![feature(default_field_values)]
 mod build;
 mod manifest;
+mod reflection;
 
 use anyhow::Context;
 pub use manifest::*;
@@ -16,6 +18,8 @@ pub struct BuildOptions {
     pub emit_debug_information: bool,
     /// Dumps SPIR-V binaries to disk alongside the archive.
     pub emit_spirv_binaries: bool,
+    /// Verbosity level
+    pub verbosity: u8 = 0,
 }
 
 #[derive(Error, Debug)]

@@ -22,12 +22,53 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::{fmt, mem, ptr};
+use vulkan_headers::vulkan::vulkan as vk2;
+
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Size of the global descriptor heaps (in number of descriptors).
 const DESCRIPTOR_TABLE_SIZE: usize = 4096;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+pub(crate) struct ExtDescriptorHeap {
+    pub(crate) cmd_bind_resource_heap: vk2::PFN_vkCmdBindResourceHeapEXT,
+    pub(crate) cmd_bind_sampler_heap: vk2::PFN_vkCmdBindSamplerHeapEXT,
+    pub(crate) cmd_push_data: vk2::PFN_vkCmdPushDataEXT,
+    pub(crate) cmd_get_physical_descriptor_size: vk2::PFN_vkGetPhysicalDeviceDescriptorSizeEXT,
+    pub(crate) write_resource_descriptors: vk2::PFN_vkWriteResourceDescriptorsEXT,
+    pub(crate) write_sampler_descriptors: vk2::PFN_vkWriteSamplerDescriptorsEXT,
+}
+
+impl ExtDescriptorHeap {
+    pub(crate) unsafe fn load(entry: &ash::Entry, instance: &ash::Instance, device: &ash::Device) -> Self {
+
+        let instance = get_vulkan_instance();
+        let get_proc_addr = |name: &CStr| {
+            let addr = instance.get_device_proc_addr(device.handle(), name.as_ptr());
+            if addr.is_none() {
+                panic!("failed to load function pointer for {:?}", name);
+            }
+            addr
+        };
+
+        Self {
+            cmd_bind_resource_heap: mem::transmute(get_proc_addr(c"vkCmdBindResourceHeapEXT")),
+            cmd_bind_sampler_heap: mem::transmute(get_proc_addr(c"vkCmdBindSamplerHeapEXT")),
+            cmd_push_data: mem::transmute(get_proc_addr(c"vkCmdPushDataEXT")),
+            cmd_get_physical_descriptor_size: mem::transmute(
+                get_proc_addr(c"vkGetPhysicalDeviceDescriptorSizeEXT"),
+            ),
+            write_resource_descriptors: mem::transmute(
+                get_proc_addr(c"vkWriteResourceDescriptorsEXT"),
+            ),
+            write_sampler_descriptors: mem::transmute(
+                get_proc_addr(c"vkWriteSamplerDescriptorsEXT"),
+            ),
+        }
+    }
+}
 
 /// Device extensions.
 pub(crate) struct DeviceExtensions {
@@ -76,6 +117,7 @@ pub(crate) struct DeviceDescriptorIndexTable {
     pub(crate) resource_descriptor_indices: SlotMap<ResourceDescriptorIndex, ()>,
     pub(crate) sampler_descriptor_indices: SlotMap<SamplerDescriptorIndex, ()>,
 }
+
 
 pub struct Device {
     /// Underlying vulkan device
@@ -365,6 +407,7 @@ const DEVICE_EXTENSIONS: &[&str] = &[
     "VK_EXT_conservative_rasterization",
     "VK_EXT_fragment_shader_interlock",
     "VK_EXT_shader_image_atomic_int64",
+    "VK_EXT_descriptor_heap",
     "VK_EXT_mutable_descriptor_type", //"VK_EXT_descriptor_buffer",
 ];
 

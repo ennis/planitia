@@ -6,7 +6,7 @@ use egui::epaint::Primitive;
 use egui::{ClippedPrimitive, ImageData};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::prelude::*;
-use gpu::{BarrierFlags, ColorAttachment, Device, ImageCopyView, Offset3D, RootParams, Size3D, Vertex};
+use gpu::{BarrierFlags, ColorAttachment, Device, ImageCopyView, InvalidateFlags, Offset3D, RootParams, Size3D, Vertex};
 use log::debug;
 
 #[derive(Copy, Clone, Vertex)]
@@ -132,9 +132,9 @@ impl Renderer {
                 },
                 data,
             );
-
-            cmd.barrier_dst(BarrierFlags::ALL_SHADER_STAGES | BarrierFlags::SAMPLED_READ);
         }
+
+        cmd.barrier(InvalidateFlags::TEXTURE);
     }
 
     pub fn render(
