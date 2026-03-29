@@ -1,19 +1,15 @@
 //! Abstractions over a vulkan device & queues.
 mod bindless;
 mod upload_buffer;
+mod descriptor_heap;
 
 use crate::device::bindless::BindlessDescriptorTable;
 use crate::device::upload_buffer::{UploadBuffer, UPLOAD_BUFFER_CHUNK_SIZE};
 use crate::instance::vk_khr_surface;
 use crate::platform::PlatformExtensions;
-use crate::{
-    get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, BufferUsage,
-    CommandPool, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error, GraphicsPipeline,
-    GraphicsPipelineCreateInfo, PreRasterizationShaders, Ptr, Sampler, SamplerCreateInfo, SamplerCreateInfoHashable,
-    VulkanObject, SUBGROUP_SIZE,
-};
+use crate::{get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, BufferUsage, CommandPool, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error, GraphicsPipeline, GraphicsPipelineCreateInfo, PreRasterizationShaders, Ptr, Sampler, SamplerCreateInfo, SamplerCreateInfoHashable, VulkanObject, SUBGROUP_SIZE};
 use ash::vk;
-use gpu_allocator::vulkan::AllocationCreateDesc;
+use gpu_allocator::vulkan::{AllocationCreateDesc, Allocator};
 use log::{debug, error, trace};
 use slotmap::SlotMap;
 use std::collections::{HashMap, VecDeque};
@@ -23,49 +19,53 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::{fmt, mem, ptr};
 use vulkan_headers::vulkan::vulkan as vk2;
-
-
+use vulkan_headers::vulkan::vulkan::{ VkBool32, VkCommandBuffer, VkDeviceAddressRangeEXT, VkDeviceSize, VK_BUFFER_USAGE_DESCRIPTOR_HEAP_BIT_EXT, VK_STRUCTURE_TYPE_BIND_HEAP_INFO_EXT};
+use crate::device::descriptor_heap::{DescriptorHeaps, DeviceDescriptorIndexTable};
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Size of the global descriptor heaps (in number of descriptors).
 const DESCRIPTOR_TABLE_SIZE: usize = 4096;
 
+const RESOURCE_DESCRIPTOR_HEAP_SIZE: usize = 1024 * 1024;
+const SAMPLER_DESCRIPTOR_HEAP_SIZE: usize = 64 * 1024;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 pub(crate) struct ExtDescriptorHeap {
-    pub(crate) cmd_bind_resource_heap: vk2::PFN_vkCmdBindResourceHeapEXT,
-    pub(crate) cmd_bind_sampler_heap: vk2::PFN_vkCmdBindSamplerHeapEXT,
-    pub(crate) cmd_push_data: vk2::PFN_vkCmdPushDataEXT,
-    pub(crate) cmd_get_physical_descriptor_size: vk2::PFN_vkGetPhysicalDeviceDescriptorSizeEXT,
-    pub(crate) write_resource_descriptors: vk2::PFN_vkWriteResourceDescriptorsEXT,
-    pub(crate) write_sampler_descriptors: vk2::PFN_vkWriteSamplerDescriptorsEXT,
+    pub(crate) cmd_bind_resource_heap: vk2::NonNullPFN_vkCmdBindResourceHeapEXT,
+    pub(crate) cmd_bind_sampler_heap: vk2::NonNullPFN_vkCmdBindSamplerHeapEXT,
+    pub(crate) cmd_push_data: vk2::NonNullPFN_vkCmdPushDataEXT,
+    pub(crate) cmd_get_physical_descriptor_size: vk2::NonNullPFN_vkGetPhysicalDeviceDescriptorSizeEXT,
+    pub(crate) write_resource_descriptors: vk2::NonNullPFN_vkWriteResourceDescriptorsEXT,
+    pub(crate) write_sampler_descriptors: vk2::NonNullPFN_vkWriteSamplerDescriptorsEXT,
 }
 
 impl ExtDescriptorHeap {
-    pub(crate) unsafe fn load(entry: &ash::Entry, instance: &ash::Instance, device: &ash::Device) -> Self {
+    pub(crate) unsafe fn load(entry: &ash::Entry, instance: &ash::Instance) -> Self {
 
-        let instance = get_vulkan_instance();
         let get_proc_addr = |name: &CStr| {
-            let addr = instance.get_device_proc_addr(device.handle(), name.as_ptr());
+            let addr = entry.get_instance_proc_addr(instance.handle(), name.as_ptr());
             if addr.is_none() {
                 panic!("failed to load function pointer for {:?}", name);
             }
             addr
         };
 
-        Self {
-            cmd_bind_resource_heap: mem::transmute(get_proc_addr(c"vkCmdBindResourceHeapEXT")),
-            cmd_bind_sampler_heap: mem::transmute(get_proc_addr(c"vkCmdBindSamplerHeapEXT")),
-            cmd_push_data: mem::transmute(get_proc_addr(c"vkCmdPushDataEXT")),
-            cmd_get_physical_descriptor_size: mem::transmute(
-                get_proc_addr(c"vkGetPhysicalDeviceDescriptorSizeEXT"),
-            ),
-            write_resource_descriptors: mem::transmute(
-                get_proc_addr(c"vkWriteResourceDescriptorsEXT"),
-            ),
-            write_sampler_descriptors: mem::transmute(
-                get_proc_addr(c"vkWriteSamplerDescriptorsEXT"),
-            ),
+        unsafe {
+            Self {
+                cmd_bind_resource_heap: mem::transmute(get_proc_addr(c"vkCmdBindResourceHeapEXT")),
+                cmd_bind_sampler_heap: mem::transmute(get_proc_addr(c"vkCmdBindSamplerHeapEXT")),
+                cmd_push_data: mem::transmute(get_proc_addr(c"vkCmdPushDataEXT")),
+                cmd_get_physical_descriptor_size: mem::transmute(
+                    get_proc_addr(c"vkGetPhysicalDeviceDescriptorSizeEXT"),
+                ),
+                write_resource_descriptors: mem::transmute(
+                    get_proc_addr(c"vkWriteResourceDescriptorsEXT"),
+                ),
+                write_sampler_descriptors: mem::transmute(
+                    get_proc_addr(c"vkWriteSamplerDescriptorsEXT"),
+                ),
+            }
         }
     }
 }
@@ -78,12 +78,15 @@ pub(crate) struct DeviceExtensions {
     pub(crate) ext_mesh_shader: ash::ext::mesh_shader::Device,
     pub(crate) _ext_extended_dynamic_state3: ash::ext::extended_dynamic_state3::Device,
     pub(crate) ext_debug_utils: ash::ext::debug_utils::Device,
+    pub(crate) ext_descriptor_heap: ExtDescriptorHeap,
 }
 
 /// Device state that is unconditionally safe to access from multiple threads, even though
 /// the fields themselves may not be Send or Sync.
 pub(crate) struct DeviceThreadSafeState {
     pub(crate) physical_device_memory_properties: vk::PhysicalDeviceMemoryProperties,
+    pub(crate) descriptor_heap_properties: vk2::VkPhysicalDeviceDescriptorHeapPropertiesEXT,
+
     _physical_device_descriptor_buffer_properties: vk::PhysicalDeviceDescriptorBufferPropertiesEXT<'static>,
     _physical_device_properties: vk::PhysicalDeviceProperties2<'static>,
 
@@ -113,11 +116,6 @@ pub(crate) struct ResourceState {
     //pub(crate) last_submission_index: u64,
 }
 
-pub(crate) struct DeviceDescriptorIndexTable {
-    pub(crate) resource_descriptor_indices: SlotMap<ResourceDescriptorIndex, ()>,
-    pub(crate) sampler_descriptor_indices: SlotMap<SamplerDescriptorIndex, ()>,
-}
-
 
 pub struct Device {
     /// Underlying vulkan device
@@ -138,8 +136,14 @@ pub struct Device {
     pub(crate) thread_safe: DeviceThreadSafeState,
     pub(crate) submission_state: Mutex<DeviceSubmissionState>,
     pub(crate) resources: Mutex<SlotMap<ResourceId, ResourceState>>,
-    pub(crate) descriptor_indices: Mutex<DeviceDescriptorIndexTable>,
+
     pub(crate) descriptor_table: BindlessDescriptorTable,
+    pub(crate) descriptor_indices: Mutex<DeviceDescriptorIndexTable>,
+
+    // WIP
+    pub(crate) descriptor_heaps: DescriptorHeaps,
+
+    // --- descriptor heap ---
 
     // semaphores ready for reuse
     pub(crate) semaphores: Mutex<Vec<vk::Semaphore>>,
@@ -415,7 +419,9 @@ const DEVICE_EXTENSIONS: &[&str] = &[
 // INITIALIZATION
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
+
 impl Device {
+
     /// Returns the global device.
     pub fn global() -> &'static Device {
         static DEVICE: LazyLock<&'static Device> =
@@ -455,15 +461,6 @@ impl Device {
         .or_else(|| self.find_compatible_memory_type_internal(memory_type_bits, required_memory_properties))
     }
 
-    /*/// Returns whether this device is compatible for presentation on the specified surface.
-    ///
-    /// More precisely, it checks that the graphics queue created for this device can present to the given surface.
-    pub unsafe fn is_compatible_for_presentation(&self, surface: vk::SurfaceKHR) -> bool {
-        vk_khr_surface()
-            .get_physical_device_surface_support(self.inner.physical_device, self.graphics_queue().1, surface)
-            .unwrap()
-    }*/
-
     // TODO: enabled features?
 
     /// Creates a new `Device` from an existing vulkan device.
@@ -500,7 +497,7 @@ impl Device {
             };
             device
                 .create_semaphore(&semaphore_create_info, None)
-                .expect("failed to queue timeline semaphore")
+                .expect("failed to create timeline semaphore")
         };
 
         // Create the GPU memory allocator
@@ -513,7 +510,7 @@ impl Device {
             allocation_sizes: Default::default(),
         };
 
-        let allocator =
+        let mut allocator =
             gpu_allocator::vulkan::Allocator::new(&allocator_create_desc).expect("failed to create GPU allocator");
 
         // Extensions
@@ -525,11 +522,36 @@ impl Device {
         let physical_device_memory_properties = instance.get_physical_device_memory_properties(physical_device);
         let ext_debug_utils = ash::ext::debug_utils::Device::new(instance, &device);
         let platform_extensions = PlatformExtensions::load(entry, instance, &device);
+        let ext_descriptor_heap = ExtDescriptorHeap::load(entry, instance);
 
         let mut physical_device_descriptor_buffer_properties =
             vk::PhysicalDeviceDescriptorBufferPropertiesEXT::default();
+        // TODO: replace this once ash is updated
+        let mut descriptor_heap_properties = vk2::VkPhysicalDeviceDescriptorHeapPropertiesEXT {
+            sType: vk2::VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_PROPERTIES_EXT,
+            pNext: &mut physical_device_descriptor_buffer_properties as *mut _ as *mut c_void,
+            samplerHeapAlignment: 0,
+            resourceHeapAlignment: 0,
+            maxSamplerHeapSize: 0,
+            maxResourceHeapSize: 0,
+            minSamplerHeapReservedRange: 0,
+            minSamplerHeapReservedRangeWithEmbedded: 0,
+            minResourceHeapReservedRange: 0,
+            samplerDescriptorSize: 0,
+            imageDescriptorSize: 0,
+            bufferDescriptorSize: 0,
+            samplerDescriptorAlignment: 0,
+            imageDescriptorAlignment: 0,
+            bufferDescriptorAlignment: 0,
+            maxPushDataSize: 0,
+            imageCaptureReplayOpaqueDataSize: 0,
+            maxDescriptorHeapEmbeddedSamplers: 0,
+            samplerYcbcrConversionCount: 0,
+            sparseDescriptorHeaps: 0,
+            protectedDescriptorHeaps: 0,
+        };
         let mut physical_device_properties = vk::PhysicalDeviceProperties2 {
-            p_next: &mut physical_device_descriptor_buffer_properties as *mut _ as *mut c_void,
+            p_next: &mut descriptor_heap_properties as *mut _ as *mut c_void,
             ..Default::default()
         };
 
@@ -537,6 +559,12 @@ impl Device {
 
         // Create global descriptor tables
         let descriptor_table = BindlessDescriptorTable::new(&device, DESCRIPTOR_TABLE_SIZE);
+
+        let descriptor_heaps = DescriptorHeaps::new(
+            &mut allocator,
+            &device,
+            &descriptor_heap_properties
+        );
 
         Ok(Device {
             raw: device,
@@ -546,10 +574,12 @@ impl Device {
                 ext_mesh_shader,
                 _ext_extended_dynamic_state3: ext_extended_dynamic_state3,
                 ext_debug_utils,
+                ext_descriptor_heap,
             },
             platform_extensions,
             thread_safe: DeviceThreadSafeState {
                 physical_device_memory_properties,
+                descriptor_heap_properties,
                 _physical_device_descriptor_buffer_properties: physical_device_descriptor_buffer_properties,
                 _physical_device_properties: physical_device_properties,
                 timeline,
@@ -563,8 +593,8 @@ impl Device {
             allocator: Mutex::new(allocator),
             resources: Mutex::new(SlotMap::with_key()),
             descriptor_indices: Mutex::new(DeviceDescriptorIndexTable {
-                resource_descriptor_indices: Default::default(),
-                sampler_descriptor_indices: Default::default(),
+                resource: Default::default(),
+                sampler: Default::default(),
             }),
             descriptor_table,
             sampler_cache: Mutex::new(Default::default()),
@@ -575,6 +605,7 @@ impl Device {
             deletion_queue: Mutex::new(Vec::new()),
             upload_buffer: Mutex::new(UploadBuffer::new(BufferUsage::UNIFORM)),
             completed_tickets: AtomicU64::new(0),
+            descriptor_heaps
         })
     }
 
@@ -800,9 +831,11 @@ impl Device {
         self.descriptor_indices
             .lock()
             .unwrap()
-            .resource_descriptor_indices
+            .resource
             .remove(index);
     }
+
+
 
     /// Allocates memory, or panic trying.
     ///
@@ -825,7 +858,7 @@ impl Device {
     pub fn call_later(&self, ticket: u64, f: impl FnOnce(&Self) + Send + Sync + 'static) {
         // if the command buffer has already completed execution, call the function right away
         if ticket <= self.completed_tickets.load(Relaxed) {
-            trace!("GPU: immediate call_later for ticket={ticket})");
+            trace!("GPU: immediate call_later for ticket={ticket}");
             f(self);
         } else {
             // otherwise move it to the deferred deletion list

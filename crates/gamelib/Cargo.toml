@@ -26,7 +26,7 @@ keyboard-types = "0.8.0"
 arboard = "3.6.0"
 renderdoc = "0.12.1"
 shader-bridge = { workspace = true }
-shader-archive = { workspace = true }
+sharc = { workspace = true }
 ab_glyph = "0.2.31"
 anyhow = "1.0.100"
 notify-debouncer-mini = "0.7.0"

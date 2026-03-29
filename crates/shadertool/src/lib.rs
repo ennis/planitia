@@ -22,6 +22,7 @@ pub struct BuildOptions {
     pub verbosity: u8 = 0,
 }
 
+
 #[derive(Error, Debug)]
 #[error(transparent)]
 pub struct Error(#[from] anyhow::Error);

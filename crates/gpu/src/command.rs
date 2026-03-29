@@ -1,7 +1,7 @@
 use crate::device::ActiveSubmission;
 use crate::{vk, BufferUntyped, CommandPool, ComputePipeline, Descriptor, Device, Ptr, SwapChain};
 use ash::prelude::VkResult;
-use ash::vk::DeviceAddress;
+use ash::vk::{DeviceAddress};
 use bitflags::bitflags;
 use log::{error, trace};
 pub use render::{DrawIndexedIndirectCommand, DrawIndirectCommand, RenderEncoder};
@@ -265,15 +265,6 @@ impl CommandBuffer {
         // Eventually, when all created command streams have been submitted (i.e. there are no
         // live CommandStream objects), we normally have next_creation_ticket == next_submission_ticket.
 
-        // ISSUE: it's possible to delete resources while a command buffer using them is still pending:
-        //        1/ create command buffer A (create ticket 0)
-        //        2/ create command buffer B (create ticket 1)
-        //        3/ submit B (submission ticket 0)
-        //        4/ schedule deletion of resources used by A
-        //        5/ wait for device idle (submission ticket 0 signalled)
-        //        6/ cleanup: deletion of resources used by A happens here, but A is still pending submission
-        //        7/ submit A (submission ticket 1)
-
         let create_ticket = device.next_create_ticket.fetch_add(1, Relaxed);
         trace!("GPU: create CommandStream, create_ticket {}", create_ticket);
 
@@ -307,6 +298,7 @@ impl CommandBuffer {
             &[],
         );
     }
+
 
     unsafe fn do_cmd_push_descriptor_set(
         &mut self,

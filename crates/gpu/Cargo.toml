@@ -15,7 +15,7 @@ slotmap = "1"
 log = "0.4.27"
 thiserror = "2"
 gpu-macros = { workspace = true }
-fxhash = "0.2.1"
+#fxhash = "0.2.1"
 math = { workspace = true }
 
 [dependencies.winapi]

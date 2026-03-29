@@ -3,7 +3,7 @@ use crate::{SceneInfo, SceneInfoUniforms};
 use color::srgba8;
 use gamelib::asset::Handle;
 use gamelib::input::InputEvent;
-use gamelib::pipeline_cache::{get_compute_pipeline, get_graphics_pipeline};
+use gamelib::render::pipeline_cache::{get_compute_pipeline, get_graphics_pipeline};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::util::PushBuffer;
 use gpu::{RootParams};

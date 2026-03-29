@@ -2,11 +2,11 @@ use crate::reflection::CollectedReflectionData;
 use crate::{BuildManifest, BuildOptions, GraphicsState, Pass};
 use anyhow::{Context, anyhow, bail};
 use color_print::{ceprintln, cprintln};
-use log::{trace, warn};
-use shader_archive::archive::{ArchiveWriter, Offset};
-use shader_archive::gpu::{ImageUsage, is_depth_format, vk};
-use shader_archive::zstring::ZString64;
-use shader_archive::{FileDependency, PipelineEntryData, RootParamInfo, RootParamLayout, ShaderData};
+use log::{warn};
+use sharc::archive::{ArchiveWriter, Offset};
+use sharc::gpu::{ImageUsage, is_depth_format, vk};
+use sharc::zstring::ZString64;
+use sharc::{FileDependency, RootParamInfo, RootParamLayout, Shader};
 use slang::reflection::TypeLayout;
 use slang::{DebugInfoLevel, Downcast};
 use std::cell::OnceCell;
@@ -17,9 +17,9 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use std::{env, fs, slice};
 
-type PipelineArchiveWriter = ArchiveWriter<shader_archive::ShaderArchiveRoot>;
+type ShaderArchiveWriter = ArchiveWriter<sharc::ShaderArchiveRoot>;
 
-fn make_file_dependency(path: &Path, archive: &mut PipelineArchiveWriter) -> anyhow::Result<FileDependency> {
+fn make_file_dependency(path: &Path, archive: &mut ShaderArchiveWriter) -> anyhow::Result<FileDependency> {
     let canonical_path = path.canonicalize()?;
     let modified_time = fs::metadata(&canonical_path)?.modified()?;
     let mtime = match modified_time.duration_since(SystemTime::UNIX_EPOCH) {
@@ -470,15 +470,16 @@ impl BuildManifest {
         Ok(())
     }
 
-    fn write_pipeline(
+    fn write_pass(
         &self,
-        archive: &mut PipelineArchiveWriter,
+        archive: &mut ShaderArchiveWriter,
         pipeline_name: &str,
         pass: Option<&Pass>,
         gs: &GraphicsState,
         entry_points: &[&EntryPoint],
         _options: &BuildOptions,
-    ) -> anyhow::Result<PipelineEntryData> {
+    ) -> anyhow::Result<sharc::Pass> {
+
         let mut push_constants_size = 0;
         let mut workgroup_size = [1u32; 3];
         let mut shaders = vec![];
@@ -487,6 +488,10 @@ impl BuildManifest {
         let mut source_dependencies = BTreeSet::new();
 
         for &entry_point in entry_points {
+            // collect pass information from entry points:
+            // - max push constant size across entry points
+            // - workgroup size for compute shaders
+            // - stages in the pipeline
             push_constants_size = push_constants_size.max(entry_point.push_constants_size);
             workgroup_size = entry_point.work_group_size;
             stage_flags |= entry_point.stage;
@@ -495,10 +500,13 @@ impl BuildManifest {
                 root_params = entry_point.root_params.clone();
             }
 
+            // collect source file dependencies for the entry point
             source_dependencies.insert((entry_point.file.canonicalize().unwrap(), entry_point.file_mtime));
 
+            // write SPIR-V code to archive
             let code_offset = archive.write_slice(entry_point.spirv.as_slice());
-            shaders.push(ShaderData {
+
+            shaders.push(Shader {
                 stage: entry_point.stage,
                 entry_point: entry_point.name.as_str().into(),
                 spirv: code_offset,
@@ -506,7 +514,7 @@ impl BuildManifest {
         }
 
         let pipeline_kind = if stage_flags.contains(vk::ShaderStageFlags::COMPUTE) {
-            shader_archive::PipelineKind::Compute(shader_archive::ComputePipelineData {
+            sharc::PassKind::Compute(sharc::ComputePass {
                 push_constants_size: push_constants_size as u16,
                 compute_shader: shaders[0],
                 workgroup_size,
@@ -528,7 +536,7 @@ impl BuildManifest {
                 {
                     let mut attachments = Vec::with_capacity(pass.color_attachments.len());
                     for ca in pass.color_attachments.iter() {
-                        attachments.push(shader_archive::ColorAttachment {
+                        attachments.push(sharc::ColorAttachment {
                             resource_name: ca.resource.as_ref().map(|s| s.as_str().into()).unwrap_or_default(),
                             clear_color: ca.clear_color,
                         });
@@ -537,7 +545,7 @@ impl BuildManifest {
                 }
 
                 if let Some(dsa) = &pass.depth_stencil_attachment {
-                    depth_stencil_attachment = Some(shader_archive::DepthStencilAttachment {
+                    depth_stencil_attachment = Some(sharc::DepthStencilAttachment {
                         resource_name: dsa.resource.as_ref().map(|s| s.as_str().into()).unwrap_or_default(),
                         clear_depth: dsa.clear_depth,
                         clear_stencil: dsa.clear_stencil,
@@ -557,7 +565,7 @@ impl BuildManifest {
             };
 
             let shaders = archive.write_slice(&shaders[..]);
-            shader_archive::PipelineKind::Graphics(shader_archive::GraphicsPipelineData {
+            sharc::PassKind::Graphics(sharc::GraphicsPass {
                 push_constants_size: push_constants_size as u16,
                 shaders,
                 rasterization: gs.rasterizer,
@@ -572,7 +580,7 @@ impl BuildManifest {
         let sources = {
             let sources = source_dependencies
                 .into_iter()
-                .map(|(path, mtime)| shader_archive::FileDependency {
+                .map(|(path, mtime)| sharc::FileDependency {
                     path: archive.write_str(&*path.to_string_lossy()),
                     mtime,
                 })
@@ -586,7 +594,7 @@ impl BuildManifest {
             Offset::INVALID
         };
 
-        Ok(PipelineEntryData {
+        Ok(sharc::Pass {
             name: ZString64::new(&pipeline_name),
             kind: pipeline_kind,
             root_params: RootParamLayout {
@@ -662,20 +670,20 @@ impl BuildManifest {
     /// Builds the list of resources.
     fn write_image_resources(
         &self,
-        archive: &mut PipelineArchiveWriter,
-    ) -> Offset<[shader_archive::ImageResourceDesc]> {
+        archive: &mut ShaderArchiveWriter,
+    ) -> Offset<[sharc::ImageResourceDesc]> {
         let mut images = Vec::with_capacity(self.resources.len());
         for (name, desc) in self.resources.iter() {
             let size = match (desc.width, desc.height) {
-                (Some(w), Some(h)) => shader_archive::ImageResourceSize::Fixed { width: w, height: h },
+                (Some(w), Some(h)) => sharc::ImageResourceSize::Fixed { width: w, height: h },
                 _ => {
                     // TODO what to do if only one dimension is specified?
                     //      for now, treat as render target size
-                    shader_archive::ImageResourceSize::RenderTarget
+                    sharc::ImageResourceSize::RenderTarget
                 }
             };
 
-            images.push(shader_archive::ImageResourceDesc {
+            images.push(sharc::ImageResourceDesc {
                 name: name.as_str().into(),
                 format: desc.format,
                 // If the usage is specified explicitly, use that. Otherwise,
@@ -757,6 +765,8 @@ impl BuildManifest {
                     got_errors = true;
                 }
             }
+
+
         }
 
         // dump SPIR-V files if requested
@@ -822,7 +832,7 @@ impl BuildManifest {
             cprintln!("<g,bold>Writing</> {}", output_file.display());
         }
 
-        // emit pipelines
+        // emit passes
         let pipelines_offset = {
             let mut entries = Vec::new();
             for (&pipeline_name, entry_points) in pipelines.iter() {
@@ -833,7 +843,7 @@ impl BuildManifest {
                 } else {
                     None
                 };
-                entries.push(self.write_pipeline(&mut archive, pipeline_name, pass, &state, entry_points, options)?);
+                entries.push(self.write_pass(&mut archive, pipeline_name, pass, &state, entry_points, options)?);
             }
             archive.write_slice(&entries[..])
         };
@@ -844,9 +854,9 @@ impl BuildManifest {
         let manifest_file = make_file_dependency(&self.manifest_path, &mut archive)?;
 
         // write archive root and dump to file
-        let _ = archive.write_root(&shader_archive::ShaderArchiveRoot {
-            manifest_file,
-            pipelines: pipelines_offset,
+        let _ = archive.write_root(&sharc::ShaderArchiveRoot {
+            manifest: manifest_file,
+            passes: pipelines_offset,
             images,
         });
         archive.write_to_file(&output_file).context("writing output")?;

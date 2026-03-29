@@ -1,10 +1,13 @@
 use crate::device::get_vk_sample_count;
-use crate::{aspects_for_format, BufferUntyped, ColorAttachment, CommandBuffer, DepthStencilAttachment, Descriptor, Device, Format, ResourceAllocation, ResourceDescriptorIndex, ResourceId, Size3D, StorageImageHandle, TextureHandle, TrackedResource, VulkanObject};
+use crate::{
+    BufferUntyped, CommandBuffer, Descriptor, Device, Format, ResourceAllocation, ResourceDescriptorIndex, ResourceId,
+    Size3D, StorageImageHandle, TextureHandle, TrackedResource, VulkanObject, aspects_for_format,
+};
 use ash::vk;
 use ash::vk::Handle;
 use bitflags::bitflags;
-use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
 use gpu_allocator::MemoryLocation;
+use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
 use std::{mem, ptr};
 
 /// Dimensionality of an image.
@@ -21,6 +24,26 @@ impl ImageType {
             Self::Image1D => vk::ImageType::TYPE_1D,
             Self::Image2D => vk::ImageType::TYPE_2D,
             Self::Image3D => vk::ImageType::TYPE_3D,
+        }
+    }
+
+    pub const fn to_vk_image_view_type(self, layers: u32) -> vk::ImageViewType {
+        match self {
+            Self::Image1D => {
+                if layers > 1 {
+                    vk::ImageViewType::TYPE_1D_ARRAY
+                } else {
+                    vk::ImageViewType::TYPE_1D
+                }
+            }
+            Self::Image2D => {
+                if layers > 1 {
+                    vk::ImageViewType::TYPE_2D_ARRAY
+                } else {
+                    vk::ImageViewType::TYPE_2D
+                }
+            }
+            Self::Image3D => vk::ImageViewType::TYPE_3D,
         }
     }
 }

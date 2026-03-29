@@ -1,9 +1,10 @@
 //! Extract extended reflection information from a slang shader module.
 
-use slang::reflection::VariableLayout;
-use shader_archive::archive::ArchiveWriter;
+use slang::reflection::{TypeLayout, VariableLayout};
+use slang::TypeKind;
+use sharc::archive::ArchiveWriter;
 use crate::BuildOptions;
-use shader_archive::{reflection, ShaderArchiveRoot};
+use sharc::{reflection, ShaderArchiveRoot};
 
 struct StructTypeInfo {
     name: String,
@@ -38,6 +39,22 @@ impl<'a> CollectedReflectionData<'a> {
         }
     }
 
+    fn reflect_type(&mut self, ty: &TypeLayout) {
+        if ty.kind() == TypeKind::Struct {
+            for field in ty.fields() {
+                let field_name = field.variable().name().unwrap_or("unnamed");
+                let field_type = field.type_layout();
+                eprintln!("     struct field {}: {:?}", field_name, field_type.kind());
+            }
+        } else if ty.kind() == TypeKind::Pointer {
+            let pointee = ty.element_type_layout();
+            eprintln!("     pointer to {:?}", pointee.kind());
+            self.reflect_type(pointee);
+        } else {
+            eprintln!("     type: {:?}", ty.kind());
+        }
+    }
+
     fn reflect_param(&mut self, param: &VariableLayout) {
 
         // in shader:
@@ -47,9 +64,18 @@ impl<'a> CollectedReflectionData<'a> {
         // with VK_EXT_descriptor_heap:
         // - indexed bindings mapped to descriptor heap indices in push data for textures and samplers
         // - indexed bindings mapped to buffer pointers for uniforms and shader storage
+
+        let set = param.binding_space();
+        let binding = param.binding_index();
+        let category = param.category();
+        let name = param.variable().name().unwrap_or("unnamed");
+        let offset = param.offset(slang::ParameterCategory::Uniform);
+        eprintln!("param {}: {:?} set {}, binding {}, offset {}", name, category, set, binding, offset);
+        self.reflect_type(&param.type_layout());
     }
 
     pub(crate) fn reflect_entry_point(&mut self, entry_point: &slang::reflection::EntryPoint) {
+
         for p in entry_point.parameters() {
             self.reflect_param(p);
         }

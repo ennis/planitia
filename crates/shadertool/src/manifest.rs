@@ -1,9 +1,9 @@
 use crate::manifest::Error::{InvalidType, MissingField};
 use anyhow::{Context, anyhow};
 use log::error;
-use shader_archive::{gpu, ColorBlendEquationData};
-use shader_archive::gpu::vk;
-use shader_archive::gpu::vk::PolygonMode;
+use sharc::{gpu, ColorBlendEquation};
+use sharc::gpu::vk;
+use sharc::gpu::vk::PolygonMode;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use toml::Value as TomlValue;
@@ -345,16 +345,16 @@ impl CompilerOptions {
 /// Graphics state configuration for a graphics pipeline.
 #[derive(Clone)]
 pub struct GraphicsState {
-    pub rasterizer: shader_archive::RasterizerStateData,
-    pub depth_stencil: shader_archive::DepthStencilStateData,
-    pub color_targets: Vec<shader_archive::ColorTarget>,
+    pub rasterizer: sharc::RasterizationState,
+    pub depth_stencil: sharc::DepthStencilState,
+    pub color_targets: Vec<sharc::ColorTarget>,
 }
 
 impl Default for GraphicsState {
     fn default() -> Self {
         Self {
-            rasterizer: shader_archive::RasterizerStateData::default(),
-            depth_stencil: shader_archive::DepthStencilStateData::default(),
+            rasterizer: sharc::RasterizationState::default(),
+            depth_stencil: sharc::DepthStencilState::default(),
             color_targets: vec![],
         }
     }
@@ -483,7 +483,7 @@ impl TomlExt for toml::Value {
     }
 }
 
-fn read_rasterizer_state(toml: &TomlValue, out: &mut shader_archive::RasterizerStateData) -> Result<(), Error> {
+fn read_rasterizer_state(toml: &TomlValue, out: &mut sharc::RasterizationState) -> Result<(), Error> {
     //let cull_mode = read_str(json, "cull_mode", Some("back"))?;
     if let Some(polygon_mode) = toml.get_optional_str("polygon_mode")? {
         out.polygon_mode = match polygon_mode {
@@ -556,7 +556,7 @@ fn get_blend_op(op_str: &str) -> Result<vk::BlendOp, Error> {
     }
 }
 
-fn read_depth_stencil_state(toml: &TomlValue, out: &mut shader_archive::DepthStencilStateData) -> anyhow::Result<()> {
+fn read_depth_stencil_state(toml: &TomlValue, out: &mut sharc::DepthStencilState) -> anyhow::Result<()> {
     // any depth-stencil field automatically enables depth testing
     if let Some(format_str) = toml.get_optional_str("format")? {
         out.format = get_format(format_str).context("in depth_stencil")?;
@@ -585,12 +585,12 @@ fn read_depth_stencil_state(toml: &TomlValue, out: &mut shader_archive::DepthSte
     Ok(())
 }
 
-fn read_blend(toml: &TomlValue) -> anyhow::Result<Option<ColorBlendEquationData>> {
+fn read_blend(toml: &TomlValue) -> anyhow::Result<Option<ColorBlendEquation>> {
     if let Some(str) = toml.as_str() {
         match str {
             "disabled" => Ok(None),
             "over" => {
-                Ok(Some(ColorBlendEquationData {
+                Ok(Some(ColorBlendEquation {
                     src_color_blend_factor: vk::BlendFactor::SRC_ALPHA,
                     dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
                     color_blend_op: vk::BlendOp::ADD,
@@ -600,7 +600,7 @@ fn read_blend(toml: &TomlValue) -> anyhow::Result<Option<ColorBlendEquationData>
                 }))
             }
             "over_premultiplied" => {
-                Ok(Some(ColorBlendEquationData {
+                Ok(Some(ColorBlendEquation {
                     src_color_blend_factor: vk::BlendFactor::ONE,
                     dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
                     color_blend_op: vk::BlendOp::ADD,
@@ -612,7 +612,7 @@ fn read_blend(toml: &TomlValue) -> anyhow::Result<Option<ColorBlendEquationData>
             _ => Err(anyhow!("unknown predefined blend mode").context("in blend")),
         }
     } else {
-        let mut blend = ColorBlendEquationData::default();
+        let mut blend = ColorBlendEquation::default();
         if let Some(src_color_blend_factor) = toml.get_optional_str("src_color")? {
             blend.src_color_blend_factor = get_blend_factor(src_color_blend_factor)?;
         }
@@ -635,7 +635,7 @@ fn read_blend(toml: &TomlValue) -> anyhow::Result<Option<ColorBlendEquationData>
     }
 }
 
-fn read_color_target(toml: &TomlValue, out: &mut shader_archive::ColorTarget) -> anyhow::Result<()> {
+fn read_color_target(toml: &TomlValue, out: &mut sharc::ColorTarget) -> anyhow::Result<()> {
     if let Some(format_str) = toml.get_optional_str("format")? {
         out.format = get_format(format_str)?;
     }
@@ -645,11 +645,11 @@ fn read_color_target(toml: &TomlValue, out: &mut shader_archive::ColorTarget) ->
     Ok(())
 }
 
-fn read_color_targets(toml: &TomlValue, out: &mut Vec<shader_archive::ColorTarget>) -> anyhow::Result<()> {
+fn read_color_targets(toml: &TomlValue, out: &mut Vec<sharc::ColorTarget>) -> anyhow::Result<()> {
     if let Some(array) = toml.as_array() {
         out.clear();
         for item in array {
-            let mut color_target = shader_archive::ColorTarget::default();
+            let mut color_target = sharc::ColorTarget::default();
             read_color_target(item, &mut color_target).context("in color_targets")?;
             out.push(color_target);
         }
@@ -668,7 +668,7 @@ fn read_color_targets(toml: &TomlValue, out: &mut Vec<shader_archive::ColorTarge
                     return Err(anyhow!("color target index out of range").context("in color_targets"));
                 }
                 if index >= out.len() {
-                    out.resize(index + 1, shader_archive::ColorTarget::default());
+                    out.resize(index + 1, sharc::ColorTarget::default());
                 }
                 read_color_target(value, &mut out[index]).context("in color_targets")?;
             }

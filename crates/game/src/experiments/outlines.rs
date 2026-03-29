@@ -4,7 +4,7 @@ use bytesize::ByteSize;
 use color::{Srgba8, srgba8};
 use gamelib::asset::{AssetLoadError, AssetReadGuard, Handle, VfsPath, VfsPathBuf};
 use gamelib::input::InputEvent;
-use gamelib::pipeline_cache::{get_compute_pipeline, get_graphics_pipeline};
+use gamelib::render::pipeline_cache::{get_compute_pipeline, get_graphics_pipeline};
 use gamelib::{static_assets, tweak};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::{BarrierFlags, Buffer, BufferCreateInfo, DrawIndirectCommand, Image, InvalidateFlags, MemoryLocation, Ptr, RootParams, Size3D};

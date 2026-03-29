@@ -8,7 +8,7 @@ use gamelib::egui;
 use gamelib::egui::{Color32, Scene};
 use gamelib::input::{InputEvent, PointerButton};
 use gamelib::paint::{DrawGlyphRunOptions, PaintRenderParams, PaintScene, Painter, TextFormat, TextLayout};
-use gamelib::pipeline_cache::get_graphics_pipeline;
+use gamelib::render::pipeline_cache::get_graphics_pipeline;
 use gamelib::platform::{EventToken, InitOptions, RenderTargetImage, UserEvent};
 use std::ops::Deref;
 

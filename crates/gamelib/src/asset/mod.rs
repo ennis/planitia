@@ -271,6 +271,13 @@ impl<'a, T: Asset> AssetReadGuard<'a, T> {
 /// Assets that have default loader functions.
 pub trait DefaultLoader: Asset + Sized {
     /// Loads the asset.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - the VFS path of the asset file
+    /// * `metadata` - metadata about the asset file, provided by the provider
+    /// * `provider` - the file system [`Provider`] that can be used to read asset file data
+    /// * `dependencies` - tracks dependencies on other assets and local files
     fn load(path: &VfsPath, metadata: &FileMetadata, provider: &dyn Provider, dependencies: &mut Dependencies) -> LoadResult<Self>;
 }
 

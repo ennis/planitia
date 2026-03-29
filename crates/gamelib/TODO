@@ -251,6 +251,14 @@ Uniforms are initialized within shaders, or explicitly in the application. By de
 
 Shader signatures: they take pointers to param buffers in global memory. Application-provided buffers are detected and provided by the system; for user params, they are cleared to zero, and editable in the interface.
 
+Setting up and running a sequence of pipelines:
+Load the file
+    This will allocate resources needed to run the pipeline (render targets, buffers)
+Run the pipeline
+    Provide parameters: like screen size, etc
+        This may reallocate resources if necesary
+    Run the sequence, given a command buffer
+
 
 Terrain rendering:
     ✔ Find out how to do the initial adaptive meshing @done (25-12-15 15:55)

@@ -1,11 +1,12 @@
 use crate::asset::{AssetCache, DefaultLoader, Dependencies, FileMetadata, Handle, LoadResult, Provider, VfsPath};
 use gpu::{PreRasterizationShaders, ShaderEntryPoint, vk};
 use log::{debug, warn};
-use shader_archive::{ShaderArchive, ShaderData};
+use sharc::{ShaderArchive, Shader};
 use std::sync::MutexGuard;
 use std::time::SystemTime;
 use std::{fs, io};
 use utils::archive::Offset;
+use crate::render::load_shader_archive;
 
 #[derive(thiserror::Error, Debug)]
 pub enum PipelineCreateError {
@@ -17,99 +18,10 @@ pub enum PipelineCreateError {
     GraphicsPipelineCreationError(#[from] gpu::Error),
 }
 
-#[derive(Clone)]
-pub struct ArchiveLoadOptions {
-    /// Watches the archive file for changes and reloads it automatically.
-    pub hot_reload: bool,
-}
-
-fn unix_mtime(last_modified: SystemTime) -> u64 {
-    if last_modified > SystemTime::now() {
-        warn!("last modification time is in the future: {:?}", last_modified);
-    }
-
-    match last_modified.duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(duration) => duration.as_secs(),
-        Err(_) => {
-            warn!("invalid modification time (before UNIX_EPOCH)");
-            0
-        }
-    }
-}
-
-/// Loads a pipeline archive file or retrieves it from the asset cache.
-pub fn load_pipeline_archive(path: impl AsRef<VfsPath>) -> Handle<ShaderArchive> {
-    let cache = AssetCache::instance();
-    cache.load(path.as_ref(), |path, metadata, provider, deps| {
-        // add dependencies on the manifest and source files
-        debug!("loading pipeline archive: {}", path.as_str());
-        let data = provider.load(path)?;
-        let a = ShaderArchive::from_bytes(&*data).unwrap();
-
-        // hot reloading support
-        #[cfg(feature = "hot_reload")]
-        {
-            fn should_rebuild_archive(archive: &ShaderArchive) -> bool {
-                fn inner(archive: &ShaderArchive) -> io::Result<bool> {
-                    let manifest_path = &archive[archive.manifest_file().path];
-                    let manifest_mtime = unix_mtime(fs::metadata(manifest_path)?.modified()?);
-
-                    if manifest_mtime > archive.manifest_file().mtime {
-                        debug!(
-                            "shader manifest modified: {} (last:{:?}, archive:{:?})",
-                            manifest_path,
-                            manifest_mtime,
-                            archive.manifest_file().mtime
-                        );
-                        return Ok(true);
-                    }
-
-                    for source in archive.source_files() {
-                        let path = &archive[source.path];
-                        let source_metadata = fs::metadata(path)?;
-                        if unix_mtime(source_metadata.modified()?) > source.mtime {
-                            debug!(
-                                "shader archive dependency modified: {} (last:{:?}, archive:{:?})",
-                                path,
-                                source_metadata.modified()?,
-                                source.mtime
-                            );
-                            return Ok(true);
-                        }
-                    }
-                    Ok(false)
-                }
-
-                inner(archive).unwrap_or(false)
-            }
-
-            for source in a.source_files() {
-                deps.add_local_file(&a[source.path]);
-            }
-            deps.add_local_file(&a[a.manifest_file().path]);
-
-            if should_rebuild_archive(&a) {
-                shadertool::build_pipeline(
-                    &a[a.manifest_file().path],
-                    &shadertool::BuildOptions {
-                        quiet: false,
-                        emit_cargo_deps: false,
-                        emit_debug_information: true, // TODO
-                        emit_spirv_binaries: true,
-                        ..
-                    },
-                )?;
-            }
-        }
-
-        Ok(a)
-    })
-}
-
 fn get_shader_entry_point<'a>(
     stage: gpu::ShaderStage,
     archive: &'a ShaderArchive,
-    shader: &'a ShaderData,
+    shader: &'a Shader,
 ) -> ShaderEntryPoint<'a> {
     let spirv = &archive[shader.spirv];
     ShaderEntryPoint {
@@ -122,9 +34,9 @@ fn get_shader_entry_point<'a>(
     }
 }
 
-pub(crate) fn create_graphics_pipeline_from_archive(
+fn create_graphics_pipeline_from_archive(
     archive: &ShaderArchive,
-    entry: &shader_archive::GraphicsPipelineData,
+    entry: &sharc::GraphicsPass,
 ) -> Result<gpu::GraphicsPipeline, PipelineCreateError> {
     let color_targets: Vec<_> = {
         let color_targets = &archive[entry.color_targets];
@@ -224,9 +136,9 @@ pub(crate) fn create_graphics_pipeline_from_archive(
     Ok(pipeline)
 }
 
-pub(crate) fn create_compute_pipeline_from_archive(
+fn create_compute_pipeline_from_archive(
     archive: &ShaderArchive,
-    entry: &shader_archive::ComputePipelineData,
+    entry: &sharc::ComputePass,
 ) -> Result<gpu::ComputePipeline, PipelineCreateError> {
     let shader = get_shader_entry_point(gpu::ShaderStage::Compute, &archive, &entry.compute_shader);
     let cpci = gpu::ComputePipelineCreateInfo {
@@ -238,7 +150,7 @@ pub(crate) fn create_compute_pipeline_from_archive(
     Ok(pipeline)
 }
 
-pub fn load_graphics_pipeline(
+fn load_graphics_pipeline(
     path: &VfsPath,
     _metadata: &FileMetadata,
     _provider: &dyn Provider,
@@ -246,7 +158,7 @@ pub fn load_graphics_pipeline(
 ) -> LoadResult<gpu::GraphicsPipeline> {
     let archive_file = path.path_without_fragment();
     let name = path.fragment().expect("pipeline name missing in path");
-    let archive_handle = load_pipeline_archive(archive_file);
+    let archive_handle = load_shader_archive(archive_file);
 
     debug!(
         "loading pipeline `{}` (graphics) from `{}`",
@@ -262,7 +174,7 @@ pub fn load_graphics_pipeline(
     Ok(create_graphics_pipeline_from_archive(&*archive, entry)?)
 }
 
-pub fn load_compute_pipeline(
+fn load_compute_pipeline(
     path: &VfsPath,
     _metadata: &FileMetadata,
     _provider: &dyn Provider,
@@ -270,7 +182,7 @@ pub fn load_compute_pipeline(
 ) -> LoadResult<gpu::ComputePipeline> {
     let archive_file = path.path_without_fragment();
     let name = path.fragment().expect("pipeline name missing in path");
-    let archive_handle = load_pipeline_archive(archive_file);
+    let archive_handle = load_shader_archive(archive_file);
 
     debug!(
         "loading pipeline `{}` (compute) from `{}`",

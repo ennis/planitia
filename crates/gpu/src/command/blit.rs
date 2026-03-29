@@ -2,7 +2,7 @@
 use ash::vk;
 
 use crate::{
-    BarrierFlags, BufferRangeUntyped, BufferUntyped, ClearColorValue, CommandBuffer, Device, Image, ImageCopyBuffer,
+    BufferRangeUntyped, BufferUntyped, ClearColorValue, CommandBuffer, Device, Image, ImageCopyBuffer,
     ImageCopyView, ImageSubresourceLayers, Rect3D,
 };
 

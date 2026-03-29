@@ -8,7 +8,7 @@ members = [
     "crates/color",           # Color types and related functions
     "crates/utils",           # Shared utility types and functions
     "crates/shader-bridge",   # Compile Slang shaders and extract/generate reflection data
-    "crates/shader-archive",  # Archive file format for precompiled shaders
+    "crates/sharc",  # Archive file format for precompiled shaders
     "crates/shadertool",      # Binary/library for building shader archives from a JSON manifest
     "crates/geomtool",        # Tool for generating geometry files, like terrain meshes
     "crates/terrain-file",    # Terrain file format and related functions
@@ -24,7 +24,7 @@ shader-bridge = { path = "crates/shader-bridge" }
 gamelib = { path = "crates/gamelib" }
 math = { path = "crates/math" }
 utils = { path = "crates/utils" }
-shader-archive = { path = "crates/shader-archive" }
+sharc = { path = "crates/sharc" }
 shadertool = { path = "crates/shadertool" }
 color = { path = "crates/color" }
 geomtool = { path = "crates/geomtool" }

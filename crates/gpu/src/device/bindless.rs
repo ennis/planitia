@@ -168,7 +168,7 @@ impl Device {
             .descriptor_indices
             .lock()
             .unwrap()
-            .resource_descriptor_indices
+            .resource
             .insert(());
 
         let dst_array_element = index.index();
@@ -202,7 +202,7 @@ impl Device {
             .descriptor_indices
             .lock()
             .unwrap()
-            .sampler_descriptor_indices
+            .sampler
             .insert(());
         let dst_array_element = index.index();
         assert!(dst_array_element < d.count as u32);

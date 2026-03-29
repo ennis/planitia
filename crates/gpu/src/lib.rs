@@ -1,4 +1,8 @@
 #![feature(default_field_values)]
+
+// REASON: this is much too verbose, and my IDE already highlights unsafe call sites
+#![allow(unsafe_op_in_unsafe_fn)]
+
 mod buffer;
 mod command;
 mod device;

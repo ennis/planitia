@@ -1,6 +1,9 @@
 #![expect(unused, reason = "noisy")]
 #![feature(default_field_values)]
 
+// REASON: this is much too verbose, and my IDE already highlights unsafe call sites
+#![allow(unsafe_op_in_unsafe_fn)]
+
 pub mod asset;
 pub mod camera_control;
 mod component;
@@ -11,14 +14,13 @@ pub mod imgui;
 pub mod input;
 mod notifier;
 pub mod paint;
-pub mod pipeline_cache;
 pub mod platform;
-mod render_world;
 mod shaders;
 mod timer;
 pub mod util;
 mod world;
 mod tweak;
+pub mod render;
 
 //--- reexports ---
 pub use {color, egui, gpu, math};
@@ -28,6 +30,9 @@ pub use tweak::*;
 
 use crate::asset::AssetCache;
 
+/// Registers gamelib's asset directory with the `AssetCache`.
+///
+/// This should be called at the start of the program.
 pub fn register_asset_directory() {
     // in development mode, load from the local gamelib/assets directory
     AssetCache::register_directory(concat!(env!("CARGO_MANIFEST_DIR"), "/../gamelib/assets"));

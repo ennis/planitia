@@ -1,6 +1,6 @@
-//! Pipeline archive files.
+//! Shader archive files.
 //!
-//! Pipeline files hold a collection of pipelines (which are variants of the same pipeline).
+//! Shader files hold a collection of pipelines (which are variants of the same pipeline).
 //! It contains fixed function state, SPIR-V shader modules, tags for pipeline variants,
 //! specialization constants, useful reflection data (e.g. push constant sizes),
 //! and possibly cached pipeline binary blobs.
@@ -25,17 +25,36 @@ use std::{fs, io};
 use utils::archive::{ArchiveError, ArchiveReader, ArchiveReaderOwned, ArchiveRoot, Offset};
 use utils::zstring::ZString;
 
+// reexport gpu types
 pub use gpu;
 use log::{debug, warn};
 pub use utils::{archive, zstring};
 
+/// Root struct of the shader archive file.
 #[repr(C)]
 #[derive(Copy, Clone)]
 // NoPadding
 pub struct ShaderArchiveRoot {
-    pub manifest_file: FileDependency,
-    pub pipelines: Offset<[PipelineEntryData]>,
+    /// The manifest that was used to generate this archive.
+    pub manifest: FileDependency,
+    /// All passes (graphics or compute) in this archive.
+    pub passes: Offset<[Pass]>,
     pub images: Offset<[ImageResourceDesc]>,
+}
+
+
+/// Describes a sequence of passes to run in order.
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct Technique {
+    /// Name of the technique.
+    pub name: Offset<str>,
+    /// The sequence of passes to run, in order.
+    pub passes: Offset<[Offset<Pass>]>,
+    // TODO: table of resources that need to be allocated
+    // images
+    // buffers
+    // TODO: table of variables to set
 }
 
 impl ArchiveRoot for ShaderArchiveRoot {
@@ -43,6 +62,7 @@ impl ArchiveRoot for ShaderArchiveRoot {
     const VERSION: u32 = 3;
 }
 
+/// How the size of an image resource is determined.
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub enum ImageResourceSize {
@@ -50,7 +70,7 @@ pub enum ImageResourceSize {
     Dynamic,
     /// The image is a screen-sized render target.
     RenderTarget,
-    /// Size is fixed.
+    /// Fixed size.
     Fixed { width: u32, height: u32 },
 }
 
@@ -64,12 +84,20 @@ pub struct ImageResourceDesc {
     pub size: ImageResourceSize,
 }
 
+/// Describes a file that was used during compilation of the pipeline archive.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct FileDependency {
+    /// Path to the file.
     pub path: Offset<str> = Offset::INVALID,
     /// Modification time as UNIX timestamp (seconds since epoch).
     pub mtime: u64 = 0,
+}
+
+impl Default for FileDependency {
+    fn default() -> Self {
+        Self { .. }
+    }
 }
 
 /*
@@ -78,12 +106,6 @@ impl FileDependency {
         SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(self.mtime)
     }
 }*/
-
-impl Default for FileDependency {
-    fn default() -> Self {
-        Self { .. }
-    }
-}
 
 /// Layout of the root parameter struct.
 #[repr(C)]
@@ -113,12 +135,14 @@ pub struct RootParamInfo {
     pub format: vk::Format,
 }
 
+/// Describes a shader pipeline (graphics or compute).
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct PipelineEntryData {
+pub struct Pass {
     /// Name of the pipeline.
     pub name: ZString<64>,
-    pub kind: PipelineKind,
+    /// The kind of pipeline (graphics or compute) and its associated data.
+    pub kind: PassKind,
     pub root_params: RootParamLayout,
     /// List of source files.
     pub sources: Offset<[FileDependency]>,
@@ -126,36 +150,37 @@ pub struct PipelineEntryData {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub enum PipelineKind {
-    Graphics(GraphicsPipelineData),
-    Compute(ComputePipelineData),
+pub enum PassKind {
+    Graphics(GraphicsPass),
+    Compute(ComputePass),
 }
 
-impl PipelineKind {
-    pub fn as_graphics(&self) -> Option<&GraphicsPipelineData> {
+impl PassKind {
+    pub fn as_graphics(&self) -> Option<&GraphicsPass> {
         match self {
-            PipelineKind::Graphics(data) => Some(data),
+            PassKind::Graphics(data) => Some(data),
             _ => None,
         }
     }
 
-    pub fn as_compute(&self) -> Option<&ComputePipelineData> {
+    pub fn as_compute(&self) -> Option<&ComputePass> {
         match self {
-            PipelineKind::Compute(data) => Some(data),
+            PassKind::Compute(data) => Some(data),
             _ => None,
         }
     }
 }
 
+/// Represents a compiled shader entry point.
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct ShaderData {
+pub struct Shader {
     pub stage: vk::ShaderStageFlags,
     pub entry_point: ZString<64>,
     pub spirv: Offset<[u32]>,
 }
 
-///
+/// Describes a color attachment of a graphics pipeline.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct ColorAttachment {
@@ -163,6 +188,7 @@ pub struct ColorAttachment {
     pub clear_color: Option<[f32; 4]>,
 }
 
+/// Describes a depth/stencil attachment of a graphics pipeline.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct DepthStencilAttachment {
@@ -173,39 +199,39 @@ pub struct DepthStencilAttachment {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct GraphicsPipelineData {
+pub struct GraphicsPass {
     /// Size of push constant block in bytes.
     pub push_constants_size: u16,
     /// Rasterization data.
-    pub rasterization: RasterizerStateData,
+    pub rasterization: RasterizationState,
     /// Depth/stencil data.
-    pub depth_stencil: DepthStencilStateData,
+    pub depth_stencil: DepthStencilState,
     /// Color targets
     pub color_targets: Offset<[Offset<ColorTarget>]>,
     pub color_attachments: Offset<[ColorAttachment]>,
     pub depth_stencil_attachment: Option<DepthStencilAttachment>,
-    pub shaders: Offset<[ShaderData]>,
+    pub shaders: Offset<[Shader]>,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct ComputePipelineData {
+pub struct ComputePass {
     /// Size of push constant block in bytes.
     pub push_constants_size: u16,
-    pub compute_shader: ShaderData,
+    pub compute_shader: Shader,
     pub workgroup_size: [u32; 3],
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
-pub struct RasterizerStateData {
+pub struct RasterizationState {
     pub polygon_mode: PolygonMode,
     pub cull_mode: CullModeFlags,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
-pub struct DepthStencilStateData {
+pub struct DepthStencilState {
     pub enable: bool,
     pub format: vk::Format,
     pub depth_compare_op: vk::CompareOp,
@@ -214,7 +240,7 @@ pub struct DepthStencilStateData {
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
-pub struct ColorBlendEquationData {
+pub struct ColorBlendEquation {
     pub src_color_blend_factor: vk::BlendFactor,
     pub dst_color_blend_factor: vk::BlendFactor,
     pub color_blend_op: vk::BlendOp,
@@ -227,7 +253,7 @@ pub struct ColorBlendEquationData {
 #[derive(Clone, Copy, Default)]
 pub struct ColorTarget {
     pub format: vk::Format,
-    pub blend: Option<ColorBlendEquationData>,
+    pub blend: Option<ColorBlendEquation>,
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -260,13 +286,13 @@ impl ShaderArchive {
     pub fn dependencies(&self) -> impl Iterator<Item = &FileDependency> {
         let root = self.root();
         let source_files = {
-            let entries = &self[root.pipelines];
+            let entries = &self[root.passes];
             entries.iter().flat_map(move |entry| {
                 let sources = &self[entry.sources];
                 sources.iter()
             })
         };
-        std::iter::once(&root.manifest_file).chain(source_files)
+        std::iter::once(&root.manifest).chain(source_files)
     }
 
     /// Checks whether any dependency of the archive has changed compared to the recorded modification times.
@@ -286,19 +312,19 @@ impl ShaderArchive {
         }
 
         let root = self.root();
-        let manifest_path = &self[root.manifest_file.path];
+        let manifest_path = &self[root.manifest.path];
         let manifest_mtime = unix_mtime(fs::metadata(manifest_path)?.modified()?);
 
-        if manifest_mtime > root.manifest_file.mtime {
+        if manifest_mtime > root.manifest.mtime {
             debug!(
                 "shader manifest modified: {} (last:{:?}, archive:{:?})",
-                manifest_path, manifest_mtime, root.manifest_file.mtime
+                manifest_path, manifest_mtime, root.manifest.mtime
             );
             return Ok(true);
         }
 
         let source_files = {
-            let entries = &self[root.pipelines];
+            let entries = &self[root.passes];
             entries.iter().flat_map(move |entry| {
                 let sources = &self[entry.sources];
                 sources.iter()
@@ -325,13 +351,14 @@ impl ShaderArchive {
         self.0.root()
     }
 
-    pub fn find_graphics_pipeline(&self, name: &str) -> Option<&GraphicsPipelineData> {
+    /// Finds a graphics pipeline by name.
+    pub fn find_graphics_pipeline(&self, name: &str) -> Option<&GraphicsPass> {
         let data = self.data();
-        let entries = &self.0[data.pipelines];
+        let entries = &self.0[data.passes];
         for entry in entries {
             if entry.name.as_str() == name {
                 match &entry.kind {
-                    PipelineKind::Graphics(p) => return Some(p),
+                    PassKind::Graphics(p) => return Some(p),
                     _ => continue,
                 }
             }
@@ -339,13 +366,14 @@ impl ShaderArchive {
         None
     }
 
-    pub fn find_compute_pipeline(&self, name: &str) -> Option<&ComputePipelineData> {
+    /// Finds a compute pipeline by name.
+    pub fn find_compute_pipeline(&self, name: &str) -> Option<&ComputePass> {
         let data = self.data();
-        let entries = &self.0[data.pipelines];
+        let entries = &self.0[data.passes];
         for entry in entries {
             if entry.name.as_str() == name {
                 match &entry.kind {
-                    PipelineKind::Compute(p) => return Some(p),
+                    PassKind::Compute(p) => return Some(p),
                     _ => continue,
                 }
             }
@@ -353,10 +381,10 @@ impl ShaderArchive {
         None
     }
 
-    /// Returns an iterator over all source files referenced by the pipelines in this archive.
-    pub fn source_files<'a>(&'a self) -> impl Iterator<Item = &'a FileDependency> + 'a {
+    /// Returns an iterator over all shader source files referenced by the pipelines in this archive.
+    pub fn shader_sources<'a>(&'a self) -> impl Iterator<Item = &'a FileDependency> + 'a {
         let data = self.data();
-        let entries = &self.0[data.pipelines];
+        let entries = &self.0[data.passes];
         entries.iter().flat_map(move |entry| {
             let sources = &self.0[entry.sources];
             sources.iter()
@@ -366,7 +394,7 @@ impl ShaderArchive {
     /// Returns the manifest path used to generate this pipeline archive.
     pub fn manifest_file(&self) -> &FileDependency {
         let data = self.data();
-        &data.manifest_file
+        &data.manifest
     }
 }
 
@@ -396,7 +424,7 @@ mod tests {
         let color_targets = {
             let color_targets = &[writer.write(&ColorTarget {
                 format: vk::Format::R8G8B8A8_UNORM,
-                blend: Some(ColorBlendEquationData {
+                blend: Some(ColorBlendEquation {
                     src_color_blend_factor: vk::BlendFactor::SRC_ALPHA,
                     dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
                     color_blend_op: vk::BlendOp::ADD,
@@ -409,16 +437,16 @@ mod tests {
         };
         let entries = writer.write_iter(
             1,
-            [PipelineEntryData {
+            [Pass {
                 name: ZString64::new("example_pipeline"),
-                kind: PipelineKind::Graphics(GraphicsPipelineData {
+                kind: PassKind::Graphics(GraphicsPass {
                     push_constants_size: 128,
                     // just some example state
-                    rasterization: RasterizerStateData {
+                    rasterization: RasterizationState {
                         polygon_mode: PolygonMode::FILL,
                         cull_mode: CullModeFlags::BACK,
                     },
-                    depth_stencil: DepthStencilStateData {
+                    depth_stencil: DepthStencilState {
                         format: vk::Format::D32_SFLOAT,
                         depth_compare_op: vk::CompareOp::ALWAYS,
                         enable: true,
@@ -437,11 +465,11 @@ mod tests {
             }],
         );
         writer.write_root(&ShaderArchiveRoot {
-            manifest_file: FileDependency {
+            manifest: FileDependency {
                 path: Offset::INVALID,
                 mtime: 0,
             },
-            pipelines: entries,
+            passes: entries,
             images: Offset::INVALID,
         });
 
