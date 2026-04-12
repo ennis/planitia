@@ -2,7 +2,7 @@ use crate::reflection::CollectedReflectionData;
 use crate::{BuildManifest, BuildOptions, GraphicsState, Pass};
 use anyhow::{Context, anyhow, bail};
 use color_print::{ceprintln, cprintln};
-use log::{warn};
+use log::warn;
 use sharc::archive::{ArchiveWriter, Offset};
 use sharc::gpu::{ImageUsage, is_depth_format, vk};
 use sharc::zstring::ZString64;
@@ -479,7 +479,6 @@ impl BuildManifest {
         entry_points: &[&EntryPoint],
         _options: &BuildOptions,
     ) -> anyhow::Result<sharc::Pass> {
-
         let mut push_constants_size = 0;
         let mut workgroup_size = [1u32; 3];
         let mut shaders = vec![];
@@ -668,10 +667,7 @@ impl BuildManifest {
     }
 
     /// Builds the list of resources.
-    fn write_image_resources(
-        &self,
-        archive: &mut ShaderArchiveWriter,
-    ) -> Offset<[sharc::ImageResourceDesc]> {
+    fn write_image_resources(&self, archive: &mut ShaderArchiveWriter) -> Offset<[sharc::ImageResourceDesc]> {
         let mut images = Vec::with_capacity(self.resources.len());
         for (name, desc) in self.resources.iter() {
             let size = match (desc.width, desc.height) {

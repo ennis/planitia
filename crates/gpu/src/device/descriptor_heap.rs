@@ -113,9 +113,9 @@ fn allocate_descriptor_heap_memory(
             .bind_buffer_memory(buffer, alloc.memory(), alloc.offset())
             .expect("failed to bind memory for descriptor heap buffer");
         device_addr = device.get_buffer_device_address(&vk::BufferDeviceAddressInfo {
-                buffer,
-                ..Default::default()
-            });
+            buffer,
+            ..Default::default()
+        });
     }
     let ptr = alloc
         .mapped_ptr()

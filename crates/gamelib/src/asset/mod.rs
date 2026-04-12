@@ -278,7 +278,12 @@ pub trait DefaultLoader: Asset + Sized {
     /// * `metadata` - metadata about the asset file, provided by the provider
     /// * `provider` - the file system [`Provider`] that can be used to read asset file data
     /// * `dependencies` - tracks dependencies on other assets and local files
-    fn load(path: &VfsPath, metadata: &FileMetadata, provider: &dyn Provider, dependencies: &mut Dependencies) -> LoadResult<Self>;
+    fn load(
+        path: &VfsPath,
+        metadata: &FileMetadata,
+        provider: &dyn Provider,
+        dependencies: &mut Dependencies,
+    ) -> LoadResult<Self>;
 }
 
 #[macro_export]
@@ -405,7 +410,6 @@ fn reload_thunk<T: Asset>(entry: &Entry) {
 }
 
 impl Loader {
-
     fn new<T: Asset>(load_fn: LoadFn<T>) -> Self {
         Self {
             type_id: TypeId::of::<T>(),
@@ -485,7 +489,6 @@ impl Loader {
                 f(path, deps)
             }
         };*/
-
     }
 }
 
@@ -686,7 +689,9 @@ impl AssetCache {
 
         // Check if an entry already exists and is clean.
         // The cache is locked only for the duration of the check.
-        if let Some(existing) = self.inner.read().unwrap().by_path.get(&key) && !existing.dirty.load(Relaxed) {
+        if let Some(existing) = self.inner.read().unwrap().by_path.get(&key)
+            && !existing.dirty.load(Relaxed)
+        {
             return Handle::new(existing.clone().downcast().expect("invalid asset type stored in cache"));
         }
 

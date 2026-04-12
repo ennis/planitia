@@ -43,30 +43,66 @@ pub struct WEFaceVertex<Data> {
 }
 
 pub struct WingedEdgeMesh<PointData, FaceVertexData> {
-    points: Vec<WEPoint<PointData>>,
-    face_vertices: Vec<WEFaceVertex<FaceVertexData>>,
-    edges: Vec<WingedEdge>,
-    faces: Vec<WEFace>,
-    points_gpu: gpu::Buffer<WEPoint<PointData>>,
-    face_vertices_gpu: gpu::Buffer<WEFaceVertex<FaceVertexData>>,
-    edges_gpu: gpu::Buffer<WingedEdge>,
-    faces_gpu: gpu::Buffer<WEFace>,
+    pub points: Vec<WEPoint<PointData>>,
+    pub face_vertices: Vec<WEFaceVertex<FaceVertexData>>,
+    pub edges: Vec<WingedEdge>,
+    pub faces: Vec<WEFace>,
+    pub points_gpu: gpu::Buffer<WEPoint<PointData>>,
+    pub face_vertices_gpu: gpu::Buffer<WEFaceVertex<FaceVertexData>>,
+    pub edges_gpu: gpu::Buffer<WingedEdge>,
+    pub faces_gpu: gpu::Buffer<WEFace>,
+}
+
+impl<PointData: Copy, FaceVertexData: Copy> Default for WingedEdgeMesh<PointData, FaceVertexData> {
+    fn default() -> Self {
+        Self {
+            points: Vec::new(),
+            face_vertices: Vec::new(),
+            edges: Vec::new(),
+            faces: Vec::new(),
+            points_gpu: gpu::Buffer::from_slice(&[]),
+            face_vertices_gpu: gpu::Buffer::from_slice(&[]),
+            edges_gpu: gpu::Buffer::from_slice(&[]),
+            faces_gpu: gpu::Buffer::from_slice(&[]),
+        }
+    }
 }
 
 #[repr(C)]
 #[derive(Copy, Clone)]
-struct WEMeshDataGPU<PointData: Copy+'static, FaceVertexData: Copy+'static> {
-    points: Ptr<WEPoint<PointData>>,
-    face_vertices: Ptr<WEFaceVertex<FaceVertexData>>,
-    edges: Ptr<WingedEdge>,
-    faces: Ptr<WEFace>,
-    point_count: u32,
-    face_vertex_count: u32,
-    edge_count: u32,
-    face_count: u32,
+pub struct WEMeshDataGPU<PointData: Copy+'static, FaceVertexData: Copy+'static> {
+    pub points: Ptr<WEPoint<PointData>>,
+    pub face_vertices: Ptr<WEFaceVertex<FaceVertexData>>,
+    pub edges: Ptr<WingedEdge>,
+    pub faces: Ptr<WEFace>,
+    pub point_count: u32,
+    pub face_vertex_count: u32,
+    pub edge_count: u32,
+    pub face_count: u32,
 }
 
 impl<PointData: Copy, FaceVertexData: Copy> WingedEdgeMesh<PointData, FaceVertexData> {
+
+    /// Returns a struct containing GPU pointers and counts for the mesh data, suitable for use in shaders.
+    pub fn gpu_data(&self) -> WEMeshDataGPU<PointData, FaceVertexData> {
+        WEMeshDataGPU {
+            points: self.points_gpu.ptr(),
+            face_vertices: self.face_vertices_gpu.ptr(),
+            edges: self.edges_gpu.ptr(),
+            faces: self.faces_gpu.ptr(),
+            point_count: self.points.len() as u32,
+            face_vertex_count: self.face_vertices.len() as u32,
+            edge_count: self.edges.len() as u32,
+            face_count: self.faces.len() as u32,
+        }
+    }
+
+    /// Constructs a new winged-edge mesh from the given points and triangle face vertices.
+    ///
+    /// # Arguments
+    /// - `points`: Point data for each point in the mesh.
+    /// - `face_vertices`: Face vertex data for each vertex of each face in the mesh.
+    /// - `get_point`: A function that maps face vertex data to its corresponding point index.
     pub fn new(
         points: &[PointData],
         face_vertices: &[FaceVertexData],
@@ -148,6 +184,8 @@ impl<PointData: Copy, FaceVertexData: Copy> WingedEdgeMesh<PointData, FaceVertex
 
             faces.push(WEFace { edges: face_edges });
         }
+
+        assert_eq!(face_vertices.len(), faces.len() * 3);
 
         // Upload to GPU
         let face_vertices_gpu = gpu::Buffer::from_slice(&face_vertices);

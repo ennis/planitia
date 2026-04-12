@@ -58,7 +58,6 @@ struct ArchiveHeader {
     root: OffsetUntyped,
 }
 
-
 ///////////////////////////////////////////////////////////
 
 pub trait ArchiveRoot: Copy + 'static {

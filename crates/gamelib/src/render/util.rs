@@ -1,4 +1,4 @@
-use gpu::{Image, ImageCreateInfo, ImageUsage, Size3D};
+use gpu::{ColorAttachment, DepthStencilAttachment, Image, ImageCreateInfo, ImageUsage, Size3D};
 
 /// Helper type to manage a 2D render target.
 ///
@@ -14,14 +14,18 @@ pub struct RenderTarget {
 impl RenderTarget {
     /// Creates a new render target with no allocated image.
     pub fn new(format: gpu::Format, usage: ImageUsage) -> Self {
-        RenderTarget { inner: None, usage, format }
+        RenderTarget {
+            inner: None,
+            usage,
+            format,
+        }
     }
 
     /// Allocates or resizes the render target image as needed to match the specified dimensions and format.
     pub fn setup(&mut self, width: u32, height: u32) {
         if let Some(ref mut inner) = self.inner {
             if inner.width != width || inner.height != height {
-                inner.image.discard_resize(Size3D::new(width, height, 1));
+                inner.image.resize_no_copy(Size3D::new(width, height, 1));
                 inner.width = width;
                 inner.height = height;
             }
@@ -39,11 +43,7 @@ impl RenderTarget {
             ..
         });
 
-        self.inner = Some(RenderTargetInner {
-            image,
-            width,
-            height,
-        });
+        self.inner = Some(RenderTargetInner { image, width, height });
     }
 
     /// Returns a reference to the render target image.
@@ -65,6 +65,27 @@ impl RenderTarget {
     /// Panics if [`setup`] has not been called yet.
     pub fn storage_handle(&self) -> gpu::StorageImageHandle {
         self.image().storage_handle()
+    }
+
+    /// Returns a color attachment descriptor for the image.
+    pub fn as_color_attachment(&self, clear_color: impl Into<Option<[f64; 4]>>) -> ColorAttachment<'_> {
+        ColorAttachment {
+            image: self.image(),
+            clear: clear_color.into(),
+        }
+    }
+
+    /// Returns a depth attachment descriptor for the image.
+    pub fn as_depth_stencil_attachment(
+        &self,
+        clear_depth: impl Into<Option<f64>>,
+        clear_stencil: impl Into<Option<u32>>,
+    ) -> DepthStencilAttachment<'_> {
+        DepthStencilAttachment {
+            image: self.image(),
+            depth_clear: clear_depth.into(),
+            stencil_clear: clear_stencil.into(),
+        }
     }
 }
 

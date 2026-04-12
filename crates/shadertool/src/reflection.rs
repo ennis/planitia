@@ -1,10 +1,10 @@
 //! Extract extended reflection information from a slang shader module.
 
-use slang::reflection::{TypeLayout, VariableLayout};
-use slang::TypeKind;
-use sharc::archive::ArchiveWriter;
 use crate::BuildOptions;
-use sharc::{reflection, ShaderArchiveRoot};
+use sharc::archive::ArchiveWriter;
+use sharc::{ShaderArchiveRoot, reflection};
+use slang::TypeKind;
+use slang::reflection::{TypeLayout, VariableLayout};
 
 struct StructTypeInfo {
     name: String,
@@ -15,7 +15,7 @@ struct StructFieldInfo {
     name: String,
     ty: TypeDesc,
     offset: u32,
-   // attributes: Vec<Attribute>,
+    // attributes: Vec<Attribute>,
 }
 
 enum TypeDesc {
@@ -33,10 +33,7 @@ pub(crate) struct CollectedReflectionData<'a> {
 
 impl<'a> CollectedReflectionData<'a> {
     pub(crate) fn new(archive: &'a mut ArchiveWriter<ShaderArchiveRoot>, options: &'a BuildOptions) -> Self {
-        CollectedReflectionData {
-            archive,
-            options,
-        }
+        CollectedReflectionData { archive, options }
     }
 
     fn reflect_type(&mut self, ty: &TypeLayout) {
@@ -56,7 +53,6 @@ impl<'a> CollectedReflectionData<'a> {
     }
 
     fn reflect_param(&mut self, param: &VariableLayout) {
-
         // in shader:
         // - all global uniforms put in a single cbuffer
         // - textures are declared the usual way (no need for handles)
@@ -70,12 +66,14 @@ impl<'a> CollectedReflectionData<'a> {
         let category = param.category();
         let name = param.variable().name().unwrap_or("unnamed");
         let offset = param.offset(slang::ParameterCategory::Uniform);
-        eprintln!("param {}: {:?} set {}, binding {}, offset {}", name, category, set, binding, offset);
+        eprintln!(
+            "param {}: {:?} set {}, binding {}, offset {}",
+            name, category, set, binding, offset
+        );
         self.reflect_type(&param.type_layout());
     }
 
     pub(crate) fn reflect_entry_point(&mut self, entry_point: &slang::reflection::EntryPoint) {
-
         for p in entry_point.parameters() {
             self.reflect_param(p);
         }

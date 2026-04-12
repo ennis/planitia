@@ -22,7 +22,6 @@ pub struct BuildOptions {
     pub verbosity: u8 = 0,
 }
 
-
 #[derive(Error, Debug)]
 #[error(transparent)]
 pub struct Error(#[from] anyhow::Error);
@@ -35,7 +34,6 @@ impl Error {
         }
     }
 }
-
 
 /// Build all pipelines defined in the manifest at the given path.
 ///

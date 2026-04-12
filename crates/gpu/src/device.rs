@@ -1,25 +1,29 @@
 //! Abstractions over a vulkan device & queues.
 mod bindless;
-mod upload_buffer;
 mod descriptor_heap;
+mod upload_buffer;
 
 use crate::device::bindless::BindlessDescriptorTable;
-use crate::device::upload_buffer::{UploadBuffer, UPLOAD_BUFFER_CHUNK_SIZE};
+use crate::device::descriptor_heap::{DescriptorHeaps, DeviceDescriptorIndexTable};
+use crate::device::upload_buffer::{UPLOAD_BUFFER_CHUNK_SIZE, UploadBuffer};
 use crate::instance::vk_khr_surface;
 use crate::platform::PlatformExtensions;
-use crate::{get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, BufferUsage, CommandPool, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error, GraphicsPipeline, GraphicsPipelineCreateInfo, PreRasterizationShaders, Ptr, Sampler, SamplerCreateInfo, SamplerCreateInfoHashable, VulkanObject, SUBGROUP_SIZE};
+use crate::{
+    BufferUsage, CommandPool, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error, GraphicsPipeline,
+    GraphicsPipelineCreateInfo, PreRasterizationShaders, Ptr, SUBGROUP_SIZE, Sampler, SamplerCreateInfo,
+    SamplerCreateInfoHashable, VulkanObject, get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format,
+};
 use ash::vk;
-use gpu_allocator::vulkan::{AllocationCreateDesc};
+use gpu_allocator::vulkan::AllocationCreateDesc;
 use log::{debug, error, trace};
 use slotmap::SlotMap;
 use std::collections::{HashMap, VecDeque};
-use std::ffi::{c_void, CStr, CString};
+use std::ffi::{CStr, CString, c_void};
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::{fmt, mem, ptr};
 use vulkan_headers::vulkan::vulkan as vk2;
-use crate::device::descriptor_heap::{DescriptorHeaps, DeviceDescriptorIndexTable};
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Size of the global descriptor heaps (in number of descriptors).
@@ -29,7 +33,6 @@ const RESOURCE_DESCRIPTOR_HEAP_SIZE: usize = 1024 * 1024;
 const SAMPLER_DESCRIPTOR_HEAP_SIZE: usize = 64 * 1024;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
 
 pub(crate) struct ExtDescriptorHeap {
     pub(crate) cmd_bind_resource_heap: vk2::NonNullPFN_vkCmdBindResourceHeapEXT,
@@ -42,7 +45,6 @@ pub(crate) struct ExtDescriptorHeap {
 
 impl ExtDescriptorHeap {
     pub(crate) unsafe fn load(entry: &ash::Entry, instance: &ash::Instance) -> Self {
-
         let get_proc_addr = |name: &CStr| {
             let addr = entry.get_instance_proc_addr(instance.handle(), name.as_ptr());
             if addr.is_none() {
@@ -56,15 +58,11 @@ impl ExtDescriptorHeap {
                 cmd_bind_resource_heap: mem::transmute(get_proc_addr(c"vkCmdBindResourceHeapEXT")),
                 cmd_bind_sampler_heap: mem::transmute(get_proc_addr(c"vkCmdBindSamplerHeapEXT")),
                 cmd_push_data: mem::transmute(get_proc_addr(c"vkCmdPushDataEXT")),
-                cmd_get_physical_descriptor_size: mem::transmute(
-                    get_proc_addr(c"vkGetPhysicalDeviceDescriptorSizeEXT"),
-                ),
-                write_resource_descriptors: mem::transmute(
-                    get_proc_addr(c"vkWriteResourceDescriptorsEXT"),
-                ),
-                write_sampler_descriptors: mem::transmute(
-                    get_proc_addr(c"vkWriteSamplerDescriptorsEXT"),
-                ),
+                cmd_get_physical_descriptor_size: mem::transmute(get_proc_addr(
+                    c"vkGetPhysicalDeviceDescriptorSizeEXT",
+                )),
+                write_resource_descriptors: mem::transmute(get_proc_addr(c"vkWriteResourceDescriptorsEXT")),
+                write_sampler_descriptors: mem::transmute(get_proc_addr(c"vkWriteSamplerDescriptorsEXT")),
             }
         }
     }
@@ -104,7 +102,6 @@ pub(crate) struct DeviceSubmissionState {
     pub(crate) queue: vk::Queue,
     /// Sorted by create_ticket, not by order of submission.
     pub(crate) active_submissions: VecDeque<ActiveSubmission>,
-
     // Pending writes not yet made visible.
     //pub(crate) writes: MemoryAccess,
     // Last access type tracked per resource. Used mostly to track image layouts.
@@ -115,7 +112,6 @@ pub(crate) struct DeviceSubmissionState {
 pub(crate) struct ResourceState {
     //pub(crate) last_submission_index: u64,
 }
-
 
 pub struct Device {
     /// Underlying vulkan device
@@ -135,6 +131,9 @@ pub struct Device {
 
     pub(crate) thread_safe: DeviceThreadSafeState,
     pub(crate) submission_state: Mutex<DeviceSubmissionState>,
+
+    // TODO: we don't track resources anymore, so this should go,
+    //       unless we have a need for IDs somewhere
     pub(crate) resources: Mutex<SlotMap<ResourceId, ResourceState>>,
 
     pub(crate) descriptor_table: BindlessDescriptorTable,
@@ -260,6 +259,8 @@ pub enum ResourceAllocation {
     },
     /// The memory for this resource was imported or exported from/to an external handle.
     DeviceMemory { device_memory: vk::DeviceMemory },
+    /// No memory is allocated for this resource.
+    None,
 }
 
 /// Chooses a swap chain surface format among a list of supported formats.
@@ -419,9 +420,7 @@ const DEVICE_EXTENSIONS: &[&str] = &[
 // INITIALIZATION
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
-
 impl Device {
-
     /// Returns the global device.
     pub fn global() -> &'static Device {
         static DEVICE: LazyLock<&'static Device> =
@@ -560,11 +559,7 @@ impl Device {
         // Create global descriptor tables
         let descriptor_table = BindlessDescriptorTable::new(&device, DESCRIPTOR_TABLE_SIZE);
 
-        let descriptor_heaps = DescriptorHeaps::new(
-            &mut allocator,
-            &device,
-            &descriptor_heap_properties
-        );
+        let descriptor_heaps = DescriptorHeaps::new(&mut allocator, &device, &descriptor_heap_properties);
 
         Ok(Device {
             raw: device,
@@ -605,7 +600,7 @@ impl Device {
             deletion_queue: Mutex::new(Vec::new()),
             upload_buffer: Mutex::new(UploadBuffer::new(BufferUsage::UNIFORM)),
             completed_tickets: AtomicU64::new(0),
-            descriptor_heaps
+            descriptor_heaps,
         })
     }
 
@@ -828,14 +823,8 @@ impl Device {
 
     /// Releases a resource heap index that is no longer used.
     pub(crate) fn free_resource_heap_index(&self, index: ResourceDescriptorIndex) {
-        self.descriptor_indices
-            .lock()
-            .unwrap()
-            .resource
-            .remove(index);
+        self.descriptor_indices.lock().unwrap().resource.remove(index);
     }
-
-
 
     /// Allocates memory, or panic trying.
     ///
@@ -910,6 +899,9 @@ impl Device {
             ResourceAllocation::DeviceMemory { device_memory } => unsafe {
                 self.raw.free_memory(device_memory, None);
             },
+            ResourceAllocation::None => {
+                // nothing to do
+            }
             ResourceAllocation::External => {
                 unreachable!()
             }

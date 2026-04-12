@@ -12,8 +12,16 @@ use windows::Win32::Graphics::Direct3D12::{
     D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_TRANSITION_BARRIER,
     ID3D12CommandQueue, ID3D12Fence, ID3D12GraphicsCommandList, ID3D12Resource,
 };
-use windows::Win32::Graphics::Dxgi::Common::{DXGI_ALPHA_MODE_IGNORE, DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_TYPELESS, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_SAMPLE_DESC, DXGI_ALPHA_MODE_UNSPECIFIED, DXGI_ALPHA_MODE_STRAIGHT};
-use windows::Win32::Graphics::Dxgi::{DXGI_ERROR_WAS_STILL_DRAWING, DXGI_PRESENT_DO_NOT_WAIT, DXGI_SCALING_STRETCH, DXGI_SWAP_CHAIN_DESC1, DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING, DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL, DXGI_USAGE_RENDER_TARGET_OUTPUT, IDXGIFactory4, IDXGISwapChain3, DXGI_SWAP_EFFECT_SEQUENTIAL, DXGI_SCALING_NONE};
+use windows::Win32::Graphics::Dxgi::Common::{
+    DXGI_ALPHA_MODE_IGNORE, DXGI_ALPHA_MODE_STRAIGHT, DXGI_ALPHA_MODE_UNSPECIFIED, DXGI_FORMAT,
+    DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_TYPELESS, DXGI_FORMAT_R8G8B8A8_UNORM,
+    DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_SAMPLE_DESC,
+};
+use windows::Win32::Graphics::Dxgi::{
+    DXGI_ERROR_WAS_STILL_DRAWING, DXGI_PRESENT_DO_NOT_WAIT, DXGI_SCALING_NONE, DXGI_SCALING_STRETCH,
+    DXGI_SWAP_CHAIN_DESC1, DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING, DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL,
+    DXGI_SWAP_EFFECT_SEQUENTIAL, DXGI_USAGE_RENDER_TARGET_OUTPUT, IDXGIFactory4, IDXGISwapChain3,
+};
 use windows::core::{Interface, Owned};
 
 /// DXGI swap chain that provides facilities for interoperation with Vulkan.
@@ -81,7 +89,12 @@ impl Drop for DxgiVulkanInteropSwapChain {
 }
 
 impl DxgiVulkanInteropSwapChain {
-    pub(super) fn new(format: DXGI_FORMAT, width: u32, height: u32, usage: gpu::ImageUsage) -> DxgiVulkanInteropSwapChain {
+    pub(super) fn new(
+        format: DXGI_FORMAT,
+        width: u32,
+        height: u32,
+        usage: gpu::ImageUsage,
+    ) -> DxgiVulkanInteropSwapChain {
         let gfx = GraphicsContext::current();
         let vk_format = dxgi_to_vk_format(format);
 
@@ -213,7 +226,6 @@ impl DxgiVulkanInteropSwapChain {
         }
     }
 
-
     /// Acquires the next image from the swap chain for rendering.
     ///
     /// This must be followed by a call to `present()`.
@@ -343,30 +355,29 @@ fn create_swap_chain(
         swap_chain
 
         /*swap_chain = dxgi_factory
-            .CreateSwapChainForHwnd(
-                command_queue,
-                hwnd,
-                &DXGI_SWAP_CHAIN_DESC1 {
-                    Width: width,
-                    Height: height,
-                    Format: dxgi_format,
-                    Stereo: false.into(),
-                    SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
-                    BufferUsage: DXGI_USAGE_RENDER_TARGET_OUTPUT,
-                    BufferCount: SWAP_CHAIN_BUFFER_COUNT,
-                    Scaling: DXGI_SCALING_STRETCH,
-                    SwapEffect: DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL,
-                    AlphaMode: DXGI_ALPHA_MODE_IGNORE,
-                    Flags: 0,
-                },
-                None,
-                None,
-            )
-            .expect("CreateSwapChainForHwnd failed")
-            // This shouldn't fail (IDXGISwapChain3 is DXGI 1.4 / Windows 10)
-            .cast::<IDXGISwapChain3>()
-            .unwrap();*/
-
+        .CreateSwapChainForHwnd(
+            command_queue,
+            hwnd,
+            &DXGI_SWAP_CHAIN_DESC1 {
+                Width: width,
+                Height: height,
+                Format: dxgi_format,
+                Stereo: false.into(),
+                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+                BufferUsage: DXGI_USAGE_RENDER_TARGET_OUTPUT,
+                BufferCount: SWAP_CHAIN_BUFFER_COUNT,
+                Scaling: DXGI_SCALING_STRETCH,
+                SwapEffect: DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL,
+                AlphaMode: DXGI_ALPHA_MODE_IGNORE,
+                Flags: 0,
+            },
+            None,
+            None,
+        )
+        .expect("CreateSwapChainForHwnd failed")
+        // This shouldn't fail (IDXGISwapChain3 is DXGI 1.4 / Windows 10)
+        .cast::<IDXGISwapChain3>()
+        .unwrap();*/
     }
 }
 

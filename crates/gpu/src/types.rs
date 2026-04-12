@@ -1,6 +1,6 @@
 // TODO: eventually all vk types should disappear from the public API
 use crate::{
-    aspects_for_format, is_depth_and_stencil_format, is_depth_only_format, is_stencil_only_format, ShaderEntryPoint,
+    ShaderEntryPoint, aspects_for_format, is_depth_and_stencil_format, is_depth_only_format, is_stencil_only_format,
 };
 use ash::vk;
 use bitflags::bitflags;
@@ -336,6 +336,8 @@ impl From<SamplerCreateInfo> for SamplerCreateInfoHashable {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// 2D point defined by X and Y coordinates.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Point2D {
     pub x: i32,
@@ -346,6 +348,7 @@ impl Point2D {
     pub const ZERO: Self = Self { x: 0, y: 0 };
 }
 
+/// 2D size defined by width and height.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Size2D {
     pub width: u32,
@@ -393,18 +396,9 @@ impl Rect2D {
     }
 }
 
-/*
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct Origin3D {
-    pub x: u32,
-    pub y: u32,
-    pub z: u32,
-}
-
-impl Origin3D {
-    pub const ZERO: Self = Self { x: 0, y: 0, z: 0 };
-}*/
-
+/// 3D offset defined by X, Y, and Z components.
+///
+/// Converts into [`vk::Offset3D`] via `Into`.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Offset3D {
     pub x: i32,
@@ -426,9 +420,43 @@ impl Into<vk::Offset3D> for Offset3D {
     }
 }
 
+/// 3D dimensions, defined by width, height, and depth along the X, Y, and Z axes.
+///
+/// Converts into [`vk::Extent3D`] via `Into`.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Size3D {
+    /// Width (extent along the X axis).
+    pub width: u32,
+    /// Height (extent along the Y axis).
+    pub height: u32,
+    /// Depth (extent along the Z axis).
+    /// When describing a layered 2D image, this represents the number of layers.
+    pub depth: u32,
+}
+
+impl Size3D {
+    /// Creates a new `Size3D` with the specified dimensions.
+    pub fn new(width: u32, height: u32, depth: u32) -> Self {
+        Self { width, height, depth }
+    }
+}
+
+impl Into<vk::Extent3D> for Size3D {
+    fn into(self) -> vk::Extent3D {
+        vk::Extent3D {
+            width: self.width,
+            height: self.height,
+            depth: self.depth,
+        }
+    }
+}
+
+/// 3D rectangle defined by minimum and maximum positions along the X, Y, and Z axes.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Rect3D {
+    /// Minimum corner of the rectangle (inclusive).
     pub min: Offset3D,
+    /// Maximum corner of the rectangle (exclusive).
     pub max: Offset3D,
 }
 
@@ -478,23 +506,6 @@ impl Rect3D {
                 y: y + height as i32,
                 z: 1,
             },
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct Size3D {
-    pub width: u32,
-    pub height: u32,
-    pub depth: u32,
-}
-
-impl Size3D {
-    pub fn new(width: u32, height: u32, depth: u32) -> Self {
-        Self {
-            width,
-            height,
-            depth,
         }
     }
 }
@@ -643,6 +654,7 @@ impl StencilState {
         (self.front != StencilOpState::IGNORE || self.back != StencilOpState::IGNORE)
             && (self.read_mask != 0 || self.write_mask != 0)
     }
+
     /// Returns true if the state doesn't mutate the target values.
     pub fn is_read_only(&self, cull_mode: Option<Face>) -> bool {
         // The rules are defined in step 7 of the "Device timeline initialization steps"

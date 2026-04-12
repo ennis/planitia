@@ -39,7 +39,6 @@ pub fn polygons_to_triangle_mesh<VertexFn, TriangleFn>(
     }
 }
 
-
 /// Helper function to convert polygons into a triangle mesh.
 ///
 /// # Arguments

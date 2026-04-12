@@ -5,9 +5,9 @@ use std::ptr;
 use std::time::Duration;
 
 use gpu::{
-    vk, BufferCreateInfo, BufferUntyped, BufferUsage, CommandBuffer, Device, Image, ImageAspect, ImageCopyBuffer,
+    BufferCreateInfo, BufferUntyped, BufferUsage, CommandBuffer, Device, Image, ImageAspect, ImageCopyBuffer,
     ImageCopyView, ImageCreateInfo, ImageDataLayout, ImageType, ImageUsage, MemoryLocation, Offset3D, Rect3D,
-    SwapChain,
+    SwapChain, vk,
 };
 use raw_window_handle::HasWindowHandle;
 use winit::application::ApplicationHandler;

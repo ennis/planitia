@@ -1,9 +1,9 @@
 use crate::manifest::Error::{InvalidType, MissingField};
 use anyhow::{Context, anyhow};
 use log::error;
-use sharc::{gpu, ColorBlendEquation};
 use sharc::gpu::vk;
 use sharc::gpu::vk::PolygonMode;
+use sharc::{ColorBlendEquation, gpu};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use toml::Value as TomlValue;
@@ -589,26 +589,22 @@ fn read_blend(toml: &TomlValue) -> anyhow::Result<Option<ColorBlendEquation>> {
     if let Some(str) = toml.as_str() {
         match str {
             "disabled" => Ok(None),
-            "over" => {
-                Ok(Some(ColorBlendEquation {
-                    src_color_blend_factor: vk::BlendFactor::SRC_ALPHA,
-                    dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
-                    color_blend_op: vk::BlendOp::ADD,
-                    src_alpha_blend_factor: vk::BlendFactor::ONE,
-                    dst_alpha_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
-                    alpha_blend_op: vk::BlendOp::ADD,
-                }))
-            }
-            "over_premultiplied" => {
-                Ok(Some(ColorBlendEquation {
-                    src_color_blend_factor: vk::BlendFactor::ONE,
-                    dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
-                    color_blend_op: vk::BlendOp::ADD,
-                    src_alpha_blend_factor: vk::BlendFactor::ONE,
-                    dst_alpha_blend_factor: vk::BlendFactor::ZERO,
-                    alpha_blend_op: vk::BlendOp::ADD,
-                }))
-            }
+            "over" => Ok(Some(ColorBlendEquation {
+                src_color_blend_factor: vk::BlendFactor::SRC_ALPHA,
+                dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
+                color_blend_op: vk::BlendOp::ADD,
+                src_alpha_blend_factor: vk::BlendFactor::ONE,
+                dst_alpha_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
+                alpha_blend_op: vk::BlendOp::ADD,
+            })),
+            "over_premultiplied" => Ok(Some(ColorBlendEquation {
+                src_color_blend_factor: vk::BlendFactor::ONE,
+                dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
+                color_blend_op: vk::BlendOp::ADD,
+                src_alpha_blend_factor: vk::BlendFactor::ONE,
+                dst_alpha_blend_factor: vk::BlendFactor::ZERO,
+                alpha_blend_op: vk::BlendOp::ADD,
+            })),
             _ => Err(anyhow!("unknown predefined blend mode").context("in blend")),
         }
     } else {

@@ -164,12 +164,7 @@ impl Device {
         image_layout: vk::ImageLayout,
     ) -> ResourceDescriptorIndex {
         let d = &self.descriptor_table;
-        let index = self
-            .descriptor_indices
-            .lock()
-            .unwrap()
-            .resource
-            .insert(());
+        let index = self.descriptor_indices.lock().unwrap().resource.insert(());
 
         let dst_array_element = index.index();
         assert!(dst_array_element < d.count as u32);
@@ -198,12 +193,7 @@ impl Device {
 
     pub(crate) unsafe fn create_global_sampler_descriptor(&self, sampler: vk::Sampler) -> SamplerDescriptorIndex {
         let d = &self.descriptor_table;
-        let index = self
-            .descriptor_indices
-            .lock()
-            .unwrap()
-            .sampler
-            .insert(());
+        let index = self.descriptor_indices.lock().unwrap().sampler.insert(());
         let dst_array_element = index.index();
         assert!(dst_array_element < d.count as u32);
         let write = vk::WriteDescriptorSet {

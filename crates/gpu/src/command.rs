@@ -1,11 +1,11 @@
 use crate::device::ActiveSubmission;
-use crate::{vk, BufferUntyped, CommandPool, ComputePipeline, Descriptor, Device, Ptr, SwapChain};
+use crate::{BufferUntyped, CommandPool, ComputePipeline, Descriptor, Device, Ptr, SwapChain, vk};
 use ash::prelude::VkResult;
-use ash::vk::{DeviceAddress};
+use ash::vk::DeviceAddress;
 use bitflags::bitflags;
 use log::{error, trace};
 pub use render::{DrawIndexedIndirectCommand, DrawIndirectCommand, RenderEncoder};
-use std::ffi::{c_void, CString};
+use std::ffi::{CString, c_void};
 use std::mem::ManuallyDrop;
 use std::sync::atomic::Ordering::Relaxed;
 use std::{mem, ptr, slice};
@@ -68,8 +68,7 @@ impl InvalidateFlags {
     }
 }
 
-
-    /*
+/*
     /// Describes the scope (memory and execution) of one side of a barrier operation.
     #[derive(Copy,Clone,Debug,PartialEq,Eq,Hash)]
     pub struct BarrierFlags: u64 {
@@ -301,7 +300,6 @@ impl CommandBuffer {
             &[],
         );
     }
-
 
     unsafe fn do_cmd_push_descriptor_set(
         &mut self,
@@ -926,8 +924,7 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
     let timeline_value = device.next_timeline_value.fetch_add(1, Relaxed);
     trace!(
         "GPU: submit CommandStream, create_ticket={}, timeline_value={}",
-        cmd.create_ticket,
-        timeline_value
+        cmd.create_ticket, timeline_value
     );
 
     // flush pending writes

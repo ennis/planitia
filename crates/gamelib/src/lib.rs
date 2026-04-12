@@ -1,6 +1,9 @@
 #![expect(unused, reason = "noisy")]
 #![feature(default_field_values)]
-#![allow(unsafe_op_in_unsafe_fn, reason = "too verbose, and my IDE already highlights unsafe call sites")]
+#![allow(
+    unsafe_op_in_unsafe_fn,
+    reason = "too verbose, and my IDE already highlights unsafe call sites"
+)]
 
 pub mod asset;
 pub mod camera_control;
@@ -13,15 +16,18 @@ pub mod input;
 mod notifier;
 pub mod paint;
 pub mod platform;
+pub mod render;
 mod shaders;
 mod timer;
+mod tweak;
 pub mod util;
 mod world;
-mod tweak;
-pub mod render;
 
 //--- reexports ---
-pub use {color, egui, gpu, math};
+pub use color;
+pub use egui;
+pub use gpu;
+pub use math;
 pub use tweak::*;
 
 ///////////////////////////////////////////////////////////////////

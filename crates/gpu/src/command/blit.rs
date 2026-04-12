@@ -1,10 +1,22 @@
-//! Blit command encoders
+//! Blit commands
+//!
+//! Wrappers for clear/blit/copy commands on buffers and images.
 use ash::vk;
 
 use crate::{
-    BufferRangeUntyped, BufferUntyped, ClearColorValue, CommandBuffer, Device, Image, ImageCopyBuffer,
-    ImageCopyView, ImageSubresourceLayers, Rect3D,
+    BufferRangeUntyped, BufferUntyped, ClearColorValue, CommandBuffer, Device, Image, ImageCopyBuffer, ImageCopyView,
+    ImageSubresourceLayers, Rect3D, Size3D,
 };
+
+fn full_subresource_range(aspects: vk::ImageAspectFlags) -> vk::ImageSubresourceRange {
+    vk::ImageSubresourceRange {
+        aspect_mask: aspects,
+        base_mip_level: 0,
+        level_count: vk::REMAINING_MIP_LEVELS,
+        base_array_layer: 0,
+        layer_count: vk::REMAINING_ARRAY_LAYERS,
+    }
+}
 
 impl CommandBuffer {
     pub fn fill_buffer(&mut self, range: &BufferRangeUntyped, data: u32) {
@@ -27,13 +39,7 @@ impl CommandBuffer {
                 image.handle(),
                 vk::ImageLayout::GENERAL,
                 &clear_color_value.into(),
-                &[vk::ImageSubresourceRange {
-                    aspect_mask: vk::ImageAspectFlags::COLOR,
-                    base_mip_level: 0,
-                    level_count: vk::REMAINING_MIP_LEVELS,
-                    base_array_layer: 0,
-                    layer_count: vk::REMAINING_ARRAY_LAYERS,
-                }],
+                &[full_subresource_range(vk::ImageAspectFlags::COLOR)],
             );
         }
     }
@@ -47,13 +53,7 @@ impl CommandBuffer {
                 image.handle(),
                 vk::ImageLayout::GENERAL,
                 &vk::ClearDepthStencilValue { depth, stencil: 0 },
-                &[vk::ImageSubresourceRange {
-                    aspect_mask: vk::ImageAspectFlags::DEPTH,
-                    base_mip_level: 0,
-                    level_count: vk::REMAINING_MIP_LEVELS,
-                    base_array_layer: 0,
-                    layer_count: vk::REMAINING_ARRAY_LAYERS,
-                }],
+                &[full_subresource_range(vk::ImageAspectFlags::DEPTH)],
             );
         }
     }
@@ -170,11 +170,35 @@ impl CommandBuffer {
     /// Copies data from an image to a buffer.
     pub fn copy_image_to_buffer(
         &mut self,
-        _source: ImageCopyView<'_>,
-        _destination: ImageCopyBuffer<'_>,
-        _copy_size: vk::Extent3D,
+        source: ImageCopyView<'_>,
+        destination: ImageCopyBuffer<'_>,
+        copy_size: Size3D,
     ) {
-        todo!("copy_image_to_buffer");
+        let regions = [vk::BufferImageCopy {
+            buffer_offset: destination.layout.offset,
+            buffer_row_length: destination.layout.texel_row_length.unwrap_or(0),
+            buffer_image_height: destination.layout.row_count.unwrap_or(0),
+            image_subresource: vk::ImageSubresourceLayers {
+                aspect_mask: source.aspect.to_aspect(source.image.format),
+                mip_level: source.mip_level,
+                base_array_layer: 0,
+                layer_count: 1,
+            },
+            image_offset: source.origin.into(),
+            image_extent: copy_size.into(),
+        }];
+
+        // SAFETY: FFI call and parameters are valid
+        let cb = self.get_or_create_command_buffer();
+        unsafe {
+            Device::global().raw.cmd_copy_image_to_buffer(
+                cb,
+                source.image.handle(),
+                vk::ImageLayout::GENERAL,
+                destination.buffer.handle(),
+                &regions,
+            );
+        }
     }
 
     pub fn blit_image(
@@ -194,36 +218,14 @@ impl CommandBuffer {
                 base_array_layer: src_subresource.base_array_layer,
                 layer_count: src_subresource.layer_count,
             },
-            src_offsets: [
-                vk::Offset3D {
-                    x: src_region.min.x,
-                    y: src_region.min.y,
-                    z: src_region.min.z,
-                },
-                vk::Offset3D {
-                    x: src_region.max.x,
-                    y: src_region.max.y,
-                    z: src_region.max.z,
-                },
-            ],
+            src_offsets: [src_region.min.into(), src_region.max.into()],
             dst_subresource: vk::ImageSubresourceLayers {
-                aspect_mask: dst_subresource.aspect.to_aspect(src.format),
+                aspect_mask: dst_subresource.aspect.to_aspect(dst.format),
                 mip_level: dst_subresource.mip_level,
                 base_array_layer: dst_subresource.base_array_layer,
                 layer_count: dst_subresource.layer_count,
             },
-            dst_offsets: [
-                vk::Offset3D {
-                    x: dst_region.min.x,
-                    y: dst_region.min.y,
-                    z: dst_region.min.z,
-                },
-                vk::Offset3D {
-                    x: dst_region.max.x,
-                    y: dst_region.max.y,
-                    z: dst_region.max.z,
-                },
-            ],
+            dst_offsets: [dst_region.min.into(), dst_region.max.into()],
         }];
 
         // SAFETY: command buffer is OK, params OK

@@ -1,12 +1,12 @@
-use std::{fs, io};
-use std::time::SystemTime;
+use crate::asset::{AssetCache, DefaultLoader, Handle, VfsPath};
 use log::{debug, warn};
 use sharc::ShaderArchive;
-use crate::asset::{AssetCache, DefaultLoader, Handle, VfsPath};
+use std::time::SystemTime;
+use std::{fs, io};
 
 pub mod pipeline_cache;
-mod render_world;
 mod reflection;
+mod render_world;
 mod util;
 //mod technique;
 
@@ -114,4 +114,3 @@ fn load_shader_archive(path: impl AsRef<VfsPath>) -> Handle<ShaderArchive> {
         Ok(a)
     })
 }
-

@@ -1,86 +1,17 @@
 import common;
 import scene_info;
 import ridge_detection;
+import winged_edge;
 
-static const uint16_t CLUSTER_EDGE_FLAG_BORDER = 1 << 0;
-static const uint16_t CLUSTER_EDGE_FLAG_CREASE = 1 << 1;
 
-struct ClusterEdge {
-    uint16_t normal_cw;
-    uint16_t normal_ccw;
-    uint16_t vertex_0;
-    uint16_t vertex_1;
-}
-
-struct ClusterVertex {
+struct PointData {
     float3 position;
-    uint32_t point_index;
+    uint group_id;
+}
+
+struct FaceVertexData {
+    uint point;
     float3 normal;
-    float pointy;
-}
-
-struct ClusterFace {
-    uint16_t3 vertices;
-    uint3 edges;
-}
-
-struct Meshlet {
-    NormalCone normal_cone;
-    uint base_vertex;
-    uint base_edge;
-    uint base_face;
-    uint base_face_normal;
-    uint16_t vertex_count;
-    uint16_t edge_count;
-    uint16_t face_count;
-    uint16_t face_normal_count;
-    uint16_t group_id;
-}
-
-// See documentation in outlines.rs
-struct MeshData {
-    ClusterVertex* vertices;
-    ClusterEdge* edges;
-    ClusterFace* faces;
-    float3* face_normals;
-    Meshlet* meshlets;
-}
-
-struct WingedEdgeFace {
-    uint edges[3];
-}
-
-struct WingedEdgeFaceVertex {
-    float3 normal;
-    uint vertex;
-    uint incident_edge;
-}
-
-struct WingedEdge {
-    uint src_vtx;
-    uint dst_vtx;
-    uint r_face;
-    uint l_face;
-    uint r_cw_edge;
-    uint r_ccw_edge;
-    uint l_ccw_edge;
-    uint l_cw_edge;
-}
-
-struct WingedEdgeMeshData {
-    float3 *vertices;
-    WingedEdgeFaceVertex *face_vertices;
-    WingedEdge *edges;
-    WingedEdgeFace *faces;
-    uint face_vertex_count;
-    uint padding;
-}
-
-struct NormalCone {
-    float3 axis;
-    float angle;
-    float3 center;
-    float radius;
 }
 
 struct OutlineVertex {
@@ -95,7 +26,7 @@ struct OutlineVertex {
     float2 local_pos;
 }
 
-struct ContourEdge {
+struct ContourSegment {
     float3 position_0;
     uint32_t point_0;
     float3 position_1;
@@ -103,9 +34,9 @@ struct ContourEdge {
     uint16_t group_id;
 }
 
-struct ContourEdgeBuffer {
+struct ContourSegmentBuffer {
     uint32_t count;
-    ContourEdge edges[];
+    ContourSegment segments[];
 }
 
 struct ContourPoint {
@@ -114,24 +45,18 @@ struct ContourPoint {
     uint next;
 }
 
-static const uint MAX_EDGES = 128;
 
 // Common root params for contour extraction and rendering
 struct ContourRootParams {
-    // input mesh
     SceneInfo* scene_info;
-    MeshData mesh;
-    WingedEdgeMeshData we_mesh;
-    uint cluster_count;
+    WEMeshData<PointData, FaceVertexData> mesh;
+
+    // Camera position used for contour extraction,
+    // can be different from scene_info.eye for debugging purposes
     float3 eye;
 
     // contour extraction output
-    ContourEdgeBuffer* contour_edges_old;
-    uint contour_point_count;
-    ContourPoint* contour_point_list;
-    ContourPoint* contour_point_list_subdiv;
-    uint global_point_count;
-    uint* global_to_contour_index_map;       // global point index -> contour point index
+    ContourSegmentBuffer* segments;
 
     // contour ranking data
     uint64_t* contours_rank_successors_0;
@@ -155,22 +80,8 @@ struct ContourRootParams {
     Texture2D<uint16_t4>.Handle angle_texture;
     Texture2D<float4>.Handle normal_texture;
     Texture2D<float4>.Handle shading_texture;
-
-    // JFA
-    RWTexture2D<int16_t2>.Handle jfa_result;
-    RWTexture2D<int16_t2>.Handle jfa_in_texture;
-    RWTexture2D<int16_t2>.Handle jfa_out_texture;
-    uint jfa_step_size;
 }
 
-
-ClusterVertex fetch_mesh_vertex(MeshData data, uint draw_id, uint vertex_id) {
-    let base_face = data.meshlets[draw_id].base_face;
-    let base_vertex = data.meshlets[draw_id].base_vertex;
-    let face = data.faces[base_face + vertex_id / 3];
-    let vertex = data.vertices[base_vertex + face.vertices[vertex_id % 3]];
-    return vertex;
-}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Depth pass
@@ -186,9 +97,10 @@ struct DepthPassVertexOutput {
 [pass("depth_pass")]
 DepthPassVertexOutput depth_pass_vertex(uint vertex_id : SV_VertexID, uint draw_id: SV_DrawIndex, uniform ContourRootParams* u)
 {
-    let vertex = fetch_mesh_vertex(u.mesh, draw_id, vertex_id);
+    let vertex = u.mesh.face_vertices[vertex_id].data;
+    let point = u.mesh.points[vertex.point].data;
     DepthPassVertexOutput o;
-    o.pos = mul(u.scene_info.view_proj_matrix, float4(vertex.position, 1.0));
+    o.pos = mul(u.scene_info.view_proj_matrix, float4(point.position, 1.0));
     return o;
 }
 
@@ -222,13 +134,15 @@ struct BaseRenderFSOut {
 [pass("base_render")]
 BaseRenderVSOut base_render_vertex(uint vertex_id : SV_VertexID, uint draw_id: SV_DrawIndex, uniform ContourRootParams* u)
 {
-    let vertex = fetch_mesh_vertex(u.mesh, draw_id, vertex_id);
+    let vertex = u.mesh.face_vertices[vertex_id].data;
+    let point = u.mesh.points[vertex.point].data;
+
     BaseRenderVSOut o;
-    o.pos = mul(u.scene_info.view_proj_matrix, float4(vertex.position, 1.0));
+    o.pos = mul(u.scene_info.view_proj_matrix, float4(point.position, 1.0));
     o.normal = mul(float3x3(u.scene_info.view_matrix), vertex.normal);
     o.meshlet_id = draw_id;
-    o.group_id = u.mesh.meshlets[draw_id].group_id;
-    let pos_view = mul(u.scene_info.view_matrix, float4(vertex.position, 1.0)).xyz;
+    o.group_id = point.group_id;
+    let pos_view = mul(u.scene_info.view_matrix, float4(point.position, 1.0)).xyz;
     o.view = normalize(pos_view);
     return o;
 }
@@ -252,183 +166,47 @@ BaseRenderFSOut base_render_fragment(BaseRenderVSOut i, uniform ContourRootParam
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-// Base render + depth pre-pass (Winged edge repr)
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-struct WEBaseRenderVSOut {
-    float4 pos: SV_Position;
-    [[vk::location(0)]] float4 color;
-    [[vk::location(1)]] float3 normal;
-}
-
-struct WEBaseRenderFSOut {
-    [[vk::location(0)]] float4 color;
-    [[vk::location(1)]] float3 normal;
-}
-
-
-[shader("vertex")]
-[pass("we_base_render")]
-WEBaseRenderVSOut we_base_render_vertex(uint vertex_id : SV_VertexID, uint draw_id: SV_DrawIndex, uniform ContourRootParams* u)
-{
-    let fi = vertex_id / 3;
-    let fvi = u.we_mesh.faces[fi].edges[vertex_id % 3]; // read 1
-    let face_vertex = u.we_mesh.face_vertices[fvi];     // read 2
-    let position = u.we_mesh.vertices[face_vertex.vertex]; // read 3
-
-    WEBaseRenderVSOut o;
-    o.pos = mul(u.scene_info.view_proj_matrix, float4(position, 1.0));
-    o.normal = face_vertex.normal;// mul(float3x3(u.scene_info.view_matrix), vertex.normal);
-    return o;
-}
-
-[shader("fragment")]
-[pass("we_base_render")]
-WEBaseRenderFSOut we_base_render_fragment(WEBaseRenderVSOut vsout, uniform ContourRootParams* u) {
-    WEBaseRenderFSOut o;
-    float3 normal = normalize(vsout.normal);
-    float light_intensity = saturate(dot(normal, -normalize(u.main_light_direction)));
-    o.color = srgba8_to_float4(u.silhouette_color);
-    o.normal = normal;
-    // colorize per cluster
-    //o.color.rgb = palette(float(i.meshlet_id) * 0.1, float3(0.5,0.5,0.5),float3(0.5,0.5,0.5),float3(1.0,1.0,1.0),float3(0.0,0.33,0.67));
-    o.color.rgb = normal;
-    return o;
-}
-
-
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
 // Outline extraction
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-
-[shader("compute")]
-[numthreads(MAX_EDGES, 1, 1)]
-[pass("extract_contours")]
-void extract_contours(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_GroupThreadID, uniform ContourRootParams* u)
-{
-    // we spawn one workgroup per edge cluster, and each thread in the workgroup processes one edge
-
-    // cluster index
-    uint cli = group_id.x;
-    if (cli >= u.cluster_count) {
-        return;
-    }
-
-    Meshlet* m = &u.mesh.meshlets[cli];
-    let base_edge = m.base_edge;
-    let base_vertex = m.base_vertex;
-    let base_face_normal = m.base_face_normal;
-
-    uint edge_index = group_thread_id.x;
-    if (edge_index >= m.edge_count) {
-        return;
-    }
-
-    let edge = u.mesh.edges[base_edge + edge_index];
-    var is_boundary = false;
-    var is_contour = false;
-    var reverse_edge = false;
-
-    if (edge.normal_cw == 0xFFFF || edge.normal_ccw == 0xFFFF) {
-        is_boundary = true;
-    } else {
-        let n_cw = u.mesh.face_normals[base_face_normal + edge.normal_cw];
-        let n_ccw = u.mesh.face_normals[base_face_normal + edge.normal_ccw];
-        let view = u.eye - u.mesh.vertices[base_vertex + edge.vertex_0].position;
-        if (dot(n_cw, view) * dot(n_ccw, view) < 0.0) {
-            // cw face is backfacing, reverse edge direction so that it follows the front-facing polygon
-            reverse_edge = dot(n_cw, view) < 0.0;
-            is_contour = true;
-            let ncross = cross(n_ccw, n_cw);
-            let edge_dir = u.mesh.vertices[base_vertex + edge.vertex_1].position - u.mesh.vertices[base_vertex + edge.vertex_0].position;
-            //if (dot(edge_dir, ncross) < -0.01) {
-            //    // concave edge, not a contour
-            //    is_contour = false;
-            //}
-        }
-    }
-
-    if (is_boundary) {
-        //// write edge
-        //uint edge_ptr;
-        //InterlockedAdd(u.contour_edges.count, 1, edge_ptr);
-        //u.contour_edges.edges[edge_ptr] = ContourEdge(
-        //    u.mesh.vertices[base_vertex + edge.vertex_0].position,
-        //    u.mesh.vertices[base_vertex + edge.vertex_0].point_index,
-        //    u.mesh.vertices[base_vertex + edge.vertex_1].position,
-        //    u.mesh.vertices[base_vertex + edge.vertex_1].point_index,
-        //    m.group_id
-        //);
-
-        // insert points in index map
-
-        uint contour_p0_index;
-        InterlockedAdd(u.contour_point_count, 1, contour_p0_index);
-
-        var p0_index = u.mesh.vertices[base_vertex + edge.vertex_0].point_index;
-        var p0_pos = u.mesh.vertices[base_vertex + edge.vertex_0].position;
-        var p1_index = u.mesh.vertices[base_vertex + edge.vertex_1].point_index;
-        var p1_pos = u.mesh.vertices[base_vertex + edge.vertex_1].position;
-        if (reverse_edge) {
-            let temp = p0_index;
-            p0_index = p1_index;
-            p1_index = temp;
-            let temp_pos = p0_pos;
-            p0_pos = p1_pos;
-            p1_pos = temp_pos;
-        }
-
-        u.global_to_contour_index_map[p0_index] = contour_p0_index;
-        u.contour_point_list[contour_p0_index].position = p0_pos;
-        u.contour_point_list[contour_p0_index].group_id = m.group_id;
-        u.contour_point_list[contour_p0_index].next = p1_index;   // replaced with contour point index in a later pass
-    }
-}
 
 float point_orientation(float3 point, float3 cam, float3 normal, float offset = 0.0) {
     let view = normalize(point - cam);
     return dot(normalize(normal), view) - offset;
 }
 
+static const uint EXTRACT_CONTOURS_THREAD_GROUP_SIZE = 128;
 
 [shader("compute")]
-[numthreads(MAX_EDGES, 1, 1)]
+[numthreads(EXTRACT_CONTOURS_THREAD_GROUP_SIZE, 1, 1)]
 [pass("extract_interpolated_contours")]
-void extract_interpolated_contours(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_GroupThreadID, uniform ContourRootParams* u)
+void extract_interpolated_contours(uint3 thread_id: SV_DispatchThreadID, uniform ContourRootParams* u)
 {
-    // restrict to valid clusters
-    uint cli = group_id.x;
-    if (cli >= u.cluster_count) {
-        return;
-    }
-
-    // load meshlet
-    Meshlet* m = &u.mesh.meshlets[cli];
-    let base_face = m.base_face;
-    let base_vertex = m.base_vertex;
+    // one thread per face
 
     // restrict to valid faces
-    uint face_index = group_thread_id.x;
-    if (face_index >= m.face_count) {
+    uint face_index = thread_id.x;
+    if (face_index >= u.mesh.face_count) {
         return;
     }
 
     // load face vertices
-    let face = u.mesh.faces[base_face + face_index];
-    let v1 = u.mesh.vertices[base_vertex + face.vertices.x];
-    let v2 = u.mesh.vertices[base_vertex + face.vertices.y];
-    let v3 = u.mesh.vertices[base_vertex + face.vertices.z];
+    let face = u.mesh.faces[face_index];
 
-    // camera position ("eye" position)
-    var eye = u.eye;
+    // face vertices are stored in consecutive order in the face vertex buffer
+    let fv1 = u.mesh.get_face_vertex(face_index, 0).data;
+    let fv2 = u.mesh.get_face_vertex(face_index, 1).data;
+    let fv3 = u.mesh.get_face_vertex(face_index, 2).data;
+    // fetch point data for vertices
+    let v1 = u.mesh.points[fv1.point].data;
+    let v2 = u.mesh.points[fv2.point].data;
+    let v3 = u.mesh.points[fv3.point].data;
 
-    // Evaluate n.v term (point orientation relative to camera) for each vertex of the face.
+    // Evaluate point orientation relative to camera (the n.v term) for each vertex of the face.
     // negative orientation means point facing away, positive means facing towards camera.
-    let o1 = point_orientation(v1.position, eye, v1.normal, u.isophote_offset);
-    let o2 = point_orientation(v2.position, eye, v2.normal, u.isophote_offset);
-    let o3 = point_orientation(v3.position, eye, v3.normal, u.isophote_offset);
+    let o1 = point_orientation(v1.position, u.eye, fv1.normal, u.isophote_offset);
+    let o2 = point_orientation(v2.position, u.eye, fv2.normal, u.isophote_offset);
+    let o3 = point_orientation(v3.position, u.eye, fv3.normal, u.isophote_offset);
 
     // If all vertices point the same way (either all away or all towards camera),
     // there is no contour crossing this face.
@@ -446,37 +224,40 @@ void extract_interpolated_contours(uint3 group_id : SV_GroupID, uint3 group_thre
         // contour passing between v1-v2 and v2-v3
         interp1 = (o2 * v1.position - o1 * v2.position) / (o2 - o1);
         interp2 = (o3 * v2.position - o2 * v3.position) / (o3 - o2);
-        pkpt_1 = v1.point_index;
-        pkpt_2 = v2.point_index;
+        pkpt_1 = fv1.point;
+        pkpt_2 = fv2.point;
     } else if (flip1) {
         // contour passing between v1-v2 and v3-v1
         interp1 = (o2 * v1.position - o1 * v2.position) / (o2 - o1);
         interp2 = (o1 * v3.position - o3 * v1.position) / (o1 - o3);
-        pkpt_1 = v1.point_index;
-        pkpt_2 = v3.point_index;
+        pkpt_1 = fv1.point;
+        pkpt_2 = fv3.point;
     } else {
         // contour passing between v2-v3 and v3-v1
         interp1 = (o3 * v2.position - o2 * v3.position) / (o3 - o2);
         interp2 = (o1 * v3.position - o3 * v1.position) / (o1 - o3);
-        pkpt_1 = v2.point_index;
-        pkpt_2 = v3.point_index;
+        pkpt_1 = fv2.point;
+        pkpt_2 = fv3.point;
     }
 
+    // Write the contour segment
     uint e_i;
-    InterlockedAdd(u.contour_edges_old.count, 1, e_i);
-    u.contour_edges_old.edges[e_i] = ContourEdge(
+    InterlockedAdd(u.segments.count, 1, e_i);
+    u.segments.segments[e_i] = ContourSegment(
         interp1,
         pkpt_1,
         interp2,
         pkpt_2,
-        m.group_id
+        v1.group_id
     );
 }
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Contour list ranking and reordering
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+/*
 static const uint SENTINEL = 0xFFFF_FFFF;
 static const uint ROOT = 0x8000_0000;
 static const uint RANK_BLOCK_SIZE = 256;
@@ -638,7 +419,7 @@ void finish_subdivide_contours(uint3 thread_id : SV_DispatchThreadID, uniform Su
         return;
     }
     u.common.contour_point_list[i] = u.common.contour_point_list_subdiv[i];
-}
+}*/
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Expand outlines
@@ -646,86 +427,17 @@ void finish_subdivide_contours(uint3 thread_id : SV_DispatchThreadID, uniform Su
 
 static const uint EXPAND_CONTOURS_GROUP_SIZE = 256;
 
-[pass("expand_contours")]
-[shader("compute")]
-[numthreads(EXPAND_CONTOURS_GROUP_SIZE, 1, 1)]
-void expand_contours(uint3 thread_id : SV_DispatchThreadID, uniform ContourRootParams* u) {
-    let i = thread_id.x;
-    if (i >= u.contour_point_count) {
-        return;
-    }
-
-    let edge_a = u.contour_point_list[i];
-    if (edge_a.next == SENTINEL) {
-        return;
-    }
-    let edge_b = u.contour_point_list[edge_a.next];
-
-    let p0 = i;
-    let p1 = edge_a.next;
-
-    float2 px_size = 2. / u.scene_info.screen_size;
-    float width = u.line_width;
-    float filter_width = u.filter_width;
-    float hw_aa = max(width, 1.) * .5 + filter_width * sqrt(2.);
-
-    var v0 = mul(u.scene_info.view_proj_matrix, float4(edge_a.position, 1.));
-    var v1 = mul(u.scene_info.view_proj_matrix, float4(edge_b.position, 1.));
-
-    float2 v = (v0.xy/v0.w - v1.xy/v1.w) / px_size;
-    float2 vn = px_size * normalize(v);
-    float2 n = px_size * normalize(float2(-v.y, v.x));
-
-    let angle = atan(n.y / n.x);
-
-    v0.xy += hw_aa * vn * v0.w;
-    v1.xy -= hw_aa * vn * v1.w;
-
-    var v0offset = v0;
-    var v1offset = v1;
-    v0.xy -= hw_aa * n * v0.w;
-    v1.xy -= hw_aa * n * v1.w;
-    v0offset.xy += hw_aa * n * v0offset.w;
-    v1offset.xy += hw_aa * n * v1offset.w;
-
-    uint vtx_ptr;
-    uint idx_ptr;
-    InterlockedAdd(u.expanded_contour_vertex_count, 4, vtx_ptr);
-    InterlockedAdd(u.expanded_contours_draw_command.vertex_count, 6, idx_ptr);
-
-    uint16_t flags = /*is_outside_edge ? CLUSTER_EDGE_FLAG_BORDER :*/ 0;
-
-    let pointy_0 = 0.0; //u.mesh.vertices[base_vertex + edge.vertex_0].pointy;
-    let pointy_1 = 1.0; //u.mesh.vertices[base_vertex + edge.vertex_1].pointy;
-    let rank_0 = u.contours_rank_successors_0[p0] & 0xFFFFFFFF;
-    let rank_1 = u.contours_rank_successors_0[p1] & 0xFFFFFFFF;
-    let root_0 = u.contours_rank_successors_0[p0] >> 32;
-    let root_1 = u.contours_rank_successors_0[p1] >> 32;
-
-    u.expanded_contour_vertices[vtx_ptr] = OutlineVertex(v0, angle, flags, edge_a.group_id, float2(0.0, -hw_aa));
-    u.expanded_contour_vertices[vtx_ptr+1] = OutlineVertex(v1, angle, flags, edge_b.group_id, float2(0.0, -hw_aa));
-    u.expanded_contour_vertices[vtx_ptr+2] = OutlineVertex(v0offset, angle, flags, edge_a.group_id, float2(1.0, hw_aa));
-    u.expanded_contour_vertices[vtx_ptr+3] = OutlineVertex(v1offset, angle, flags, edge_b.group_id, float2(1.0, hw_aa));
-
-    u.expanded_contour_indices[idx_ptr] = vtx_ptr;
-    u.expanded_contour_indices[idx_ptr+1] = vtx_ptr + 1;
-    u.expanded_contour_indices[idx_ptr+2] = vtx_ptr + 2;
-    u.expanded_contour_indices[idx_ptr+3] = vtx_ptr + 1;
-    u.expanded_contour_indices[idx_ptr+4] = vtx_ptr + 3;
-    u.expanded_contour_indices[idx_ptr+5] = vtx_ptr + 2;
-}
-
-
 [pass("expand_interpolated_contours")]
 [shader("compute")]
 [numthreads(EXPAND_CONTOURS_GROUP_SIZE, 1, 1)]
 void expand_interpolated_contours(uint3 thread_id : SV_DispatchThreadID, uniform ContourRootParams* u) {
-    let i = thread_id.x;
-    if (i >= u.contour_edges_old.count) {
-        return;
-    }
 
-    let edge = u.contour_edges_old.edges[i];
+    // one thread per contour segment
+    let i = thread_id.x;
+    if (i >= u.segments.count)
+        return;
+
+    let edge = u.segments.segments[i];
 
     float2 px_size = 2. / u.scene_info.screen_size;
     float width = u.line_width;
@@ -847,126 +559,4 @@ RenderOutlinesFSOut render_outlines_fragment(
     //o.color = float4(0.0, 0.0, 0.0, 0.0);
 
     return o;
-
-    
-
-    //RenderOutlinesFSOut o;
-    //o.color = uint4(vsout.group_id, uint((vsout.angle / TAU) * 65535.), vsout.pointy * 65535, 1);
-    //o.depth = frag_coord.z-0.1;
-    //return o;
-}
-
-
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-// Corner detection
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-[pass("corner_detection")]
-[shader("vertex")]
-ScreenQuadVSOut corner_detection_vertex_shader(uint vertex_id : SV_VertexID)
-{
-    return screen_quad_vertex_shader(vertex_id);
-}
-
-struct CornerDetectionFSOut {
-    [[vk::location(0)]] float4 color;
-}
-
-
-[pass("corner_detection")]
-[shader("fragment")]
-CornerDetectionFSOut corner_detection_fragment_shader(
-    float3 frag_coord: SV_Position,
-    ScreenQuadVSOut vertex_output,
-    uniform ContourRootParams* params)
-{
-    int2 coords = int2(frag_coord.xy);
-    int2 size = int2(params.scene_info.screen_size);
-    let base = params.normal_texture.Load(int3(coords, 0));
-
-    float max_curv;
-    float axis_dist;
-    float2 axis;
-
-    compute_ridge_properties(
-        params->shading_texture,
-        params->depth_texture,
-        params->angle_texture,
-        coords,
-        size,
-        max_curv,
-
-        axis_dist,
-        axis
-    );
-
-    float angle = atan2(axis.y, axis.x);
-
-    //static const int W = 1;
-    //float3 accum = float3(0.0);
-    //var weight_sum = 0.0;
-
-    //for (int i = -W; i <= W; ++i) {
-    //    for (int j = -W; j <= W; ++j) {
-    //        accum += fetch_image_value(params, coord.xy + int2(i, j));
-    //        weight_sum += 1.0;
-    //    }
-    //}
-
-
-    CornerDetectionFSOut o;
-    o.color = float4(colorize_1d(max_curv * 5), 1.0);
-    //o.color = float4(colorize_angle(angle) * max_curv * 5. , 1.0);
-   //o.color = float4(base.rgb, 1.0);
-    return o;
-
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-// JFA 
-///////////////////////////////////////////////////////////////////////////////////////////////////
-static const uint JFA_TILE_SIZE = 16;
-
-
-[shader("compute")]
-[pass("jfa_init")]
-[numthreads(JFA_TILE_SIZE, JFA_TILE_SIZE, 1)]
-void jfa_init(uint3 thread_id : SV_DispatchThreadID, uniform ContourRootParams* params)
-{
-    int3 coord = int3(thread_id.xy, 0);
-    let texel = params.angle_texture.Load(coord, 0);
-    let init = texel.a > 0.0 ? int16_t2(coord.x, coord.y) : int16_t2(-1, -1);
-    params.jfa_in_texture.Store(coord.xy, init);
-}
-
-
-[shader("compute")]
-[pass("jfa_step")]
-[numthreads(JFA_TILE_SIZE, JFA_TILE_SIZE, 1)]
-void jfa_step(uint3 thread_id : SV_DispatchThreadID, uniform ContourRootParams *params)
-{
-    int2 coord = thread_id.xy;
-    let k = params.jfa_step_size;
-    var cur = params.jfa_in_texture.Load(coord);
-    var cur_dist = length(float2(cur - coord));
-
-    let size = int2(params.scene_info.screen_size);
-    if (coord.x >= size.x || coord.y >= size.y) {
-        return;
-    }
-
-    for (int i = -1; i <= 1; ++i) {
-        for (int j = -1; j <= 1; ++j) {
-            let ncoord = clamp(coord + k * int2(i, j), int2(0,0), size - int2(1,1));
-            let nb = params.jfa_in_texture.Load(ncoord);
-            let dist = length(float2(nb - coord));
-            if (nb.x != -1 && (cur.x == -1 || dist < cur_dist)) {
-                cur = nb;
-                cur_dist = dist;
-            }
-        }
-    }
-
-    params.jfa_out_texture.Store(coord, cur);
 }

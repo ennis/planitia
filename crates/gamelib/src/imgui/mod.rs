@@ -12,8 +12,7 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use std::{fs, mem};
 
-pub struct ImGui<'a>
-{
+pub struct ImGui<'a> {
     egui: &'a mut egui::Ui,
 }
 

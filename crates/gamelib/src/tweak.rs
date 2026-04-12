@@ -1,18 +1,17 @@
 //! Global tweakable parameters.
 
+use color::Srgba8;
+use egui::Ui;
+use math::{Vec2, Vec3, Vec4};
 use std::any::Any;
 use std::collections::HashMap;
 use std::ops::RangeInclusive;
 use std::panic::Location;
 use std::sync::{LazyLock, Mutex};
-use egui::{Ui};
-use color::Srgba8;
-use math::{Vec2, Vec3, Vec4};
 
 pub trait Tweakable: Any + Send + Sync {
     fn ui(&mut self, ui: &mut egui::Ui, options: &TweakOptions);
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -20,7 +19,6 @@ impl Tweakable for f32 {
     fn ui(&mut self, ui: &mut Ui, options: &TweakOptions) {
         if options.range.start().is_infinite() || options.range.end().is_infinite() {
             ui.add(egui::DragValue::new(self).speed(0.1));
-
         } else {
             ui.add(egui::Slider::new(self, options.range.clone()));
         }
@@ -83,7 +81,11 @@ pub struct TweakOptions {
 
 #[track_caller]
 pub fn tweak_value<T: Tweakable + Clone>(name: &str, default: T, options: TweakOptions) -> T {
-    TWEAKS.lock().unwrap().get_or_insert(Location::caller(), name, default, options).clone()
+    TWEAKS
+        .lock()
+        .unwrap()
+        .get_or_insert(Location::caller(), name, default, options)
+        .clone()
 }
 
 pub fn show_tweaks_gui(ui: &mut Ui) {
@@ -141,10 +143,13 @@ impl Tweaks {
             location,
         };
         if !self.entries.contains_key(&key) {
-            self.entries.insert(key.clone(), Tweak {
-                value: Box::new(default),
-                options,
-            });
+            self.entries.insert(
+                key.clone(),
+                Tweak {
+                    value: Box::new(default),
+                    options,
+                },
+            );
         }
         let value = &mut *self.entries.get_mut(&key).unwrap().value;
         (value as &mut dyn Any).downcast_mut::<T>().unwrap()
@@ -161,6 +166,4 @@ impl Tweaks {
     }
 }
 
-static TWEAKS: LazyLock<Mutex<Tweaks>> = LazyLock::new(|| {
-    Mutex::new(Tweaks::new())
-});
+static TWEAKS: LazyLock<Mutex<Tweaks>> = LazyLock::new(|| Mutex::new(Tweaks::new()));

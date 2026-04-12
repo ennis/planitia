@@ -9,9 +9,9 @@ use crate::paint::shape::RectShape;
 use crate::paint::tessellation::{Mesh, Tessellator};
 use crate::paint::text::GlyphCache;
 use color::Srgba8;
-use gpu::{vk, CommandBuffer, Ptr, RootParams, Sampler, Vertex as GpuVertex};
+use gpu::{CommandBuffer, Ptr, RootParams, Sampler, Vertex as GpuVertex, vk};
 use math::geom::Camera;
-use math::{u16vec2, uvec2, vec2, Mat4, Rect, U16Vec2, UVec2, Vec2};
+use math::{Mat4, Rect, U16Vec2, UVec2, Vec2, u16vec2, uvec2, vec2};
 use shader_bridge::ShaderLibrary;
 
 use crate::paint::atlas::Atlas;
@@ -369,7 +369,8 @@ impl<'a> PaintScene<'a> {
                 image: d,
                 depth_clear: None,
                 stencil_clear: None,
-            }));
+            }),
+        );
 
         let width = params.color_target.width();
         let height = params.color_target.height();

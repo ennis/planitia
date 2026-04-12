@@ -1,8 +1,9 @@
 use crate::{BufferRange, BufferUsage, Device, Ptr, ResourceAllocation, ResourceId, TrackedResource, VulkanObject};
 use ash::vk;
-use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
 use gpu_allocator::MemoryLocation;
+use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
 use log::{trace, warn};
+use std::alloc::Layout;
 use std::collections::Bound;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
@@ -10,18 +11,21 @@ use std::ops::RangeBounds;
 use std::os::raw::c_void;
 use std::ptr::NonNull;
 use std::{mem, ptr, slice};
-use std::alloc::Layout;
+use slotmap::Key;
 
 impl<T: ?Sized> Drop for Buffer<T> {
     fn drop(&mut self) {
         let mut allocation = mem::take(&mut self.allocation);
         let handle = self.handle;
 
-        Device::global().delete_resource_after_current_submission(self.id, move |device| unsafe {
-            trace!("GPU: deleting buffer: {:?}", handle);
-            device.raw.destroy_buffer(handle, None);
-            device.free_memory(&mut allocation);
-        });
+        // skip this if no buffer was actually allocated
+        if !self.id.is_null() {
+            Device::global().delete_resource_after_current_submission(self.id, move |device| unsafe {
+                trace!("GPU: deleting buffer: {:?}", handle);
+                device.raw.destroy_buffer(handle, None);
+                device.free_memory(&mut allocation);
+            });
+        }
     }
 }
 
@@ -62,11 +66,15 @@ unsafe impl<T: ?Sized> Sync for Buffer<T> {}
 impl<T: ?Sized> Buffer<T> {
     pub unsafe fn from_layout(layout: Layout) -> Buffer<T> {
         // TODO ensure alignment
-        let buffer = Device::global().create_buffer(1, BufferCreateInfo {
-            len: layout.size(),
-            usage: BufferUsage::default(),
-            memory_location: MemoryLocation::CpuToGpu,
-        });
+        let buffer = Device::global().create_buffer(
+            1,
+            BufferCreateInfo {
+                len: layout.size(),
+                usage: BufferUsage::default(),
+                memory_location: MemoryLocation::CpuToGpu,
+                ..
+            },
+        );
 
         buffer.cast_unsized()
     }
@@ -140,7 +148,7 @@ impl<T: Copy> Buffer<T> {
     /// Discards the contents of this buffer and replaces it with a buffer of a different size.
     ///
     /// All other properties of the buffer (usage flags, memory location, etc.) are preserved.
-    pub fn discard_resize(&mut self, new_len: usize) {
+    pub fn resize_no_copy(&mut self, new_len: usize) {
         let buffer = Device::global().create_buffer(
             size_of::<T>(),
             BufferCreateInfo {
@@ -149,9 +157,7 @@ impl<T: Copy> Buffer<T> {
                 memory_location: self.memory_location,
             },
         );
-        unsafe {
-            *self = buffer.cast()
-        }
+        unsafe { *self = buffer.cast() }
     }
 
     /// Creates a CpuToGpu buffer and copies data into it.
@@ -175,7 +181,6 @@ impl<T: Copy> Buffer<T> {
 }
 
 impl<T: Copy> Buffer<T> {
-
     /// Returns the number of elements in the buffer.
     pub fn len(&self) -> usize {
         (self.byte_size() / size_of::<T>() as u64) as usize
@@ -313,7 +318,7 @@ impl<T: ?Sized> std::fmt::Debug for Buffer<T> {
     }
 }
 
-impl<T> VulkanObject for Buffer<T> {
+impl<T: ?Sized> VulkanObject for Buffer<T> {
     type Handle = vk::Buffer;
 
     fn handle(&self) -> vk::Buffer {
@@ -341,10 +346,29 @@ impl Device {
     pub(crate) fn create_buffer(&self, elem_size: usize, create_info: BufferCreateInfo) -> BufferUntyped {
         //assert!(create_info.len > 0, "buffer size must be greater than zero");
 
+        // we allow zero-sized buffers: in this case, we don't allocate any memory or create a
+        // Vulkan buffer, but we still return a non-null, dangling, mapped pointer.
         if create_info.len == 0 || elem_size == 0 {
-            warn!(
-                "creating a zero-sized buffer: this is not supported by Vulkan and a minimum size of 1 byte will be used"
-            );
+
+            // dummy struct to get a dangling NonNull with correct alignment
+            #[repr(align(64))]
+            struct Align64;
+
+            let mapped_ptr = NonNull::<Align64>::dangling().cast::<c_void>();
+
+            // Don't output a warning for this
+            // Instead, we should simply not allocate anything in this case.
+            return BufferUntyped {
+                id: ResourceId::null(),
+                allocation: ResourceAllocation::None,
+                handle: vk::Buffer::null(),
+                memory_location: create_info.memory_location,
+                device_address: 0,
+                size: 0,
+                usage: create_info.usage,
+                mapped_ptr: Some(mapped_ptr),
+                _marker: PhantomData,
+            };
         }
         let byte_size = elem_size as u64 * create_info.len as u64;
 

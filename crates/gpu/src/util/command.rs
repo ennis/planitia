@@ -1,6 +1,6 @@
 use crate::{
-    vk, Buffer, CommandBuffer, Device, Image, ImageAspect, ImageCopyBuffer, ImageCopyView, ImageCreateInfo,
-    ImageDataLayout, ImageSubresourceLayers, ImageUsage, Offset3D, Ptr, Rect3D, Size3D,
+    Buffer, CommandBuffer, Device, Image, ImageAspect, ImageCopyBuffer, ImageCopyView, ImageCreateInfo,
+    ImageDataLayout, ImageSubresourceLayers, ImageUsage, Offset3D, Ptr, Rect3D, Size3D, vk,
 };
 
 impl CommandBuffer {

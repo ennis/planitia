@@ -1,9 +1,9 @@
+use crate::{BufferCreateInfo, BufferUntyped, BufferUsage, Ptr};
+use ash::vk;
+use gpu_allocator::MemoryLocation;
 use std::alloc::Layout;
 use std::marker::PhantomData;
 use std::ptr;
-use ash::vk;
-use gpu_allocator::MemoryLocation;
-use crate::{BufferCreateInfo, BufferUntyped, BufferUsage, Ptr};
 
 /// Alignment of upload buffer allocations.
 pub(super) const UPLOAD_BUFFER_ALIGNMENT: usize = 256;

@@ -7,29 +7,15 @@ use utils::archive::Offset;
 #[derive(Clone, Copy)]
 pub enum Value {
     /// Boolean scalar or vector.
-    Bool {
-        count: u8,
-        values: [bool; 4],
-    },
+    Bool { count: u8, values: [bool; 4] },
     /// Signed integer scalar or vector.
-    I32 {
-        count: u8,
-        values: [i32; 4],
-    },
+    I32 { count: u8, values: [i32; 4] },
     /// Unsigned integer scalar or vector.
-    U32 {
-        count: u8,
-        values: [u32; 4],
-    },
+    U32 { count: u8, values: [u32; 4] },
     /// Floating point scalar or vector.
-    F32 {
-        count: u8,
-        values: [f32; 4],
-    },
+    F32 { count: u8, values: [f32; 4] },
     /// String
-    String {
-        value: Offset<str>,
-    }
+    String { value: Offset<str> },
 }
 
 /// Scalar value kinds.
@@ -92,7 +78,7 @@ pub struct MatrixType {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct  SampledType {
+pub struct SampledType {
     pub scalar: ScalarType,
     pub components: u8,
 }
@@ -138,7 +124,6 @@ pub struct FragmentShaderOutput {
     pub components: u8,
 }
 
-
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub enum Interpolation {
@@ -153,7 +138,7 @@ pub struct VertexShaderOutput {
     pub location: u32,
     pub scalar_type: ScalarType,
     pub components: u8,
-    pub interpolation: Interpolation
+    pub interpolation: Interpolation,
 }
 
 /// Location of a shader parameter value.
@@ -168,12 +153,12 @@ pub enum ParamLocation {
         /// Buffer resource index (in `Signature::resources`).
         index: u32,
         /// Byte offset of the parameter within the buffer.
-        offset: u32
+        offset: u32,
     },
     /// Parameter value is passed in push data.
     PushData {
         /// Byte offset of the parameter value within push data.
-        offset: u32
+        offset: u32,
     },
 }
 
@@ -213,8 +198,13 @@ pub struct ShaderResource {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub enum ShaderInterface {
-    Vertex { outputs: Offset<[VertexShaderOutput]> },
-    Fragment { inputs: Offset<[VertexShaderOutput]>, outputs: Offset<[FragmentShaderOutput]> },
+    Vertex {
+        outputs: Offset<[VertexShaderOutput]>,
+    },
+    Fragment {
+        inputs: Offset<[VertexShaderOutput]>,
+        outputs: Offset<[FragmentShaderOutput]>,
+    },
 }
 
 /// Shader entry point signature.

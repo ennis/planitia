@@ -1,5 +1,8 @@
 //! Render command encoders
-use crate::{is_depth_and_stencil_format, Buffer, BufferUntyped, ClearColorValue, ColorAttachment, CommandBuffer, DepthBias, DepthStencilAttachment, Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, Rect2D, RootParams};
+use crate::{
+    Buffer, BufferUntyped, ClearColorValue, ColorAttachment, CommandBuffer, DepthBias, DepthStencilAttachment,
+    Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, Rect2D, RootParams, is_depth_and_stencil_format,
+};
 use ash::vk;
 use std::ops::Range;
 use std::ptr;
@@ -84,12 +87,7 @@ impl<'a> RenderEncoder<'a> {
             match db {
                 Some(db) => {
                     device.cmd_set_depth_bias_enable(self.command_buffer, true);
-                    device.cmd_set_depth_bias(
-                        self.command_buffer,
-                        db.constant_factor,
-                        db.clamp,
-                        db.slope_factor,
-                    );
+                    device.cmd_set_depth_bias(self.command_buffer, db.constant_factor, db.clamp, db.slope_factor);
                 }
                 None => {
                     device.cmd_set_depth_bias_enable(self.command_buffer, false);
@@ -334,13 +332,7 @@ impl<'a> RenderEncoder<'a> {
     }
 
     pub fn draw_screen_quad<'params, T: Copy + 'static>(&mut self, root_params: impl Into<RootParams<'params, T>>) {
-        self.draw(
-            PrimitiveTopology::TriangleList,
-            None,
-            0..6,
-            0..1,
-            root_params,
-        );
+        self.draw(PrimitiveTopology::TriangleList, None, 0..6, 0..1, root_params);
     }
 
     pub fn draw<'params, T: Copy + 'static>(
@@ -519,8 +511,6 @@ impl<'a> Drop for RenderEncoder<'a> {
 }
 
 impl CommandBuffer {
-
-
     /// Starts a rendering pass.
     ///
     /// The render area is set to cover the entire size of the attachments.
@@ -530,10 +520,11 @@ impl CommandBuffer {
     ///
     /// * `color_attachments` - The attachments to use for the render pass
     /// * `depth_stencil_attachment` - The depth-stencil attachment to use for the render pass.
-    pub fn begin_rendering(&mut self,
-                           color_attachments: &[ColorAttachment],
-                           depth_stencil_attachment: Option<DepthStencilAttachment>) -> RenderEncoder<'_>
-    {
+    pub fn begin_rendering(
+        &mut self,
+        color_attachments: &[ColorAttachment],
+        depth_stencil_attachment: Option<DepthStencilAttachment>,
+    ) -> RenderEncoder<'_> {
         // determine render area
         let render_area = {
             // FIXME validate that all attachments have the same size
@@ -557,8 +548,7 @@ impl CommandBuffer {
         };
 
         // Begin render pass
-        let color_attachment_infos: Vec<_> = 
-            color_attachments
+        let color_attachment_infos: Vec<_> = color_attachments
             .iter()
             .map(|a| {
                 vk::RenderingAttachmentInfo {

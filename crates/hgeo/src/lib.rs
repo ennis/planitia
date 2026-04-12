@@ -81,6 +81,7 @@ macro_rules! impl_attribute_type {
 impl_attribute_type!(f32, StorageKind::FpReal32, 1);
 impl_attribute_type!(f64, StorageKind::FpReal64, 1);
 impl_attribute_type!(i32, StorageKind::Int32, 1);
+impl_attribute_type!(u32, StorageKind::Int32, 1);
 impl_attribute_type!(i64, StorageKind::Int64, 1);
 impl_attribute_type!(Vec2, StorageKind::FpReal32, 2);
 impl_attribute_type!(Vec3, StorageKind::FpReal32, 3);

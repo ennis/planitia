@@ -1,5 +1,8 @@
 #![feature(default_field_values)]
-#![allow(unsafe_op_in_unsafe_fn, reason = "too verbose, and my IDE already highlights unsafe call sites")]
+#![allow(
+    unsafe_op_in_unsafe_fn,
+    reason = "too verbose, and my IDE already highlights unsafe call sites"
+)]
 #![expect(unused, reason = "noisy")]
 
 mod buffer;
@@ -15,8 +18,8 @@ pub mod util;
 
 use std::borrow::Cow;
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 // --- reexports ---
 
@@ -37,12 +40,12 @@ pub use gpu_macros::Vertex;
 
 pub mod prelude {
     pub use crate::{
-        vk, Buffer, BufferUsage, ClearColorValue, ColorBlendEquation, ColorTargetState, CommandBuffer,
-        DepthStencilState, Format, FragmentState, GraphicsPipeline, GraphicsPipelineCreateInfo, Image, ImageCreateInfo,
-        ImageType, ImageUsage, MemoryLocation, PipelineBindPoint, PipelineLayoutDescriptor, Point2D,
-        PreRasterizationShaders, RasterizationState, Rect2D, RenderEncoder, Sampler, SamplerCreateInfo, ShaderCode,
-        ShaderEntryPoint, ShaderSource, Size2D, StencilState, Vertex, VertexBufferDescriptor,
-        VertexBufferLayoutDescription, VertexInputAttributeDescription, VertexInputState,
+        Buffer, BufferUsage, ClearColorValue, ColorBlendEquation, ColorTargetState, CommandBuffer, DepthStencilState,
+        Format, FragmentState, GraphicsPipeline, GraphicsPipelineCreateInfo, Image, ImageCreateInfo, ImageType,
+        ImageUsage, MemoryLocation, PipelineBindPoint, PipelineLayoutDescriptor, Point2D, PreRasterizationShaders,
+        RasterizationState, Rect2D, RenderEncoder, Sampler, SamplerCreateInfo, ShaderCode, ShaderEntryPoint,
+        ShaderSource, Size2D, StencilState, Vertex, VertexBufferDescriptor, VertexBufferLayoutDescription,
+        VertexInputAttributeDescription, VertexInputState, vk,
     };
 }
 
@@ -53,7 +56,6 @@ pub trait VulkanObject {
     type Handle: vk::Handle;
     fn handle(&self) -> Self::Handle;
 }
-
 
 /// Standard subgroup size.
 pub const SUBGROUP_SIZE: u32 = 32;
@@ -189,6 +191,13 @@ impl Drop for GraphicsPipeline {
     }
 }
 
+impl VulkanObject for GraphicsPipeline {
+    type Handle = vk::Pipeline;
+    fn handle(&self) -> Self::Handle {
+        self.pipeline
+    }
+}
+
 /// Compute pipelines.
 ///
 /// TODO Drop impl
@@ -209,6 +218,13 @@ impl ComputePipeline {
 
     /// Returns the Vulkan pipeline handle.
     pub fn pipeline(&self) -> vk::Pipeline {
+        self.pipeline
+    }
+}
+
+impl VulkanObject for ComputePipeline {
+    type Handle = vk::Pipeline;
+    fn handle(&self) -> Self::Handle {
         self.pipeline
     }
 }

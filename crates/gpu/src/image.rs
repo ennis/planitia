@@ -1,7 +1,8 @@
 use crate::device::get_vk_sample_count;
 use crate::{
-    BufferUntyped, CommandBuffer, Descriptor, Device, Format, ResourceAllocation, ResourceDescriptorIndex, ResourceId,
-    Size3D, StorageImageHandle, TextureHandle, TrackedResource, VulkanObject, aspects_for_format,
+    BufferUntyped, ColorAttachment, CommandBuffer, DepthStencilAttachment, Descriptor, Device, Format,
+    ResourceAllocation, ResourceDescriptorIndex, ResourceId, Size3D, StorageImageHandle, TextureHandle,
+    TrackedResource, VulkanObject, aspects_for_format,
 };
 use ash::vk;
 use ash::vk::Handle;
@@ -320,7 +321,7 @@ impl Image {
     /// - when called on an imported image (via e.g. create_imported_image_win32).
     /// - when the specified dimensions do not match the current dimensionality
     ///   (e.g. depth != 1 when image_type is Image2D).
-    pub fn discard_resize(&mut self, new_size: Size3D) {
+    pub fn resize_no_copy(&mut self, new_size: Size3D) {
         assert!(!self.swapchain_image, "cannot resize a swap chain image");
         assert!(
             !matches!(
@@ -346,6 +347,34 @@ impl Image {
             array_layers: self.array_layers,
             samples: self.samples,
         });
+    }
+
+    /// Returns a [`ColorAttachment`] referencing this image, with the specified clear color.
+    ///
+    /// # Arguments
+    /// - `clear_color`: color to clear to when beginning a render pass with this attachment. `None` to leave contents unchanged.
+    pub fn as_color_attachment(&self, clear_color: impl Into<Option<[f64; 4]>>) -> ColorAttachment<'_> {
+        ColorAttachment {
+            image: self,
+            clear: clear_color.into(),
+        }
+    }
+
+    /// Returns a [`DepthStencilAttachment`] referencing this image, with the specified clear depth and stencil values.
+    ///
+    /// # Arguments
+    /// - `clear_depth`: depth value to clear to when beginning a render pass with this attachment. `None` to leave depth contents unchanged.
+    /// - `clear_stencil`: stencil value to clear to when beginning a render pass with this attachment. `None` to leave stencil contents unchanged.
+    pub fn as_depth_stencil_attachment(
+        &self,
+        clear_depth: impl Into<Option<f64>>,
+        clear_stencil: impl Into<Option<u32>>,
+    ) -> DepthStencilAttachment<'_> {
+        DepthStencilAttachment {
+            image: self,
+            depth_clear: clear_depth.into(),
+            stencil_clear: clear_stencil.into(),
+        }
     }
 }
 
@@ -480,7 +509,7 @@ impl Device {
         }
     }
 
-    // bullshit to transition to GENERAL layout and appease the validation layers
+    // to transition to GENERAL layout and appease the validation layers
     // the contents will be undefined anyway
     pub(crate) unsafe fn transition_image_to_general(&self, image: vk::Image, aspect_mask: vk::ImageAspectFlags) {
         unsafe {

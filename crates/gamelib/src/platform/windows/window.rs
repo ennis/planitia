@@ -2,11 +2,12 @@ use crate::platform::RenderTargetImage;
 use crate::platform::windows::graphics::GraphicsContext;
 use crate::platform::windows::swap_chain::{DxgiVulkanInteropSwapChain, dxgi_to_vk_format};
 use crate::platform::windows::{Error, get_hwnd};
+use crate::util::env_flag;
 use gpu::vk;
+use log::info;
 use std::cell::Cell;
 use std::env;
 use std::time::Duration;
-use log::info;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::DirectComposition::{IDCompositionTarget, IDCompositionVisual2};
 use windows::Win32::Graphics::Dxgi::Common::{
@@ -18,7 +19,6 @@ use winit::event_loop::ActiveEventLoop;
 use winit::platform::windows::WindowAttributesExtWindows;
 use winit::raw_window_handle::HasWindowHandle;
 use winit::window::WindowAttributes;
-use crate::util::env_flag;
 
 struct DCompState {
     composition_target: IDCompositionTarget,
@@ -50,7 +50,6 @@ pub(super) struct Window {
 
 impl Window {
     pub(super) fn new(event_loop: &ActiveEventLoop, title: &str, width: u32, height: u32) -> Result<Window, Error> {
-
         let use_directcomposition = env_flag("USE_DXGI");
 
         if use_directcomposition {
@@ -159,7 +158,8 @@ impl Window {
                 }
             }
             SwapChainMode::Vulkan(ref mut swap_chain) => {
-                gpu::present(swap_chain, self.swap_chain_image_index.get()).expect("failed to present swap chain image");
+                gpu::present(swap_chain, self.swap_chain_image_index.get())
+                    .expect("failed to present swap chain image");
             }
         }
     }

@@ -1,14 +1,14 @@
 use crate::asset::{AssetCache, DefaultLoader, Dependencies, FileMetadata, Handle, LoadResult, Provider, VfsPath};
-use gpu::{PreRasterizationShaders, ShaderEntryPoint, vk};
+use crate::render::load_shader_archive;
+use crate::render::reflection::GraphicsPipelineReflection;
+use gpu::{PreRasterizationShaders, ShaderEntryPoint, vk, set_debug_name};
 use log::{debug, warn};
-use sharc::{ShaderArchive, Shader};
+use sharc::{Shader, ShaderArchive};
+use std::ops::Deref;
 use std::sync::MutexGuard;
 use std::time::SystemTime;
 use std::{fs, io};
-use std::ops::Deref;
 use utils::archive::Offset;
-use crate::render::load_shader_archive;
-use crate::render::reflection::GraphicsPipelineReflection;
 
 #[derive(thiserror::Error, Debug)]
 pub enum PipelineCreateError {
@@ -38,6 +38,7 @@ fn get_shader_entry_point<'a>(
 
 fn create_graphics_pipeline_from_archive(
     archive: &ShaderArchive,
+    name: &str,
     entry: &sharc::GraphicsPipeline,
 ) -> Result<gpu::GraphicsPipeline, PipelineCreateError> {
     let color_targets: Vec<_> = {
@@ -135,11 +136,17 @@ fn create_graphics_pipeline_from_archive(
         },
     };
     let pipeline = gpu::GraphicsPipeline::new(gpci)?;
+
+    unsafe {
+        gpu::set_debug_name(&pipeline, name);
+    }
+
     Ok(pipeline)
 }
 
 fn create_compute_pipeline_from_archive(
     archive: &ShaderArchive,
+    name: &str,
     entry: &sharc::ComputePipeline,
 ) -> Result<gpu::ComputePipeline, PipelineCreateError> {
     let shader = get_shader_entry_point(gpu::ShaderStage::Compute, &archive, &entry.compute_shader);
@@ -149,6 +156,9 @@ fn create_compute_pipeline_from_archive(
         shader,
     };
     let pipeline = gpu::ComputePipeline::new(cpci)?;
+    unsafe {
+        gpu::set_debug_name(&pipeline, name);
+    }
     Ok(pipeline)
 }
 
@@ -158,6 +168,7 @@ fn load_graphics_pipeline(
     _provider: &dyn Provider,
     _dependencies: &mut Dependencies,
 ) -> LoadResult<gpu::GraphicsPipeline> {
+
     let archive_file = path.path_without_fragment();
     let name = path.fragment().expect("pipeline name missing in path");
     let archive_handle = load_shader_archive(archive_file);
@@ -173,7 +184,7 @@ fn load_graphics_pipeline(
         .find_graphics_pipeline(name)
         .ok_or_else(|| PipelineCreateError::PipelineNotFound(name.to_string()))?;
 
-    Ok(create_graphics_pipeline_from_archive(&*archive, entry)?)
+    Ok(create_graphics_pipeline_from_archive(&*archive, name, entry)?)
 }
 
 fn load_compute_pipeline(
@@ -186,19 +197,14 @@ fn load_compute_pipeline(
     let name = path.fragment().expect("pipeline name missing in path");
     let archive_handle = load_shader_archive(archive_file);
 
-    debug!(
-        "loading pipeline `{}` (compute) from `{}`",
-        name,
-        archive_file.as_str()
-    );
+    debug!("loading pipeline `{}` (compute) from `{}`", name, archive_file.as_str());
 
     let archive = archive_handle.read()?;
     let entry = archive
         .find_compute_pipeline(name)
         .ok_or_else(|| PipelineCreateError::PipelineNotFound(name.to_string()))?;
-    Ok(create_compute_pipeline_from_archive(&*archive, entry)?)
+    Ok(create_compute_pipeline_from_archive(&*archive, name, entry)?)
 }
-
 
 /// Loads a graphics pipeline object from the specified archive file and pipeline name.
 pub fn get_graphics_pipeline(path: impl AsRef<VfsPath>) -> Handle<gpu::GraphicsPipeline> {
@@ -233,9 +239,7 @@ impl DefaultLoader for gpu::ComputePipeline {
     }
 }
 
-
 //--------------------------------------------------------------------------------------------------
-
 
 /// Represents a graphics pipeline with reflection information.
 pub struct GraphicsPipeline {
@@ -258,15 +262,13 @@ impl GraphicsPipeline {
     }
 }
 
-
 impl DefaultLoader for GraphicsPipeline {
     fn load(
         path: &VfsPath,
         metadata: &FileMetadata,
         provider: &dyn Provider,
         dependencies: &mut Dependencies,
-    ) -> LoadResult<Self>
-    {
+    ) -> LoadResult<Self> {
         let archive_file = path.path_without_fragment();
         let name = path.fragment().expect("pipeline name missing in path");
         let archive_handle = load_shader_archive(archive_file);
@@ -280,12 +282,12 @@ impl DefaultLoader for GraphicsPipeline {
         let pass = archive
             .find_graphics_pipeline(name)
             .ok_or_else(|| PipelineCreateError::PipelineNotFound(name.to_string()))?;
-        let pipeline = create_graphics_pipeline_from_archive(&*archive, pass)?;
+        let pipeline = create_graphics_pipeline_from_archive(&*archive, name, pass)?;
 
         // --- extract reflection data into memory ---
         let mut alloc = bumpalo::Bump::new();
 
-        // color output formats²
+        // color output formats
         let color_formats;
         {
             let mut f = Vec::with_capacity(archive[pass.color_targets].len());
@@ -296,9 +298,8 @@ impl DefaultLoader for GraphicsPipeline {
             color_formats = alloc.alloc_slice_copy(&f);
         }
 
-        let reflection = alloc.alloc(GraphicsPipelineReflection {
-            color_formats,
-        }) as *const _ as *const GraphicsPipelineReflection<'static>;
+        let reflection = alloc.alloc(GraphicsPipelineReflection { color_formats }) as *const _
+            as *const GraphicsPipelineReflection<'static>;
 
         Ok(GraphicsPipeline {
             compiled: pipeline,

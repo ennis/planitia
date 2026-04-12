@@ -5,6 +5,8 @@ use crate::imgui::ImguiContext;
 use crate::input::InputEvent;
 pub use crate::platform::LoopHandler;
 use crate::platform::{EventToken, InitOptions, Platform, PlatformInterface, RenderTargetImage, UserEvent};
+use crate::tweak::show_tweaks_gui;
+use crate::util::env_flag;
 use futures::future::AbortHandle;
 use gpu::vk::Handle;
 use keyboard_types::{Key, KeyState, Modifiers, NamedKey};
@@ -18,8 +20,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, OnceLock};
 use std::{mem, ptr};
 use threadbound::ThreadBound;
-use crate::tweak::show_tweaks_gui;
-use crate::util::env_flag;
 
 /// Holds the application's global objects and services.
 pub(crate) struct Context {
@@ -167,7 +167,6 @@ pub struct App<H: 'static>(OnceLock<AppInner<H>>);
 // Holds the currently running App instance.
 //static CURRENT_APP: OnceLock<&'static App<dyn AppHandler>> = OnceLock::new();
 
-
 impl<H: AppHandler + Default + 'static> App<H> {
     pub const fn new() -> Self {
         App(OnceLock::new())
@@ -308,8 +307,7 @@ where
 
         match input_event {
             InputEvent::KeyboardEvent(ref ke) if ke.key == Key::Named(NamedKey::F9) && ke.state == KeyState::Down => {
-                if ke.modifiers.contains(Modifiers::SHIFT) {
-                }
+                if ke.modifiers.contains(Modifiers::SHIFT) {}
             }
             _ => {}
         }

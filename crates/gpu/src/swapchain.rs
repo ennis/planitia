@@ -1,5 +1,5 @@
 use crate::device::{get_preferred_present_mode, get_preferred_swap_extent};
-use crate::{vk_khr_surface, CommandBuffer, Device, Image, ImageType, ImageUsage, ResourceAllocation, Size3D};
+use crate::{CommandBuffer, Device, Image, ImageType, ImageUsage, ResourceAllocation, Size3D, vk_khr_surface};
 use ash::vk;
 use gpu_allocator::MemoryLocation;
 use std::ptr;
