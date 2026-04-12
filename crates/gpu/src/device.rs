@@ -9,7 +9,7 @@ use crate::instance::vk_khr_surface;
 use crate::platform::PlatformExtensions;
 use crate::{get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format, BufferUsage, CommandPool, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error, GraphicsPipeline, GraphicsPipelineCreateInfo, PreRasterizationShaders, Ptr, Sampler, SamplerCreateInfo, SamplerCreateInfoHashable, VulkanObject, SUBGROUP_SIZE};
 use ash::vk;
-use gpu_allocator::vulkan::{AllocationCreateDesc, Allocator};
+use gpu_allocator::vulkan::{AllocationCreateDesc};
 use log::{debug, error, trace};
 use slotmap::SlotMap;
 use std::collections::{HashMap, VecDeque};
@@ -19,7 +19,6 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::{fmt, mem, ptr};
 use vulkan_headers::vulkan::vulkan as vk2;
-use vulkan_headers::vulkan::vulkan::{ VkBool32, VkCommandBuffer, VkDeviceAddressRangeEXT, VkDeviceSize, VK_BUFFER_USAGE_DESCRIPTOR_HEAP_BIT_EXT, VK_STRUCTURE_TYPE_BIND_HEAP_INFO_EXT};
 use crate::device::descriptor_heap::{DescriptorHeaps, DeviceDescriptorIndexTable};
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -30,6 +29,7 @@ const RESOURCE_DESCRIPTOR_HEAP_SIZE: usize = 1024 * 1024;
 const SAMPLER_DESCRIPTOR_HEAP_SIZE: usize = 64 * 1024;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 pub(crate) struct ExtDescriptorHeap {
     pub(crate) cmd_bind_resource_heap: vk2::NonNullPFN_vkCmdBindResourceHeapEXT,

@@ -5,8 +5,10 @@ use sharc::{ShaderArchive, Shader};
 use std::sync::MutexGuard;
 use std::time::SystemTime;
 use std::{fs, io};
+use std::ops::Deref;
 use utils::archive::Offset;
 use crate::render::load_shader_archive;
+use crate::render::reflection::GraphicsPipelineReflection;
 
 #[derive(thiserror::Error, Debug)]
 pub enum PipelineCreateError {
@@ -36,7 +38,7 @@ fn get_shader_entry_point<'a>(
 
 fn create_graphics_pipeline_from_archive(
     archive: &ShaderArchive,
-    entry: &sharc::GraphicsPass,
+    entry: &sharc::GraphicsPipeline,
 ) -> Result<gpu::GraphicsPipeline, PipelineCreateError> {
     let color_targets: Vec<_> = {
         let color_targets = &archive[entry.color_targets];
@@ -138,7 +140,7 @@ fn create_graphics_pipeline_from_archive(
 
 fn create_compute_pipeline_from_archive(
     archive: &ShaderArchive,
-    entry: &sharc::ComputePass,
+    entry: &sharc::ComputePipeline,
 ) -> Result<gpu::ComputePipeline, PipelineCreateError> {
     let shader = get_shader_entry_point(gpu::ShaderStage::Compute, &archive, &entry.compute_shader);
     let cpci = gpu::ComputePipelineCreateInfo {
@@ -228,5 +230,80 @@ impl DefaultLoader for gpu::ComputePipeline {
         dependencies: &mut Dependencies,
     ) -> LoadResult<Self> {
         load_compute_pipeline(path, metadata, provider, dependencies)
+    }
+}
+
+
+//--------------------------------------------------------------------------------------------------
+
+
+/// Represents a graphics pipeline with reflection information.
+pub struct GraphicsPipeline {
+    pub compiled: gpu::GraphicsPipeline,
+    reflection_alloc: bumpalo::Bump,
+    reflection: *const GraphicsPipelineReflection<'static>,
+}
+
+// SAFETY: GraphicsPipeline is normally non-Sync because of bumpalo::Bump and the raw pointer,
+//         but we don't touch the bump arena after creation, so everything is effectively immutable
+//         and can be safely shared between threads.
+unsafe impl Send for GraphicsPipeline {}
+unsafe impl Sync for GraphicsPipeline {}
+
+impl GraphicsPipeline {
+    pub fn reflection(&self) -> &GraphicsPipelineReflection<'_> {
+        // SAFETY: the reflection data is allocated in a bump arena owned by this struct,
+        //         so it will remain valid as long as the struct is alive.
+        unsafe { &*self.reflection }
+    }
+}
+
+
+impl DefaultLoader for GraphicsPipeline {
+    fn load(
+        path: &VfsPath,
+        metadata: &FileMetadata,
+        provider: &dyn Provider,
+        dependencies: &mut Dependencies,
+    ) -> LoadResult<Self>
+    {
+        let archive_file = path.path_without_fragment();
+        let name = path.fragment().expect("pipeline name missing in path");
+        let archive_handle = load_shader_archive(archive_file);
+        debug!(
+            "loading pipeline `{}` (graphics) from `{}`",
+            name,
+            archive_file.as_str()
+        );
+
+        let archive = archive_handle.read()?;
+        let pass = archive
+            .find_graphics_pipeline(name)
+            .ok_or_else(|| PipelineCreateError::PipelineNotFound(name.to_string()))?;
+        let pipeline = create_graphics_pipeline_from_archive(&*archive, pass)?;
+
+        // --- extract reflection data into memory ---
+        let mut alloc = bumpalo::Bump::new();
+
+        // color output formats²
+        let color_formats;
+        {
+            let mut f = Vec::with_capacity(archive[pass.color_targets].len());
+            for color_target in &archive[pass.color_targets] {
+                let c = &archive[*color_target];
+                f.push(c.format);
+            }
+            color_formats = alloc.alloc_slice_copy(&f);
+        }
+
+        let reflection = alloc.alloc(GraphicsPipelineReflection {
+            color_formats,
+        }) as *const _ as *const GraphicsPipelineReflection<'static>;
+
+        Ok(GraphicsPipeline {
+            compiled: pipeline,
+            reflection_alloc: alloc,
+            reflection,
+        })
     }
 }

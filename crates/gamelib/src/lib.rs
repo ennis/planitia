@@ -1,8 +1,6 @@
 #![expect(unused, reason = "noisy")]
 #![feature(default_field_values)]
-
-// REASON: this is much too verbose, and my IDE already highlights unsafe call sites
-#![allow(unsafe_op_in_unsafe_fn)]
+#![allow(unsafe_op_in_unsafe_fn, reason = "too verbose, and my IDE already highlights unsafe call sites")]
 
 pub mod asset;
 pub mod camera_control;

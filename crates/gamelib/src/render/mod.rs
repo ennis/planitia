@@ -2,13 +2,22 @@ use std::{fs, io};
 use std::time::SystemTime;
 use log::{debug, warn};
 use sharc::ShaderArchive;
-use crate::asset::{AssetCache, Handle, VfsPath};
+use crate::asset::{AssetCache, DefaultLoader, Handle, VfsPath};
 
 pub mod pipeline_cache;
 mod render_world;
-mod technique;
+mod reflection;
+mod util;
+//mod technique;
 
-pub use technique::{Technique, TechniqueInstance};
+//pub use technique::{Technique, TechniqueInstance};
+
+pub use pipeline_cache::GraphicsPipeline;
+//pub use pipeline_cache::ComputePipeline;
+//pub use util::allocate_render_target_for_pipeline;
+pub use util::RenderTarget;
+
+//-----------------------------------------------------------------
 
 fn unix_mtime(last_modified: SystemTime) -> u64 {
     if last_modified > SystemTime::now() {
@@ -105,3 +114,4 @@ fn load_shader_archive(path: impl AsRef<VfsPath>) -> Handle<ShaderArchive> {
         Ok(a)
     })
 }
+

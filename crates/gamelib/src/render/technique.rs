@@ -1,11 +1,10 @@
-use crate::asset::{AssetCache, DefaultLoader, Dependencies, FileMetadata, Handle, LoadResult, Provider, VfsPath};
-use crate::render::load_shader_archive;
 
+/*
 /// Collection of graphics and compute passes describing a rendering pipeline.
 pub struct Technique {
     name: String,
     file: Handle<sharc::ShaderArchive>,
-}
+}*/
 
 /*
 impl DefaultLoader for Technique {
@@ -20,7 +19,8 @@ impl DefaultLoader for Technique {
     }
 }*/
 
+/*
 /// Resources allocated for a rendering technique.
 pub struct TechniqueInstance {
     tech: Handle<Technique>,
-}
+}*/

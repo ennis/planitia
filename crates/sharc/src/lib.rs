@@ -42,7 +42,7 @@ pub struct ShaderArchiveRoot {
     pub images: Offset<[ImageResourceDesc]>,
 }
 
-
+/*
 /// Describes a sequence of passes to run in order.
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -55,7 +55,7 @@ pub struct Technique {
     // images
     // buffers
     // TODO: table of variables to set
-}
+}*/
 
 impl ArchiveRoot for ShaderArchiveRoot {
     const SIGNATURE: [u8; 4] = *b"PARC";
@@ -142,7 +142,7 @@ pub struct Pass {
     /// Name of the pipeline.
     pub name: ZString<64>,
     /// The kind of pipeline (graphics or compute) and its associated data.
-    pub kind: PassKind,
+    pub kind: PipelineKind,
     pub root_params: RootParamLayout,
     /// List of source files.
     pub sources: Offset<[FileDependency]>,
@@ -150,22 +150,22 @@ pub struct Pass {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub enum PassKind {
-    Graphics(GraphicsPass),
-    Compute(ComputePass),
+pub enum PipelineKind {
+    Graphics(GraphicsPipeline),
+    Compute(ComputePipeline),
 }
 
-impl PassKind {
-    pub fn as_graphics(&self) -> Option<&GraphicsPass> {
+impl PipelineKind {
+    pub fn as_graphics(&self) -> Option<&GraphicsPipeline> {
         match self {
-            PassKind::Graphics(data) => Some(data),
+            PipelineKind::Graphics(data) => Some(data),
             _ => None,
         }
     }
 
-    pub fn as_compute(&self) -> Option<&ComputePass> {
+    pub fn as_compute(&self) -> Option<&ComputePipeline> {
         match self {
-            PassKind::Compute(data) => Some(data),
+            PipelineKind::Compute(data) => Some(data),
             _ => None,
         }
     }
@@ -199,7 +199,7 @@ pub struct DepthStencilAttachment {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct GraphicsPass {
+pub struct GraphicsPipeline {
     /// Size of push constant block in bytes.
     pub push_constants_size: u16,
     /// Rasterization data.
@@ -215,7 +215,7 @@ pub struct GraphicsPass {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct ComputePass {
+pub struct ComputePipeline {
     /// Size of push constant block in bytes.
     pub push_constants_size: u16,
     pub compute_shader: Shader,
@@ -352,13 +352,13 @@ impl ShaderArchive {
     }
 
     /// Finds a graphics pipeline by name.
-    pub fn find_graphics_pipeline(&self, name: &str) -> Option<&GraphicsPass> {
+    pub fn find_graphics_pipeline(&self, name: &str) -> Option<&GraphicsPipeline> {
         let data = self.data();
         let entries = &self.0[data.passes];
         for entry in entries {
             if entry.name.as_str() == name {
                 match &entry.kind {
-                    PassKind::Graphics(p) => return Some(p),
+                    PipelineKind::Graphics(p) => return Some(p),
                     _ => continue,
                 }
             }
@@ -367,13 +367,13 @@ impl ShaderArchive {
     }
 
     /// Finds a compute pipeline by name.
-    pub fn find_compute_pipeline(&self, name: &str) -> Option<&ComputePass> {
+    pub fn find_compute_pipeline(&self, name: &str) -> Option<&ComputePipeline> {
         let data = self.data();
         let entries = &self.0[data.passes];
         for entry in entries {
             if entry.name.as_str() == name {
                 match &entry.kind {
-                    PassKind::Compute(p) => return Some(p),
+                    PipelineKind::Compute(p) => return Some(p),
                     _ => continue,
                 }
             }
@@ -439,7 +439,7 @@ mod tests {
             1,
             [Pass {
                 name: ZString64::new("example_pipeline"),
-                kind: PassKind::Graphics(GraphicsPass {
+                kind: PipelineKind::Graphics(GraphicsPipeline {
                     push_constants_size: 128,
                     // just some example state
                     rasterization: RasterizationState {

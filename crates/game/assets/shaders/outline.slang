@@ -148,6 +148,7 @@ struct ContourRootParams {
     Srgba8 silhouette_color;
     float line_width;
     float filter_width;
+    float isophote_offset;
 
     // textures
     Texture2D.Handle depth_texture;
@@ -386,63 +387,75 @@ void extract_contours(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_Gro
     }
 }
 
-float point_orientation(float3 point, float3 cam, float3 normal) {
+float point_orientation(float3 point, float3 cam, float3 normal, float offset = 0.0) {
     let view = normalize(point - cam);
-    return dot(normalize(normal), view);
+    return dot(normalize(normal), view) - offset;
 }
+
 
 [shader("compute")]
 [numthreads(MAX_EDGES, 1, 1)]
 [pass("extract_interpolated_contours")]
 void extract_interpolated_contours(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_GroupThreadID, uniform ContourRootParams* u)
 {
+    // restrict to valid clusters
     uint cli = group_id.x;
     if (cli >= u.cluster_count) {
         return;
     }
 
+    // load meshlet
     Meshlet* m = &u.mesh.meshlets[cli];
     let base_face = m.base_face;
     let base_vertex = m.base_vertex;
 
+    // restrict to valid faces
     uint face_index = group_thread_id.x;
     if (face_index >= m.face_count) {
         return;
     }
 
+    // load face vertices
     let face = u.mesh.faces[base_face + face_index];
     let v1 = u.mesh.vertices[base_vertex + face.vertices.x];
     let v2 = u.mesh.vertices[base_vertex + face.vertices.y];
     let v3 = u.mesh.vertices[base_vertex + face.vertices.z];
+
+    // camera position ("eye" position)
     var eye = u.eye;
 
-    let o1 = point_orientation(v1.position, eye, v1.normal);
-    let o2 = point_orientation(v2.position, eye, v2.normal);
-    let o3 = point_orientation(v3.position, eye, v3.normal);
+    // Evaluate n.v term (point orientation relative to camera) for each vertex of the face.
+    // negative orientation means point facing away, positive means facing towards camera.
+    let o1 = point_orientation(v1.position, eye, v1.normal, u.isophote_offset);
+    let o2 = point_orientation(v2.position, eye, v2.normal, u.isophote_offset);
+    let o3 = point_orientation(v3.position, eye, v3.normal, u.isophote_offset);
+
+    // If all vertices point the same way (either all away or all towards camera),
+    // there is no contour crossing this face.
     if (sign(o1) == sign(o2) && sign(o2) == sign(o3)) {
-        // no contour crossing
         return;
     }
+
     float3 interp1;
     float3 interp2;
     uint pkpt_1;
     uint pkpt_2;
-    let flip1 = sign(o1) != sign(o2);
-    let flip2 = sign(o2) != sign(o3);
+    let flip1 = sign(o1) != sign(o2);   // does the orientation flip between v1 and v2?
+    let flip2 = sign(o2) != sign(o3);   // does the orientation flip between v2 and v3?
     if (flip1 && flip2) {
-        // e1, e2
+        // contour passing between v1-v2 and v2-v3
         interp1 = (o2 * v1.position - o1 * v2.position) / (o2 - o1);
         interp2 = (o3 * v2.position - o2 * v3.position) / (o3 - o2);
         pkpt_1 = v1.point_index;
         pkpt_2 = v2.point_index;
     } else if (flip1) {
-        // e1, e3
+        // contour passing between v1-v2 and v3-v1
         interp1 = (o2 * v1.position - o1 * v2.position) / (o2 - o1);
         interp2 = (o1 * v3.position - o3 * v1.position) / (o1 - o3);
         pkpt_1 = v1.point_index;
         pkpt_2 = v3.point_index;
     } else {
-        // e2, e3
+        // contour passing between v2-v3 and v3-v1
         interp1 = (o3 * v2.position - o2 * v3.position) / (o3 - o2);
         interp2 = (o1 * v3.position - o3 * v1.position) / (o1 - o3);
         pkpt_1 = v2.point_index;
@@ -877,7 +890,7 @@ CornerDetectionFSOut corner_detection_fragment_shader(
     float2 axis;
 
     compute_ridge_properties(
-        params->normal_texture,
+        params->shading_texture,
         params->depth_texture,
         params->angle_texture,
         coords,

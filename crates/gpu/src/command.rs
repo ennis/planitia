@@ -30,7 +30,7 @@ pub struct CommandBuffer {
     submitted: bool,
     /// Last bound compute pipeline layout.
     pipeline_layout: vk::PipelineLayout,
-    barrier_source: BarrierFlags,
+    //barrier_source: BarrierFlags,
     create_ticket: u64,
 }
 
@@ -47,7 +47,29 @@ bitflags! {
         /// Invalidate any cache related to uniform buffer memory.
         const UNIFORM = 1 << 3;
     }
+}
 
+impl InvalidateFlags {
+    fn to_access_flags(self) -> vk::AccessFlags2 {
+        let mut flags = vk::AccessFlags2::empty();
+        if self.contains(Self::STORAGE) {
+            flags |= vk::AccessFlags2::SHADER_STORAGE_READ;
+        }
+        if self.contains(Self::TEXTURE) {
+            flags |= vk::AccessFlags2::SHADER_SAMPLED_READ;
+        }
+        if self.contains(Self::INDIRECT) {
+            flags |= vk::AccessFlags2::INDIRECT_COMMAND_READ;
+        }
+        if self.contains(Self::UNIFORM) {
+            flags |= vk::AccessFlags2::UNIFORM_READ;
+        }
+        flags
+    }
+}
+
+
+    /*
     /// Describes the scope (memory and execution) of one side of a barrier operation.
     #[derive(Copy,Clone,Debug,PartialEq,Eq,Hash)]
     pub struct BarrierFlags: u64 {
@@ -111,28 +133,9 @@ bitflags! {
         const INDEX_READ = 1 << 13;
 
     }
-}
+}*/
 
-impl InvalidateFlags {
-    fn to_access_flags(self) -> vk::AccessFlags2 {
-        let mut flags = vk::AccessFlags2::empty();
-        if self.contains(Self::STORAGE) {
-            flags |= vk::AccessFlags2::SHADER_STORAGE_READ;
-        }
-        if self.contains(Self::TEXTURE) {
-            flags |= vk::AccessFlags2::SHADER_SAMPLED_READ;
-        }
-        if self.contains(Self::INDIRECT) {
-            flags |= vk::AccessFlags2::INDIRECT_COMMAND_READ;
-        }
-        if self.contains(Self::UNIFORM) {
-            flags |= vk::AccessFlags2::UNIFORM_READ;
-        }
-        flags
-    }
-}
-
-impl BarrierFlags {
+/*impl BarrierFlags {
     fn shader_stage_flags(self) -> vk::PipelineStageFlags2 {
         let mut flags = vk::PipelineStageFlags2::empty();
         if self.contains(Self::VERTEX_SHADER) {
@@ -225,7 +228,7 @@ impl BarrierFlags {
 
         (stages, access)
     }
-}
+}*/
 
 /// Describes root parameters for a command.
 #[derive(Clone, Copy)]
@@ -277,7 +280,7 @@ impl CommandBuffer {
             //tracked_writes: MemoryAccess::empty(),
             submitted: false,
             pipeline_layout: Default::default(),
-            barrier_source: BarrierFlags::empty(),
+            //_barrier_source: BarrierFlags::empty(),
             create_ticket,
         }
     }
@@ -896,10 +899,12 @@ fn sync(waits: &[SyncWait], signals: &[SyncSignal]) {
     }
 }
 
+/// Waits on the given timeline semaphore until it reaches the given value.
 pub fn sync_wait(semaphore: vk::Semaphore, value: u64) {
     sync(&[SyncWait { sync: semaphore, value }], &[]);
 }
 
+/// Signals the given timeline semaphore with the given value.
 pub fn sync_signal(semaphore: vk::Semaphore, value: u64) {
     sync(&[], &[SyncSignal { sync: semaphore, value }]);
 }

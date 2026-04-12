@@ -1,7 +1,6 @@
 #![feature(default_field_values)]
-
-// REASON: this is much too verbose, and my IDE already highlights unsafe call sites
-#![allow(unsafe_op_in_unsafe_fn)]
+#![allow(unsafe_op_in_unsafe_fn, reason = "too verbose, and my IDE already highlights unsafe call sites")]
+#![expect(unused, reason = "noisy")]
 
 mod buffer;
 mod command;
@@ -161,7 +160,7 @@ pub struct GraphicsPipeline {
     /// - set 0, binding 1: array of combined image sampler descriptors (unused)
     /// - set 0, binding 2: array of storage image descriptors
     ///
-    /// The descriptor arrays are kept up-to-date automatically as resourcess are created and destroyed.
+    /// The descriptor arrays are kept up-to-date automatically as resources are created and destroyed.
     pub(crate) bindless: bool,
 }
 

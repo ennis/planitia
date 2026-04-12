@@ -514,7 +514,7 @@ impl BuildManifest {
         }
 
         let pipeline_kind = if stage_flags.contains(vk::ShaderStageFlags::COMPUTE) {
-            sharc::PassKind::Compute(sharc::ComputePass {
+            sharc::PipelineKind::Compute(sharc::ComputePipeline {
                 push_constants_size: push_constants_size as u16,
                 compute_shader: shaders[0],
                 workgroup_size,
@@ -565,7 +565,7 @@ impl BuildManifest {
             };
 
             let shaders = archive.write_slice(&shaders[..]);
-            sharc::PassKind::Graphics(sharc::GraphicsPass {
+            sharc::PipelineKind::Graphics(sharc::GraphicsPipeline {
                 push_constants_size: push_constants_size as u16,
                 shaders,
                 rasterization: gs.rasterizer,
@@ -765,8 +765,6 @@ impl BuildManifest {
                     got_errors = true;
                 }
             }
-
-
         }
 
         // dump SPIR-V files if requested

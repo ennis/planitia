@@ -7,7 +7,7 @@ use gamelib::input::InputEvent;
 use gamelib::render::pipeline_cache::{get_compute_pipeline, get_graphics_pipeline};
 use gamelib::{static_assets, tweak};
 use gpu::PrimitiveTopology::TriangleList;
-use gpu::{BarrierFlags, Buffer, BufferCreateInfo, DrawIndirectCommand, Image, InvalidateFlags, MemoryLocation, Ptr, RootParams, Size3D};
+use gpu::{Buffer, BufferCreateInfo, DrawIndirectCommand, Image, InvalidateFlags, MemoryLocation, Ptr, RootParams, Size3D};
 use hgeo::util::polygons_to_triangle_mesh;
 use log::{info, warn};
 use math::geom::Camera;
@@ -945,6 +945,7 @@ struct ContoursRootParams {
     silhouette_color: Srgba8,
     line_width: f32,
     filter_width: f32,
+    isophote_offset: f32,
 
     depth_texture: gpu::TextureHandle,
     angle_texture: gpu::TextureHandle,
@@ -1319,6 +1320,7 @@ Winged-edge representation:
             line_width: tweak!(line_width = 1.0),
             filter_width: tweak!(filter_width = 0.7),
 
+            isophote_offset: tweak!(isophote_offset = 0.0),
             depth_texture: depth_target.texture_handle(),
             angle_texture: self.angle_texture.texture_handle(),
             normal_texture: self.normal_texture.texture_handle(),

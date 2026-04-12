@@ -6,8 +6,7 @@ edition = "2024"
 
 [dependencies]
 ash = "0.38"
-vulkan-headers = "0.2.4+vulkan-1.4.342" # until ash updates to support vk1.4
-
+vulkan-headers = "0.2.4" # until ash updates to support vk1.4
 bitflags = "2"
 gpu-allocator = "0.28"
 raw-window-handle = "0.6.0"

@@ -1,11 +1,15 @@
 use crate::{SceneInfo, SceneInfoUniforms};
+use gamelib::asset::AssetLoadError;
+use gamelib::egui::DragValue;
+use gamelib::input::InputEvent;
+use gamelib::render::RenderTarget;
 use gamelib::{egui, static_assets, tweak};
-use gpu::{Buffer, BufferCreateInfo, Image, ImageCreateInfo, InvalidateFlags, PrimitiveTopology, Size3D};
+use gpu::{
+    Buffer, BufferCreateInfo, Image, ImageUsage, InvalidateFlags,
+    PrimitiveTopology,
+};
 use math::{IVec2, Vec3};
 use std::path::Path;
-use gamelib::asset::AssetLoadError;
-use gamelib::egui::{DragValue, Slider};
-use gamelib::input::InputEvent;
 
 static_assets! {
     static BASE_RENDER: gpu::GraphicsPipeline = "/shaders/game_shaders.sharc#automaton_base_render";
@@ -97,18 +101,21 @@ pub struct AutomatonExperiment {
     point_count: u32,
     vertex_count: u32,
 
-    shading_texture: Image,
-    normal_texture: Image,
-    depth_texture: Image,
-    aux_texture: Image,
+    shading_texture: RenderTarget,
+    normal_texture: RenderTarget,
+    depth_texture: RenderTarget,
+    aux_texture: RenderTarget,
+    contour_target: RenderTarget,
+    trails_0: RenderTarget,
+    trails_1: RenderTarget,
 
-    contour_target: Image,
+    edge_x: RenderTarget,
+    edge_y: RenderTarget,
+
     emitters: Buffer<Emitter>,
-    trails_0: Image,
-    trails_1: Image,
     sim_step: u32,
     max_sim_steps: u32,
-    debug_mode: DebugMode
+    debug_mode: DebugMode,
 }
 
 const EMITTERS_COUNT: usize = 1000;
@@ -120,20 +127,43 @@ impl AutomatonExperiment {
             vertices: Buffer::from_slice(&[]),
             point_count: 0,
             vertex_count: 0,
-            shading_texture: Image::new_color_attachment(1, 1, gpu::Format::R8G8B8A8_UNORM),
-            normal_texture: Image::new_color_attachment(1, 1, gpu::Format::A2B10G10R10_UNORM_PACK32),
-            depth_texture: Image::new(ImageCreateInfo {
-                width: 1,
-                height: 1,
-                format: gpu::Format::D32_SFLOAT_S8_UINT,
-                usage: gpu::ImageUsage::DEPTH_STENCIL_ATTACHMENT,
+            shading_texture: RenderTarget::new(
+                gpu::Format::R8G8B8A8_UNORM,
+                ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
+            ),
+            normal_texture: RenderTarget::new(
+                gpu::Format::A2B10G10R10_UNORM_PACK32,
+                ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
+            ),
+            depth_texture: RenderTarget::new(gpu::Format::D32_SFLOAT_S8_UINT, ImageUsage::DEPTH_STENCIL_ATTACHMENT),
+            aux_texture: RenderTarget::new(
+                gpu::Format::R16G16B16A16_UINT,
+                ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
+            ),
+            contour_target: RenderTarget::new(
+                gpu::Format::R32G32B32A32_SFLOAT,
+                ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
+            ),
+            trails_0: RenderTarget::new(
+                gpu::Format::R32G32B32A32_SFLOAT,
+                ImageUsage::STORAGE | ImageUsage::SAMPLED,
+            ),
+            trails_1: RenderTarget::new(
+                gpu::Format::R32G32B32A32_SFLOAT,
+                ImageUsage::STORAGE | ImageUsage::SAMPLED,
+            ),
+            edge_x: RenderTarget::new(
+                gpu::Format::R8_SNORM,
+                ImageUsage::STORAGE | ImageUsage::SAMPLED,
+            ),
+            edge_y: RenderTarget::new(
+                gpu::Format::R32_SFLOAT,
+                ImageUsage::STORAGE | ImageUsage::SAMPLED,
+            ),
+            emitters: Buffer::new(BufferCreateInfo {
+                len: EMITTERS_COUNT,
                 ..
             }),
-            aux_texture: Image::new_color_attachment(1, 1, gpu::Format::R16G16B16A16_UINT),
-            contour_target: Image::new_color_attachment(1, 1, gpu::Format::R32G32B32A32_SFLOAT),
-            trails_0: Image::new_texture(1, 1, gpu::Format::R32G32B32A32_SFLOAT),
-            trails_1: Image::new_texture(1, 1, gpu::Format::R32G32B32A32_SFLOAT),
-            emitters: Buffer::new(BufferCreateInfo {len: EMITTERS_COUNT, .. }),
             sim_step: 0,
             max_sim_steps: 30,
             debug_mode: DebugMode::Shading,
@@ -160,7 +190,11 @@ impl AutomatonExperiment {
                 ui.selectable_value(&mut self.debug_mode, DebugMode::Normals, "Normals");
                 ui.selectable_value(&mut self.debug_mode, DebugMode::Depth, "Depth");
                 ui.selectable_value(&mut self.debug_mode, DebugMode::Aux, "Aux");
-                ui.selectable_value(&mut self.debug_mode, DebugMode::ContoursMaxCurv, "Contours (max curvature)");
+                ui.selectable_value(
+                    &mut self.debug_mode,
+                    DebugMode::ContoursMaxCurv,
+                    "Contours (max curvature)",
+                );
                 ui.selectable_value(&mut self.debug_mode, DebugMode::ContoursAngle, "Contours (angle)");
                 ui.selectable_value(&mut self.debug_mode, DebugMode::SimTrails, "Simulation trails");
             });
@@ -168,18 +202,13 @@ impl AutomatonExperiment {
                 self.sim_step = 0;
             }
             //ui.add(Slider::new(&mut self.sim_step, 0..=self.max_sim_steps).text("Sim step").step_by(1.0));
-            ui.add(DragValue::new(&mut self.max_sim_steps).range(0..=1000).prefix("Max sim steps: ").speed(1.0));
+            ui.add(
+                DragValue::new(&mut self.max_sim_steps)
+                    .range(0..=1000)
+                    .prefix("Max sim steps: ")
+                    .speed(1.0),
+            );
         });
-    }
-
-    pub(crate) fn resize(&mut self, width: u32, height: u32) {
-        self.shading_texture.discard_resize(Size3D::new(width, height, 1));
-        self.normal_texture.discard_resize(Size3D::new(width, height, 1));
-        self.depth_texture.discard_resize(Size3D::new(width, height, 1));
-        self.contour_target.discard_resize(Size3D::new(width, height, 1));
-        self.aux_texture.discard_resize(Size3D::new(width, height, 1));
-        self.trails_0.discard_resize(Size3D::new(width, height, 1));
-        self.trails_1.discard_resize(Size3D::new(width, height, 1));
     }
 
     pub(crate) fn load_geometry(&mut self, path: &Path) {
@@ -220,8 +249,23 @@ impl AutomatonExperiment {
         self.vertex_count = vertices.len() as u32;
     }
 
+    pub(crate) fn render(
+        &mut self,
+        cmd: &mut gpu::CommandBuffer,
+        color_target: &Image,
+        depth_target: &Image,
+        scene_info: &SceneInfo,
+    ) -> Result<(), AssetLoadError> {
+        let width = color_target.width();
+        let height = color_target.height();
 
-    pub(crate) fn render(&mut self, cmd: &mut gpu::CommandBuffer, color_target: &Image, depth_target: &Image, scene_info: &SceneInfo) -> Result<(), AssetLoadError>  {
+        self.shading_texture.setup(width, height);
+        self.normal_texture.setup(width, height);
+        self.depth_texture.setup(width, height);
+        self.contour_target.setup(width, height);
+        self.aux_texture.setup(width, height);
+        self.trails_0.setup(width, height);
+        self.trails_1.setup(width, height);
 
         let params = cmd.upload(&RootParams {
             scene_info: scene_info.gpu,
@@ -250,28 +294,33 @@ impl AutomatonExperiment {
             let mut encoder = cmd.begin_rendering(
                 &[
                     gpu::ColorAttachment {
-                        image: &self.shading_texture,
+                        image: self.shading_texture.image(),
                         clear: Some([0.0, 0.0, 0.0, 0.0]),
                     },
                     gpu::ColorAttachment {
-                        image: &self.normal_texture,
+                        image: self.normal_texture.image(),
                         clear: Some([0.0, 0.0, 0.0, 0.0]),
                     },
                     gpu::ColorAttachment {
-                        image: &self.aux_texture,
+                        image: self.aux_texture.image(),
                         clear: Some([0.0, 0.0, 0.0, 0.0]),
-                    }
+                    },
                 ],
                 Some(gpu::DepthStencilAttachment {
-                    image: &self.depth_texture,
+                    image: self.depth_texture.image(),
                     depth_clear: Some(1.0),
                     stencil_clear: None,
                 }),
             );
 
-
             encoder.bind_graphics_pipeline(&*BASE_RENDER.read()?);
-            encoder.draw(PrimitiveTopology::TriangleList, None, 0..self.vertex_count, 0..1, params);
+            encoder.draw(
+                PrimitiveTopology::TriangleList,
+                None,
+                0..self.vertex_count,
+                0..1,
+                params,
+            );
             encoder.finish();
         }
 
@@ -279,7 +328,7 @@ impl AutomatonExperiment {
         {
             let mut encoder = cmd.begin_rendering(
                 &[gpu::ColorAttachment {
-                    image: &self.contour_target,
+                    image: &self.contour_target.image(),
                     clear: Some([0.0, 0.0, 0.0, 0.0]),
                 }],
                 None,
@@ -295,17 +344,15 @@ impl AutomatonExperiment {
             let emitter_workgroup_size = 64;
             let trails_workgroup_tile_size = 16;
             let emitter_workgroup_count = self.emitters.len().div_ceil(emitter_workgroup_size as usize) as u32;
-            let trails_workgroup_count_x = self.trails_0.width().div_ceil(trails_workgroup_tile_size);
-            let trails_workgroup_count_y = self.trails_0.height().div_ceil(trails_workgroup_tile_size);
+            let trails_workgroup_count_x = width.div_ceil(trails_workgroup_tile_size);
+            let trails_workgroup_count_y = height.div_ceil(trails_workgroup_tile_size);
 
             cmd.bind_compute_pipeline(&*SIM_INIT_EMITTERS.read()?);
             cmd.dispatch(emitter_workgroup_count, 1, 1, params);
             cmd.bind_compute_pipeline(&*SIM_INIT_TRAILS.read()?);
             cmd.dispatch(trails_workgroup_count_x, trails_workgroup_count_y, 1, params);
 
-
             for _ in 0..self.max_sim_steps {
-
                 cmd.barrier(InvalidateFlags::STORAGE);
 
                 cmd.bind_compute_pipeline(&*SIM_STEP_EMITTERS.read()?);

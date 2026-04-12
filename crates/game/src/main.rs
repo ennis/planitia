@@ -264,8 +264,8 @@ impl AppHandler for Game {
 
         // --- experiments ---
         //self.coat_experiment.input(&input_event);
-        //self.outline_experiment.input(&input_event);
-        self.automaton_experiment.input(&input_event);
+        self.outline_experiment.input(&input_event);
+        //self.automaton_experiment.input(&input_event);
     }
 
     fn event(&mut self, event: UserEvent) {
@@ -279,8 +279,8 @@ impl AppHandler for Game {
         self.height = height;
         self.camera_control.resize(width, height);
         self.depth_stencil_buffer = create_depth_buffer(width, height);
-        //self.outline_experiment.resize(width, height);
-        self.automaton_experiment.resize(width, height);
+        self.outline_experiment.resize(width, height);
+        //self.automaton_experiment.resize(width, height);
     }
 
     fn vsync(&mut self) {}
@@ -329,10 +329,10 @@ impl AppHandler for Game {
 
             //self.coat_experiment
             //    .render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
-            // self.outline_experiment
+            self.outline_experiment
+               .render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
+            //let _ = self.automaton_experiment
             //    .render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
-            let _ = self.automaton_experiment
-                .render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
         }
 
         //-------------------------------

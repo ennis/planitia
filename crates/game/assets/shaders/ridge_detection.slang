@@ -176,3 +176,21 @@ compute_ridge_properties(in Texture2D<float4>.Handle image,
       axis_dist = max_dist;
    }
 }
+
+//----------------------------------------------------------------------------------------------------------------------
+// Gradient
+float2 sobel_x(Texture2D<float4>.Handle image, int2 coords, int2 image_size) {
+
+}
+
+//----------------------------------------------------------------------------------------------------------------------
+// 2D structure tensor
+
+float2x2 structure_tensor(Texture2D<float4>.Handle image,
+                          int2 coords,
+                          int2 image_size,
+                          int window)
+{
+
+}
+

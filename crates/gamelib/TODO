@@ -241,6 +241,12 @@ Link lines together
 "Tracing automatas"
 Simulation process that traces contours from pixel-based guides
 
+Image-based methods may be a dead end:
+- difficult to reconstruct a stable geometry (skeleton)
+- dependent on user-provided thresholds
+- inconsistent feature width
+- image space can be costly 
+
 
 Dynamic rendering pipelines:
 
@@ -258,6 +264,38 @@ Run the pipeline
     Provide parameters: like screen size, etc
         This may reallocate resources if necesary
     Run the sequence, given a command buffer
+
+Relationship between files and techniques
+A: at most one technique per file (and thus per manifest)
+    if a slang file is compiled as a technique, then all shaders are part of the technique
+    otherwise, there is no technique and all shaders are unrelated
+B: multiple techniques 
+
+Issue: currently the slang module name is completely ignored; all 
+
+Use cases
+- one manifest file, multiple slang files each defining a material
+    - we don't want to have one manifest per slang file, that would defeat the purpose of the manifest (specifying default pipeline states)
+    - one subfolder containing the manifest + all shaders that follow the same interface
+- technique
+
+- issue: technique in manifest + glob source compilation
+    - does it merge all passes?
+
+Most intuitive solution : reverse the unit of compilation : shadertool would consume slang files as input, which themselves reference a TOML file
+Issue: slang language may not be there yet (e.g. no module-level attributes)
+
+
+Another idea: high-level scripting in lua, interactive, in VSCode
+- load slang file
+- allocate render targets
+- draw mesh
+- run compute passes
+
+```
+loadshaders("outlines.slang")
+...
+```
 
 
 Terrain rendering:
