@@ -6,6 +6,7 @@ import winged_edge;
 
 struct PointData {
     float3 position;
+    float3 normal;
     uint group_id;
 }
 
@@ -82,6 +83,11 @@ struct ContourRootParams {
     Texture2D<float4>.Handle shading_texture;
 }
 
+[vk::push_constant]
+uniform ContourRootParams* u;
+
+[vk::push_constant]
+uniform ContourRootParams* u2;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Depth pass
@@ -95,7 +101,7 @@ struct DepthPassVertexOutput {
 
 [shader("vertex")]
 [pass("depth_pass")]
-DepthPassVertexOutput depth_pass_vertex(uint vertex_id : SV_VertexID, uint draw_id: SV_DrawIndex, uniform ContourRootParams* u)
+DepthPassVertexOutput depth_pass_vertex(uint vertex_id : SV_VertexID, uint draw_id: SV_DrawIndex)
 {
     let vertex = u.mesh.face_vertices[vertex_id].data;
     let point = u.mesh.points[vertex.point].data;
@@ -132,7 +138,7 @@ struct BaseRenderFSOut {
 
 [shader("vertex")]
 [pass("base_render")]
-BaseRenderVSOut base_render_vertex(uint vertex_id : SV_VertexID, uint draw_id: SV_DrawIndex, uniform ContourRootParams* u)
+BaseRenderVSOut base_render_vertex(uint vertex_id : SV_VertexID, uint draw_id: SV_DrawIndex)
 {
     let vertex = u.mesh.face_vertices[vertex_id].data;
     let point = u.mesh.points[vertex.point].data;
@@ -149,7 +155,7 @@ BaseRenderVSOut base_render_vertex(uint vertex_id : SV_VertexID, uint draw_id: S
 
 [shader("fragment")]
 [pass("base_render")]
-BaseRenderFSOut base_render_fragment(BaseRenderVSOut i, uniform ContourRootParams* u) {
+BaseRenderFSOut base_render_fragment(BaseRenderVSOut i) {
     BaseRenderFSOut o;
     float3 normal = normalize(i.normal);
     let light_dir = -i.view;
@@ -180,7 +186,7 @@ static const uint EXTRACT_CONTOURS_THREAD_GROUP_SIZE = 128;
 [shader("compute")]
 [numthreads(EXTRACT_CONTOURS_THREAD_GROUP_SIZE, 1, 1)]
 [pass("extract_interpolated_contours")]
-void extract_interpolated_contours(uint3 thread_id: SV_DispatchThreadID, uniform ContourRootParams* u)
+void extract_interpolated_contours(uint3 thread_id: SV_DispatchThreadID)
 {
     // one thread per face
 
@@ -204,9 +210,9 @@ void extract_interpolated_contours(uint3 thread_id: SV_DispatchThreadID, uniform
 
     // Evaluate point orientation relative to camera (the n.v term) for each vertex of the face.
     // negative orientation means point facing away, positive means facing towards camera.
-    let o1 = point_orientation(v1.position, u.eye, fv1.normal, u.isophote_offset);
-    let o2 = point_orientation(v2.position, u.eye, fv2.normal, u.isophote_offset);
-    let o3 = point_orientation(v3.position, u.eye, fv3.normal, u.isophote_offset);
+    let o1 = point_orientation(v1.position, u.eye, v1.normal, u.isophote_offset);
+    let o2 = point_orientation(v2.position, u.eye, v2.normal, u.isophote_offset);
+    let o3 = point_orientation(v3.position, u.eye, v3.normal, u.isophote_offset);
 
     // If all vertices point the same way (either all away or all towards camera),
     // there is no contour crossing this face.
@@ -430,7 +436,7 @@ static const uint EXPAND_CONTOURS_GROUP_SIZE = 256;
 [pass("expand_interpolated_contours")]
 [shader("compute")]
 [numthreads(EXPAND_CONTOURS_GROUP_SIZE, 1, 1)]
-void expand_interpolated_contours(uint3 thread_id : SV_DispatchThreadID, uniform ContourRootParams* u) {
+void expand_interpolated_contours(uint3 thread_id : SV_DispatchThreadID) {
 
     // one thread per contour segment
     let i = thread_id.x;
@@ -500,7 +506,7 @@ struct RenderOutlinesVSOut {
 
 [pass("render_outlines")]
 [shader("vertex")]
-RenderOutlinesVSOut render_outlines_vertex(uint vertex_id : SV_VertexID, uniform ContourRootParams* u)
+RenderOutlinesVSOut render_outlines_vertex(uint vertex_id : SV_VertexID)
 {
     let index = u.expanded_contour_indices[vertex_id];
     let vertex = u.expanded_contour_vertices[index];
@@ -522,8 +528,7 @@ struct RenderOutlinesFSOut {
 [shader("fragment")]
 RenderOutlinesFSOut render_outlines_fragment(
     float3 frag_coord: SV_Position,
-    RenderOutlinesVSOut vsout,
-    uniform ContourRootParams* params)
+    RenderOutlinesVSOut vsout)
 {
     int3 coord = int3(int2(frag_coord.xy), 0);
 

@@ -245,7 +245,8 @@ Image-based methods may be a dead end:
 - difficult to reconstruct a stable geometry (skeleton)
 - dependent on user-provided thresholds
 - inconsistent feature width
-- image space can be costly 
+- image space can be costly
+- contour T-junctions difficult to handle in image space 
 
 
 Dynamic rendering pipelines:
@@ -256,6 +257,9 @@ Those are accessible as predefined input buffers in shaders.
 Uniforms are initialized within shaders, or explicitly in the application. By default they are initialized to zero.
 
 Shader signatures: they take pointers to param buffers in global memory. Application-provided buffers are detected and provided by the system; for user params, they are cleared to zero, and editable in the interface.
+
+Debugging shaders:
+
 
 Setting up and running a sequence of pipelines:
 Load the file

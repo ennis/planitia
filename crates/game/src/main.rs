@@ -15,7 +15,7 @@ use std::ops::Deref;
 use color::{Srgba8, srgba8};
 use egui_demo_lib::{View, WidgetGallery};
 use gpu::PrimitiveTopology::TriangleList;
-use gpu::{Image, Ptr, RootParams, root_params};
+use gpu::{Image, Ptr, PushDataSource, root_params};
 use log::debug;
 use ron::ser::PrettyConfig;
 use math::geom::{Camera, rect_xywh};
@@ -130,8 +130,8 @@ impl Default for Game {
             painter: Painter::new(gpu::Format::R8G8B8A8_UNORM, None),
             depth_stencil_buffer: create_depth_buffer(WIDTH, HEIGHT),
             camera_control: CameraControl::default(),
-            grid_shader: get_graphics_pipeline("/shaders/game_shaders.sharc#grid"),
-            background_shader: get_graphics_pipeline("/shaders/game_shaders.sharc#background"),
+            grid_shader: get_graphics_pipeline("/shaders/game_shaders.sharc#grid/grid"),
+            background_shader: get_graphics_pipeline("/shaders/game_shaders.sharc#background/background"),
             frame_count: 0,
             width: WIDTH,
             height: HEIGHT,

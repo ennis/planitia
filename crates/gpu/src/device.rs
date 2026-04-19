@@ -412,7 +412,7 @@ const DEVICE_EXTENSIONS: &[&str] = &[
     "VK_EXT_conservative_rasterization",
     "VK_EXT_fragment_shader_interlock",
     "VK_EXT_shader_image_atomic_int64",
-    "VK_EXT_descriptor_heap",
+   // "VK_EXT_descriptor_heap",
     "VK_EXT_mutable_descriptor_type", //"VK_EXT_descriptor_buffer",
 ];
 

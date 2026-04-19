@@ -17,7 +17,7 @@ wry = { version =  "0.53.4", optional = true}
 winit = { version = "0.30.12", optional = true }
 include_dir = { version = "0.7.4", optional = true }
 clap = { version = "4.5.50", features = ["derive"], optional = true }
-slang = { git = "https://github.com/ennis/slang-rs.git" }
+slang = { package = "shader-slang", git = "https://github.com/ennis/slang-rs.git", rev = "a7e6a2726c63482c77870e31caa06a47e6043585" }
 env_logger = "0.11"
 
 [features]

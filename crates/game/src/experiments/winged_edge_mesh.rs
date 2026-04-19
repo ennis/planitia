@@ -5,8 +5,10 @@ use gpu::Ptr;
 #[derive(Default, Copy, Clone, Debug)]
 #[repr(C)]
 pub struct WingedEdge {
-    pub src_vtx: u32,
-    pub dst_vtx: u32,
+
+    pub src_point: u32,
+    pub dst_point: u32,
+
     /// Right (CW) face
     pub r_face: u32,
     /// Left (CCW) face
@@ -151,8 +153,8 @@ impl<PointData: Copy, FaceVertexData: Copy> WingedEdgeMesh<PointData, FaceVertex
                 } else {
                     // create new edge
                     let new_edge = WingedEdge {
-                        src_vtx,
-                        dst_vtx,
+                        src_point: src_vtx,
+                        dst_point: dst_vtx,
                         r_face: faces.len() as u32,
                         l_face: u32::MAX,
                         r_cw: u32::MAX,
@@ -173,7 +175,7 @@ impl<PointData: Copy, FaceVertexData: Copy> WingedEdgeMesh<PointData, FaceVertex
                 let prev_ei = face_edges[(i + 2) % 3];
                 let src_vtx = get_point(&fvs[i].data);
 
-                if src_vtx == edges[curr_ei as usize].src_vtx {
+                if src_vtx == edges[curr_ei as usize].src_point {
                     edges[curr_ei as usize].r_cw = next_ei;
                     edges[curr_ei as usize].r_ccw = prev_ei;
                 } else {
@@ -204,4 +206,5 @@ impl<PointData: Copy, FaceVertexData: Copy> WingedEdgeMesh<PointData, FaceVertex
             faces_gpu,
         }
     }
+
 }

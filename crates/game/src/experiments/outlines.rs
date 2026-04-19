@@ -9,7 +9,7 @@ use gamelib::render::pipeline_cache::{get_compute_pipeline, get_graphics_pipelin
 use gamelib::render::RenderTarget;
 use gamelib::{static_assets, tweak};
 use gpu::PrimitiveTopology::TriangleList;
-use gpu::{Buffer, BufferCreateInfo, DrawIndirectCommand, Image, InvalidateFlags, MemoryLocation, Ptr, RootParams, Size3D};
+use gpu::{Buffer, BufferCreateInfo, DrawIndirectCommand, Image, InvalidateFlags, MemoryLocation, Ptr, PushDataSource, Size3D};
 use hgeo::util::polygons_to_triangle_mesh;
 use log::{info, warn};
 use math::geom::Camera;
@@ -25,6 +25,7 @@ use std::{fmt, ptr};
 #[derive(Copy, Clone)]
 struct PointData {
     position: Vec3,
+    normal: Vec3,
     id: u32
 }
 
@@ -164,22 +165,29 @@ struct SubdivideContoursRootParams2 {
     point_count: u32,
 }
 
+/*
+#[derive(PushData)]
+struct OutlinePushData {
+    #[push_data(binding(0), address)]
+    common: Ptr<ContoursRootParams>,
+}*/
+
 static_assets! {
-    static BASE_RENDER: gpu::GraphicsPipeline = "/shaders/game_shaders.sharc#base_render";
-    static DEPTH_PASS: gpu::GraphicsPipeline = "/shaders/game_shaders.sharc#depth_pass";
-    static EXTRACT_INTERPOLATED_CONTOURS: gpu::ComputePipeline = "/shaders/game_shaders.sharc#extract_interpolated_contours";
-    static EXPAND_INTERPOLATED_CONTOURS: gpu::ComputePipeline = "/shaders/game_shaders.sharc#expand_interpolated_contours";
+    static BASE_RENDER: gpu::GraphicsPipeline = "/shaders/game_shaders.sharc#outline/base_render";
+    static DEPTH_PASS: gpu::GraphicsPipeline = "/shaders/game_shaders.sharc#outline/depth_pass";
+    static EXTRACT_INTERPOLATED_CONTOURS: gpu::ComputePipeline = "/shaders/game_shaders.sharc#outline/extract_interpolated_contours";
+    static EXPAND_INTERPOLATED_CONTOURS: gpu::ComputePipeline = "/shaders/game_shaders.sharc#outline/expand_interpolated_contours";
 
-    static BREAK_CONTOURS_INIT: gpu::ComputePipeline = "/shaders/game_shaders.sharc#break_contours_init";
-    static BREAK_CONTOURS_STEP: gpu::ComputePipeline = "/shaders/game_shaders.sharc#break_contours_step";
-    static RANK_CONTOURS_INIT: gpu::ComputePipeline = "/shaders/game_shaders.sharc#rank_contours_init";
-    static RANK_CONTOURS_STEP: gpu::ComputePipeline = "/shaders/game_shaders.sharc#rank_contours_step";
+    static BREAK_CONTOURS_INIT: gpu::ComputePipeline = "/shaders/game_shaders.sharc#outline/break_contours_init";
+    static BREAK_CONTOURS_STEP: gpu::ComputePipeline = "/shaders/game_shaders.sharc#outline/break_contours_step";
+    static RANK_CONTOURS_INIT: gpu::ComputePipeline = "/shaders/game_shaders.sharc#outline/rank_contours_init";
+    static RANK_CONTOURS_STEP: gpu::ComputePipeline = "/shaders/game_shaders.sharc#outline/rank_contours_step";
 
-    static SETUP_SUBDIVIDE_CONTOURS: gpu::ComputePipeline = "/shaders/game_shaders.sharc#setup_subdivide_contours";
-    static FINISH_SUBDIVIDE_CONTOURS: gpu::ComputePipeline = "/shaders/game_shaders.sharc#finish_subdivide_contours";
-    static SUBDIVIDE_CONTOURS: gpu::ComputePipeline = "/shaders/game_shaders.sharc#subdivide_contours";
+    static SETUP_SUBDIVIDE_CONTOURS: gpu::ComputePipeline = "/shaders/game_shaders.sharc#outline/setup_subdivide_contours";
+    static FINISH_SUBDIVIDE_CONTOURS: gpu::ComputePipeline = "/shaders/game_shaders.sharc#outline/finish_subdivide_contours";
+    static SUBDIVIDE_CONTOURS: gpu::ComputePipeline = "/shaders/game_shaders.sharc#outline/subdivide_contours";
 
-    static RENDER_OUTLINES: gpu::GraphicsPipeline = "/shaders/game_shaders.sharc#render_outlines";
+    static RENDER_OUTLINES: gpu::GraphicsPipeline = "/shaders/game_shaders.sharc#outline/render_outlines";
 }
 
 const RANK_CONTOURS_GROUP_SIZE: u32 = 256;
@@ -206,7 +214,7 @@ impl OutlineExperiment {
                 first_instance: 0,
             }]),
             angle_texture: RenderTarget::new(gpu::Format::R16G16B16A16_UINT, gpu::ImageUsage::SAMPLED | gpu::ImageUsage::STORAGE | gpu::ImageUsage::COLOR_ATTACHMENT),
-            normal_texture: RenderTarget::new(gpu::Format::R16G16B16A16_SFLOAT, gpu::ImageUsage::SAMPLED | gpu::ImageUsage::STORAGE | gpu::ImageUsage::COLOR_ATTACHMENT),
+            normal_texture: RenderTarget::new(gpu::Format::A2B10G10R10_UNORM_PACK32, gpu::ImageUsage::SAMPLED | gpu::ImageUsage::STORAGE | gpu::ImageUsage::COLOR_ATTACHMENT),
             shading_texture: RenderTarget::new(gpu::Format::R8G8B8A8_UNORM, gpu::ImageUsage::SAMPLED | gpu::ImageUsage::STORAGE | gpu::ImageUsage::COLOR_ATTACHMENT),
             lock_view: false,
             locked_eye: Vec3::ZERO,
@@ -218,11 +226,12 @@ impl OutlineExperiment {
         let geo = hgeo::Geo::load(path).unwrap();
 
         // convert points
-        let points = (0..geo.point_count)
+        let mut points = (0..geo.point_count)
             .map(|ptnum| {
                 let position = geo.point(ptnum as u32, "P");
                 let id = geo.point(ptnum as u32, "id");
-                PointData { position, id }
+                let normal = Vec3::default();   // initialized later
+                PointData { position, normal, id }
             })
             .collect::<Vec<_>>();
 
@@ -235,17 +244,20 @@ impl OutlineExperiment {
                 }
                 let first_vertex = vertices.len();
                 for (i, vi) in prim.vertices().enumerate() {
-                    vertices.push(FaceVertexData {
-                        point: geo.vertexpoint(vi),
-                        normal: geo.vertex(vi, "N"),
-                    });
                     if i > 2 {
                         let v0 = vertices[first_vertex];
-                        let v1 = vertices[first_vertex + i - 1];
+                        let v1 = vertices[first_vertex + (i - 2) * 3 - 1];
                         //let v2 = vertices[first_vertex + i];
                         vertices.push(v0);
                         vertices.push(v1);
                     }
+                    let point_index = geo.vertexpoint(vi);
+                    let normal = geo.vertex(vi, "N");
+                    points[point_index as usize].normal = normal;
+                    vertices.push(FaceVertexData {
+                        point: point_index,
+                        normal,
+                    });
                 }
             }
             vertices

@@ -141,17 +141,14 @@ pub struct VertexShaderOutput {
     pub interpolation: Interpolation,
 }
 
-/// Location of a shader parameter value.
-///
-/// This describes where the value of the parameter is stored,
-/// either in a buffer resource, or in push data.
+/// Describes how a shader parameter is accessed.
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum ParamLocation {
     /// Parameter is in a buffer accessed via a resource binding.
     Binding {
         /// Buffer resource index (in `Signature::resources`).
-        index: u32,
+        resource_index: u32,
         /// Byte offset of the parameter within the buffer.
         offset: u32,
     },
@@ -160,16 +157,31 @@ pub enum ParamLocation {
         /// Byte offset of the parameter value within push data.
         offset: u32,
     },
+    /// Indirect parameter, relative to another pointer parameter.
+    Indirect {
+        /// Index of the pointer parameter this parameter is relative to (in `Signature::params`).
+        rel: u32,
+        /// Byte offset of the parameter value relative to the pointer value.
+        offset: u32,
+    },
 }
 
-/// Shader uniform parameter.
+/// Represents a shader parameter.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Param {
+    /// Full name of the parameter.
+    ///
+    /// If this is part of a struct, the name is the full path to the parameter, e.g., `param0.myField`.
     pub name: Offset<str>,
-    pub ty: TypeDesc,
-    /// Location of the parameter value.
+    /// Location of the parameter.
     pub location: ParamLocation,
+    /// Size of the parameter in bytes (if applicable).
+    ///
+    /// This is the number of bytes that should be readable from the parameter location.
+    pub byte_size: u32,
+    //pub ty: TypeDesc,
+    /// User attributes.
     pub attributes: Offset<[Attribute]>,
 }
 
@@ -195,6 +207,7 @@ pub struct ShaderResource {
     pub set: u32,
     pub kind: ShaderResourceKind,
 }
+
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub enum ShaderInterface {
@@ -207,12 +220,18 @@ pub enum ShaderInterface {
     },
 }
 
-/// Shader entry point signature.
+/// Pipeline signature.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Signature {
-    pub interface: ShaderInterface,
-    /// Uniform parameters.
+    // For graphics pipelines, describes the vertex output/fragment input interface of the shader.
+    //
+    // This is empty for compute pipelines.
+    //pub vertex_output_interface: Offset<[VertexShaderOutput]>,
+    // For graphics pipelines, describes the fragment output interface (attachment outputs) of the shader.
+    //
+    // This is empty for compute pipelines.
+    //pub fragment_output_interface: Offset<[FragmentShaderOutput]>,
     pub params: Offset<[Param]>,
     pub resources: Offset<[ShaderResource]>,
 }

@@ -35,7 +35,6 @@ pub struct CommandBuffer {
 }
 
 bitflags! {
-
     /// Describes the memory types to invalidate during a barrier operation.
     pub struct InvalidateFlags: u32 {
         /// Invalidate any cache related to shader storage memory.
@@ -68,185 +67,35 @@ impl InvalidateFlags {
     }
 }
 
-/*
-    /// Describes the scope (memory and execution) of one side of a barrier operation.
-    #[derive(Copy,Clone,Debug,PartialEq,Eq,Hash)]
-    pub struct BarrierFlags: u64 {
-
-        /// Transfer stage (execution only dependency)
-        const TRANSFER = 1 << 0;
-
-        #[doc(hidden)]
-        const TRANSFER_MEMORY_READ =  1 << 14;
-        #[doc(hidden)]
-        const TRANSFER_MEMORY_WRITE = 1 << 15;
-
-        const TRANSFER_READ =  Self::TRANSFER.bits() | Self::TRANSFER_MEMORY_READ.bits();
-        const TRANSFER_WRITE = Self::TRANSFER.bits() | Self::TRANSFER_MEMORY_WRITE.bits();
-
-        const VERTEX_SHADER = 1 << 1;
-        const COMPUTE_SHADER = 1 << 2;
-        const FRAGMENT_SHADER = 1 << 3;
-        const MESH_SHADER = 1 << 4;
-        const TASK_SHADER = 1 << 5;
-        const ALL_SHADER_STAGES = Self::VERTEX_SHADER.bits() | Self::COMPUTE_SHADER.bits() | Self::FRAGMENT_SHADER.bits() | Self::MESH_SHADER.bits() | Self::TASK_SHADER.bits();
-
-        /// Source: shader storage write
-        /// Destination: shader storage read
-        ///
-        /// Equivalent to:
-        /// - source:      SHADER_STORAGE_WRITE
-        /// - destination: SHADER_STORAGE_READ
-        const STORAGE = 1 << 6;
-
-        /// Destination: shader sampled read
-        const SAMPLED_READ = 1 << 7;
-
-        /// Destination: indirect command read
-        const INDIRECT_READ = 1 << 8;
-
-        /// Destination: uniform read
-        const UNIFORM_READ = 1 << 9;
-
-        /// Color attachment read/output stage
-        /// Destination: Color attachment read
-        /// OR Source: Color attachment write + late fragment tests stage
-        ///
-        /// Equivalent to:
-        /// - source:      COLOR_ATTACHMENT_OUTPUT + COLOR_ATTACHMENT_WRITE
-        /// - destination: COLOR_ATTACHMENT_OUTPUT + COLOR_ATTACHMENT_READ
-        const COLOR_ATTACHMENT = 1 << 10;
-
-        /// Destination: Depth-stencil read + early fragment tests stage
-        /// OR Source: Depth-stencil write + late fragment tests stage
-        ///
-        /// Equivalent to:
-        /// - source:      LATE_FRAGMENT_TESTS  + DEPTH_STENCIL_ATTACHMENT_WRITE
-        /// - destination: EARLY_FRAGMENT_TESTS + DEPTH_STENCIL_ATTACHMENT_READ
-        const DEPTH_STENCIL = 1 << 11;
-
-        /// Vertex input stage & vertex attribute read.
-        const VERTEX_READ = 1 << 12;
-
-        /// Index input stage & index read.
-        const INDEX_READ = 1 << 13;
-
-    }
-}*/
-
-/*impl BarrierFlags {
-    fn shader_stage_flags(self) -> vk::PipelineStageFlags2 {
-        let mut flags = vk::PipelineStageFlags2::empty();
-        if self.contains(Self::VERTEX_SHADER) {
-            flags |= vk::PipelineStageFlags2::VERTEX_SHADER;
-        }
-        if self.contains(Self::FRAGMENT_SHADER) {
-            flags |= vk::PipelineStageFlags2::FRAGMENT_SHADER;
-        }
-        if self.contains(Self::COMPUTE_SHADER) {
-            flags |= vk::PipelineStageFlags2::COMPUTE_SHADER;
-        }
-        if self.contains(Self::MESH_SHADER) {
-            flags |= vk::PipelineStageFlags2::MESH_SHADER_EXT;
-        }
-        if self.contains(Self::TASK_SHADER) {
-            flags |= vk::PipelineStageFlags2::TASK_SHADER_EXT;
-        }
-        flags
-    }
-
-    fn to_vk_barrier_src_flags(&self) -> (vk::PipelineStageFlags2, vk::AccessFlags2) {
-        let mut stages = vk::PipelineStageFlags2::empty();
-        let mut access = vk::AccessFlags2::empty();
-
-        stages |= self.shader_stage_flags();
-
-        if self.contains(Self::DEPTH_STENCIL) {
-            stages |= vk::PipelineStageFlags2::LATE_FRAGMENT_TESTS;
-            access |= vk::AccessFlags2::DEPTH_STENCIL_ATTACHMENT_WRITE;
-        }
-        if self.contains(Self::TRANSFER) {
-            stages |= vk::PipelineStageFlags2::TRANSFER;
-        }
-        if self.contains(Self::TRANSFER_MEMORY_WRITE) {
-            access |= vk::AccessFlags2::TRANSFER_WRITE;
-        }
-        if self.contains(Self::STORAGE) {
-            access |= vk::AccessFlags2::SHADER_STORAGE_WRITE;
-        }
-        if self.contains(Self::COLOR_ATTACHMENT) {
-            stages |= vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT;
-            access |= vk::AccessFlags2::COLOR_ATTACHMENT_WRITE;
-        }
-
-        (stages, access)
-    }
-
-    fn to_vk_barrier_dst_flags(&self) -> (vk::PipelineStageFlags2, vk::AccessFlags2) {
-        let mut stages = vk::PipelineStageFlags2::empty();
-        let mut access = vk::AccessFlags2::empty();
-
-        stages |= self.shader_stage_flags();
-
-        if self.contains(Self::DEPTH_STENCIL) {
-            stages |= vk::PipelineStageFlags2::EARLY_FRAGMENT_TESTS;
-            access |= vk::AccessFlags2::DEPTH_STENCIL_ATTACHMENT_READ;
-        }
-        if self.contains(Self::TRANSFER) {
-            stages |= vk::PipelineStageFlags2::TRANSFER;
-            if self.contains(Self::TRANSFER_MEMORY_READ) {
-                // no need for a memory dependency if we're only writing
-                access |= vk::AccessFlags2::TRANSFER_READ;
-            }
-        }
-        if self.contains(Self::STORAGE) {
-            access |= vk::AccessFlags2::SHADER_STORAGE_READ;
-        }
-        if self.contains(Self::COLOR_ATTACHMENT) {
-            stages |= vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT;
-            access |= vk::AccessFlags2::COLOR_ATTACHMENT_READ;
-        }
-        if self.contains(Self::SAMPLED_READ) {
-            access |= vk::AccessFlags2::SHADER_SAMPLED_READ;
-        }
-        if self.contains(Self::UNIFORM_READ) {
-            access |= vk::AccessFlags2::UNIFORM_READ;
-        }
-        if self.contains(Self::INDIRECT_READ) {
-            stages |= vk::PipelineStageFlags2::DRAW_INDIRECT;
-            access |= vk::AccessFlags2::INDIRECT_COMMAND_READ;
-        }
-        if self.contains(Self::VERTEX_READ) {
-            stages |= vk::PipelineStageFlags2::VERTEX_ATTRIBUTE_INPUT;
-            access |= vk::AccessFlags2::VERTEX_ATTRIBUTE_READ;
-        }
-        if self.contains(Self::INDEX_READ) {
-            stages |= vk::PipelineStageFlags2::INDEX_INPUT;
-            access |= vk::AccessFlags2::INDEX_READ;
-        }
-
-        (stages, access)
-    }
-}*/
-
 /// Describes root parameters for a command.
 #[derive(Clone, Copy)]
-pub enum RootParams<'a, T: Copy + 'static> {
-    /// Root parameters are provided as a GPU pointer to a structure.
-    Ptr(Ptr<T>),
-    /// Root parameters are provided as immediate data.
-    Immediate(&'a T),
+pub enum PushDataSource<'a, T: Copy + 'static> {
+    /// Pass a GPU pointer to root parameters in push data. The shader should expect the pointer at offset 0 in push data.
+    Indirect(Ptr<T>),
+    /// Pass a GPU pointer to root parameters in push data. The provided data is first uploaded to an internal GPU buffer. The shader should expect the pointer at offset 0 in push data.
+    IndirectUpload(&'a T),
+    /// Write push data directly, without an extra indirection. The shader should expect the root parameters directly in push data.
+    Direct(&'a T),
 }
 
-impl<T: Copy + 'static> From<Ptr<T>> for RootParams<'_, T> {
+impl<T: Copy + 'static> From<Ptr<T>> for PushDataSource<'_, T> {
     fn from(p: Ptr<T>) -> Self {
-        RootParams::Ptr(p)
+        PushDataSource::Indirect(p)
     }
 }
 
-impl<'a, T: Copy + 'static> From<&'a T> for RootParams<'a, T> {
+impl<'a, T: Copy + 'static> From<&'a T> for PushDataSource<'a, T> {
     fn from(data: &'a T) -> Self {
-        RootParams::Immediate(data)
+        PushDataSource::IndirectUpload(data)
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct ImmediatePushData<'a, T: Copy + 'static>(pub &'a T);
+
+impl<'a, T: Copy + 'static> From<ImmediatePushData<'a, T>> for PushDataSource<'a, T> {
+    fn from(data: ImmediatePushData<'a, T>) -> Self {
+        PushDataSource::Direct(data.0)
     }
 }
 
@@ -495,12 +344,12 @@ impl CommandBuffer {
         }
     }
 
-    fn set_root_params<T: Copy + 'static>(
+    fn set_push_data<T: Copy + 'static>(
         &mut self,
-        command_buffer: vk::CommandBuffer,
+        cb: vk::CommandBuffer,
         bind_point: vk::PipelineBindPoint,
-        pipeline_layout: vk::PipelineLayout,
-        params: RootParams<T>,
+        pl: vk::PipelineLayout,
+        params: PushDataSource<T>,
     ) {
         // None of the relevant drivers on desktop care about the actual stages,
         // only if it's graphics, compute, or ray tracing.
@@ -512,94 +361,27 @@ impl CommandBuffer {
             _ => panic!("unsupported bind point"),
         };
 
-        let ptr = match params {
-            RootParams::Ptr(p) => p.raw,
-            RootParams::Immediate(data) => Device::global().upload(slice::from_ref(data)).raw,
-        };
+        let device = Device::global();
 
         unsafe {
-            Device::global().raw.cmd_push_constants(
-                command_buffer,
-                pipeline_layout,
-                stages,
-                0,
-                slice::from_raw_parts(&ptr as *const DeviceAddress as *const u8, size_of::<DeviceAddress>()),
-            );
+            match params {
+                PushDataSource::Indirect(p) => {
+                    let ptr = p.raw;
+                    let constants = slice::from_raw_parts(&ptr as *const _ as *const u8, size_of::<DeviceAddress>());
+                    device.raw.cmd_push_constants(cb, pl, stages, 0, constants);
+                }
+                PushDataSource::IndirectUpload(data) => {
+                    let ptr = device.upload(slice::from_ref(data)).raw;
+                    let constants = slice::from_raw_parts(&ptr as *const _ as *const u8, size_of::<DeviceAddress>());
+                    device.raw.cmd_push_constants(cb, pl, stages, 0, constants);
+                }
+                PushDataSource::Direct(data) => {
+                    let constants = slice::from_raw_parts(data as *const _ as *const u8, size_of::<T>());
+                    device.raw.cmd_push_constants(cb, pl, stages, 0, constants);
+                }
+            };
         }
     }
-
-    /*
-    pub fn pipeline_barrier(&mut self, src: BarrierFlags, dest: BarrierFlags) {
-        //let mut image_barriers = vec![];
-        let full_src = self.barrier_source | src;
-
-        if full_src.is_empty() && dest.is_empty() {
-            return;
-        }
-
-        let (src_stage_mask, src_access_mask) = full_src.to_vk_barrier_src_flags();
-        let (dst_stage_mask, dst_access_mask) = dest.to_vk_barrier_dst_flags();
-        let global_memory_barrier = vk::MemoryBarrier2 {
-            src_access_mask,
-            dst_access_mask,
-            src_stage_mask,
-            dst_stage_mask,
-            ..Default::default()
-        };
-
-        let command_buffer = self.get_or_create_command_buffer();
-        unsafe {
-            Device::global().raw.cmd_pipeline_barrier2(
-                command_buffer,
-                &vk::DependencyInfo {
-                    dependency_flags: Default::default(),
-                    memory_barrier_count: 1,
-                    p_memory_barriers: &global_memory_barrier,
-                    ..Default::default()
-                },
-            );
-        }
-
-        self.barrier_source = BarrierFlags::empty();
-
-        /*for (image, access) in barrier.transitions {
-            if let Some(entry) = self.tracked_images.get_mut(&image.id()) {
-                if entry.last_access != access {
-                    let (src_stage_mask, src_access_mask) = entry.last_access.to_vk_scope_flags();
-                    let (dst_stage_mask, dst_access_mask) = access.to_vk_scope_flags();
-                    image_barriers.push(vk::ImageMemoryBarrier2 {
-                        src_stage_mask,
-                        src_access_mask,
-                        dst_stage_mask,
-                        dst_access_mask,
-                        image: image.handle(),
-                        old_layout: entry.last_access.to_vk_image_layout(image.format()),
-                        new_layout: access.to_vk_image_layout(image.format()),
-                        subresource_range: vk::ImageSubresourceRange {
-                            aspect_mask: aspects_for_format(image.format()),
-                            base_mip_level: 0,
-                            level_count: vk::REMAINING_MIP_LEVELS,
-                            base_array_layer: 0,
-                            layer_count: vk::REMAINING_ARRAY_LAYERS,
-                        },
-                        ..Default::default()
-                    });
-                }
-                entry.last_access = access;
-            } else {
-                self.tracked_images.insert(
-                    image.id(),
-                    CommandBufferImageState {
-                        image: image.handle(),
-                        format: image.format(),
-                        id: image.id(),
-                        first_access: access,
-                        last_access: access,
-                    },
-                );
-            }
-        }*/
-    }*/
 
     /// Emits a pipeline barrier.
     ///
@@ -713,11 +495,11 @@ impl CommandBuffer {
         group_count_x: u32,
         group_count_y: u32,
         group_count_z: u32,
-        root_params: impl Into<RootParams<'params, T>>,
+        root_params: impl Into<PushDataSource<'params, T>>,
     ) {
         let cb = self.get_or_create_command_buffer();
         unsafe {
-            self.set_root_params(
+            self.set_push_data(
                 cb,
                 vk::PipelineBindPoint::COMPUTE,
                 self.pipeline_layout,

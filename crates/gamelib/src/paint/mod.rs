@@ -9,7 +9,7 @@ use crate::paint::shape::RectShape;
 use crate::paint::tessellation::{Mesh, Tessellator};
 use crate::paint::text::GlyphCache;
 use color::Srgba8;
-use gpu::{CommandBuffer, Ptr, RootParams, Sampler, Vertex as GpuVertex, vk};
+use gpu::{CommandBuffer, Ptr, PushDataSource, Sampler, Vertex as GpuVertex, vk};
 use math::geom::Camera;
 use math::{Mat4, Rect, U16Vec2, UVec2, Vec2, u16vec2, uvec2, vec2};
 use shader_bridge::ShaderLibrary;
@@ -446,7 +446,7 @@ fn draw_mesh(
         Some(vertex_buffer.as_bytes()),
         0,
         0..1,
-        RootParams::Ptr(root_params),
+        PushDataSource::Indirect(root_params),
     );
 }
 

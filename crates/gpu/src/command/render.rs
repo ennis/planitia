@@ -1,7 +1,7 @@
 //! Render command encoders
 use crate::{
     Buffer, BufferUntyped, ClearColorValue, ColorAttachment, CommandBuffer, DepthBias, DepthStencilAttachment,
-    Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, Rect2D, RootParams, is_depth_and_stencil_format,
+    Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, Rect2D, PushDataSource, is_depth_and_stencil_format,
 };
 use ash::vk;
 use std::ops::Range;
@@ -331,7 +331,7 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
-    pub fn draw_screen_quad<'params, T: Copy + 'static>(&mut self, root_params: impl Into<RootParams<'params, T>>) {
+    pub fn draw_screen_quad<'params, T: Copy + 'static>(&mut self, root_params: impl Into<PushDataSource<'params, T>>) {
         self.draw(PrimitiveTopology::TriangleList, None, 0..6, 0..1, root_params);
     }
 
@@ -341,10 +341,10 @@ impl<'a> RenderEncoder<'a> {
         vertex_buffer: Option<&BufferUntyped>,
         vertices: Range<u32>,
         instances: Range<u32>,
-        root_params: impl Into<RootParams<'params, T>>,
+        root_params: impl Into<PushDataSource<'params, T>>,
     ) {
         unsafe {
-            self.stream.set_root_params(
+            self.stream.set_push_data(
                 self.command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout,
@@ -373,10 +373,10 @@ impl<'a> RenderEncoder<'a> {
         vertex_buffer: Option<&BufferUntyped>,
         base_vertex: i32,
         instances: Range<u32>,
-        root_params: impl Into<RootParams<'params, T>>,
+        root_params: impl Into<PushDataSource<'params, T>>,
     ) {
         unsafe {
-            self.stream.set_root_params(
+            self.stream.set_push_data(
                 self.command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout,
@@ -406,10 +406,10 @@ impl<'a> RenderEncoder<'a> {
         vertex_buffer: Option<&BufferUntyped>,
         commands: &Buffer<DrawIndirectCommand>,
         draw_range: Range<u32>,
-        root_params: impl Into<RootParams<'params, T>>,
+        root_params: impl Into<PushDataSource<'params, T>>,
     ) {
         unsafe {
-            self.stream.set_root_params(
+            self.stream.set_push_data(
                 self.command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout,
@@ -437,10 +437,10 @@ impl<'a> RenderEncoder<'a> {
         vertex_buffer: Option<&BufferUntyped>,
         commands: &Buffer<DrawIndexedIndirectCommand>,
         draw_range: Range<u32>,
-        root_params: impl Into<RootParams<'params, T>>,
+        root_params: impl Into<PushDataSource<'params, T>>,
     ) {
         unsafe {
-            self.stream.set_root_params(
+            self.stream.set_push_data(
                 self.command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout,
@@ -467,10 +467,10 @@ impl<'a> RenderEncoder<'a> {
         group_count_x: u32,
         group_count_y: u32,
         group_count_z: u32,
-        root_params: impl Into<RootParams<'params, T>>,
+        root_params: impl Into<PushDataSource<'params, T>>,
     ) {
         unsafe {
-            self.stream.set_root_params(
+            self.stream.set_push_data(
                 self.command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout,

@@ -8,11 +8,11 @@ pub mod pipeline_cache;
 mod reflection;
 mod render_world;
 mod util;
+mod workbench;
 //mod technique;
 
 //pub use technique::{Technique, TechniqueInstance};
 
-pub use pipeline_cache::GraphicsPipeline;
 //pub use pipeline_cache::ComputePipeline;
 //pub use util::allocate_render_target_for_pipeline;
 pub use util::RenderTarget;
@@ -34,7 +34,7 @@ fn unix_mtime(last_modified: SystemTime) -> u64 {
 }
 
 /// Loads a pipeline archive file or retrieves it from the asset cache.
-fn load_shader_archive(path: impl AsRef<VfsPath>) -> Handle<ShaderArchive> {
+pub(crate) fn load_shader_archive(path: impl AsRef<VfsPath>) -> Handle<ShaderArchive> {
     let cache = AssetCache::instance();
     cache.load(path.as_ref(), |path, metadata, provider, deps| {
         debug!("loading pipeline archive: {}", path.as_str());

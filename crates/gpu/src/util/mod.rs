@@ -87,7 +87,7 @@ pub unsafe fn blit_images(
 #[macro_export]
 macro_rules! root_params {
     ( $( $field:ident : $ty:ty = $val:expr ),* ) => {
-        $crate::RootParams::Immediate(&{
+        $crate::PushDataSource::IndirectUpload(&{
             #[repr(C)]
             #[derive(Copy, Clone)]
             struct Params {

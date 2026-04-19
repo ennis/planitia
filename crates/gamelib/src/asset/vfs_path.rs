@@ -137,6 +137,12 @@ impl AsRef<VfsPath> for str {
     }
 }
 
+impl ToString for VfsPath {
+    fn to_string(&self) -> String {
+        self.0.to_string()
+    }
+}
+
 /// Owned version of VfsPath.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub struct VfsPathBuf(String);

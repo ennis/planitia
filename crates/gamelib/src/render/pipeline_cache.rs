@@ -22,14 +22,13 @@ pub enum PipelineCreateError {
 
 fn get_shader_entry_point<'a>(
     stage: gpu::ShaderStage,
-    archive: &'a ShaderArchive,
-    shader: &'a Shader,
+    spirv: &'a [u32],
+    entry_point_name: &'a str,
 ) -> ShaderEntryPoint<'a> {
-    let spirv = &archive[shader.spirv];
     ShaderEntryPoint {
         stage,
         code: spirv,
-        entry_point: shader.entry_point.as_str(),
+        entry_point: entry_point_name,
         push_constants_size: 0, // ignored by gpu anyway
         source_path: None,
         workgroup_size: [0, 0, 0], // ignored by gpu anyway
@@ -38,6 +37,7 @@ fn get_shader_entry_point<'a>(
 
 fn create_graphics_pipeline_from_archive(
     archive: &ShaderArchive,
+    module: &sharc::Module,
     name: &str,
     entry: &sharc::GraphicsPipeline,
 ) -> Result<gpu::GraphicsPipeline, PipelineCreateError> {
@@ -87,21 +87,23 @@ fn create_graphics_pipeline_from_archive(
     let mut stage_flags = vk::ShaderStageFlags::empty();
 
     for shader in &archive[entry.shaders] {
+        let ep_name = shader.entry_point.as_str();
+        let spirv = &archive[module.spirv];
         match shader.stage {
             vk::ShaderStageFlags::VERTEX => {
-                vertex_shader = Some(get_shader_entry_point(gpu::ShaderStage::Vertex, &archive, shader));
+                vertex_shader = Some(get_shader_entry_point(gpu::ShaderStage::Vertex, spirv, ep_name));
                 stage_flags |= vk::ShaderStageFlags::VERTEX;
             }
             vk::ShaderStageFlags::FRAGMENT => {
-                fragment_shader = Some(get_shader_entry_point(gpu::ShaderStage::Fragment, &archive, shader));
+                fragment_shader = Some(get_shader_entry_point(gpu::ShaderStage::Fragment, spirv, ep_name));
                 stage_flags |= vk::ShaderStageFlags::FRAGMENT;
             }
             vk::ShaderStageFlags::MESH_EXT => {
-                mesh_shader = Some(get_shader_entry_point(gpu::ShaderStage::Mesh, &archive, shader));
+                mesh_shader = Some(get_shader_entry_point(gpu::ShaderStage::Mesh, spirv, ep_name));
                 stage_flags |= vk::ShaderStageFlags::MESH_EXT;
             }
             vk::ShaderStageFlags::TASK_EXT => {
-                task_shader = Some(get_shader_entry_point(gpu::ShaderStage::Task, &archive, shader));
+                task_shader = Some(get_shader_entry_point(gpu::ShaderStage::Task, spirv, ep_name));
                 stage_flags |= vk::ShaderStageFlags::TASK_EXT;
             }
             _ => {
@@ -138,6 +140,7 @@ fn create_graphics_pipeline_from_archive(
     let pipeline = gpu::GraphicsPipeline::new(gpci)?;
 
     unsafe {
+        let name = format!("{}/{}", &archive[module.name], name);
         gpu::set_debug_name(&pipeline, name);
     }
 
@@ -146,10 +149,13 @@ fn create_graphics_pipeline_from_archive(
 
 fn create_compute_pipeline_from_archive(
     archive: &ShaderArchive,
+    module: &sharc::Module,
     name: &str,
     entry: &sharc::ComputePipeline,
 ) -> Result<gpu::ComputePipeline, PipelineCreateError> {
-    let shader = get_shader_entry_point(gpu::ShaderStage::Compute, &archive, &entry.compute_shader);
+    let ep_name = entry.compute_shader.entry_point.as_str();
+    let spirv = &archive[module.spirv];
+    let shader = get_shader_entry_point(gpu::ShaderStage::Compute, spirv, ep_name);
     let cpci = gpu::ComputePipelineCreateInfo {
         set_layouts: &[],
         push_constants_size: entry.push_constants_size as usize,
@@ -157,9 +163,19 @@ fn create_compute_pipeline_from_archive(
     };
     let pipeline = gpu::ComputePipeline::new(cpci)?;
     unsafe {
+        let name = format!("{}/{}", &archive[module.name], name);
         gpu::set_debug_name(&pipeline, name);
     }
     Ok(pipeline)
+}
+
+fn get_module_and_pipeline_name(path: &VfsPath) -> LoadResult<(&str, &str)> {
+    let Some(name) = path.fragment() else {
+        return Err(PipelineCreateError::PipelineNotFound(path.to_string()).into());
+    };
+    name.split_once('/')
+        .map(|(module_name, pipeline_name)| (module_name, pipeline_name))
+        .ok_or_else(|| PipelineCreateError::PipelineNotFound(name.to_string()).into())
 }
 
 fn load_graphics_pipeline(
@@ -170,21 +186,20 @@ fn load_graphics_pipeline(
 ) -> LoadResult<gpu::GraphicsPipeline> {
 
     let archive_file = path.path_without_fragment();
-    let name = path.fragment().expect("pipeline name missing in path");
+    let (module_name, pipeline_name) = get_module_and_pipeline_name(path)?;
     let archive_handle = load_shader_archive(archive_file);
 
     debug!(
-        "loading pipeline `{}` (graphics) from `{}`",
-        name,
+        "loading pipeline `{module_name}/{pipeline_name}` (graphics) from `{}`",
         archive_file.as_str()
     );
 
     let archive = archive_handle.read()?;
-    let entry = archive
-        .find_graphics_pipeline(name)
-        .ok_or_else(|| PipelineCreateError::PipelineNotFound(name.to_string()))?;
+    let (module, pipeline) = archive
+        .find_graphics_pipeline(module_name, pipeline_name)
+        .ok_or_else(|| PipelineCreateError::PipelineNotFound(path.to_string()))?;
 
-    Ok(create_graphics_pipeline_from_archive(&*archive, name, entry)?)
+    Ok(create_graphics_pipeline_from_archive(&*archive, module, pipeline_name, pipeline)?)
 }
 
 fn load_compute_pipeline(
@@ -194,16 +209,16 @@ fn load_compute_pipeline(
     _dependencies: &mut Dependencies,
 ) -> LoadResult<gpu::ComputePipeline> {
     let archive_file = path.path_without_fragment();
-    let name = path.fragment().expect("pipeline name missing in path");
+    let (module_name, pipeline_name) = get_module_and_pipeline_name(path)?;
     let archive_handle = load_shader_archive(archive_file);
 
-    debug!("loading pipeline `{}` (compute) from `{}`", name, archive_file.as_str());
+    debug!("loading pipeline `{module_name}/{pipeline_name}` (compute) from `{}`", archive_file.as_str());
 
     let archive = archive_handle.read()?;
-    let entry = archive
-        .find_compute_pipeline(name)
-        .ok_or_else(|| PipelineCreateError::PipelineNotFound(name.to_string()))?;
-    Ok(create_compute_pipeline_from_archive(&*archive, name, entry)?)
+    let (module, pipeline) = archive
+        .find_compute_pipeline(module_name, pipeline_name)
+        .ok_or_else(|| PipelineCreateError::PipelineNotFound(path.to_string()))?;
+    Ok(create_compute_pipeline_from_archive(&*archive, module, pipeline_name, pipeline)?)
 }
 
 /// Loads a graphics pipeline object from the specified archive file and pipeline name.
@@ -241,6 +256,7 @@ impl DefaultLoader for gpu::ComputePipeline {
 
 //--------------------------------------------------------------------------------------------------
 
+/*
 /// Represents a graphics pipeline with reflection information.
 pub struct GraphicsPipeline {
     pub compiled: gpu::GraphicsPipeline,
@@ -308,3 +324,4 @@ impl DefaultLoader for GraphicsPipeline {
         })
     }
 }
+*/

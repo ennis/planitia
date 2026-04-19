@@ -3,9 +3,12 @@ mod build;
 mod manifest;
 mod reflection;
 
+use std::fs;
 use anyhow::Context;
 pub use manifest::*;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::SystemTime;
+use log::warn;
 use thiserror::Error;
 
 #[derive(Debug, Clone)]
@@ -57,4 +60,18 @@ pub fn build_pipeline(manifest_path: impl AsRef<Path>, options: &BuildOptions) -
     }
 
     build_pipeline_inner(manifest_path.as_ref(), options).map_err(Error)
+}
+
+fn get_file_mtime(path: &Path) -> anyhow::Result<(PathBuf, u64)> {
+    let canonical_path = path.canonicalize()?;
+    let metadata = fs::metadata(path)?;
+    let modified_time = metadata.modified()?;
+    let mtime = match modified_time.duration_since(SystemTime::UNIX_EPOCH) {
+        Ok(duration) => duration.as_secs(),
+        Err(_) => {
+            warn!("invalid mtime for {} (before UNIX_EPOCH)", canonical_path.display());
+            0
+        }
+    };
+    Ok((canonical_path, mtime))
 }

@@ -7,6 +7,7 @@ use sharc::{ColorBlendEquation, gpu};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use toml::Value as TomlValue;
+use crate::get_file_mtime;
 
 /// The maximum number of color targets in graphics states.
 pub const MAX_COLOR_TARGETS: usize = 8;
@@ -184,12 +185,15 @@ impl Pass {
 pub struct BuildManifest {
     pub input_files: Vec<String>,
     pub manifest_path: PathBuf,
+    pub canonical_manifest_path: PathBuf,
+    pub mtime: u64,
     pub include_paths: Vec<String>,
     pub output_file: String,
     pub default: GraphicsState,
     pub shader_profile: String,
     pub compiler: CompilerOptions,
-    pub pass: BTreeMap<String, Pass>,
+    // module_name -> pass_name -> pass overrides
+    pub pass: BTreeMap<String, BTreeMap<String, Pass>>,
     //pub override_: toml::Table,
     pub resources: BTreeMap<String, Resource>,
 }
@@ -205,6 +209,9 @@ impl BuildManifest {
     }
 
     pub fn from_toml(toml: &TomlValue, manifest_path: PathBuf) -> anyhow::Result<Self> {
+
+        let (canonical_manifest_path, mtime) = get_file_mtime(&manifest_path)?;
+
         // input_files = ["file1.slang", "file2.slang", "../*.slang", ...]
         let input_files = {
             let input_files_toml = toml.get("input_files").ok_or(MissingField("input_files"))?;
@@ -253,10 +260,14 @@ impl BuildManifest {
             .to_string();
 
         // passes
-        let mut pass = BTreeMap::new();
-        if let Some(pass_toml) = toml.get_optional_table("pass")? {
-            for (name, pass_toml) in pass_toml.as_table().unwrap().iter() {
-                pass.insert(name.clone(), Pass::from_toml(pass_toml)?);
+        let mut overrides = BTreeMap::new();
+        if let Some(toml) = toml.get_optional_table("pass")? {
+            for (module_name, toml) in toml.as_table().unwrap().iter() {
+                let mut overrides_for_module = BTreeMap::new();
+                for (name, toml) in toml.as_table().unwrap().iter() {
+                    overrides_for_module.insert(name.clone(), Pass::from_toml(toml)?);
+                }
+                overrides.insert(module_name.clone(), overrides_for_module);
             }
         }
 
@@ -280,10 +291,12 @@ impl BuildManifest {
             input_files,
             shader_profile,
             manifest_path,
+            canonical_manifest_path,
+            mtime,
             include_paths,
             output_file,
             default,
-            pass,
+            pass: overrides,
             compiler,
             resources,
         })

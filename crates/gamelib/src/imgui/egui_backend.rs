@@ -6,7 +6,7 @@ use egui::epaint::Primitive;
 use egui::{ClippedPrimitive, ImageData};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::prelude::*;
-use gpu::{ColorAttachment, Device, ImageCopyView, InvalidateFlags, Offset3D, RootParams, Size3D, Vertex};
+use gpu::{ColorAttachment, Device, ImageCopyView, InvalidateFlags, Offset3D, PushDataSource, Size3D, Vertex};
 use log::debug;
 
 #[derive(Copy, Clone, Vertex)]
@@ -235,7 +235,7 @@ impl Renderer {
                 Some(vertex_buffer.as_bytes()),
                 0,
                 0..1,
-                RootParams::Ptr(params),
+                PushDataSource::Indirect(params),
             );
         }
 

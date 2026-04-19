@@ -6,7 +6,7 @@ use gamelib::input::InputEvent;
 use gamelib::render::pipeline_cache::{get_compute_pipeline, get_graphics_pipeline};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::util::PushBuffer;
-use gpu::{RootParams};
+use gpu::{PushDataSource};
 
 /// Post-stroke expansion vertex, already in clip space.
 #[repr(C)]
@@ -241,7 +241,7 @@ impl CoatExperiment {
             workgroup_count,
             1,
             1,
-            RootParams::Immediate(&ExpandStrokesRootParams {
+            PushDataSource::IndirectUpload(&ExpandStrokesRootParams {
                 scene_info: scene_info.gpu,
                 data: params,
             }),

@@ -37,9 +37,18 @@ pub use utils::{archive, zstring};
 pub struct ShaderArchiveRoot {
     /// The manifest that was used to generate this archive.
     pub manifest: FileDependency,
-    /// All passes (graphics or compute) in this archive.
-    pub passes: Offset<[Pass]>,
+    pub modules: Offset<[Module]>,
     pub images: Offset<[ImageResourceDesc]>,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct Module {
+    pub name: Offset<str>,
+    pub file: FileDependency,
+    pub passes: Offset<[Pass]>,
+    pub params: Offset<[reflection::Param]>,
+    pub spirv: Offset<[u32]>,
 }
 
 /*
@@ -144,8 +153,8 @@ pub struct Pass {
     /// The kind of pipeline (graphics or compute) and its associated data.
     pub kind: PipelineKind,
     pub root_params: RootParamLayout,
-    /// List of source files.
-    pub sources: Offset<[FileDependency]>,
+    ///
+    pub signature: Offset<reflection::Signature>
 }
 
 #[repr(C)]
@@ -171,13 +180,12 @@ impl PipelineKind {
     }
 }
 
-/// Represents a compiled shader entry point.
+/// Represents a shader entry point.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Shader {
     pub stage: vk::ShaderStageFlags,
     pub entry_point: ZString<64>,
-    pub spirv: Offset<[u32]>,
 }
 
 /// Describes a color attachment of a graphics pipeline.
@@ -262,6 +270,11 @@ pub struct ColorTarget {
 pub struct ShaderArchive(Cow<'static, ArchiveReader<ShaderArchiveRoot>>);
 
 impl ShaderArchive {
+
+    fn data(&self) -> &ShaderArchiveRoot {
+        self.0.root()
+    }
+
     /// Loads a shader archive from a file.
     pub fn load(file_path: impl AsRef<Path>) -> Result<Self, ArchiveError> {
         let archive = ArchiveReaderOwned::load(file_path)?;
@@ -285,14 +298,16 @@ impl ShaderArchive {
     /// Returns an iterator over all file dependencies of the archive.
     pub fn dependencies(&self) -> impl Iterator<Item = &FileDependency> {
         let root = self.root();
-        let source_files = {
-            let entries = &self[root.passes];
-            entries.iter().flat_map(move |entry| {
-                let sources = &self[entry.sources];
-                sources.iter()
-            })
-        };
-        std::iter::once(&root.manifest).chain(source_files)
+        std::iter::once(&root.manifest).chain(self.shader_sources())
+    }
+
+    /// Returns an iterator over all shader source files referenced by the pipelines in this archive.
+    pub fn shader_sources<'a>(&'a self) -> impl Iterator<Item = &'a FileDependency> + 'a {
+        let data = self.data();
+        let entries = &self[data.modules];
+        entries.iter().map(move |entry| {
+            &entry.file
+        })
     }
 
     /// Checks whether any dependency of the archive has changed compared to the recorded modification times.
@@ -323,13 +338,7 @@ impl ShaderArchive {
             return Ok(true);
         }
 
-        let source_files = {
-            let entries = &self[root.passes];
-            entries.iter().flat_map(move |entry| {
-                let sources = &self[entry.sources];
-                sources.iter()
-            })
-        };
+        let source_files = self.shader_sources();
 
         for source in source_files {
             let path = &self[source.path];
@@ -347,18 +356,25 @@ impl ShaderArchive {
         Ok(false)
     }
 
-    fn data(&self) -> &ShaderArchiveRoot {
-        self.0.root()
+    /// Finds a module by name.
+    pub fn find_module(&self, name: &str) -> Option<&Module> {
+        let data = self.data();
+        let modules = &self.0[data.modules];
+        for module in modules {
+            if &self[module.name] == name {
+                return Some(module);
+            }
+        }
+        None
     }
 
     /// Finds a graphics pipeline by name.
-    pub fn find_graphics_pipeline(&self, name: &str) -> Option<&GraphicsPipeline> {
-        let data = self.data();
-        let entries = &self.0[data.passes];
-        for entry in entries {
+    pub fn find_graphics_pipeline(&self, module: &str, name: &str) -> Option<(&Module, &GraphicsPipeline)> {
+        let module = self.find_module(module)?;
+        for entry in &self[module.passes] {
             if entry.name.as_str() == name {
                 match &entry.kind {
-                    PipelineKind::Graphics(p) => return Some(p),
+                    PipelineKind::Graphics(p) => return Some((module,p)),
                     _ => continue,
                 }
             }
@@ -367,13 +383,12 @@ impl ShaderArchive {
     }
 
     /// Finds a compute pipeline by name.
-    pub fn find_compute_pipeline(&self, name: &str) -> Option<&ComputePipeline> {
-        let data = self.data();
-        let entries = &self.0[data.passes];
-        for entry in entries {
+    pub fn find_compute_pipeline(&self, module: &str, name: &str) -> Option<(&Module,&ComputePipeline)> {
+        let module = self.find_module(module)?;
+        for entry in &self[module.passes] {
             if entry.name.as_str() == name {
                 match &entry.kind {
-                    PipelineKind::Compute(p) => return Some(p),
+                    PipelineKind::Compute(p) => return Some((module,p)),
                     _ => continue,
                 }
             }
@@ -381,15 +396,6 @@ impl ShaderArchive {
         None
     }
 
-    /// Returns an iterator over all shader source files referenced by the pipelines in this archive.
-    pub fn shader_sources<'a>(&'a self) -> impl Iterator<Item = &'a FileDependency> + 'a {
-        let data = self.data();
-        let entries = &self.0[data.passes];
-        entries.iter().flat_map(move |entry| {
-            let sources = &self.0[entry.sources];
-            sources.iter()
-        })
-    }
 
     /// Returns the manifest path used to generate this pipeline archive.
     pub fn manifest_file(&self) -> &FileDependency {
@@ -461,7 +467,7 @@ mod tests {
                     byte_size: 0,
                     parameters: Offset::INVALID,
                 },
-                sources: Offset::INVALID,
+                signature: Offset::INVALID,
             }],
         );
         writer.write_root(&ShaderArchiveRoot {
@@ -469,7 +475,7 @@ mod tests {
                 path: Offset::INVALID,
                 mtime: 0,
             },
-            passes: entries,
+            modules: Offset::INVALID,
             images: Offset::INVALID,
         });
 

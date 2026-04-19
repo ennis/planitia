@@ -643,10 +643,15 @@ impl Dependencies {
         {
             let path = path.as_ref();
             trace!("watching for changes: `{}`", path.display());
-            self.local_files
+            match self.local_files
                 .watcher()
                 .watch(path, RecursiveMode::NonRecursive)
-                .unwrap()
+            {
+                Ok(()) => (),
+                Err(err) => {
+                    error!("failed to add watcher to path `{}`: {}", path.display(), err);
+                }
+            }
         }
     }
 }
