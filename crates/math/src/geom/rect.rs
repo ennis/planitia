@@ -2,6 +2,7 @@ use crate::{vec2, Vec2};
 use glam::{ivec3, IVec2, IVec3, Vec3};
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 #[repr(C)]
 pub struct Rect {
     pub min: Vec2,
@@ -90,6 +91,7 @@ pub const fn rect_xywh(x: f32, y: f32, w: f32, h: f32) -> Rect {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 #[repr(C)]
 pub struct IRect {
     pub min: IVec2,

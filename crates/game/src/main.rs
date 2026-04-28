@@ -13,7 +13,7 @@ use gamelib::platform::{EventToken, InitOptions, RenderTargetImage, UserEvent};
 use std::ops::Deref;
 
 use color::{Srgba8, srgba8};
-use egui_demo_lib::{View, WidgetGallery};
+//use egui_demo_lib::{View, WidgetGallery};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::{Image, Ptr, PushDataSource, root_params};
 use log::debug;
@@ -93,7 +93,7 @@ impl Config {
 struct Game {
     width: u32,
     height: u32,
-    demo: WidgetGallery,
+    //demo: WidgetGallery,
     color: Color32,
     bg_top_color: Color32,
     bg_bottom_color: Color32,
@@ -123,7 +123,7 @@ fn create_depth_buffer(width: u32, height: u32) -> Image {
 impl Default for Game {
     fn default() -> Self {
         Self {
-            demo: WidgetGallery::default(),
+            //demo: WidgetGallery::default(),
             color: Default::default(),
             bg_top_color: Color32::from_rgb(100, 149, 237),
             bg_bottom_color: Color32::from_rgb(25, 25, 112),
@@ -389,7 +389,8 @@ impl AppHandler for Game {
                 });
         });
 
-        self.automaton_experiment.ui(ctx);
+        //self.automaton_experiment.ui(ctx);
+        self.outline_experiment.gui(ctx);
     }
 
     fn exiting(&mut self) {

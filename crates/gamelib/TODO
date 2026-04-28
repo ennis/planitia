@@ -16,11 +16,12 @@
  ✔ Fix egui freezing sometimes @done (25-08-23 22:28)
  ✔ Fix egui color bug @done (25-08-23 23:15)
      It was a nasty use-after-free due to slice::from_raw_parts ignoring lifetimes
- ☐ Use vulkan swapchains instead of DXGI, to make things simpler to debug @low
+ ✔ Use vulkan swapchains instead of DXGI, to make things simpler to debug @low @done (26-04-26 09:16)
  ✔ Replace uses of `Device::global().function` by global functions. @done (25-11-01 10:37)
  ✔ Load mesh @done (26-01-10 13:36)
  ✔ Import shader-bridge @done (25-10-06 22:26)
  ✔ move to a separate repo @done (25-10-06 22:26)
+ ☐ Shadertool should emit one file per slang module
  ☐ get rid of winit
  ☐ get rid of arboard
  ☐ get rid of egui
@@ -31,7 +32,7 @@
  ☐ async asset reloading
  ☐ move egui shaders to shader-archive
  ☐ Deprecate shader-bridge? Move functionality to shadertool
- ☐ crate color should not depend on gpu @high @easy 
+ ☐ crate color should not depend on gpu @high @easy
     should be the opposite, optional dependency of gpu on color to implement vertex data types
  ✔ buffer pool for uploading stuff to the GPU on each frame (use case: immediate / line rendering) @done (26-01-08 16:12)
  ☐ find a better API than indexing with `Offset<>` to read archives @low
@@ -258,7 +259,16 @@ Uniforms are initialized within shaders, or explicitly in the application. By de
 
 Shader signatures: they take pointers to param buffers in global memory. Application-provided buffers are detected and provided by the system; for user params, they are cleared to zero, and editable in the interface.
 
-Debugging shaders:
+Generic data viewer:
+- for geometry: 
+    gamelib::debug_geometry
+        point accessor 
+        triangle face accessor (generates indices into point accessor)
+
+e.g. for winged-edge repr:
+    debug_geometry:
+        vertex: *(base.#0)[@vertex].#4
+         
 
 
 Setting up and running a sequence of pipelines:

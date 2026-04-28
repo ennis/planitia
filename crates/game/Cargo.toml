@@ -11,7 +11,7 @@ geom = { workspace = true }
 color = { workspace = true, features = ["gpu-support"] }
 utils = { workspace = true }
 log = "0.4.28"
-egui_demo_lib = "0.32.1"
+#egui_demo_lib = "0.32.1"
 rfd = "0.16.0"
 hgeo = { workspace = true }
 smallvec = "2.0.0-alpha.12"

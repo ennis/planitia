@@ -7,7 +7,7 @@ use gamelib::asset::{AssetLoadError, AssetReadGuard, Handle, VfsPath, VfsPathBuf
 use gamelib::input::InputEvent;
 use gamelib::render::pipeline_cache::{get_compute_pipeline, get_graphics_pipeline};
 use gamelib::render::RenderTarget;
-use gamelib::{static_assets, tweak};
+use gamelib::{egui, static_assets, tweak};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::{Buffer, BufferCreateInfo, DrawIndirectCommand, Image, InvalidateFlags, MemoryLocation, Ptr, PushDataSource, Size3D};
 use hgeo::util::polygons_to_triangle_mesh;
@@ -20,6 +20,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 use std::path::Path;
 use std::{fmt, ptr};
+use gamelib::worksheet::Worksheet;
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -62,6 +63,8 @@ pub struct OutlineExperiment {
 
     lock_view: bool,
     locked_eye: Vec3,
+
+    worksheet: gamelib::worksheet::Worksheet,
 }
 
 /// GPU root parameters for contour extraction, ranking, and expansion passes.
@@ -92,6 +95,7 @@ struct ContoursRootParams {
     angle_texture: gpu::TextureHandle,
     normal_texture: gpu::TextureHandle,
     shading_texture: gpu::TextureHandle,
+
 }
 
 
@@ -218,6 +222,7 @@ impl OutlineExperiment {
             shading_texture: RenderTarget::new(gpu::Format::R8G8B8A8_UNORM, gpu::ImageUsage::SAMPLED | gpu::ImageUsage::STORAGE | gpu::ImageUsage::COLOR_ATTACHMENT),
             lock_view: false,
             locked_eye: Vec3::ZERO,
+            worksheet: Worksheet::default(),
         }
     }
 
@@ -345,6 +350,14 @@ impl OutlineExperiment {
 
     pub(crate) fn resize(&mut self, _width: u32, _height: u32) {
         // nothing
+    }
+
+    pub(crate) fn gui(&mut self, ctx: &egui::Context) {
+        //egui::CentralPanel::default().frame(egui::Frame::NONE).show(ctx,
+        //    |ui| {
+        //        self.worksheet.gui(ui)
+        //    }
+        //);
     }
 
     pub(crate) fn render(

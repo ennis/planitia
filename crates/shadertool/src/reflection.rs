@@ -25,10 +25,11 @@ impl<'a> CollectedReflectionData<'a> {
         }
     }
 
-    fn add_param(&mut self, name: &str, location: ParamLocation, byte_size: u32) -> ParamIndex {
+    fn add_param(&mut self, name: &str, location: ParamLocation, byte_size: u32, parent: Option<ParamIndex>) -> ParamIndex {
         let param_index = self.params.len() as ParamIndex;
         self.params.push(reflection::Param {
             name: self.archive.write_str(name),
+            parent: parent.unwrap_or(ParamIndex::MAX),
             location,
             byte_size,
             attributes: Offset::INVALID,
@@ -121,7 +122,7 @@ impl<'a> CollectedReflectionData<'a> {
                         field_type.kind()
                     );
 
-                    let index = self.add_param(&field_full_name, field_location, 0);
+                    let index = self.add_param(&field_full_name, field_location, 0, Some(param_index));
                     type_path.push(ty_layout);
                     self.reflect_variable_type_layout(index, &field_full_name, field_location, &field_type, type_path);
                     type_path.pop();
@@ -133,7 +134,7 @@ impl<'a> CollectedReflectionData<'a> {
                     offset: 0,
                 };
                 let deref_name = format!("{}.$", full_name);
-                let index = self.add_param(&deref_name, deref_location, 0);
+                let index = self.add_param(&deref_name, deref_location, 0, Some(param_index));
                 eprintln!(
                     "deref {}.$ @ {:?} kind={:?}",
                     full_name,
@@ -165,34 +166,36 @@ impl<'a> CollectedReflectionData<'a> {
         //       at some point we should fork and make our own bindings to slang
         //       (at least panic on null pointers instead of turning *everything* into Option)
 
-        let set = param.binding_space();
-        let binding = param.binding_index();
+        //let set = param.binding_space();
+        //let binding = param.binding_index();
         let category = param.category().unwrap();
         let name = param.variable().unwrap().name().unwrap_or("unnamed");
 
         match category {
             ParameterCategory::Uniform => {
+                let type_layout = param.type_layout().unwrap();
                 let offset = param.offset(slang::ParameterCategory::Uniform);
                 let location = ParamLocation::PushData { offset: offset as u32 };
-                eprintln!(
-                    "push data {}: {:?} set {}, binding {}, offset {}",
-                    name, category, set, binding, offset
-                );
-                let size = param.type_layout().unwrap().size(ParameterCategory::Uniform) as u32;
-                let index = self.add_param(name, location, size);
-                self.reflect_variable_type_layout(index, name, location, param.type_layout().unwrap(), &mut vec![]);
+                //eprintln!(
+                //    "push data {}: {:?} set {}, binding {}, offset {}",
+                //    name, category, set, binding, offset
+                //);
+                let size = type_layout.size(ParameterCategory::Uniform) as u32;
+                let index = self.add_param(name, location, size, None);
+                self.reflect_variable_type_layout(index, name, location, type_layout, &mut vec![]);
             }
             ParameterCategory::PushConstantBuffer => {
                 // sanity check
-                assert!(param.type_layout().unwrap().kind() == TypeKind::ConstantBuffer);
+                let type_layout = param.type_layout().unwrap();
+                assert!(type_layout.kind() == TypeKind::ConstantBuffer);
                 // The type of push constant buffers is `ConstantBuffer<T>`, which conceptually
                 // represents a constant buffer slot. This is meaningless for push constants,
                 // and we don't want this type to end up in the reflected type hierarchy,
                 // so pass through it.
-                let cbuffer_content_layout = param.type_layout().unwrap().element_type_layout().unwrap();
+                let cbuffer_content_layout = type_layout.element_type_layout().unwrap();
                 let location = ParamLocation::PushData { offset: 0 };
                 let size = cbuffer_content_layout.size(ParameterCategory::Uniform) as u32;
-                let index = self.add_param(name, location, size);
+                let index = self.add_param(name, location, size, None);
                 self.reflect_variable_type_layout(index, name, location, cbuffer_content_layout, &mut vec![]);
             }
             ParameterCategory::None => {

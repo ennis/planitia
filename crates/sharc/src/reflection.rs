@@ -174,13 +174,14 @@ pub struct Param {
     ///
     /// If this is part of a struct, the name is the full path to the parameter, e.g., `param0.myField`.
     pub name: Offset<str>,
+    /// Parent parameter index, or `u32::MAX` if this is a root parameter.
+    pub parent: u32,
     /// Location of the parameter.
     pub location: ParamLocation,
     /// Size of the parameter in bytes (if applicable).
     ///
     /// This is the number of bytes that should be readable from the parameter location.
     pub byte_size: u32,
-    //pub ty: TypeDesc,
     /// User attributes.
     pub attributes: Offset<[Attribute]>,
 }

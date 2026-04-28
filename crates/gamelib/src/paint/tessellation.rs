@@ -2,6 +2,7 @@ use crate::paint::shape::RectShape;
 use crate::paint::{FeatherVertex, Srgba8};
 use math::{U16Vec2, Vec2, vec2};
 use std::f32::consts::PI;
+use crate::paint::path::PathSlice;
 
 #[derive(Clone, Copy, Debug)]
 struct PN {
@@ -198,6 +199,7 @@ impl Tessellator {
             .indices
             .extend([base + 0, base + 1, base + 2, base + 0, base + 2, base + 3]);
     }
+
 
     pub fn finish_and_reset(&mut self) -> Mesh {
         let vertices = self.geometry.vertices.clone();

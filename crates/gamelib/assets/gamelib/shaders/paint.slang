@@ -12,6 +12,7 @@ struct FeatherVertex
 struct VertexOutput
 {
     float4 pos: SV_Position;
+    float2 device_pos;
     float2 uv;
     float4 color;
     float feather;
@@ -24,7 +25,7 @@ struct FragmentOutput
 
 struct RootParams
 {
-    float4x4 matrix;
+    float3x3 device_to_uv_transform;
     float2 screen_size;
     float line_width;
     Texture2D<float4>.Handle texture;
@@ -38,10 +39,11 @@ struct RootParams
 VertexOutput paint_vertex_main(FeatherVertex v, uniform RootParams* u)
 {
     VertexOutput o;
-    o.pos = float4(v.position.xy / u.screen_size * 2.0 - 1.0, 0.0, 1.0);
+    o.pos = float4(v.position / u.screen_size * 2.0 - 1.0, 0.0, 1.0);
+    o.device_pos = v.position.xy;
     o.color = v.color;
     o.feather = v.feather;
-    o.uv = v.uv;
+    o.uv = mul(u.device_to_uv_transform, float3(v.position.xy, 1.0)).xy;
     return o;
 }
 

@@ -1,8 +1,8 @@
-use crate::asset::{AssetCache, FileMetadata, Provider, VfsPath, VfsPathBuf};
+use crate::asset::{AssetCache, FileMetadata, Provider, ReadSeek, VfsPath, VfsPathBuf};
 use log::warn;
 use std::collections::HashMap;
 use std::io;
-use std::io::Read;
+use std::io::{Error, Read};
 use std::path::{Path, PathBuf};
 use utils::aligned_vec::AVec;
 
@@ -60,6 +60,8 @@ impl Provider for LocalProvider {
         }
     }
 
+
+
     fn load(&self, path: &VfsPath) -> Result<AVec<u8>, io::Error> {
         let p = self.full_path(path);
         let file_size = get_file_size(&p)?;
@@ -68,6 +70,12 @@ impl Provider for LocalProvider {
         let mut file = std::fs::File::open(&p)?;
         file.read_exact(&mut buffer)?;
         Ok(buffer)
+    }
+
+    fn open(&self, path: &VfsPath) -> Result<Box<dyn ReadSeek>, Error> {
+        let p = self.full_path(path);
+        let file = std::fs::File::open(&p)?;
+        Ok(Box::new(file))
     }
 
     fn name(&self) -> &str {

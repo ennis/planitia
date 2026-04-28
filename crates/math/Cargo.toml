@@ -5,3 +5,8 @@ edition = "2021"
 
 [dependencies]
 glam = "0.30.5"
+serde = { version = "1", features = ["derive"], optional = true }
+
+[features]
+default = ["serialization"]
+serialization = ["serde", "glam/serde"]

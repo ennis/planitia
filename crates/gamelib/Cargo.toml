@@ -7,6 +7,7 @@ edition = "2024"
 gpu = { workspace = true }
 math = { workspace = true }
 color = { workspace = true, features = ["gpu-support"] }
+shader-bridge = { workspace = true }
 utils = { workspace = true }
 futures = { version = "0.3", features = ["executor"] }
 slab = "0.4"
@@ -20,12 +21,11 @@ env_logger = "0.11.8"
 tracy-client = "0.18.2"
 bumpalo = "3.19.0"
 thiserror = "2.0.16"
-egui = { version = "0.32.1", features = ["persistence", "default_fonts"] }
+egui = { version = "0.32.1", features = ["persistence"] }
 uniform-cubic-splines = "0.5.0"
 keyboard-types = "0.8.0"
 arboard = "3.6.0"
 renderdoc = "0.12.1"
-shader-bridge = { workspace = true }
 sharc = { workspace = true }
 ab_glyph = "0.2.31"
 anyhow = "1.0.100"
@@ -33,6 +33,8 @@ notify-debouncer-mini = "0.7.0"
 shadertool = { workspace = true, optional = true }
 libloading = "0.9.0"
 ron = "0.12.0"
+serde = { version = "1.0.228", features = ["derive"] }
+lyon_tessellation = "1.0.20"
 
 [target.'cfg(target_os="windows")'.dependencies]
 windows = { version = "0.61.3", features = [

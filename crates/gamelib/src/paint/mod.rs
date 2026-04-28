@@ -1,6 +1,6 @@
 mod atlas;
-mod painter;
-mod scene;
+mod fill;
+mod path;
 mod shape;
 mod tessellation;
 mod text;
@@ -11,10 +11,11 @@ use crate::paint::text::GlyphCache;
 use color::Srgba8;
 use gpu::{CommandBuffer, Ptr, PushDataSource, Sampler, Vertex as GpuVertex, vk};
 use math::geom::Camera;
-use math::{Mat4, Rect, U16Vec2, UVec2, Vec2, u16vec2, uvec2, vec2};
+use math::{Mat3, Mat4, Rect, U16Vec2, UVec2, Vec2, u16vec2, uvec2, vec2, vec3, Vec3};
 use shader_bridge::ShaderLibrary;
 
 use crate::paint::atlas::Atlas;
+use crate::paint::fill::{Fill, rect_transform};
 use gpu::PrimitiveTopology::TriangleList;
 pub use text::{GlyphRun, TextFormat, TextLayout};
 
@@ -51,17 +52,11 @@ impl FeatherVertex {
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct PaintRootParams {
-    matrix: Mat4,
+    device_to_uv_transform: Mat3,
     screen_size: [f32; 2],
     line_width: f32,
     texture: gpu::TextureHandle = gpu::TextureHandle::INVALID,
     sampler: gpu::SamplerHandle = gpu::SamplerHandle::INVALID,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct GlyphPushConstants {
-    atlas: gpu::TextureHandle,
 }
 
 /// GPU pipelines for drawing.
@@ -183,6 +178,7 @@ pub struct Painter {
     pipelines: Pipelines,
     texture_atlas: Atlas,
     white_pixel_uv: U16Vec2,
+    white_pixel_uv_f: Vec2,
     glyph_cache: GlyphCache,
     sampler: gpu::Sampler,
     color_format: vk::Format,
@@ -200,6 +196,10 @@ impl Painter {
             min_filter: vk::Filter::LINEAR,
             ..
         });
+        let white_pixel_uv_f = vec2(
+            white_pixel_uv.x as f32 / (u16::MAX as f32),
+            white_pixel_uv.y as f32 / (u16::MAX as f32),
+        );
 
         Painter {
             pipelines: Pipelines::create(target_color_format, target_depth_format),
@@ -208,6 +208,7 @@ impl Painter {
             glyph_cache: Default::default(),
             texture_atlas: atlas,
             white_pixel_uv,
+            white_pixel_uv_f,
             sampler,
         }
     }
@@ -218,14 +219,11 @@ impl Painter {
     }
 }
 
-pub struct Primitive {
-    kind: PrimKind,
+pub struct DrawOp {
+    mesh: Mesh,
     clip: Rect,
-    texture: gpu::TextureHandle,
-}
-
-enum PrimKind {
-    Geometry(Mesh),
+    device_to_local: Mat3,
+    fill: Fill,
 }
 
 /// Options passed to `PaintScene::draw_glyph_run`.
@@ -239,7 +237,7 @@ pub struct DrawGlyphRunOptions {
 pub struct PaintScene<'a> {
     painter: &'a mut Painter,
     pub(crate) tess: Tessellator,
-    prims: Vec<Primitive>,
+    ops: Vec<DrawOp>,
     clip_stack: Vec<Rect>,
 }
 
@@ -248,26 +246,41 @@ impl<'a> PaintScene<'a> {
         Self {
             painter,
             tess: Tessellator::new(),
-            prims: vec![],
+            ops: vec![],
             clip_stack: vec![Rect::INFINITE],
         }
     }
 
-    fn end_prim(&mut self, texture: Option<gpu::TextureHandle>) {
+    /*fn end_prim(&mut self, texture: Option<gpu::TextureHandle>) {
         if !self.tess.is_empty() {
             let mesh = self.tess.finish_and_reset();
-            let prim = Primitive {
-                kind: PrimKind::Geometry(mesh),
+            let prim = DrawOp {
+                mesh,
                 clip: self.clip_stack.last().cloned().unwrap(),
                 texture: texture.unwrap_or(self.painter.texture_atlas.texture_handle()),
             };
-            self.prims.push(prim);
+            self.ops.push(prim);
         }
+    }*/
+
+    fn push_draw_op(&mut self, fill: impl Into<Fill>) {
+        let fill = fill.into();
+        let device_to_local = Mat3::IDENTITY; // TODO transform stack
+        self.ops.push(DrawOp {
+            mesh: self.tess.finish_and_reset(),
+            clip: self.clip_rect(),
+            device_to_local,
+            fill,
+        });
     }
 
     /// Draws a rounded rectangle at the specified position with the given size and corner radius.
-    pub fn fill_rrect(&mut self, rect: Rect, radius: f32, color: impl Into<Srgba8>) {
-        let color = color.into();
+    pub fn fill_rrect(&mut self, rect: Rect, radius: f32, fill: impl Into<Fill>) {
+        let fill = fill.into();
+        let color = match fill {
+            Fill::Solid(color) => color,
+            Fill::Texture { .. } => Srgba8::WHITE,
+        };
         self.tess.fill_rrect(
             RectShape {
                 rect,
@@ -277,6 +290,7 @@ impl<'a> PaintScene<'a> {
             },
             self.painter.white_pixel_uv,
         );
+        self.push_draw_op(fill);
     }
 
     fn clip_rect(&self) -> Rect {
@@ -285,21 +299,17 @@ impl<'a> PaintScene<'a> {
 
     /// Pushes a clip rectangle onto the stack. All subsequent drawing operations will be clipped to this rectangle.
     pub fn push_clip(&mut self, rect: Rect) {
-        self.end_prim(None);
         let clip = self.clip_rect().intersect(&rect).unwrap_or_default();
         self.clip_stack.push(clip);
     }
 
     /// Pops the last clip rectangle from the stack.
     pub fn pop_clip(&mut self) {
-        self.end_prim(None);
         self.clip_stack.pop();
     }
 
     /// Draws a glyph run.
     pub fn draw_glyph_run(&mut self, position: Vec2, glyph_run: &GlyphRun<'_>, options: &DrawGlyphRunOptions) {
-        self.end_prim(None);
-
         let format = glyph_run.format();
         let x = glyph_run.offset();
         let y = glyph_run.baseline();
@@ -334,13 +344,14 @@ impl<'a> PaintScene<'a> {
             let uv1 = entry.normalized_texcoords[1];
             //eprintln!("    glyph {:?} quad={:?} uv0={:?} uv1={:?} tex={:?}", glyph.id, quad, uv0, uv1, self.painter.glyph_cache.texture_handle());
             self.tess.quad(quad.min, quad.max, uv0, uv1, Srgba8::WHITE);
+            self.push_draw_op(Fill::Texture {
+                texture: self.painter.texture_atlas.texture_handle(),
+                uv_transform: rect_transform(quad, Rect::from_min_max(entry.uv[0], entry.uv[1])),
+            });
         }
-
-        self.end_prim(None);
     }
 
     pub fn finish(mut self, cmd: &mut CommandBuffer, params: &PaintRenderParams) {
-        self.end_prim(None);
         self.draw_inner(cmd, params);
     }
 
@@ -378,23 +389,40 @@ impl<'a> PaintScene<'a> {
         encoder.set_scissor(0, 0, width, height);
         encoder.bind_graphics_pipeline(&self.painter.pipelines.paint);
 
-        for prim in self.prims.iter() {
+        for prim in self.ops.iter() {
             if prim.clip.is_null() {
                 continue;
             }
 
-            match &prim.kind {
-                PrimKind::Geometry(mesh) => {
-                    let root_params = encoder.upload(&PaintRootParams {
-                        matrix: params.camera.view_projection(),
-                        screen_size: [width as f32, height as f32],
-                        line_width: 1.0,
-                        texture: prim.texture,
-                        sampler: self.painter.sampler.device_handle(),
-                    });
-                    draw_mesh(&mut encoder, params, mesh, prim.clip, root_params);
+            let texture;
+            let device_to_uv_transform;
+
+            match prim.fill {
+                Fill::Solid(_) => {
+                    texture = self.painter.texture_atlas.texture_handle();
+                    device_to_uv_transform = Mat3::from_cols(
+                        Vec3::ZERO,
+                        Vec3::ZERO,
+                        vec3(self.painter.white_pixel_uv_f.x, self.painter.white_pixel_uv_f.y, 1.0),
+                    );
                 }
-            }
+                Fill::Texture {
+                    texture: tex,
+                    uv_transform,
+                } => {
+                    texture = tex;
+                    device_to_uv_transform = prim.device_to_local * uv_transform;
+                }
+            };
+
+            let root_params = encoder.upload(&PaintRootParams {
+                screen_size: [width as f32, height as f32],
+                line_width: 1.0,
+                device_to_uv_transform,
+                texture,
+                sampler: self.painter.sampler.device_handle(),
+            });
+            draw_mesh(&mut encoder, params, &prim.mesh, prim.clip, root_params);
         }
         encoder.finish();
     }

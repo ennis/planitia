@@ -4,7 +4,6 @@ use crate::SHADER_PROFILE;
 use heck::ToShoutySnakeCase;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, TokenStreamExt};
-use slang::Downcast;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
@@ -81,11 +80,11 @@ pub fn compile_and_embed_shaders(
 
     for module in modules.iter() {
         let mut components = Vec::new();
-        components.push(module.downcast().clone());
+        components.push(module.clone().into());
         let entry_point_count = module.entry_point_count();
         for i in 0..entry_point_count {
             let entry_point = module.entry_point_by_index(i).unwrap();
-            components.push(entry_point.downcast().clone());
+            components.push(entry_point.clone().into());
         }
         let program = session.create_composite_component_type(&components).unwrap();
         let program = program.link().unwrap();
@@ -116,7 +115,7 @@ pub fn compile_and_embed_shaders(
             let code_u32_slice = code_u32.as_slice();
 
             // generate shader info
-            let rust_entry_point_name = format_ident!("{}", entry_point_name.to_shouty_snake_case());
+            let rust_entry_point_name = format_ident!("{}", entry_point_name.unwrap().to_shouty_snake_case());
             let refl_ep = reflection.entry_point_by_index(i).unwrap();
             let push_constant_buffer_size = get_push_constants_size(&refl_ep);
             let stage = convert_slang_stage(refl_ep.stage());

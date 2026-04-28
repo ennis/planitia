@@ -48,6 +48,7 @@ impl LinSrgba {
 
 /// Encoded sRGB color with components in the range `[0, 255]` packed into 4 bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 #[repr(C)]
 pub struct Srgba8 {
     pub r: u8,

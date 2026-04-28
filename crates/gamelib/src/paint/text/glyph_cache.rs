@@ -28,6 +28,7 @@ pub(crate) struct GlyphEntry {
     pub(crate) atlas_pos: IVec2,
     /// Normalized texture coordinates (min/max) in the atlas texture.
     pub(crate) normalized_texcoords: [U16Vec2; 2],
+    pub(crate) uv: [Vec2; 2],
     /// Horizontal advance of the glyph in layout coordinates.
     pub(crate) advance: f32,
 }
@@ -41,6 +42,7 @@ impl GlyphEntry {
             px_bounds: Default::default(),
             atlas_pos: Default::default(),
             normalized_texcoords: [U16Vec2::default(); 2],
+            uv: [Vec2::default(); 2],
             advance: 0.0,
         }
     }
@@ -150,6 +152,10 @@ impl GlyphCache {
                 min: ivec2(bounds.min.x as i32, bounds.min.y as i32),
                 max: ivec2(bounds.max.x as i32, bounds.max.y as i32),
             },
+            uv: [
+                atlas_rect.min.as_vec2() / vec2(atlas.width as f32, atlas.height as f32),
+                atlas_rect.max.as_vec2() / vec2(atlas.width as f32, atlas.height as f32),
+            ],
             atlas_pos: atlas_rect.top_left(),
             normalized_texcoords,
             advance: h_advance,

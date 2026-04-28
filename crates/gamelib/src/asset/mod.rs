@@ -60,7 +60,7 @@ pub enum AssetLoadError {
     #[error("no provider found for path")]
     NoProviderFound,
     #[error("I/O error while loading asset: {0}")]
-    IoError(#[source] io::Error),
+    IoError(#[from] io::Error),
     /// Error from loader.
     #[error("asset not loaded")]
     NotLoaded,
@@ -129,6 +129,13 @@ pub struct FileMetadata {
     pub modified: SystemTime,
 }
 
+
+/// Trait that combines `io::Read` and `io::Seek`.
+pub trait ReadSeek : io::Read + io::Seek {}
+
+// Blanket impl
+impl<T: io::Read + io::Seek> ReadSeek for T {}
+
 /// File system providers provide file data from VFS paths.
 pub trait Provider {
     /// Returns whether the provider can provide the given path.
@@ -136,6 +143,14 @@ pub trait Provider {
 
     /// Loads the file as an aligned (to the cache line size) byte vector.
     fn load(&self, path: &VfsPath) -> Result<AVec<u8>, io::Error>;
+
+    /// Returns a reader for the file.
+    ///
+    /// The default implementation loads the whole data and returns a `io::Cursor`.
+    fn open(&self, path: &VfsPath) -> Result<Box<dyn ReadSeek>, io::Error> {
+        let data = self.load(path)?;
+        Ok(Box::new(io::Cursor::new(data)))
+    }
 
     /// Loads the file as a static byte slice.
     ///
@@ -368,35 +383,10 @@ impl<T: Asset> Deref for Handle<T> {
 
 ////////////////////////////////////////////////////////////////////
 
-// FIXME: there should be only one kind of loader function, taking a VfsPath and Dependencies,
-//        and the loader should be responsible for loading the file data itself if needed.
-enum LoaderKind {
-    /// Loads the asset from a byte slice.
-    ///
-    /// Loader function signature: `fn(&[u8], &FileMetadata, &mut Dependencies) -> LoadResult<T>`
-    FromSlice,
-    /// Loads the asset from a static byte slice.
-    ///
-    /// This can be more efficient if the target asset type can reference the static data directly,
-    /// without copying it.
-    ///
-    /// Loader function signature: `fn(&'static [u8], &FileMetadata, &mut Dependencies) -> LoadResult<T>`
-    FromStaticSlice,
-    /// Loads the asset from a file specified by a VFS path.
-    ///
-    /// Loader function signature: `fn(&VfsPath, &mut Dependencies) -> LoadResult<T>`
-    FromPath,
-}
-
-type LoadFromSliceFn<T> = fn(&[u8], &FileMetadata, &mut Dependencies) -> LoadResult<T>;
-type LoadFromStaticSliceFn<T> = fn(&'static [u8], &FileMetadata, &mut Dependencies) -> LoadResult<T>;
-type LoadFromPathFn<T> = fn(&VfsPath, &mut Dependencies) -> LoadResult<T>;
-
 type LoadFn<T> = fn(&VfsPath, &FileMetadata, &dyn Provider, &mut Dependencies) -> LoadResult<T>;
 
 struct Loader {
     type_id: TypeId,
-    //kind: LoaderKind,
     func: *const (),
     reload: fn(&Entry),
 }
@@ -419,33 +409,6 @@ impl Loader {
         }
     }
 
-    /*fn from_slice<T: Asset>(f: LoadFromSliceFn<T>) -> Self {
-        Self {
-            type_id: TypeId::of::<T>(),
-            kind: LoaderKind::FromSlice,
-            func: f as *const (),
-            reload: reload_thunk::<T>,
-        }
-    }
-
-    fn from_static_slice<T: Asset>(f: LoadFromStaticSliceFn<T>) -> Self {
-        Self {
-            type_id: TypeId::of::<T>(),
-            kind: LoaderKind::FromStaticSlice,
-            func: f as *const (),
-            reload: reload_thunk::<T>,
-        }
-    }
-
-    fn from_path<T: Asset>(f: LoadFromPathFn<T>) -> Self {
-        Self {
-            type_id: TypeId::of::<T>(),
-            kind: LoaderKind::FromPath,
-            func: f as *const (),
-            reload: reload_thunk::<T>,
-        }
-    }*/
-
     fn load<T: Asset>(&self, path: &VfsPath, providers: &Providers, deps: &mut Dependencies) -> LoadResult<T> {
         let f: LoadFn<T> = unsafe { std::mem::transmute(self.func) };
         let (provider, metadata) = providers.find_provider(path)?;
@@ -462,33 +425,6 @@ impl Loader {
             }
             Ok(asset) => Ok(asset),
         }
-
-        //let bytes = provider.load(path)?;
-        /*let result = match self.kind {
-            LoaderKind::FromSlice => {
-                let f: LoadFromSliceFn<T> = unsafe { std::mem::transmute(self.func) };
-                // TODO error handling
-                let (provider, metadata) = providers.find_provider(path)?;
-                let bytes = provider.load(path)?;
-                // track local file dependencies for hot reloading
-                if let Some(ref local_path) = metadata.local_path {
-                    deps.add_local_file(local_path);
-                }
-                f(&bytes, &metadata, deps)
-            }
-            LoaderKind::FromStaticSlice => {
-                // Note that we shouldn't reload assets loaded from static slices, since the data
-                // isn't supposed to change
-                let f: LoadFromStaticSliceFn<T> = unsafe { std::mem::transmute(self.func) };
-                let (provider, metadata) = providers.find_provider(path)?;
-                let bytes = provider.load_static(path)?;
-                f(bytes, &metadata, deps)
-            }
-            LoaderKind::FromPath => {
-                let f: LoadFromPathFn<T> = unsafe { std::mem::transmute(self.func) };
-                f(path, deps)
-            }
-        };*/
     }
 }
 
@@ -755,6 +691,7 @@ impl AssetCache {
         unsafe { self.insert_inner(path, Loader::new(loader)) }
     }
 
+
     pub fn do_reload(&self) {
         #[cfg(feature = "hot_reload")]
         {
@@ -860,4 +797,21 @@ impl AssetCache {
             path.as_ref().to_path_buf(),
         )));
     }
+}
+
+
+/// Opens an asset file.
+pub fn open_asset(path: impl AsRef<VfsPath>) -> Result<Box<dyn ReadSeek>, AssetLoadError> {
+    let path = path.as_ref();
+    let providers = Providers::get().read().unwrap();
+    let (provider, _metadata) = providers.find_provider(path)?;
+    provider.open(path).map_err(AssetLoadError::IoError)
+}
+
+/// Loads an asset file into a byte vector.
+pub fn load_asset(path: impl AsRef<VfsPath>) -> Result<AVec<u8>, AssetLoadError> {
+    let path = path.as_ref();
+    let providers = Providers::get().read().unwrap();
+    let (provider, _metadata) = providers.find_provider(path)?;
+    provider.load(path).map_err(AssetLoadError::IoError)
 }

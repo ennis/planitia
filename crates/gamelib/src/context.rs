@@ -305,12 +305,12 @@ where
             return;
         }
 
-        match input_event {
+        /*match input_event {
             InputEvent::KeyboardEvent(ref ke) if ke.key == Key::Named(NamedKey::F9) && ke.state == KeyState::Down => {
                 if ke.modifiers.contains(Modifiers::SHIFT) {}
             }
             _ => {}
-        }
+        }*/
 
         if input_event.is_shortcut("F9") {
             ctx.rdoc_capture_requested.set(true);

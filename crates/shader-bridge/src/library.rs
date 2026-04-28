@@ -2,8 +2,8 @@ use crate::error::Error;
 use crate::session::{create_session, SessionOptions};
 use crate::SHADER_PROFILE;
 use gpu::vk;
-use slang::Downcast;
 use std::path::{Path, PathBuf};
+use slang::ComponentType;
 
 /// Additional options for loading a `ShaderLibrary`.
 #[derive(Default)]
@@ -119,7 +119,8 @@ impl ShaderLibrary {
 
     /// Returns the list of entry points defined in this shader library.
     pub fn entry_points(&self) -> Vec<EntryPoint> {
-        let layout = self.module.downcast().layout(0).expect("failed to get layout");
+        let module : ComponentType = self.module.clone().into();
+        let layout = module.layout(0).expect("failed to get layout");
         let count = layout.entry_point_count();
         let mut entry_points = Vec::with_capacity(count as usize);
         for i in 0..count {
@@ -127,14 +128,14 @@ impl ShaderLibrary {
 
             // `[pass("...")]` attribute
             let mut pass = None;
-            for attr in ep.function().user_attributes() {
-                if attr.name() == "pass" {
+            for attr in ep.function().unwrap().user_attributes() {
+                if attr.name().unwrap() == "pass" {
                     pass = attr.argument_value_string(0).map(String::from);
                 }
             }
 
             entry_points.push(EntryPoint {
-                name: ep.name().to_string(),
+                name: ep.name().unwrap().to_string(),
                 stage: slang_stage_to_gpu_stage(ep.stage()),
                 pass,
             });
@@ -151,7 +152,7 @@ impl ShaderLibrary {
 
         let program = self
             .session
-            .create_composite_component_type(&[self.module.downcast().clone(), entry_point.downcast().clone()])?;
+            .create_composite_component_type(&[self.module.clone().into(), entry_point.clone().into()])?;
         let program = program.link()?;
 
         let blob = {
@@ -205,8 +206,8 @@ pub(crate) fn get_push_constants_size(entry_point: &slang::reflection::EntryPoin
     let mut size = 0;
     for p in entry_point.parameters() {
         // There's a PushConstantBuffer category, but it doesn't seem to be used
-        if p.category() == slang::ParameterCategory::Uniform {
-            size += p.type_layout().size(slang::ParameterCategory::Uniform);
+        if p.category().unwrap() == slang::ParameterCategory::Uniform {
+            size += p.type_layout().unwrap().size(slang::ParameterCategory::Uniform);
         }
     }
     size

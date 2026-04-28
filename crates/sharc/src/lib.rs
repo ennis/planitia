@@ -356,6 +356,18 @@ impl ShaderArchive {
         Ok(false)
     }
 
+    /// Finds a module by name, returning the module and its index in the modules array.
+    pub fn find_module_with_index(&self, name: &str) -> Option<(usize, &Module)> {
+        let data = self.data();
+        let modules = &self.0[data.modules];
+        for (index, module) in modules.iter().enumerate() {
+            if &self[module.name] == name {
+                return Some((index, module));
+            }
+        }
+        None
+    }
+
     /// Finds a module by name.
     pub fn find_module(&self, name: &str) -> Option<&Module> {
         let data = self.data();

@@ -22,6 +22,7 @@ mod timer;
 mod tweak;
 pub mod util;
 mod world;
+pub mod worksheet;
 
 //--- reexports ---
 pub use color;

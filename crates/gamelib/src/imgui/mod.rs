@@ -6,11 +6,13 @@ pub(crate) mod input_state;
 use crate::imgui;
 use crate::imgui::input_state::EguiInputState;
 use crate::input::InputEvent;
-use egui::{Align, Color32, FontDefinitions, RichText, Style, TextFormat, TextStyle};
+use egui::{Align, Color32, FontData, FontDefinitions, FontFamily, RichText, Style, TextFormat, TextStyle};
 use gpu::CommandBuffer;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::{fs, mem};
+use std::sync::Arc;
+use crate::asset::{load_asset, AssetCache, VfsPath};
 
 pub struct ImGui<'a> {
     egui: &'a mut egui::Ui,
@@ -26,6 +28,32 @@ pub struct Slider<'a> {
 pub struct Button<'a> {
     pub label: &'a str,
     pub enabled: bool = true,
+}
+
+macro_rules! load_font {
+    ($ctx: expr, $($name:literal, $path:literal as $font_family:expr),*) => {
+
+        let mut fonts = FontDefinitions::default();
+
+        $(
+            fonts.font_data.insert($name.into(), FontData::from_static(include_bytes!($path)));
+            fonts.families.get_mut(&$font_family).unwrap().push($name.into());
+        )*
+
+        $ctx.set_fonts(fonts);
+    };
+}
+
+fn load_font(path: impl AsRef<VfsPath>, family_name: &str, fonts: &mut FontDefinitions) {
+    let font_data = load_asset(path.as_ref()).unwrap();
+    fonts.font_data.insert(family_name.into(), Arc::new(FontData::from_owned(font_data.to_vec())));
+}
+
+fn load_fonts(ctx: &egui::Context) {
+    let mut fonts = FontDefinitions::empty();
+    load_font("/gamelib/fonts/ZurichCondensedBT.ttf", "ZurichCondensedBT", &mut fonts);
+    fonts.families.insert(FontFamily::Proportional, vec!["ZurichCondensedBT".to_string()]);
+    ctx.set_fonts(fonts);
 }
 
 // see https://github.com/rerun-io/rerun/blob/main/crates/re_ui/src/lib.rs#L599
@@ -79,7 +107,7 @@ pub(crate) struct ImguiContext {
 impl ImguiContext {
     pub(crate) fn new() -> Self {
         let ctx = egui::Context::default();
-        ctx.set_fonts(FontDefinitions::default());
+        load_fonts(&ctx);
         ctx.set_style(Style::default());
         let renderer = egui_backend::Renderer::new();
 
