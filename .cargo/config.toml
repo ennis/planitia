@@ -1,0 +1,3 @@
+[profile.release-with-dbginfo]
+inherits = "release"
+debug = true

@@ -647,6 +647,10 @@ impl AssetCache {
             let providers = Providers::get().read().unwrap();
             let asset = loader.load(path, &providers, &mut deps);
 
+            if let Err(ref err) = asset {
+                error!("failed to load asset `{}`: {}", path.as_str(), err);
+            }
+
             #[cfg(feature = "hot_reload")]
             {
                 dependencies = deps.dependencies.clone();

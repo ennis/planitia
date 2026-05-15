@@ -18,7 +18,7 @@ event-listener = "5.4.0"
 mlua = { version = "0.11.1", features = ["luau", "async"] }
 log = "0.4.27"
 env_logger = "0.11.8"
-tracy-client = "0.18.2"
+tracy-client = "0.18.4"
 bumpalo = "3.19.0"
 thiserror = "2.0.16"
 egui = { version = "0.32.1", features = ["persistence"] }
@@ -34,7 +34,6 @@ shadertool = { workspace = true, optional = true }
 libloading = "0.9.0"
 ron = "0.12.0"
 serde = { version = "1.0.228", features = ["derive"] }
-lyon_tessellation = "1.0.20"
 
 [target.'cfg(target_os="windows")'.dependencies]
 windows = { version = "0.61.3", features = [

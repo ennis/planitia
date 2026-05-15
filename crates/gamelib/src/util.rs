@@ -1,8 +1,12 @@
+mod profiler;
+
 use arboard::Clipboard;
 use log::error;
 use std::env;
 use std::future::pending;
 use std::path::{Path, PathBuf};
+
+
 
 /// An async future that never completes.
 pub async fn forever() {

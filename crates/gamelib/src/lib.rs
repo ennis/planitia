@@ -30,6 +30,7 @@ pub use egui;
 pub use gpu;
 pub use math;
 pub use tweak::*;
+pub use tracy_client;
 
 ///////////////////////////////////////////////////////////////////
 

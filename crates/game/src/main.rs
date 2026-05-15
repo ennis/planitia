@@ -8,8 +8,8 @@ use gamelib::egui;
 use gamelib::egui::{Color32, Scene};
 use gamelib::input::{InputEvent, PointerButton};
 use gamelib::paint::{DrawGlyphRunOptions, PaintRenderParams, PaintScene, Painter, TextFormat, TextLayout};
-use gamelib::render::pipeline_cache::get_graphics_pipeline;
 use gamelib::platform::{EventToken, InitOptions, RenderTargetImage, UserEvent};
+use gamelib::render::pipeline_cache::get_graphics_pipeline;
 use std::ops::Deref;
 
 use color::{Srgba8, srgba8};
@@ -17,9 +17,9 @@ use color::{Srgba8, srgba8};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::{Image, Ptr, PushDataSource, root_params};
 use log::debug;
-use ron::ser::PrettyConfig;
 use math::geom::{Camera, rect_xywh};
 use math::{Mat4, Vec2, Vec3, vec2};
+use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
 
 mod experiments;
@@ -66,12 +66,7 @@ struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        Self {
-            show_grid: false,
-            show_painting_demo: false,
-            show_background: false,
-            show_imgui: false,
-        }
+        Self { show_grid: false, show_painting_demo: false, show_background: false, show_imgui: false }
     }
 }
 
@@ -107,6 +102,7 @@ struct Game {
     coat_experiment: experiments::coat::CoatExperiment,
     outline_experiment: experiments::outlines::OutlineExperiment,
     automaton_experiment: experiments::automaton::AutomatonExperiment,
+    svg_experiment: experiments::svg::SvgExperiment,
     cfg: Config,
 }
 
@@ -139,6 +135,7 @@ impl Default for Game {
             coat_experiment: experiments::coat::CoatExperiment::new(),
             outline_experiment: experiments::outlines::OutlineExperiment::new(),
             automaton_experiment: experiments::automaton::AutomatonExperiment::new(),
+            svg_experiment: experiments::svg::SvgExperiment::new(),
             cfg: Config::load(),
         }
     }
@@ -162,7 +159,7 @@ impl Game {
                         scene_uniforms: Ptr<SceneInfoUniforms> = scene_info.gpu,
                         bottom_color: Srgba8 = bottom_color,
                         top_color: Srgba8 = top_color
-                    }
+                    },
                 );
             }
         }
@@ -190,10 +187,7 @@ impl Game {
         let mut scene = self.painter.build_scene();
 
         let mut text = TextLayout::new(
-            &TextFormat {
-                size: 20.0,
-                ..Default::default()
-            },
+            &TextFormat { size: 20.0, ..Default::default() },
             concat!(
                 "[Home] Home camera\n",
                 "[G] Toggle grid\n",
@@ -208,14 +202,7 @@ impl Game {
             scene.draw_glyph_run(vec2(0.0, 0.0), &glyph_run, &DrawGlyphRunOptions::default());
         }
 
-        scene.finish(
-            cmd,
-            &PaintRenderParams {
-                camera: Default::default(),
-                color_target: target,
-                depth_target: None,
-            },
-        );
+        scene.finish(cmd, &PaintRenderParams { camera: Default::default(), color_target: target, depth_target: None });
 
         if self.cfg.show_painting_demo {
             experiments::painting_test(
@@ -224,6 +211,8 @@ impl Game {
                 target,
                 Srgba8::from(self.color.to_srgba_unmultiplied()),
             );
+
+            self.svg_experiment.render(&mut self.painter, cmd, target);
         }
     }
 }
@@ -277,6 +266,7 @@ impl AppHandler for Game {
     fn resized(&mut self, width: u32, height: u32) {
         self.width = width;
         self.height = height;
+        // TODO painter.resize() method
         self.camera_control.resize(width, height);
         self.depth_stencil_buffer = create_depth_buffer(width, height);
         self.outline_experiment.resize(width, height);
@@ -314,23 +304,21 @@ impl AppHandler for Game {
             };
             scene_info.gpu = cmd.upload(&scene_info.info);
 
-            let mut encoder = cmd.begin_rendering(&[gpu::ColorAttachment {
-                    image: target.image,
-                    clear: Some([0.0, 0.0, 0.0, 1.0]),
-                }],
+            let mut encoder = cmd.begin_rendering(
+                &[gpu::ColorAttachment { image: target.image, clear: Some([0.0, 0.0, 0.0, 1.0]) }],
                 Some(gpu::DepthStencilAttachment {
                     image: &self.depth_stencil_buffer,
                     depth_clear: Some(1.0),
                     stencil_clear: Some(0),
-                }));
+                }),
+            );
 
             self.render_scene(&mut encoder, &camera, &scene_info);
             encoder.finish();
 
             //self.coat_experiment
             //    .render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
-            self.outline_experiment
-               .render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
+            self.outline_experiment.render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
             //let _ = self.automaton_experiment
             //    .render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
         }
@@ -354,39 +342,35 @@ impl AppHandler for Game {
 
     fn imgui(&mut self, ctx: &egui::Context) {
         egui::Window::new("imgui").show(ctx, |ui| {
-            egui::Grid::new("params")
-                .num_columns(2)
-                .spacing([40.0, 4.0])
-                .striped(true)
-                .show(ui, |ui| {
-                    ui.label("Show grid");
-                    ui.checkbox(&mut self.cfg.show_grid, "");
-                    ui.end_row();
+            egui::Grid::new("params").num_columns(2).spacing([40.0, 4.0]).striped(true).show(ui, |ui| {
+                ui.label("Show grid");
+                ui.checkbox(&mut self.cfg.show_grid, "");
+                ui.end_row();
 
-                    ui.label("Show background");
-                    ui.checkbox(&mut self.cfg.show_background, "");
-                    ui.end_row();
+                ui.label("Show background");
+                ui.checkbox(&mut self.cfg.show_background, "");
+                ui.end_row();
 
-                    ui.label("Show painting demo");
-                    ui.checkbox(&mut self.cfg.show_painting_demo, "");
-                    ui.end_row();
+                ui.label("Show painting demo");
+                ui.checkbox(&mut self.cfg.show_painting_demo, "");
+                ui.end_row();
 
-                    ui.label("Show imgui");
-                    ui.checkbox(&mut self.cfg.show_imgui, "");
-                    ui.end_row();
+                ui.label("Show imgui");
+                ui.checkbox(&mut self.cfg.show_imgui, "");
+                ui.end_row();
 
-                    ui.label("Painting demo color");
-                    ui.color_edit_button_srgba(&mut self.color);
-                    ui.end_row();
+                ui.label("Painting demo color");
+                ui.color_edit_button_srgba(&mut self.color);
+                ui.end_row();
 
-                    ui.label("BG top color");
-                    ui.color_edit_button_srgba(&mut self.bg_top_color);
-                    ui.end_row();
+                ui.label("BG top color");
+                ui.color_edit_button_srgba(&mut self.bg_top_color);
+                ui.end_row();
 
-                    ui.label("BG bottom color");
-                    ui.color_edit_button_srgba(&mut self.bg_bottom_color);
-                    ui.end_row();
-                });
+                ui.label("BG bottom color");
+                ui.color_edit_button_srgba(&mut self.bg_bottom_color);
+                ui.end_row();
+            });
         });
 
         //self.automaton_experiment.ui(ctx);
@@ -403,10 +387,5 @@ fn main() {
     AssetCache::register_directory(concat!(env!("CARGO_MANIFEST_DIR"), "/assets"));
     gamelib::register_asset_directory();
 
-    APP.run(&InitOptions {
-        width: WIDTH,
-        height: HEIGHT,
-        window_title: "Planitia",
-        ..Default::default()
-    });
+    APP.run(&InitOptions { width: WIDTH, height: HEIGHT, window_title: "Planitia", ..Default::default() });
 }

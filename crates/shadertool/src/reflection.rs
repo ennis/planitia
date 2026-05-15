@@ -1,7 +1,7 @@
 //! Extract extended reflection information from a slang shader module.
 
 use crate::BuildOptions;
-use color_print::{ceprintln, cprintln};
+use color_print::{ceprintln};
 use sharc::archive::{ArchiveWriter, Offset};
 use sharc::reflection::ParamLocation;
 use sharc::{ShaderArchiveRoot, reflection};
@@ -210,7 +210,7 @@ impl<'a> CollectedReflectionData<'a> {
     }
 
     pub(crate) fn reflect_shader(&mut self, shader: &slang::reflection::Shader) {
-        let global_params_layout = shader.global_params_var_layout();
+        //let global_params_layout = shader.global_params_var_layout();
         let ty_layout = shader.global_params_type_layout().unwrap();
         if ty_layout.kind() != TypeKind::Struct {
             panic!("expected global params to be a struct");

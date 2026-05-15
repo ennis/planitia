@@ -14,7 +14,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::CString;
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
 use std::{env, fs, slice};
 
 type ShaderArchiveWriter = ArchiveWriter<sharc::ShaderArchiveRoot>;
@@ -24,10 +23,7 @@ fn get_slang_global_session() -> slang::GlobalSession {
         static SESSION: OnceCell<slang::GlobalSession> = OnceCell::new();
     }
 
-    SESSION.with(|s| {
-        s.get_or_init(|| slang::GlobalSession::new().expect("Failed to create Slang session"))
-            .clone()
-    })
+    SESSION.with(|s| s.get_or_init(|| slang::GlobalSession::new().expect("Failed to create Slang session")).clone())
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -62,6 +58,7 @@ impl Display for BuildErrors {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/*
 fn find_user_attribute<'a>(
     decl: &'a slang::reflection::Variable,
     name: &str,
@@ -76,10 +73,11 @@ fn find_user_attribute<'a>(
 
 fn get_user_attribute_string<'a>(var: &'a slang::reflection::Variable, name: &str, index: u32) -> Option<&'a str> {
     find_user_attribute(var, name).and_then(|attr| attr.argument_value_string(index))
-}
+}*/
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/*
 /// Extracts the root parameters of the shader entry point.
 ///
 /// # Example
@@ -223,6 +221,7 @@ fn get_root_param_info(entry_point: &slang::reflection::EntryPoint) -> Vec<RootP
 
     infos
 }
+*/
 
 fn slang_stage_to_stage_flags(stage: slang::Stage) -> vk::ShaderStageFlags {
     match stage {
@@ -262,6 +261,7 @@ fn get_push_constants_size(entry_point: &slang::reflection::EntryPoint) -> usize
     size
 }
 
+/*
 fn link_entry_point(
     session: &slang::Session,
     module: &slang::Module,
@@ -273,17 +273,17 @@ fn link_entry_point(
         .map_err(SlangError::from)?;
     let program = program.link().map_err(SlangError::from)?;
     Ok(program)
-}
+}*/
 
 /// Represents a shader module
 struct Module {
     name: String,
-    module: slang::Module,
+    _module: slang::Module,
     file_path: PathBuf,
     file_mtime: u64,
     spirv: Vec<u32>,
     // spirv_archive: Offset<[u32]>,
-    program: slang::ComponentType,
+    _program: slang::ComponentType,
     reflection: Vec<reflection::Param>,
     entry_points: Vec<EntryPoint>,
 }
@@ -383,10 +383,7 @@ impl BuildManifest {
         if let Some(manifest_dir) = self.manifest_path.parent() {
             if !manifest_dir.as_os_str().is_empty() {
                 env::set_current_dir(manifest_dir).with_context(|| {
-                    format!(
-                        "failed to set current directory `{}` for glob resolution",
-                        manifest_dir.display()
-                    )
+                    format!("failed to set current directory `{}` for glob resolution", manifest_dir.display())
                 })?;
             }
         }
@@ -406,10 +403,8 @@ impl BuildManifest {
                         //    canonical_path.display(),
                         //    prev_current_dir.display()
                         //);
-                        let relative_path = canonical_path
-                            .strip_prefix(&prev_current_dir_canonical)
-                            .unwrap()
-                            .to_path_buf();
+                        let relative_path =
+                            canonical_path.strip_prefix(&prev_current_dir_canonical).unwrap().to_path_buf();
                         paths.push(relative_path);
                     }
                     Err(err) => {
@@ -446,30 +441,20 @@ impl BuildManifest {
             .matrix_layout_column(true)
             .optimization(slang::OptimizationLevel::Default)
             .vulkan_use_entry_point_name(true)
-            .debug_information(if emit_debug_information {
-                DebugInfoLevel::Maximal
-            } else {
-                DebugInfoLevel::None
-            })
+            .debug_information(if emit_debug_information { DebugInfoLevel::Maximal } else { DebugInfoLevel::None })
             .profile(profile);
 
         for (k, v) in self.compiler.defines.iter() {
             compiler_options = compiler_options.macro_define(k, v);
         }
 
-        let target_desc = slang::TargetDesc::default()
-            .format(slang::CompileTarget::Spirv)
-            .options(&compiler_options);
+        let target_desc = slang::TargetDesc::default().format(slang::CompileTarget::Spirv).options(&compiler_options);
         let targets = [target_desc];
 
-        let session_desc = slang::SessionDesc::default()
-            .targets(&targets)
-            .search_paths(&search_path_ptrs)
-            .options(&compiler_options);
+        let session_desc =
+            slang::SessionDesc::default().targets(&targets).search_paths(&search_path_ptrs).options(&compiler_options);
 
-        let session = global_session
-            .create_session(&session_desc)
-            .expect("failed to create session");
+        let session = global_session.create_session(&session_desc).expect("failed to create session");
         session
     }
 
@@ -504,13 +489,12 @@ impl BuildManifest {
             // entry points. While it could be possible to emit a SPIR-V "library"
             // with no entry points, it currently crashes the Slang compiler.
             return Ok(Module {
-                module: module.clone(),
+                _module: module.clone(),
                 name: module_name,
                 file_path: canonical_path,
                 file_mtime,
                 spirv: vec![],
-                // FIXME: it would be better if we didn't return anything at all here
-                program: module.clone().into(),
+                _program: module.clone().into(),
                 reflection: vec![],
                 entry_points: vec![],
             });
@@ -523,9 +507,7 @@ impl BuildManifest {
         }
 
         // module + all entry points composite
-        let composite = session
-            .create_composite_component_type(&components)
-            .map_err(SlangError::from)?;
+        let composite = session.create_composite_component_type(&components).map_err(SlangError::from)?;
 
         // linked program
         let program = composite.link().map_err(SlangError::from)?;
@@ -543,8 +525,6 @@ impl BuildManifest {
             convert_spirv_u8_to_u32(blob.as_slice())
         };
 
-        let spirv_archive = archive.write_slice(blob.as_slice());
-
         let mut entry_points = Vec::new();
         for i in 0..module.entry_point_count() {
             let reflection = program.layout(0).expect("failed to get reflection");
@@ -559,15 +539,26 @@ impl BuildManifest {
             let mut pass = None;
 
             // `[pass("...")]` attribute
-            for attr in module
-                .entry_point_by_index(i)
-                .unwrap()
-                .function_reflection()
-                .user_attributes()
-            {
+            for attr in module.entry_point_by_index(i).unwrap().function_reflection().user_attributes() {
                 if attr.name().unwrap() == "pass" {
                     pass = attr.argument_value_string(0).map(String::from);
                 }
+            }
+
+            // if there's no pass attribute, infer from the entry point name
+            if pass.is_none() {
+                let mut name = entry_point.name().unwrap();
+                let suffixes =
+                    ["_vertex", "_fragment", "_compute", "_mesh", "_amplification", "_hull", "_domain", "_geometry"];
+                // remove stage suffixes
+                // if no suffix is found, assume that the pass name is the same as the entry point name
+                for suffix in suffixes.iter() {
+                    if let Some(stripped) = name.strip_suffix(suffix) {
+                        name = stripped;
+                        break;
+                    }
+                }
+                pass = Some(name.to_string());
             }
 
             if options.verbosity >= 2 {
@@ -584,12 +575,12 @@ impl BuildManifest {
         }
 
         Ok(Module {
-            module,
+            _module: module,
             name: module_name,
             file_path: canonical_path,
             file_mtime,
             spirv: blob,
-            program,
+            _program: program,
             reflection,
             entry_points,
         })
@@ -624,10 +615,7 @@ impl BuildManifest {
             //    root_params = entry_point.root_params.clone();
             //}
 
-            shaders.push(Shader {
-                stage: entry_point.stage,
-                entry_point: entry_point.name.as_str().into(),
-            });
+            shaders.push(Shader { stage: entry_point.stage, entry_point: entry_point.name.as_str().into() });
         }
 
         let pipeline_kind = if stage_flags.contains(vk::ShaderStageFlags::COMPUTE) {
@@ -811,10 +799,7 @@ impl BuildManifest {
             name,
             spirv,
             passes: pipelines_offset,
-            file: FileDependency {
-                path,
-                mtime: module.file_mtime,
-            },
+            file: FileDependency { path, mtime: module.file_mtime },
             params,
         };
         Ok(module)
@@ -823,16 +808,11 @@ impl BuildManifest {
     /// Scans shader source files for shader definitions and collects a list of shader pipelines and entry points to compile.
     pub(crate) fn build(&self, options: &BuildOptions) -> anyhow::Result<()> {
         // resolve paths
-        let files = self
-            .resolve_glob_file_paths(&self.input_files)
-            .context("error resolving input files")?;
+        let files = self.resolve_glob_file_paths(&self.input_files).context("error resolving input files")?;
         let output_file = self.resolve_path(&self.output_file);
         let spirv_dump_path = output_file.parent().unwrap().join("spirv");
-        let include_paths: Vec<String> = self
-            .include_paths
-            .iter()
-            .map(|p| self.resolve_path(p).to_string_lossy().into_owned())
-            .collect();
+        let include_paths: Vec<String> =
+            self.include_paths.iter().map(|p| self.resolve_path(p).to_string_lossy().into_owned()).collect();
 
         if options.emit_cargo_deps {
             println!("cargo:rerun-if-changed={}", self.manifest_path.display());
@@ -939,10 +919,7 @@ impl BuildManifest {
 
         // write archive root and dump to file
         let _ = archive.write_root(&sharc::ShaderArchiveRoot {
-            manifest: FileDependency {
-                path: manifest_path,
-                mtime: self.mtime,
-            },
+            manifest: FileDependency { path: manifest_path, mtime: self.mtime },
             modules,
             images,
         });

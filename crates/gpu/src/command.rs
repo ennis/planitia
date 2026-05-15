@@ -163,10 +163,7 @@ impl CommandBuffer {
 
         for (binding, descriptor) in bindings {
             match *descriptor {
-                Descriptor::SampledImage {
-                    image: image_view,
-                    layout,
-                } => {
+                Descriptor::SampledImage { image: image_view, layout } => {
                     descriptors.push(DescriptorBufferOrImage {
                         image: vk::DescriptorImageInfo {
                             sampler: Default::default(),
@@ -183,10 +180,7 @@ impl CommandBuffer {
                         ..Default::default()
                     });
                 }
-                Descriptor::StorageImage {
-                    image: image_view,
-                    layout,
-                } => {
+                Descriptor::StorageImage { image: image_view, layout } => {
                     descriptors.push(DescriptorBufferOrImage {
                         image: vk::DescriptorImageInfo {
                             sampler: Default::default(),
@@ -205,11 +199,7 @@ impl CommandBuffer {
                 }
                 Descriptor::UniformBuffer { buffer, offset, size } => {
                     descriptors.push(DescriptorBufferOrImage {
-                        buffer: vk::DescriptorBufferInfo {
-                            buffer: buffer.handle(),
-                            offset,
-                            range: size,
-                        },
+                        buffer: vk::DescriptorBufferInfo { buffer: buffer.handle(), offset, range: size },
                     });
                     descriptor_writes.push(vk::WriteDescriptorSet {
                         dst_binding: *binding,
@@ -222,11 +212,7 @@ impl CommandBuffer {
                 }
                 Descriptor::StorageBuffer { buffer, offset, size } => {
                     descriptors.push(DescriptorBufferOrImage {
-                        buffer: vk::DescriptorBufferInfo {
-                            buffer: buffer.handle(),
-                            offset,
-                            range: size,
-                        },
+                        buffer: vk::DescriptorBufferInfo { buffer: buffer.handle(), offset, range: size },
                     });
                     descriptor_writes.push(vk::WriteDescriptorSet {
                         dst_binding: *binding,
@@ -470,9 +456,7 @@ impl CommandBuffer {
         let device = Device::global();
         let cb = self.get_or_create_command_buffer();
         unsafe {
-            device
-                .raw
-                .cmd_bind_pipeline(cb, vk::PipelineBindPoint::COMPUTE, pipeline.pipeline);
+            device.raw.cmd_bind_pipeline(cb, vk::PipelineBindPoint::COMPUTE, pipeline.pipeline);
             if pipeline.bindless {
                 self.bind_bindless_descriptor_sets(cb, vk::PipelineBindPoint::COMPUTE, pipeline.pipeline_layout);
             }
@@ -499,15 +483,8 @@ impl CommandBuffer {
     ) {
         let cb = self.get_or_create_command_buffer();
         unsafe {
-            self.set_push_data(
-                cb,
-                vk::PipelineBindPoint::COMPUTE,
-                self.pipeline_layout,
-                root_params.into(),
-            );
-            Device::global()
-                .raw
-                .cmd_dispatch(cb, group_count_x, group_count_y, group_count_z);
+            self.set_push_data(cb, vk::PipelineBindPoint::COMPUTE, self.pipeline_layout, root_params.into());
+            Device::global().raw.cmd_dispatch(cb, group_count_x, group_count_y, group_count_z);
         }
     }
 
@@ -530,10 +507,7 @@ impl CommandBuffer {
         // TODO check that push/pop calls are balanced
         let command_buffer = self.get_or_create_command_buffer();
         unsafe {
-            Device::global()
-                .extensions
-                .ext_debug_utils
-                .cmd_end_debug_utils_label(command_buffer);
+            Device::global().extensions.ext_debug_utils.cmd_end_debug_utils_label(command_buffer);
         }
     }
 
@@ -667,10 +641,7 @@ fn sync(waits: &[SyncWait], signals: &[SyncSignal]) {
 
     unsafe {
         trace!("GPU: QueueSubmit (synchronization)");
-        match device
-            .raw
-            .queue_submit(submission_state.queue, &[submit_info], vk::Fence::null())
-        {
+        match device.raw.queue_submit(submission_state.queue, &[submit_info], vk::Fence::null()) {
             Ok(()) => {}
             Err(e) => {
                 error!("QueueSubmit (synchronization) failed: {:?}", e);
@@ -704,10 +675,7 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
     assert!(!cmd.submitted);
 
     let timeline_value = device.next_timeline_value.fetch_add(1, Relaxed);
-    trace!(
-        "GPU: submit CommandStream, create_ticket={}, timeline_value={}",
-        cmd.create_ticket, timeline_value
-    );
+    trace!("GPU: submit CommandStream, create_ticket={}, timeline_value={}", cmd.create_ticket, timeline_value);
 
     // flush pending writes
     cmd.barrier(InvalidateFlags::empty());
@@ -845,9 +813,7 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
         //         queue object should be externally synchronized, which is realized here by the
         //         lock on submission_state.
         trace!("GPU: QueueSubmit");
-        result = device
-            .raw
-            .queue_submit(submission_state.queue, &[submit_info], vk::Fence::null());
+        result = device.raw.queue_submit(submission_state.queue, &[submit_info], vk::Fence::null());
 
         // active_submissions is sorted by ticket
         let pos = submission_state

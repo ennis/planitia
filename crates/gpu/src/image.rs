@@ -9,6 +9,7 @@ use ash::vk::Handle;
 use bitflags::bitflags;
 use gpu_allocator::MemoryLocation;
 use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
+use slotmap::Key;
 use std::{mem, ptr};
 
 /// Dimensionality of an image.
@@ -290,18 +291,20 @@ impl Image {
 
     /// Returns the bindless texture handle of this image view.
     pub fn texture_handle(&self) -> TextureHandle {
-        TextureHandle {
-            index: self.descriptors.texture.index(),
-            _unused: 0,
-        }
+        assert!(
+            !self.descriptors.texture.is_null(),
+            "no texture descriptor exists for image (was it created with SAMPLED usage?)"
+        );
+        TextureHandle { index: self.descriptors.texture.index(), _unused: 0 }
     }
 
     /// Returns the bindless storage image handle of this image view.
     pub fn storage_handle(&self) -> StorageImageHandle {
-        StorageImageHandle {
-            index: self.descriptors.storage.index(),
-            _unused: 0,
-        }
+        assert!(
+            !self.descriptors.storage.is_null(),
+            "no storage descriptor exists for image (was it created with STORAGE usage?)"
+        );
+        StorageImageHandle { index: self.descriptors.storage.index(), _unused: 0 }
     }
 
     /// Discards the contents of the image and resizes this image to the new dimensions.
@@ -324,10 +327,7 @@ impl Image {
     pub fn resize_no_copy(&mut self, new_size: Size3D) {
         assert!(!self.swapchain_image, "cannot resize a swap chain image");
         assert!(
-            !matches!(
-                self.allocation,
-                ResourceAllocation::External | ResourceAllocation::DeviceMemory { .. }
-            ),
+            !matches!(self.allocation, ResourceAllocation::External | ResourceAllocation::DeviceMemory { .. }),
             "cannot resize images created from external memory"
         );
         match self.type_ {
@@ -354,10 +354,7 @@ impl Image {
     /// # Arguments
     /// - `clear_color`: color to clear to when beginning a render pass with this attachment. `None` to leave contents unchanged.
     pub fn as_color_attachment(&self, clear_color: impl Into<Option<[f64; 4]>>) -> ColorAttachment<'_> {
-        ColorAttachment {
-            image: self,
-            clear: clear_color.into(),
-        }
+        ColorAttachment { image: self, clear: clear_color.into() }
     }
 
     /// Returns a [`DepthStencilAttachment`] referencing this image, with the specified clear depth and stencil values.
@@ -370,11 +367,7 @@ impl Image {
         clear_depth: impl Into<Option<f64>>,
         clear_stencil: impl Into<Option<u32>>,
     ) -> DepthStencilAttachment<'_> {
-        DepthStencilAttachment {
-            image: self,
-            depth_clear: clear_depth.into(),
-            stencil_clear: clear_stencil.into(),
-        }
+        DepthStencilAttachment { image: self, depth_clear: clear_depth.into(), stencil_clear: clear_stencil.into() }
     }
 }
 
@@ -543,11 +536,7 @@ impl Device {
             let create_info = vk::ImageCreateInfo {
                 image_type: image_info.type_.into(),
                 format: image_info.format,
-                extent: vk::Extent3D {
-                    width: image_info.width,
-                    height: image_info.height,
-                    depth: image_info.depth,
-                },
+                extent: vk::Extent3D { width: image_info.width, height: image_info.height, depth: image_info.depth },
                 mip_levels: image_info.mip_levels,
                 array_layers: image_info.array_layers,
                 samples: get_vk_sample_count(image_info.samples),
@@ -560,10 +549,7 @@ impl Device {
                 ..Default::default()
             };
 
-            let handle = self
-                .raw
-                .create_image(&create_info, None)
-                .expect("failed to create image");
+            let handle = self.raw.create_image(&create_info, None).expect("failed to create image");
 
             let mem_req = self.raw.get_image_memory_requirements(handle);
             let allocation = self.allocate_memory_or_panic(&AllocationCreateDesc {
@@ -574,9 +560,7 @@ impl Device {
                 allocation_scheme: AllocationScheme::GpuAllocatorManaged,
             });
 
-            self.raw
-                .bind_image_memory(handle, allocation.memory(), allocation.offset() as u64)
-                .unwrap();
+            self.raw.bind_image_memory(handle, allocation.memory(), allocation.offset() as u64).unwrap();
 
             // create the bindless image view
             let descriptors = self.create_image_resource_descriptors(
@@ -602,11 +586,7 @@ impl Device {
                 format: image_info.format,
                 mip_levels: image_info.mip_levels,
                 array_layers: image_info.array_layers,
-                size: Size3D {
-                    width: image_info.width,
-                    height: image_info.height,
-                    depth: image_info.depth,
-                },
+                size: Size3D { width: image_info.width, height: image_info.height, depth: image_info.depth },
                 samples: image_info.samples,
             }
         }

@@ -6,11 +6,13 @@ mod sweep;
 mod winged_edge_mesh;
 mod ss_contours;
 pub mod automaton;
+pub mod svg;
 
 use color::Srgba8;
 use gamelib::paint::{DrawGlyphRunOptions, PaintRenderParams, Painter, TextFormat, TextLayout};
 use math::geom::rect_xywh;
 use math::vec2;
+
 
 pub(super) fn painting_test(painter: &mut Painter, cmd: &mut gpu::CommandBuffer, target: &gpu::Image, color: Srgba8) {
     let mut scene = painter.build_scene();
@@ -33,9 +35,9 @@ And what is else not to be overcome?",
     );
     text.layout(1000.0);
 
-    for glyph_run in text.glyph_runs() {
+    /*for glyph_run in text.glyph_runs() {
         scene.draw_glyph_run(vec2(0.0, 0.0), &glyph_run, &DrawGlyphRunOptions::default());
-    }
+    }*/
 
     scene.finish(
         cmd,
