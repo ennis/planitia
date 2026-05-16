@@ -43,8 +43,12 @@ macro_rules! impl_bezier {
                 let p1 = self.p1;
                 let p2 = self.p2;
                 let p3 = self.p3;
-                let t = tolerance * tolerance;
-                (0.5 * (p0 + p2) - p1).length_squared() <= t && (0.5 * (p1 + p3) - p2).length_squared() <= t
+
+                let dx = p3.x - p0.x;
+                let dy = p3.y - p0.y;
+                let d2 = ((p1.x - p3.x) * dy - (p1.y - p3.y) * dx).abs();
+                let d3 = ((p2.x - p3.x) * dy - (p2.y - p3.y) * dx).abs();
+                (d2 + d3) * (d2 + d3) < tolerance * (dx * dx + dy * dy)
             }
 
             fn flatten_inner(&self, points: &mut Vec<$vec>, tolerance: f32) {

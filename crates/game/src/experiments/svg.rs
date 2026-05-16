@@ -71,7 +71,7 @@ fn render_group(scene: &mut PaintScene, group: &usvg::Group) {
 
 impl SvgExperiment {
     pub fn new() -> Self {
-        let svg_data = include_str!("Ghostscript_Tiger.svg");
+        let svg_data = include_str!("whisker.svg");
         let document = usvg::Tree::from_str(svg_data, &usvg::Options::default()).unwrap();
         Self { document }
     }

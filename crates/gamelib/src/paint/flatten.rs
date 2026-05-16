@@ -49,7 +49,7 @@ pub(super) fn flatten_path(
 
                 cur_contour = Some(points.len());
                 let tto = transform.transform_point2(to);
-                points.push(transform.transform_point2(tto));
+                points.push(tto);
                 pos = tto;
             }
             PathSegment::LineTo(to) => {
@@ -84,6 +84,13 @@ pub(super) fn flatten_path(
                 });
             }
         }
+    }
+    if let Some(start) = cur_contour {
+        contours.push(Contour {
+            start: start as u32,
+            end: points.len() as u32,
+            path: path_index,
+        });
     }
 
     let point_count = points.len() - start_points_len;

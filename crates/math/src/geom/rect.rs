@@ -56,6 +56,12 @@ impl Rect {
         }
     }
 
+    pub fn union(&self, other: &Rect) -> Rect {
+        let min = Vec2::new(self.min.x.min(other.min.x), self.min.y.min(other.min.y));
+        let max = Vec2::new(self.max.x.max(other.max.x), self.max.y.max(other.max.y));
+        Rect { min, max }
+    }
+
     pub const fn is_null(&self) -> bool {
         self.min.x >= self.max.x || self.min.y >= self.max.y
     }

@@ -275,24 +275,42 @@ bool clip_line_y(float yclip, bool side, inout float2 p, inout float2 q)
     return true;
 }
 
-struct TileBin {
-    int2 coords;
-    uint path;
-    int winding;
-    uint seg_offset;
-    uint seg_count;
-};
+//-----------------------------------------------------------------------------
 
 static const uint RASTER_TILE_SIZE = 16;
 
+struct TileCover {
+    uint64_t id;
+    int winding;
+    uint seg_offset;
+    uint seg_count;
+
+    int2 tile_coords() {
+        return int2(id >> 32 & 0xFFFF, id >> 48 & 0xFFFF);
+    }
+
+    uint2 path_id() {
+        return uint2(id & 0xFFFFFFFF);
+    }
+};
+
+struct TileCoverList {
+    uint offset;
+    uint count;
+};
+
 struct RasterTilesParams {
-    float4* segments;
-    TileBin* tile_bins;
-    uint tile_bin_count;
-    uint* bin_offsets;
-    uint tile_count;
+    uint8_t4* segments;
+    TileCover* covers;
+    uint cover_count;
+    TileCoverList* cover_lists;
+    uint cover_lists_count;
     RWTexture2D<float4>.Handle output;
 };
+
+float4 unpack_segment(uint8_t4 segment) {
+    return float4(segment) / 255.0 * RASTER_TILE_SIZE;
+}
 
 groupshared float s_coverage[RASTER_TILE_SIZE * RASTER_TILE_SIZE * 2];
 groupshared int s_winding_v_area[RASTER_TILE_SIZE];
@@ -302,25 +320,25 @@ groupshared int s_winding_v_delta[RASTER_TILE_SIZE];
 [numthreads(RASTER_TILE_SIZE, RASTER_TILE_SIZE, 1)]
 void raster_tiles(uint3 workgroup_id: SV_GroupID, uint3 group_thread_id : SV_GroupThreadID, uniform RasterTilesParams* u)
 {
-    if (workgroup_id.x >= u.tile_count) {
+    var cover_list = u.cover_lists[workgroup_id.x];
+
+    let tile_coords = u.covers[cover_list.offset].tile_coords();
+    if (tile_coords.x < 0 || tile_coords.y < 0) {
         return;
     }
 
-    var bin_offset = u.bin_offsets[workgroup_id.x];
-
-    var cur_tile = u.tile_bins[bin_offset];
-
-    let tile_coords = cur_tile.coords;
     let tsize = int2(RASTER_TILE_SIZE, RASTER_TILE_SIZE);
-
     let local     = int2(group_thread_id.xy);               // coordinates within the tile
     let tile_top_left = tile_coords * tsize;                      // tile top-left corner position in screen coordinates
     let pixel_center  = float2(local) + 0.5;  // pixel center in tile-local coordinates
 
-    while (true) {
+    var max_coverage = 0.0;
+
+    for (uint i_cover = cover_list.offset; i_cover < cover_list.offset + cover_list.count; i_cover++) {
+        var tile_cover = u.covers[i_cover];
+
         // compute vertical winding numbers at x = 0
         // process segments in parallel
-
         let local_index = group_thread_id.y * RASTER_TILE_SIZE + group_thread_id.x;
         if (local_index < RASTER_TILE_SIZE) {
             s_winding_v_area[local_index] = 0;
@@ -329,20 +347,20 @@ void raster_tiles(uint3 workgroup_id: SV_GroupID, uint3 group_thread_id : SV_Gro
 
         GroupMemoryBarrierWithGroupSync();
 
-        if (local_index < cur_tile.seg_count) {
-            float4 seg = u.segments[cur_tile.seg_offset + local_index];
+        if (local_index < tile_cover.seg_count) {
+            float4 seg = unpack_segment(u.segments[tile_cover.seg_offset + local_index]);
             float2 a = seg.xy;
             float2 b = seg.zw;
             float2 d = b - a;
-            // compute intersection at x = 0, i.e. solve a + t*d = (0, y) -> t = -a.x/d.x -> y = a.y + t*d.y
-            //float t = -a.x / d.x;
-
+            // lines are clipped to the tile, so if they intersect the left edge
+            // they must have x == 0 at the endpoint
             if (a.x == 0.0 || b.x == 0) {
                 let y = a.x == 0.0 ? a.y : b.y;
-                let yi = int(floor(y)); // pixel row index of intesection
+                let yi = int(floor(y)); // pixel row index of intersection
                 let yf = 1 - (y - yi);        // 1 - fractional part
                 let yf_quant = int(yf * 255.0); // quantized to 0..255
                 let sign = int(sign(d.x));    // crossing left to right: -1, crossing right to left: +1
+                // also, d.x can be 0 for vertical lines that straddle the left edge
                 InterlockedAdd(s_winding_v_area[yi], sign * yf_quant);
                 InterlockedAdd(s_winding_v_delta[yi], sign);
             }
@@ -360,12 +378,18 @@ void raster_tiles(uint3 workgroup_id: SV_GroupID, uint3 group_thread_id : SV_Gro
 
         GroupMemoryBarrierWithGroupSync();
 
-        float winding = (float) cur_tile.winding + s_winding_v_delta[local.y] + float(s_winding_v_area[local.y]) / 255.0;
-        for (uint i = 0; i < cur_tile.seg_count; i++) {
-            float4 seg = u.segments[cur_tile.seg_offset + i];
+        float winding = (float) tile_cover.winding + s_winding_v_delta[local.y] + float(s_winding_v_area[local.y]) / 255.0;
+        for (uint i = 0; i < tile_cover.seg_count; i++) {
+            uint8_t4 rawseg = u.segments[tile_cover.seg_offset + i];
+            float4 seg = unpack_segment(rawseg);
             float2 a = seg.xy - float2(local);
             float2 b = seg.zw - float2(local);
-            float2 d = b - a;
+            // The line below produces very weird behavior when the line is horizontal (d.x == 0),
+            // as if the both the d.x == 0 and d.x != 0 branches are both taken.
+            // For some reason this behavior disappears if we access b.x in the d.x != 0 branch.
+            // This seems like a driver issue.
+            //float2 d = seg.zw - seg.xy;
+            float2 d = float2(int2(rawseg.zw) - int2(rawseg.xy)) / 255.0 * RASTER_TILE_SIZE;
 
             // good luck with that
 
@@ -380,46 +404,30 @@ void raster_tiles(uint3 workgroup_id: SV_GroupID, uint3 group_thread_id : SV_Gro
                 float y_max = saturate(max(a.y, b.y));
                 float x = a.x;
                 winding += sign(-d.y) * (y_max - y_min) * saturate(1.0 - x);
-                continue;
             }
-
-            // FIXME: for near-vertical segments this is super unstable
-            float y_0 = a.y - a.x * d.y / d.x;
-            float y_1 = a.y + (1.0 - a.x) * d.y / d.x;
-            float y_min = saturate(min(a.y, b.y));
-            float y_max = saturate(max(a.y, b.y));
-            float x_0 = a.x + (y_min - a.y) / d.y * d.x;
-            float x_1 = a.x + (y_max - a.y) / d.y * d.x;
-            float a_1 = 0.5 * abs(y_min - y_0) * max(0.0, x_0);
-            float a_2 = 0.5 * abs(y_max - y_0) * max(0.0, x_1);
-            float a_3 = 0.5 * abs(y_min - y_1) * max(0.0, x_0 - 1.0);
-            float a_4 = 0.5 * abs(y_max - y_1) * max(0.0, x_1 - 1.0);
-
-            float area = (y_max - y_min) - abs(a_1 - a_2) + abs(a_3 - a_4);
-            winding += area * sign(-d.y);
-
-            /*// solve line intersection with horizontal ray from pixel center: a + t*d = (x, 0) -> t = -a.y/d.y -> x = a.x + t*d.x
-            float t = -a.y / d.y;
-            if (t >= 0.0 && t < 1.0) {
-                float x = a.x - d.x * a.y / d.y;
-                winding += saturate(-x + 0.5) * sign(-d.y);
-            }*/
+            else  {
+                // FIXME: for near-vertical segments this is super unstable
+                float y_0 = a.y - a.x * d.y / d.x;
+                float y_1 = a.y + (1.0 - a.x) * d.y / d.x;
+                float y_min = saturate(min(a.y, b.y));
+                float y_max = saturate(max(a.y, b.y));
+                float x_0 = a.x + (y_min - a.y) / d.y * d.x;
+                float x_1 = a.x + (y_max - a.y) / d.y * d.x;
+                float a_1 = 0.5 * abs(y_min - y_0) * max(0.0, x_0);
+                float a_2 = 0.5 * abs(y_max - y_0) * max(0.0, x_1);
+                float a_3 = 0.5 * abs(y_min - y_1) * max(0.0, x_0 - 1.0);
+                float a_4 = 0.5 * abs(y_max - y_1) * max(0.0, x_1 - 1.0);
+                float area = (y_max - y_min) - abs(a_1 - a_2) + abs(a_3 - a_4);
+                //area += 0.000000001 * b.x;  // work around driver bug?
+                winding += area * sign(-d.y);
+            }
         }
 
-        u.output.Store(tile_coords * tsize + local, float4((winding).xxx, 1.0));
-        //u.output.Store(tile_coords * tsize + local, float4(1.0, 0.0, 0.0, 1.0));
-
-        bin_offset += 1;
-        if (bin_offset >= u.tile_bin_count) {
-            break;
-        }
-        cur_tile = u.tile_bins[bin_offset];
-        if (cur_tile.coords.x != tile_coords.x || cur_tile.coords.y != tile_coords.y) {
-            break;
-        }
-
-
+        max_coverage += 0.15 * abs(winding);
     }
+
+    u.output.Store(tile_coords * tsize + local, float4(max_coverage.xxx, 1.0) /*+ float4(float2(local)/tsize, 0.0, 1.0)*/);
+    //u.output.Store(tile_coords * tsize + local, float4(float2(local)/tsize, 0.0, 1.0));
 }
 
 

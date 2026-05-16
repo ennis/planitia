@@ -58,26 +58,26 @@ impl<'a> PaintScene<'a> {
         self.tess.fill_rrect(RRect { rect, radius });
         self.push_draw_op(fill);
 
-        //v2 scene
-        let mut path = PathBuilder::new();
-        path.move_to(rect.min);
-        path.line_to(vec2(rect.max.x, rect.min.y - 233.0));
-        path.line_to(rect.max);
-        path.line_to(vec2(rect.min.x + 20.0, rect.max.y));
-        path.close();
+     //  //v2 scene
+     //  let mut path = PathBuilder::new();
+     //  path.move_to(rect.min);
+     //  path.line_to(vec2(rect.max.x, rect.min.y - 233.0));
+     //  path.line_to(rect.max);
+     //  path.line_to(vec2(rect.min.x + 20.0, rect.max.y));
+     //  path.close();
 
-       self.tess.stroke_path(PathSlice::from(&path), 1.0);
-       self.push_draw_op(Fill::Solid(srgba8(255, 255, 0, 255)));
+     // self.tess.stroke_path(PathSlice::from(&path), 1.0);
+     // self.push_draw_op(Fill::Solid(srgba8(255, 255, 0, 255)));
 
-        let path_index = self.scene.ops.len() as u32;
-        flatten_path(
-            PathSlice::from(&path),
-            &Mat3::IDENTITY,
-            2.0,
-            path_index,
-            &mut self.scene_2.vertices,
-            &mut self.scene_2.contours,
-        );
+     //  flatten_path(
+     //      PathSlice::from(&path),
+     //      &Mat3::IDENTITY,
+     //      1.0,
+     //      self.scene_2.path_index,
+     //      &mut self.scene_2.vertices,
+     //      &mut self.scene_2.contours,
+     //  );
+     //  self.scene_2.path_index += 1;
     }
 
     pub fn save(&mut self) {
@@ -100,12 +100,16 @@ impl<'a> PaintScene<'a> {
         flatten_path(
             PathSlice::from(path),
             &self.transform,
-            2.0,
-            self.scene.ops.len() as u32,
+            1.0,
+            self.scene_2.path_index,
             &mut self.scene_2.vertices,
             &mut self.scene_2.contours,
         );
         self.scene_2.fills.push(fill.into());
+        self.scene_2.path_index += 1;
+
+        self.tess.stroke_path(PathSlice::from(path), 1.0);
+        self.push_draw_op(Fill::Solid(srgba8(255, 255, 0, 255)));
     }
 
     pub fn draw_line(&mut self, p0: Vec2, p1: Vec2, width: f32, fill: impl Into<Fill>) {
