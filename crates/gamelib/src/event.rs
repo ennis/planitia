@@ -6,9 +6,7 @@ pub struct Event<T> {
 
 impl<T> Event<T> {
     pub const fn new() -> Self {
-        Self {
-            event: event_listener::Event::with_tag(),
-        }
+        Self { event: event_listener::Event::with_tag() }
     }
 }
 

@@ -1,5 +1,5 @@
 use crate::paint::{PaintVertex, PathSegment, PathSlice, RRect};
-use math::{vec2, Vec2};
+use math::{Vec2, vec2};
 use std::f32::consts::PI;
 
 #[derive(Clone, Copy, Debug)]
@@ -29,19 +29,13 @@ impl GeomSink {
 }
 
 fn stroke_path(path: &[PN], closed: bool, width: f32, feather: f32, out: &mut GeomSink) {
-
     let base_vertex = out.vertices.len() as u32;
 
-    out.reserve(
-        path.len() * 2,
-        if closed { path.len() * 6 } else { (path.len() - 1) * 6 },
-    );
+    out.reserve(path.len() * 2, if closed { path.len() * 6 } else { (path.len() - 1) * 6 });
 
     for (i, v) in path.iter().enumerate() {
-        out.vertices
-            .push(PaintVertex::new(v.p - v.n * (width + feather), -1.0));
-        out.vertices
-            .push(PaintVertex::new(v.p + v.n * (width + feather), 1.0));
+        out.vertices.push(PaintVertex::new(v.p - v.n * (width + feather), -1.0));
+        out.vertices.push(PaintVertex::new(v.p + v.n * (width + feather), 1.0));
         if i > 0 {
             let base = base_vertex + (i * 2) as u32;
             out.indices.extend([base - 2, base - 1, base, base, base - 1, base + 1]);
@@ -69,11 +63,7 @@ fn tess_feathered_polygon(polygon: &[PN], feather_in: f32, feather_out: f32, out
 
     // tess main polygon
     let base = out.vertices.len() as u32;
-    out.vertices.extend(
-        polygon
-            .iter()
-            .map(|v| PaintVertex::new(v.p - feather_in * v.n, 0.0)),
-    );
+    out.vertices.extend(polygon.iter().map(|v| PaintVertex::new(v.p - feather_in * v.n, 0.0)));
     for i in 1..(polygon.len() - 1) {
         let i = i as u32;
         out.indices.extend([base, base + i, base + i + 1]);
@@ -83,8 +73,7 @@ fn tess_feathered_polygon(polygon: &[PN], feather_in: f32, feather_out: f32, out
     if feather_in > 0.0 || feather_out > 0.0 {
         let base_feather = out.vertices.len() as u32;
         for v in polygon.iter() {
-            out.vertices
-                .push(PaintVertex::new(v.p + feather_out * v.n, 1.0));
+            out.vertices.push(PaintVertex::new(v.p + feather_out * v.n, 1.0));
         }
         for i in 0..polygon.len() {
             let i = i as u32;
@@ -133,9 +122,7 @@ pub struct Tessellator {
 
 impl Tessellator {
     pub fn new() -> Self {
-        Self {
-            geometry: GeomSink::default(),
-        }
+        Self { geometry: GeomSink::default() }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -153,7 +140,7 @@ impl Tessellator {
         flatten_rrect(rect, &mut p);
         stroke_path(&p, true, width, 0.5, &mut self.geometry);
     }
-    
+
     pub fn stroke_line(&mut self, p0: Vec2, p1: Vec2, width: f32) {
         let dir = (p1 - p0).normalize_or_zero();
         let n = Vec2::new(-dir.y, dir.x);
@@ -182,28 +169,13 @@ impl Tessellator {
     pub fn quad(&mut self, p0: Vec2, p1: Vec2) {
         let base = self.geometry.vertices.len() as u32;
         self.geometry.vertices.extend([
-            PaintVertex {
-                p: Vec2::new(p0.x, p0.y),
-                feather: 0.0,
-            },
-            PaintVertex {
-                p: Vec2::new(p1.x, p0.y),
-                feather: 0.0,
-            },
-            PaintVertex {
-                p: Vec2::new(p1.x, p1.y),
-                feather: 0.0,
-            },
-            PaintVertex {
-                p: Vec2::new(p0.x, p1.y),
-                feather: 0.0,
-            },
+            PaintVertex { p: Vec2::new(p0.x, p0.y), feather: 0.0 },
+            PaintVertex { p: Vec2::new(p1.x, p0.y), feather: 0.0 },
+            PaintVertex { p: Vec2::new(p1.x, p1.y), feather: 0.0 },
+            PaintVertex { p: Vec2::new(p0.x, p1.y), feather: 0.0 },
         ]);
-        self.geometry
-            .indices
-            .extend([base + 0, base + 1, base + 2, base + 0, base + 2, base + 3]);
+        self.geometry.indices.extend([base + 0, base + 1, base + 2, base + 0, base + 2, base + 3]);
     }
-
 
     pub fn finish_and_reset(&mut self) -> Mesh {
         let vertices = self.geometry.vertices.clone();

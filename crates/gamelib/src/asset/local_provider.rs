@@ -31,11 +31,7 @@ impl LocalProvider {
                 path.as_str()
             );
         }
-        let path_without_first_slash = if file_part.0.starts_with('/') {
-            &file_part.0[1..]
-        } else {
-            &file_part.0
-        };
+        let path_without_first_slash = if file_part.0.starts_with('/') { &file_part.0[1..] } else { &file_part.0 };
 
         self.root_directory.join(path_without_first_slash)
     }
@@ -51,16 +47,11 @@ impl Provider for LocalProvider {
         let p = self.full_path(path);
         if p.exists() {
             let metadata = std::fs::metadata(&p)?;
-            Ok(FileMetadata {
-                local_path: Some(p),
-                modified: metadata.modified()?,
-            })
+            Ok(FileMetadata { local_path: Some(p), modified: metadata.modified()? })
         } else {
             Err(io::Error::new(io::ErrorKind::NotFound, "File not found"))
         }
     }
-
-
 
     fn load(&self, path: &VfsPath) -> Result<AVec<u8>, io::Error> {
         let p = self.full_path(path);

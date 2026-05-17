@@ -22,12 +22,6 @@ impl SweepExperiment {
         let stroke_vertices = Buffer::from_slice(&[]);
         let cross_sections = Buffer::from_slice(&[]);
 
-        Self {
-            sweep_stroke_pipeline,
-            debug_stroke_pipeline,
-            strokes,
-            stroke_vertices,
-            cross_sections,
-        }
+        Self { sweep_stroke_pipeline, debug_stroke_pipeline, strokes, stroke_vertices, cross_sections }
     }
 }

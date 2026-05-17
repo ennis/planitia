@@ -19,10 +19,7 @@ impl CompositorClock {
     pub(super) fn new() -> CompositorClock {
         // create an event that can be used to abort the clock thread
         let abort_event = unsafe { Owned::new(CreateEventW(None, false, false, None).unwrap()) };
-        CompositorClock {
-            abort_event,
-            active: Default::default(),
-        }
+        CompositorClock { abort_event, active: Default::default() }
     }
 
     /// Marks that a VSync event should be sent to the event loop on the next compositor clock tick.

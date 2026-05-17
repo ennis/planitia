@@ -77,9 +77,7 @@ impl Drop for DxgiVulkanInteropSwapChain {
             // Release the swap chain resources
             // FIXME: there should be a RAII wrapper for semaphores probably
             gpu::wait_idle();
-            gpu::Device::global()
-                .raw()
-                .destroy_semaphore(self.fence_semaphore, None);
+            gpu::Device::global().raw().destroy_semaphore(self.fence_semaphore, None);
             CloseHandle(self.fence_shared_handle).unwrap();
             for img in self.images.iter() {
                 CloseHandle(img.shared_handle).unwrap();
@@ -118,10 +116,8 @@ impl DxgiVulkanInteropSwapChain {
                 //       around that by using a staging texture and copying it to the swap chain
                 //       on the D3D12 side.
                 //       Also, I can't find the code on GitHub that I used as a reference for this.
-                let shared_handle = gfx
-                    .d3d_device
-                    .CreateSharedHandle(&swap_chain_buffer, None, GENERIC_ALL.0, None)
-                    .unwrap();
+                let shared_handle =
+                    gfx.d3d_device.CreateSharedHandle(&swap_chain_buffer, None, GENERIC_ALL.0, None).unwrap();
 
                 // import the buffer to a vulkan image with memory imported from the shared handle
                 let imported_image = Device::global().create_imported_image_win32(
@@ -152,12 +148,7 @@ impl DxgiVulkanInteropSwapChain {
                 // In our case we just call DiscardResource on the swap chain buffer.
                 let discard_cmd_list: ID3D12GraphicsCommandList = gfx
                     .d3d_device
-                    .CreateCommandList(
-                        0,
-                        D3D12_COMMAND_LIST_TYPE_DIRECT,
-                        gfx.cmd_alloc.get_ref().unwrap(),
-                        None,
-                    )
+                    .CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, gfx.cmd_alloc.get_ref().unwrap(), None)
                     .unwrap();
 
                 discard_cmd_list.ResourceBarrier(&[D3D12_RESOURCE_BARRIER {
@@ -199,10 +190,7 @@ impl DxgiVulkanInteropSwapChain {
 
             // Create & share a D3D12 fence for VK/DXGI sync
             let fence = gfx.d3d_device.CreateFence(0, D3D12_FENCE_FLAG_SHARED).unwrap();
-            let fence_shared_handle = gfx
-                .d3d_device
-                .CreateSharedHandle(&fence, None, GENERIC_ALL.0, None)
-                .unwrap();
+            let fence_shared_handle = gfx.d3d_device.CreateSharedHandle(&fence, None, GENERIC_ALL.0, None).unwrap();
             let fence_semaphore = gpu::Device::global().create_imported_semaphore_win32(
                 vk::SemaphoreImportFlags::empty(),
                 vk::ExternalSemaphoreHandleTypeFlags::D3D12_FENCE,
@@ -243,8 +231,7 @@ impl DxgiVulkanInteropSwapChain {
         unsafe {
             // dummy rendering to synchronize with the presentation engine before signalling the fence
             // needed! there's some implicit synchronization being done here
-            gfx.cmd_queue
-                .ExecuteCommandLists(&[Some(image.dummy_cmd_list.cast().unwrap())]);
+            gfx.cmd_queue.ExecuteCommandLists(&[Some(image.dummy_cmd_list.cast().unwrap())]);
 
             gfx.cmd_queue.Signal(&self.fence, fence_value).unwrap();
             gpu::sync_wait(self.fence_semaphore, fence_value);
@@ -317,10 +304,7 @@ fn create_swap_chain(
 ) -> IDXGISwapChain3 {
     // CreateSwapChainForComposition fails if width or height are zero.
     // Catch this early to avoid a cryptic error message from the system.
-    assert!(
-        width != 0 && height != 0,
-        "swap chain width and height must be non-zero"
-    );
+    assert!(width != 0 && height != 0, "swap chain width and height must be non-zero");
 
     // NOTE: using too few buffers can lead to contention on the present queue since frames
     // must wait for a buffer to be available.

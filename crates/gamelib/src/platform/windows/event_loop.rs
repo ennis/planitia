@@ -145,12 +145,7 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
                 if size.width == 0 || size.height == 0 {
                     return;
                 }
-                self.this
-                    .window
-                    .borrow_mut()
-                    .as_mut()
-                    .unwrap()
-                    .resize(size.width, size.height);
+                self.this.window.borrow_mut().as_mut().unwrap().resize(size.width, size.height);
                 self.inner.resized(size.width, size.height);
             }
             WindowEvent::CloseRequested => {
@@ -159,17 +154,9 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
             WindowEvent::CursorMoved { position, device_id } => {
                 self.cursor_x = position.x as u32;
                 self.cursor_y = position.y as u32;
-                event = Some(InputEvent::CursorMoved {
-                    x: self.cursor_x,
-                    y: self.cursor_y,
-                });
+                event = Some(InputEvent::CursorMoved { x: self.cursor_x, y: self.cursor_y });
             }
-            WindowEvent::MouseInput {
-                state,
-                button,
-                device_id,
-                ..
-            } => {
+            WindowEvent::MouseInput { state, button, device_id, .. } => {
                 let button = match button {
                     winit::event::MouseButton::Left => PointerButton::LEFT,
                     winit::event::MouseButton::Right => PointerButton::RIGHT,
@@ -191,11 +178,7 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
                     }
                 }
             }
-            WindowEvent::KeyboardInput {
-                device_id,
-                event: ke,
-                is_synthetic,
-            } => {
+            WindowEvent::KeyboardInput { device_id, event: ke, is_synthetic } => {
                 let (key, code) = key_event_to_key_code(&ke);
                 let state = if ke.state == winit::event::ElementState::Pressed {
                     keyboard_types::KeyState::Down
@@ -217,10 +200,9 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
             WindowEvent::MouseWheel { delta, .. } => {
                 let delta = match delta {
                     winit::event::MouseScrollDelta::LineDelta(x, y) => MouseScrollDelta::LineDelta { x, y },
-                    winit::event::MouseScrollDelta::PixelDelta(pos) => MouseScrollDelta::PixelDelta {
-                        x: pos.x as f32,
-                        y: pos.y as f32,
-                    },
+                    winit::event::MouseScrollDelta::PixelDelta(pos) => {
+                        MouseScrollDelta::PixelDelta { x: pos.x as f32, y: pos.y as f32 }
+                    }
                 };
 
                 event = Some(InputEvent::MouseWheel(delta));
@@ -254,11 +236,7 @@ pub(crate) static EVENT_LOOP_PROXY: OnceLock<EventLoopProxy<WakeReason>> = OnceL
 
 /// Wakes the event loop with the given user event.
 pub fn wake_event_loop(callback: impl FnOnce() + Send + 'static) {
-    EVENT_LOOP_PROXY
-        .get()
-        .unwrap()
-        .send_event(WakeReason::User(UserEvent::Callback(Box::new(callback))))
-        .unwrap()
+    EVENT_LOOP_PROXY.get().unwrap().send_event(WakeReason::User(UserEvent::Callback(Box::new(callback)))).unwrap()
 }
 
 fn main_loop_waker() -> Waker {
@@ -273,12 +251,8 @@ fn main_loop_waker() -> Waker {
 
 impl Win32Platform {
     pub(crate) fn run_event_loop(&'static self, mut handler: Box<dyn LoopHandler + '_>) {
-        let event_loop = winit::event_loop::EventLoop::<WakeReason>::with_user_event()
-            .build()
-            .unwrap();
-        EVENT_LOOP_PROXY
-            .set(event_loop.create_proxy())
-            .expect("main loop already initialized");
+        let event_loop = winit::event_loop::EventLoop::<WakeReason>::with_user_event().build().unwrap();
+        EVENT_LOOP_PROXY.set(event_loop.create_proxy()).expect("main loop already initialized");
         event_loop
             .run_app(&mut WinitAppHandler {
                 this: self,

@@ -5,12 +5,8 @@ use std::os::raw::c_char;
 use std::sync::LazyLock;
 
 #[cfg(windows)]
-const INSTANCE_EXTENSIONS: &[&str] = &[
-    "VK_KHR_get_surface_capabilities2",
-    "VK_EXT_debug_utils",
-    "VK_KHR_surface",
-    "VK_KHR_win32_surface",
-];
+const INSTANCE_EXTENSIONS: &[&str] =
+    &["VK_KHR_get_surface_capabilities2", "VK_EXT_debug_utils", "VK_KHR_surface", "VK_KHR_win32_surface"];
 // TODO other platforms
 
 //--------------------------------------------------------------------------------------------------
@@ -109,15 +105,12 @@ fn initialize_vulkan_entry() -> ash::Entry {
 
 /// Checks if all validation layers are supported
 unsafe fn check_validation_layer_support() -> bool {
-    let available_layers = VULKAN_ENTRY
-        .enumerate_instance_layer_properties()
-        .expect("failed to enumerate instance layers");
+    let available_layers =
+        VULKAN_ENTRY.enumerate_instance_layer_properties().expect("failed to enumerate instance layers");
 
     VALIDATION_LAYERS.iter().all(|&required_layer| {
         let c_required_layer = CString::new(required_layer).unwrap();
-        available_layers
-            .iter()
-            .any(|&layer| CStr::from_ptr(layer.layer_name.as_ptr()) == c_required_layer.as_c_str())
+        available_layers.iter().any(|&layer| CStr::from_ptr(layer.layer_name.as_ptr()) == c_required_layer.as_c_str())
     })
 }
 
@@ -162,8 +155,6 @@ fn create_vulkan_instance() -> ash::Instance {
             instance_create_info.pp_enabled_layer_names = validation_layers.as_ptr();
         }
 
-        VULKAN_ENTRY
-            .create_instance(&instance_create_info, None)
-            .expect("failed to create vulkan instance")
+        VULKAN_ENTRY.create_instance(&instance_create_info, None).expect("failed to create vulkan instance")
     }
 }

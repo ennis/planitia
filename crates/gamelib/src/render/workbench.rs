@@ -19,12 +19,10 @@ impl Workbench {
             .expect("shader module path must contain a fragment specifying the module name");
         let archive = load_shader_archive(shader_module_path.path_without_fragment());
 
-
         {
             let archive_ref = &*archive.read()?;
-            let (_,module) = archive_ref
-                .find_module_with_index(module_name)
-                .ok_or(AssetLoadError::IoError(io::Error::new(
+            let (_, module) =
+                archive_ref.find_module_with_index(module_name).ok_or(AssetLoadError::IoError(io::Error::new(
                     io::ErrorKind::NotFound,
                     format!(
                         "module `{}` not found in shader archive `{}`",
@@ -60,8 +58,6 @@ impl Workbench {
     pub fn dispatch_compute(&mut self, pass_name: &str) {}
 
     pub fn draw(&mut self, pass_name: &str) {}
-
-
 }
 
 fn find_param(a: &sharc::ShaderArchive, pass: &sharc::Pass, name: &str) -> Option<sharc::reflection::Param> {

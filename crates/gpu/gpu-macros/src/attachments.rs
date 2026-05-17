@@ -146,10 +146,7 @@ pub(crate) fn derive_attachments(input: proc_macro::TokenStream) -> syn::Result<
             return Err(syn::Error::new(f.span(), "missing `#[attachment(...)]` attribute"));
         }
         if is_color && is_depth_stencil {
-            return Err(syn::Error::new(
-                f.span(),
-                "cannot be both a color and a depth-stencil attachment",
-            ));
+            return Err(syn::Error::new(f.span(), "cannot be both a color and a depth-stencil attachment"));
         }
         if !(is_color || is_depth_stencil) {
             // If unspecified, assume that this is a color attachment.
@@ -164,19 +161,13 @@ pub(crate) fn derive_attachments(input: proc_macro::TokenStream) -> syn::Result<
         }
 
         if is_depth_stencil && clear_color.is_some() {
-            return Err(syn::Error::new(
-                f.span(),
-                "cannot specify `clear_color` for a depth or stencil attachment",
-            ));
+            return Err(syn::Error::new(f.span(), "cannot specify `clear_color` for a depth or stencil attachment"));
         }
 
         let format = if let Some(format) = format {
             format
         } else {
-            return Err(syn::Error::new(
-                f.span(),
-                "missing `format` argument in `#[attachment(...)]`",
-            ));
+            return Err(syn::Error::new(f.span(), "missing `format` argument in `#[attachment(...)]`"));
         };
 
         let field_name = &f.ident;
@@ -184,16 +175,8 @@ pub(crate) fn derive_attachments(input: proc_macro::TokenStream) -> syn::Result<
         let attachment_wrapper =
             if clear_depth_stencil.is_some() || clear_color.is_some() || store_op.is_some() || load_op.is_some() {
                 // handle attachment overrides specified on the field
-                let load_op = if let Some(load_op) = load_op {
-                    quote!(Some(#load_op))
-                } else {
-                    quote!(None)
-                };
-                let store_op = if let Some(store_op) = store_op {
-                    quote!(Some(#store_op))
-                } else {
-                    quote!(None)
-                };
+                let load_op = if let Some(load_op) = load_op { quote!(Some(#load_op)) } else { quote!(None) };
+                let store_op = if let Some(store_op) = store_op { quote!(Some(#store_op)) } else { quote!(None) };
                 let clear_value = if is_color {
                     if let Some(clear_color) = clear_color {
                         quote!(Some(#CRATE::vk::ClearValue { color: #clear_color }))

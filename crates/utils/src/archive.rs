@@ -45,9 +45,7 @@ fn length_prefixed_array_offset<Element>(count: usize) -> usize {
 
 /// Returns the (layout, array_offset)
 fn length_prefixed_array_layout<Element>(count: usize) -> (Layout, usize) {
-    let (layout, array_offset) = Layout::new::<u32>()
-        .extend(Layout::array::<Element>(count).unwrap())
-        .unwrap();
+    let (layout, array_offset) = Layout::new::<u32>().extend(Layout::array::<Element>(count).unwrap()).unwrap();
     (layout.pad_to_align(), array_offset)
 }
 
@@ -207,16 +205,10 @@ impl<Root: ArchiveRoot> ArchiveReader<Root> {
         let header = this.header()?;
 
         if header.signature != Root::SIGNATURE {
-            return Err(ArchiveError::InvalidSignature {
-                expected: Root::SIGNATURE,
-                found: header.signature,
-            });
+            return Err(ArchiveError::InvalidSignature { expected: Root::SIGNATURE, found: header.signature });
         }
         if header.version != Root::VERSION {
-            return Err(ArchiveError::UnsupportedVersion {
-                expected: Root::VERSION,
-                found: header.version,
-            });
+            return Err(ArchiveError::UnsupportedVersion { expected: Root::VERSION, found: header.version });
         }
         Ok(this)
     }
@@ -296,10 +288,7 @@ impl<Root: ArchiveRoot> ArchiveReaderOwned<Root> {
             storage.resize(file_size, 0);
             let read = file.read(&mut storage)?;
             if read != file_size {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::UnexpectedEof,
-                    "failed to read whole file",
-                ));
+                return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "failed to read whole file"));
             }
             Ok(storage.into_boxed_slice())
         }
@@ -338,16 +327,10 @@ pub struct ArchiveWriter<Root: ArchiveRoot> {
 
 impl<Root: ArchiveRoot> ArchiveWriter<Root> {
     pub fn new() -> Self {
-        let mut this = ArchiveWriter {
-            storage: AlignedVec::new(0),
-            _phantom: PhantomData,
-        };
+        let mut this = ArchiveWriter { storage: AlignedVec::new(0), _phantom: PhantomData };
         // reserve space for archive header
-        let _ = this.write(&ArchiveHeader {
-            signature: Root::SIGNATURE,
-            version: Root::VERSION,
-            root: OffsetUntyped::MAX,
-        });
+        let _ =
+            this.write(&ArchiveHeader { signature: Root::SIGNATURE, version: Root::VERSION, root: OffsetUntyped::MAX });
         this
     }
 

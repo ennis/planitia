@@ -1,13 +1,25 @@
+use color::Srgba8;
 use crate::paint::PaintVertex;
-use crate::paint::render::PaintRootParams;
 use gpu::{Vertex, vk};
+use math::Mat3;
 use shader_bridge::ShaderLibrary;
+
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub(super) struct PaintRootParams {
+    pub(super) device_to_uv_transform: Mat3,
+    pub(super) screen_size: [f32; 2],
+    pub(super) line_width: f32,
+    pub(super) color: Srgba8,
+    pub(super) texture: gpu::TextureHandle = gpu::TextureHandle::INVALID,
+    pub(super) sampler: gpu::SamplerHandle = gpu::SamplerHandle::INVALID,
+}
 
 /// Painter pipelines.
 pub(super) struct Pipelines {
     pub(super) paint: gpu::GraphicsPipeline,
 }
-
 
 impl Pipelines {
     /// Creates the pipelines from the shaders.
@@ -15,10 +27,7 @@ impl Pipelines {
     /// # Arguments
     /// * `target_color_format` format of the color attachment to render to
     /// * `target_depth_format` format of the depth attachment to render to
-    pub(super) fn create(
-        target_color_format: gpu::Format,
-        target_depth_format: Option<gpu::Format>,
-    ) -> Pipelines {
+    pub(super) fn create(target_color_format: gpu::Format, target_depth_format: Option<gpu::Format>) -> Pipelines {
         // TODO use asset system, and replace with embedded pipeline archive
         let shader = ShaderLibrary::new("crates/gamelib/assets/gamelib/shaders/paint.slang").unwrap();
         let vertex = shader.get_compiled_entry_point("paint_vertex_main").unwrap();
@@ -89,7 +98,6 @@ impl Pipelines {
         let glyph_pipeline = device
             .create_graphics_pipeline(create_info)
             .expect("failed to create glyph pipeline");*/
-
 
         Pipelines { paint: paint_pipeline }
     }

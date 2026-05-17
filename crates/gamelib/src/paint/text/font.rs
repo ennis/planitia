@@ -56,10 +56,7 @@ impl Font {
     /// Loads a font file.
     pub fn load_static_font_from_bytes(bytes: &'static [u8]) -> Font {
         let font = FontArc::try_from_slice(bytes).expect("failed to load font");
-        Font {
-            data: font,
-            id: FontId::next(),
-        }
+        Font { data: font, id: FontId::next() }
     }
 
     /// Returns the default font for regular text.

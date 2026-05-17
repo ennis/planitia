@@ -129,19 +129,13 @@ impl Device {
         win32_handle: HANDLE,
         win32_handle_name: Option<&str>,
     ) -> Image {
-        let external_memory_image_create_info = vk::ExternalMemoryImageCreateInfo {
-            handle_types: win32_handle_type,
-            ..Default::default()
-        };
+        let external_memory_image_create_info =
+            vk::ExternalMemoryImageCreateInfo { handle_types: win32_handle_type, ..Default::default() };
         let create_info = vk::ImageCreateInfo {
             p_next: &external_memory_image_create_info as *const _ as *const c_void,
             image_type: image_info.type_.to_vk_image_type(),
             format: image_info.format,
-            extent: vk::Extent3D {
-                width: image_info.width,
-                height: image_info.height,
-                depth: image_info.depth,
-            },
+            extent: vk::Extent3D { width: image_info.width, height: image_info.height, depth: image_info.depth },
             mip_levels: image_info.mip_levels,
             array_layers: image_info.array_layers,
             samples: get_vk_sample_count(image_info.samples),
@@ -153,10 +147,7 @@ impl Device {
             initial_layout: vk::ImageLayout::UNDEFINED,
             ..Default::default()
         };
-        let handle = self
-            .raw
-            .create_image(&create_info, None)
-            .expect("failed to create image");
+        let handle = self.raw.create_image(&create_info, None).expect("failed to create image");
         let mem_req = self.raw.get_image_memory_requirements(handle);
         let device_memory = import_external_memory(
             self,
@@ -216,11 +207,7 @@ impl Device {
             format: image_info.format,
             mip_levels: image_info.mip_levels,
             array_layers: image_info.array_layers,
-            size: Size3D {
-                width: image_info.width,
-                height: image_info.height,
-                depth: image_info.depth,
-            },
+            size: Size3D { width: image_info.width, height: image_info.height, depth: image_info.depth },
             samples: 0,
         }
     }
@@ -234,19 +221,13 @@ impl Device {
         access_flags: u32,
         handle_name: Option<&str>,
     ) -> (Image, HANDLE) {
-        let external_memory_image_create_info = vk::ExternalMemoryImageCreateInfo {
-            handle_types: handle_type,
-            ..Default::default()
-        };
+        let external_memory_image_create_info =
+            vk::ExternalMemoryImageCreateInfo { handle_types: handle_type, ..Default::default() };
         let create_info = vk::ImageCreateInfo {
             p_next: &external_memory_image_create_info as *const _ as *const c_void,
             image_type: image_info.type_.to_vk_image_type(),
             format: image_info.format,
-            extent: vk::Extent3D {
-                width: image_info.width,
-                height: image_info.height,
-                depth: image_info.depth,
-            },
+            extent: vk::Extent3D { width: image_info.width, height: image_info.height, depth: image_info.depth },
             mip_levels: image_info.mip_levels,
             array_layers: image_info.array_layers,
             samples: get_vk_sample_count(image_info.samples),
@@ -257,20 +238,14 @@ impl Device {
             p_queue_family_indices: ptr::null(),
             ..Default::default()
         };
-        let handle = self
-            .raw
-            .create_image(&create_info, None)
-            .expect("failed to create image");
+        let handle = self.raw.create_image(&create_info, None).expect("failed to create image");
         let mem_req = self.raw.get_image_memory_requirements(handle);
 
         let (_, handle_name_wstr) = handle_name_to_wstr(handle_name);
 
         let (required_memory_properties, preferred_memory_properties) = match memory_location {
             MemoryLocation::Unknown => Default::default(),
-            MemoryLocation::GpuOnly => (
-                vk::MemoryPropertyFlags::DEVICE_LOCAL,
-                vk::MemoryPropertyFlags::DEVICE_LOCAL,
-            ),
+            MemoryLocation::GpuOnly => (vk::MemoryPropertyFlags::DEVICE_LOCAL, vk::MemoryPropertyFlags::DEVICE_LOCAL),
             MemoryLocation::CpuToGpu => (
                 vk::MemoryPropertyFlags::HOST_VISIBLE
                     | vk::MemoryPropertyFlags::HOST_COHERENT
@@ -311,17 +286,12 @@ impl Device {
             ..Default::default()
         };
 
-        let device_memory = self
-            .raw
-            .allocate_memory(&memory_allocate_info, None)
-            .expect("failed to allocate exported memory");
+        let device_memory =
+            self.raw.allocate_memory(&memory_allocate_info, None).expect("failed to allocate exported memory");
 
         // retrieve the win32 handle
-        let get_win32_handle_info = vk::MemoryGetWin32HandleInfoKHR {
-            memory: device_memory,
-            handle_type,
-            ..Default::default()
-        };
+        let get_win32_handle_info =
+            vk::MemoryGetWin32HandleInfoKHR { memory: device_memory, handle_type, ..Default::default() };
 
         // TODO proper error handling
         let win32_handle = self
@@ -354,11 +324,7 @@ impl Device {
             format: image_info.format,
             mip_levels: image_info.mip_levels,
             array_layers: image_info.array_layers,
-            size: Size3D {
-                width: image_info.width,
-                height: image_info.height,
-                depth: image_info.depth,
-            },
+            size: Size3D { width: image_info.width, height: image_info.height, depth: image_info.depth },
             samples: image_info.samples,
         };
         (image, win32_handle)
@@ -391,11 +357,7 @@ impl Device {
 
         let semaphore = self.raw.create_semaphore(&semaphore_create_info, None).unwrap();
 
-        let get_win32_handle_info = vk::SemaphoreGetWin32HandleInfoKHR {
-            semaphore,
-            handle_type,
-            ..Default::default()
-        };
+        let get_win32_handle_info = vk::SemaphoreGetWin32HandleInfoKHR { semaphore, handle_type, ..Default::default() };
 
         let handle = self
             .platform_extensions
@@ -427,11 +389,7 @@ impl Device {
         };
 
         let semaphore_create_info = vk::SemaphoreCreateInfo {
-            p_next: if is_timeline {
-                &timeline_create_info as *const _ as *const c_void
-            } else {
-                ptr::null()
-            },
+            p_next: if is_timeline { &timeline_create_info as *const _ as *const c_void } else { ptr::null() },
             ..Default::default()
         };
 
@@ -473,9 +431,6 @@ impl PlatformExtensions {
     pub(crate) fn load(_entry: &ash::Entry, instance: &ash::Instance, device: &ash::Device) -> PlatformExtensions {
         let khr_external_memory_win32 = ash::khr::external_memory_win32::Device::new(instance, device);
         let khr_external_semaphore_win32 = ash::khr::external_semaphore_win32::Device::new(instance, device);
-        PlatformExtensions {
-            khr_external_memory_win32,
-            khr_external_semaphore_win32,
-        }
+        PlatformExtensions { khr_external_memory_win32, khr_external_semaphore_win32 }
     }
 }

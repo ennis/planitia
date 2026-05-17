@@ -254,9 +254,7 @@ pub enum ResourceAllocation {
     #[default]
     External,
     /// We allocated a block of memory exclusively for this resource.
-    Allocation {
-        allocation: gpu_allocator::vulkan::Allocation,
-    },
+    Allocation { allocation: gpu_allocator::vulkan::Allocation },
     /// The memory for this resource was imported or exported from/to an external handle.
     DeviceMemory { device_memory: vk::DeviceMemory },
     /// No memory is allocated for this resource.
@@ -320,21 +318,16 @@ pub(super) fn get_preferred_swap_extent(
         capabilities.current_extent
     } else {
         vk::Extent2D {
-            width: framebuffer_size
-                .0
-                .clamp(capabilities.min_image_extent.width, capabilities.max_image_extent.width),
-            height: framebuffer_size.1.clamp(
-                capabilities.min_image_extent.height,
-                capabilities.max_image_extent.height,
-            ),
+            width: framebuffer_size.0.clamp(capabilities.min_image_extent.width, capabilities.max_image_extent.width),
+            height: framebuffer_size
+                .1
+                .clamp(capabilities.min_image_extent.height, capabilities.max_image_extent.height),
         }
     }
 }
 
 unsafe fn select_physical_device(instance: &ash::Instance) -> PhysicalDeviceAndProperties {
-    let physical_devices = instance
-        .enumerate_physical_devices()
-        .expect("failed to enumerate physical devices");
+    let physical_devices = instance.enumerate_physical_devices().expect("failed to enumerate physical devices");
     if physical_devices.is_empty() {
         panic!("no device with vulkan support");
     }
@@ -376,10 +369,7 @@ unsafe fn find_queue_family(
             // if present_surface != nullptr, check that it also supports presentation
             // to the given surface
             if let Some(surface) = present_surface {
-                if !vk_khr_surface
-                    .get_physical_device_surface_support(phy, index, surface)
-                    .unwrap()
-                {
+                if !vk_khr_surface.get_physical_device_surface_support(phy, index, surface).unwrap() {
                     // does not support presentation, skip it
                     continue;
                 }
@@ -412,7 +402,7 @@ const DEVICE_EXTENSIONS: &[&str] = &[
     "VK_EXT_conservative_rasterization",
     "VK_EXT_fragment_shader_interlock",
     "VK_EXT_shader_image_atomic_int64",
-   // "VK_EXT_descriptor_heap",
+    // "VK_EXT_descriptor_heap",
     "VK_EXT_mutable_descriptor_type", //"VK_EXT_descriptor_buffer",
 ];
 
@@ -494,9 +484,7 @@ impl Device {
                 p_next: &timeline_create_info as *const _ as *const c_void,
                 ..Default::default()
             };
-            device
-                .create_semaphore(&semaphore_create_info, None)
-                .expect("failed to create timeline semaphore")
+            device.create_semaphore(&semaphore_create_info, None).expect("failed to create timeline semaphore")
         };
 
         // Create the GPU memory allocator
@@ -580,10 +568,7 @@ impl Device {
                 timeline,
                 physical_device,
             },
-            submission_state: Mutex::new(DeviceSubmissionState {
-                queue,
-                active_submissions: VecDeque::new(),
-            }),
+            submission_state: Mutex::new(DeviceSubmissionState { queue, active_submissions: VecDeque::new() }),
             queue_family: graphics_queue_family_index,
             allocator: Mutex::new(allocator),
             resources: Mutex::new(SlotMap::with_key()),
@@ -611,9 +596,7 @@ impl Device {
 
     /// Returns the list of supported swapchain formats for the given surface.
     pub unsafe fn get_surface_formats(&self, surface: vk::SurfaceKHR) -> Vec<vk::SurfaceFormatKHR> {
-        vk_khr_surface()
-            .get_physical_device_surface_formats(self.thread_safe.physical_device, surface)
-            .unwrap()
+        vk_khr_surface().get_physical_device_surface_formats(self.thread_safe.physical_device, surface).unwrap()
     }
 
     /// Returns one supported surface format. Use if you don't care about the format of your swapchain.
@@ -639,10 +622,7 @@ impl Device {
             present_surface,
         );
 
-        debug!(
-            "selected physical device: {:?}",
-            CStr::from_ptr(phy.properties.device_name.as_ptr())
-        );
+        debug!("selected physical device: {:?}", CStr::from_ptr(phy.properties.device_name.as_ptr()));
 
         // ------ Setup device create info ------
         let queue_priorities = [1.0f32];
@@ -833,11 +813,7 @@ impl Device {
         &self,
         create_desc: &AllocationCreateDesc,
     ) -> gpu_allocator::vulkan::Allocation {
-        self.allocator
-            .lock()
-            .unwrap()
-            .allocate(create_desc)
-            .expect("failed to allocate device memory")
+        self.allocator.lock().unwrap().allocate(create_desc).expect("failed to allocate device memory")
     }
 
     /// Schedules a function call.
@@ -852,16 +828,8 @@ impl Device {
         } else {
             // otherwise move it to the deferred deletion list
             let mut deletion_queue = self.deletion_queue.lock().unwrap();
-            let pos = deletion_queue
-                .binary_search_by_key(&ticket, |e| e.create_ticket)
-                .unwrap_or_else(|p| p);
-            deletion_queue.insert(
-                pos,
-                DeleteQueueEntry {
-                    create_ticket: ticket,
-                    deleter: Some(Box::new(f)),
-                },
-            );
+            let pos = deletion_queue.binary_search_by_key(&ticket, |e| e.create_ticket).unwrap_or_else(|p| p);
+            deletion_queue.insert(pos, DeleteQueueEntry { create_ticket: ticket, deleter: Some(Box::new(f)) });
         }
     }
 
@@ -890,12 +858,9 @@ impl Device {
 
     pub(crate) unsafe fn free_memory(&self, allocation: &mut ResourceAllocation) {
         match mem::replace(allocation, ResourceAllocation::External) {
-            ResourceAllocation::Allocation { allocation } => self
-                .allocator
-                .lock()
-                .unwrap()
-                .free(allocation)
-                .expect("failed to free memory"),
+            ResourceAllocation::Allocation { allocation } => {
+                self.allocator.lock().unwrap().free(allocation).expect("failed to free memory")
+            }
             ResourceAllocation::DeviceMemory { device_memory } => unsafe {
                 self.raw.free_memory(device_memory, None);
             },
@@ -943,9 +908,7 @@ impl Device {
     fn maintain(&self) {
         self.retire_upload_buffers();
         let last_completed_submission_index = unsafe {
-            self.raw
-                .get_semaphore_counter_value(self.thread_safe.timeline)
-                .expect("get_semaphore_counter_value failed")
+            self.raw.get_semaphore_counter_value(self.thread_safe.timeline).expect("get_semaphore_counter_value failed")
         };
         if last_completed_submission_index == u64::MAX {
             error!("GetSemaphoreCounterValue returned UINT64_MAX");
@@ -1037,29 +1000,17 @@ impl Device {
             ..Default::default()
         };
 
-        let sampler = unsafe {
-            self.raw
-                .create_sampler(&create_info, None)
-                .expect("failed to create sampler")
-        };
+        let sampler = unsafe { self.raw.create_sampler(&create_info, None).expect("failed to create sampler") };
 
         let descriptor_index = unsafe { self.create_global_sampler_descriptor(sampler) };
-        let sampler = Sampler {
-            descriptor_index,
-            sampler,
-        };
-        self.sampler_cache
-            .lock()
-            .unwrap()
-            .insert(info_hashable, sampler.clone());
+        let sampler = Sampler { descriptor_index, sampler };
+        self.sampler_cache.lock().unwrap().insert(info_hashable, sampler.clone());
         sampler
     }
 
     pub(crate) fn get_or_create_command_pool(&self, queue_family: u32) -> CommandPool {
         let free_command_pools = &mut self.free_command_pools.lock().unwrap();
-        let index = free_command_pools
-            .iter()
-            .position(|pool| pool.queue_family == queue_family);
+        let index = free_command_pools.iter().position(|pool| pool.queue_family == queue_family);
         if let Some(index) = index {
             free_command_pools.swap_remove(index)
         } else {
@@ -1117,10 +1068,7 @@ impl Device {
     /// functions with very similar names (`create_descriptor_set_layout` and `create_descriptor_set_layout_from_handle`)
     /// that have totally different semantics (one returns a raw vulkan handle, the other returns a RAII wrapper `DescriptorSetLayout`).
     pub fn create_descriptor_set_layout_from_handle(&self, handle: vk::DescriptorSetLayout) -> DescriptorSetLayout {
-        DescriptorSetLayout {
-            last_submission_index: Some(Arc::new(Default::default())),
-            handle,
-        }
+        DescriptorSetLayout { last_submission_index: Some(Arc::new(Default::default())), handle }
     }
 
     pub fn create_push_descriptor_set_layout(
@@ -1134,9 +1082,7 @@ impl Device {
             ..Default::default()
         };
         let handle = unsafe {
-            self.raw
-                .create_descriptor_set_layout(&create_info, None)
-                .expect("failed to create descriptor set layout")
+            self.raw.create_descriptor_set_layout(&create_info, None).expect("failed to create descriptor set layout")
         };
         self.create_descriptor_set_layout_from_handle(handle)
     }
@@ -1184,11 +1130,8 @@ impl Device {
             ..Default::default()
         };
 
-        let pipeline_layout = unsafe {
-            self.raw
-                .create_pipeline_layout(&create_info, None)
-                .expect("failed to create pipeline layout")
-        };
+        let pipeline_layout =
+            unsafe { self.raw.create_pipeline_layout(&create_info, None).expect("failed to create pipeline layout") };
 
         pipeline_layout
     }
@@ -1228,10 +1171,7 @@ impl Device {
         };
 
         let pipeline = unsafe {
-            match self
-                .raw
-                .create_compute_pipelines(vk::PipelineCache::null(), &[cpci], None)
-            {
+            match self.raw.create_compute_pipelines(vk::PipelineCache::null(), &[cpci], None) {
                 Ok(pipelines) => pipelines[0],
                 Err(e) => {
                     return Err(Error::Vulkan(e.1));
@@ -1270,10 +1210,7 @@ impl Device {
             vk::DynamicState::DEPTH_BIAS_ENABLE,
         ];
 
-        if matches!(
-            create_info.pre_rasterization_shaders,
-            PreRasterizationShaders::PrimitiveShading { .. }
-        ) {
+        if matches!(create_info.pre_rasterization_shaders, PreRasterizationShaders::PrimitiveShading { .. }) {
             dynamic_states.push(vk::DynamicState::PRIMITIVE_TOPOLOGY);
         }
 
@@ -1348,38 +1285,23 @@ impl Device {
         match create_info.pre_rasterization_shaders {
             PreRasterizationShaders::PrimitiveShading { vertex } => {
                 vertex_entry_point = CString::new(vertex.entry_point).unwrap();
-                let (stage, module) = create_stage(
-                    &self,
-                    p_next,
-                    vk::ShaderStageFlags::VERTEX,
-                    &vertex.code,
-                    &vertex_entry_point,
-                )?;
+                let (stage, module) =
+                    create_stage(&self, p_next, vk::ShaderStageFlags::VERTEX, &vertex.code, &vertex_entry_point)?;
                 _vertex_module = module;
                 stages.push(stage);
             }
             PreRasterizationShaders::MeshShading { mesh, task } => {
                 if let Some(task) = task {
                     task_entry_point = CString::new(task.entry_point).unwrap();
-                    let (stage, module) = create_stage(
-                        &self,
-                        p_next,
-                        vk::ShaderStageFlags::TASK_EXT,
-                        &task.code,
-                        &task_entry_point,
-                    )?;
+                    let (stage, module) =
+                        create_stage(&self, p_next, vk::ShaderStageFlags::TASK_EXT, &task.code, &task_entry_point)?;
                     _task_module = module;
                     stages.push(stage);
                 }
 
                 mesh_entry_point = CString::new(mesh.entry_point).unwrap();
-                let (stage, module) = create_stage(
-                    &self,
-                    p_next,
-                    vk::ShaderStageFlags::MESH_EXT,
-                    &mesh.code,
-                    &mesh_entry_point,
-                )?;
+                let (stage, module) =
+                    create_stage(&self, p_next, vk::ShaderStageFlags::MESH_EXT, &mesh.code, &mesh_entry_point)?;
                 _mesh_module = module;
                 stages.push(stage);
             }
@@ -1477,16 +1399,9 @@ impl Device {
             Default::default()
         };
 
-        let color_attachment_formats = create_info
-            .fragment
-            .color_targets
-            .iter()
-            .map(|target| target.format)
-            .collect::<Vec<_>>();
-        let depth_attachment_format = create_info
-            .depth_stencil
-            .map(|ds| ds.format)
-            .unwrap_or(vk::Format::UNDEFINED);
+        let color_attachment_formats =
+            create_info.fragment.color_targets.iter().map(|target| target.format).collect::<Vec<_>>();
+        let depth_attachment_format = create_info.depth_stencil.map(|ds| ds.format).unwrap_or(vk::Format::UNDEFINED);
         let stencil_attachment_format = if is_depth_and_stencil_format(depth_attachment_format) {
             depth_attachment_format
         } else {
@@ -1529,10 +1444,7 @@ impl Device {
         };
 
         let pipeline = unsafe {
-            match self
-                .raw
-                .create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_create_info], None)
-            {
+            match self.raw.create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_create_info], None) {
                 Ok(pipelines) => pipelines[0],
                 Err(e) => {
                     return Err(Error::Vulkan(e.1));

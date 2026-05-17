@@ -38,10 +38,7 @@ pub struct Texture2D_Handle<T> {
 
 impl<T> From<gpu::TextureHandle> for Texture2D_Handle<T> {
     fn from(handle: gpu::TextureHandle) -> Self {
-        Texture2D_Handle {
-            handle,
-            _phantom: PhantomData,
-        }
+        Texture2D_Handle { handle, _phantom: PhantomData }
     }
 }
 
@@ -54,10 +51,7 @@ pub struct RWTexture2D_Handle<T> {
 
 impl<T> From<gpu::TextureHandle> for RWTexture2D_Handle<T> {
     fn from(handle: gpu::TextureHandle) -> Self {
-        RWTexture2D_Handle {
-            handle,
-            _phantom: PhantomData,
-        }
+        RWTexture2D_Handle { handle, _phantom: PhantomData }
     }
 }
 

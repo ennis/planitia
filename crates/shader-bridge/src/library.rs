@@ -2,8 +2,8 @@ use crate::error::Error;
 use crate::session::{create_session, SessionOptions};
 use crate::SHADER_PROFILE;
 use gpu::vk;
-use std::path::{Path, PathBuf};
 use slang::ComponentType;
+use std::path::{Path, PathBuf};
 
 /// Additional options for loading a `ShaderLibrary`.
 #[derive(Default)]
@@ -95,11 +95,7 @@ impl ShaderLibrary {
     }
 
     fn new_inner(path: &Path, options: ShaderLibraryLoadOptions) -> Result<Self, Error> {
-        let path = path
-            .canonicalize()?
-            .to_str()
-            .expect("path is not valid UTF-8")
-            .to_string();
+        let path = path.canonicalize()?.to_str().expect("path is not valid UTF-8").to_string();
         let profile = options.shader_profile.as_deref().unwrap_or(SHADER_PROFILE);
         let session = create_session(&SessionOptions {
             profile_id: profile,
@@ -109,17 +105,12 @@ impl ShaderLibrary {
         });
         let module = session.load_module(&path)?;
 
-        Ok(Self {
-            path: Some(path),
-            _options: options,
-            session,
-            module,
-        })
+        Ok(Self { path: Some(path), _options: options, session, module })
     }
 
     /// Returns the list of entry points defined in this shader library.
     pub fn entry_points(&self) -> Vec<EntryPoint> {
-        let module : ComponentType = self.module.clone().into();
+        let module: ComponentType = self.module.clone().into();
         let layout = module.layout(0).expect("failed to get layout");
         let count = layout.entry_point_count();
         let mut entry_points = Vec::with_capacity(count as usize);
@@ -150,9 +141,8 @@ impl ShaderLibrary {
             .find_entry_point_by_name(entry_point_name)
             .ok_or_else(|| Error::EntryPointNotFound(entry_point_name.to_string()))?;
 
-        let program = self
-            .session
-            .create_composite_component_type(&[self.module.clone().into(), entry_point.clone().into()])?;
+        let program =
+            self.session.create_composite_component_type(&[self.module.clone().into(), entry_point.clone().into()])?;
         let program = program.link()?;
 
         let blob = {

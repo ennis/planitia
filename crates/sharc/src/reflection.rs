@@ -212,13 +212,8 @@ pub struct ShaderResource {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub enum ShaderInterface {
-    Vertex {
-        outputs: Offset<[VertexShaderOutput]>,
-    },
-    Fragment {
-        inputs: Offset<[VertexShaderOutput]>,
-        outputs: Offset<[FragmentShaderOutput]>,
-    },
+    Vertex { outputs: Offset<[VertexShaderOutput]> },
+    Fragment { inputs: Offset<[VertexShaderOutput]>, outputs: Offset<[FragmentShaderOutput]> },
 }
 
 /// Pipeline signature.

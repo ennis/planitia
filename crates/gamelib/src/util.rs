@@ -6,8 +6,6 @@ use std::env;
 use std::future::pending;
 use std::path::{Path, PathBuf};
 
-
-
 /// An async future that never completes.
 pub async fn forever() {
     pending::<()>().await;
@@ -16,9 +14,7 @@ pub async fn forever() {
 /// Returns the value of an environment variable as a boolean flag.
 /// The variable is considered true if its value is "1", "true", or "yes".
 pub fn env_flag(name: &str) -> bool {
-    env::var(name)
-        .map(|v| v == "1" || v == "true" || v == "yes")
-        .unwrap_or(false)
+    env::var(name).map(|v| v == "1" || v == "true" || v == "yes").unwrap_or(false)
 }
 
 /// Copies the given text to the system clipboard.

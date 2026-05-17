@@ -1,7 +1,7 @@
 //! Render command encoders
 use crate::{
     Buffer, BufferUntyped, ClearColorValue, ColorAttachment, CommandBuffer, DepthBias, DepthStencilAttachment,
-    Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, Rect2D, PushDataSource, is_depth_and_stencil_format,
+    Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, PushDataSource, Rect2D, is_depth_and_stencil_format,
 };
 use ash::vk;
 use std::ops::Range;
@@ -214,14 +214,7 @@ impl<'a> RenderEncoder<'a> {
             Device::global().raw.cmd_set_viewport(
                 self.command_buffer,
                 0,
-                &[vk::Viewport {
-                    x,
-                    y,
-                    width,
-                    height,
-                    min_depth,
-                    max_depth,
-                }],
+                &[vk::Viewport { x, y, width, height, min_depth, max_depth }],
             );
         }
     }
@@ -243,10 +236,7 @@ impl<'a> RenderEncoder<'a> {
             Device::global().raw.cmd_set_scissor(
                 self.command_buffer,
                 0,
-                &[vk::Rect2D {
-                    offset: vk::Offset2D { x, y },
-                    extent: vk::Extent2D { width, height },
-                }],
+                &[vk::Rect2D { offset: vk::Offset2D { x, y }, extent: vk::Extent2D { width, height } }],
             );
         }
     }
@@ -288,14 +278,8 @@ impl<'a> RenderEncoder<'a> {
                     base_array_layer: 0,
                     layer_count: 1,
                     rect: vk::Rect2D {
-                        offset: vk::Offset2D {
-                            x: rect.min.x,
-                            y: rect.min.y,
-                        },
-                        extent: vk::Extent2D {
-                            width: rect.width(),
-                            height: rect.height(),
-                        },
+                        offset: vk::Offset2D { x: rect.min.x, y: rect.min.y },
+                        extent: vk::Extent2D { width: rect.width(), height: rect.height() },
                     },
                 }],
             );
@@ -309,22 +293,14 @@ impl<'a> RenderEncoder<'a> {
                 &[vk::ClearAttachment {
                     aspect_mask: vk::ImageAspectFlags::DEPTH,
                     color_attachment: 0,
-                    clear_value: vk::ClearValue {
-                        depth_stencil: vk::ClearDepthStencilValue { depth, stencil: 0 },
-                    },
+                    clear_value: vk::ClearValue { depth_stencil: vk::ClearDepthStencilValue { depth, stencil: 0 } },
                 }],
                 &[vk::ClearRect {
                     base_array_layer: 0,
                     layer_count: 1,
                     rect: vk::Rect2D {
-                        offset: vk::Offset2D {
-                            x: rect.min.x,
-                            y: rect.min.y,
-                        },
-                        extent: vk::Extent2D {
-                            width: rect.width(),
-                            height: rect.height(),
-                        },
+                        offset: vk::Offset2D { x: rect.min.x, y: rect.min.y },
+                        extent: vk::Extent2D { width: rect.width(), height: rect.height() },
                     },
                 }],
             );
@@ -540,10 +516,7 @@ impl CommandBuffer {
 
             vk::Rect2D {
                 offset: vk::Offset2D { x: 0, y: 0 },
-                extent: vk::Extent2D {
-                    width: extent.width,
-                    height: extent.height,
-                },
+                extent: vk::Extent2D { width: extent.width, height: extent.height },
             }
         };
 
@@ -555,15 +528,9 @@ impl CommandBuffer {
                     image_view: a.image.view_handle(),
                     image_layout: vk::ImageLayout::GENERAL,
                     resolve_mode: vk::ResolveModeFlags::NONE,
-                    load_op: if a.clear.is_some() {
-                        vk::AttachmentLoadOp::CLEAR
-                    } else {
-                        vk::AttachmentLoadOp::LOAD
-                    },
+                    load_op: if a.clear.is_some() { vk::AttachmentLoadOp::CLEAR } else { vk::AttachmentLoadOp::LOAD },
                     store_op: vk::AttachmentStoreOp::STORE,
-                    clear_value: vk::ClearValue {
-                        color: a.get_vk_clear_color_value(),
-                    },
+                    clear_value: vk::ClearValue { color: a.get_vk_clear_color_value() },
                     // TODO multisampling resolve
                     ..Default::default()
                 }
@@ -585,9 +552,7 @@ impl CommandBuffer {
                     vk::AttachmentLoadOp::LOAD
                 },
                 store_op: vk::AttachmentStoreOp::STORE,
-                clear_value: vk::ClearValue {
-                    depth_stencil: depth.get_vk_clear_depth_stencil_value(),
-                },
+                clear_value: vk::ClearValue { depth_stencil: depth.get_vk_clear_depth_stencil_value() },
                 // TODO multisampling resolve
                 ..Default::default()
             };
@@ -604,9 +569,7 @@ impl CommandBuffer {
                         vk::AttachmentLoadOp::LOAD
                     },
                     store_op: vk::AttachmentStoreOp::STORE,
-                    clear_value: vk::ClearValue {
-                        depth_stencil: depth.get_vk_clear_depth_stencil_value(),
-                    },
+                    clear_value: vk::ClearValue { depth_stencil: depth.get_vk_clear_depth_stencil_value() },
                     // TODO multisampling resolve
                     ..Default::default()
                 };
@@ -647,26 +610,13 @@ impl CommandBuffer {
 
         let command_buffer = self.get_or_create_command_buffer();
         unsafe {
-            Device::global()
-                .raw
-                .cmd_begin_rendering(command_buffer, &rendering_info);
+            Device::global().raw.cmd_begin_rendering(command_buffer, &rendering_info);
         }
 
-        let mut encoder = RenderEncoder {
-            stream: self,
-            command_buffer,
-            render_area,
-            pipeline_layout: Default::default(),
-        };
+        let mut encoder =
+            RenderEncoder { stream: self, command_buffer, render_area, pipeline_layout: Default::default() };
 
-        encoder.set_viewport(
-            0.0,
-            0.0,
-            render_area.extent.width as f32,
-            render_area.extent.height as f32,
-            0.0,
-            1.0,
-        );
+        encoder.set_viewport(0.0, 0.0, render_area.extent.width as f32, render_area.extent.height as f32, 0.0, 1.0);
         encoder.set_scissor(0, 0, render_area.extent.width, render_area.extent.height);
 
         encoder

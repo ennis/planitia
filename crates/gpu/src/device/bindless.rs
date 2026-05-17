@@ -104,20 +104,12 @@ impl BindlessDescriptorTable {
             ..Default::default()
         };
 
-        let layout = device
-            .create_descriptor_set_layout(&dslci, None)
-            .expect("failed to create descriptor set layout");
+        let layout = device.create_descriptor_set_layout(&dslci, None).expect("failed to create descriptor set layout");
 
         // pool for all descriptors
         let pool_sizes = [
-            vk::DescriptorPoolSize {
-                ty: vk::DescriptorType::SAMPLER,
-                descriptor_count: count as u32,
-            },
-            vk::DescriptorPoolSize {
-                ty: vk::DescriptorType::MUTABLE_EXT,
-                descriptor_count: count as u32,
-            },
+            vk::DescriptorPoolSize { ty: vk::DescriptorType::SAMPLER, descriptor_count: count as u32 },
+            vk::DescriptorPoolSize { ty: vk::DescriptorType::MUTABLE_EXT, descriptor_count: count as u32 },
         ];
 
         let pool_create_info = vk::DescriptorPoolCreateInfo {
@@ -129,9 +121,7 @@ impl BindlessDescriptorTable {
         };
 
         let pool = unsafe {
-            device
-                .create_descriptor_pool(&pool_create_info, None)
-                .expect("failed to create descriptor pool")
+            device.create_descriptor_pool(&pool_create_info, None).expect("failed to create descriptor pool")
         };
 
         // and allocate a new descriptor set from it
@@ -146,13 +136,7 @@ impl BindlessDescriptorTable {
                 .expect("failed to allocate descriptor set")[0]
         };
 
-        BindlessDescriptorTable {
-            layout,
-            _pool: pool,
-            set,
-            count,
-            write_lock: Mutex::new(()),
-        }
+        BindlessDescriptorTable { layout, _pool: pool, set, count, write_lock: Mutex::new(()) }
     }
 }
 
@@ -174,11 +158,7 @@ impl Device {
             dst_array_element,
             descriptor_count: 1,
             descriptor_type,
-            p_image_info: &vk::DescriptorImageInfo {
-                image_view,
-                image_layout,
-                ..Default::default()
-            },
+            p_image_info: &vk::DescriptorImageInfo { image_view, image_layout, ..Default::default() },
             ..Default::default()
         };
         //trace!("image_descriptors[{}] = {:?}", dst_array_element, image_view);
@@ -202,10 +182,7 @@ impl Device {
             dst_array_element,
             descriptor_count: 1,
             descriptor_type: DT::SAMPLER,
-            p_image_info: &vk::DescriptorImageInfo {
-                sampler,
-                ..Default::default()
-            },
+            p_image_info: &vk::DescriptorImageInfo { sampler, ..Default::default() },
             ..Default::default()
         };
         //trace!("sampler_descriptors[{}] = {:?}", dst_array_element, sampler);

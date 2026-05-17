@@ -86,30 +86,15 @@ fn print_geometry_summary(geo: &Geo) {
 
     cprintln!("  Point Attributes:");
     for attr in &geo.point_attributes {
-        cprintln!(
-            "    <b><bold>{:10}</></>   <i>{} × {:?}</>",
-            attr.name,
-            attr.size,
-            attr.storage_kind()
-        );
+        cprintln!("    <b><bold>{:10}</></>   <i>{} × {:?}</>", attr.name, attr.size, attr.storage_kind());
     }
     cprintln!("  Vertex Attributes:");
     for attr in &geo.vertex_attributes {
-        cprintln!(
-            "    <m><bold>{:10}</></>   <i>{} × {:?}</>",
-            attr.name,
-            attr.size,
-            attr.storage_kind()
-        );
+        cprintln!("    <m><bold>{:10}</></>   <i>{} × {:?}</>", attr.name, attr.size, attr.storage_kind());
     }
     cprintln!("  Primitive Attributes:");
     for attr in &geo.primitive_attributes {
-        cprintln!(
-            "    <y><bold>{:10}</></>   <i>{} × {:?}</>",
-            attr.name,
-            attr.size,
-            attr.storage_kind()
-        );
+        cprintln!("    <y><bold>{:10}</></>   <i>{} × {:?}</>", attr.name, attr.size, attr.storage_kind());
     }
     cprintln!("  Point Groups:");
     for (name, group) in geo.point_groups() {
@@ -127,15 +112,8 @@ fn main() {
     let _ = CONFIG.set(Config { quiet: args.quiet });
 
     match args.command {
-        Commands::Terrain {
-            heightmap,
-            error_threshold,
-            triangle_count,
-        } => {
-            let terrain_cfg = TerrainConfig {
-                error_threshold,
-                triangle_count_target: triangle_count,
-            };
+        Commands::Terrain { heightmap, error_threshold, triangle_count } => {
+            let terrain_cfg = TerrainConfig { error_threshold, triangle_count_target: triangle_count };
             generate_terrain_meshes(heightmap, &terrain_cfg);
         }
         Commands::Convert { geo_file, output_file } => {

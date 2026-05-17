@@ -1,7 +1,7 @@
 use crate::asset::{AssetCache, DefaultLoader, Dependencies, FileMetadata, Handle, LoadResult, Provider, VfsPath};
 use crate::render::load_shader_archive;
 use crate::render::reflection::GraphicsPipelineReflection;
-use gpu::{PreRasterizationShaders, ShaderEntryPoint, vk, set_debug_name};
+use gpu::{PreRasterizationShaders, ShaderEntryPoint, set_debug_name, vk};
 use log::{debug, warn};
 use sharc::{Shader, ShaderArchive};
 use std::ops::Deref;
@@ -184,15 +184,11 @@ fn load_graphics_pipeline(
     _provider: &dyn Provider,
     _dependencies: &mut Dependencies,
 ) -> LoadResult<gpu::GraphicsPipeline> {
-
     let archive_file = path.path_without_fragment();
     let (module_name, pipeline_name) = get_module_and_pipeline_name(path)?;
     let archive_handle = load_shader_archive(archive_file);
 
-    debug!(
-        "loading pipeline `{module_name}/{pipeline_name}` (graphics) from `{}`",
-        archive_file.as_str()
-    );
+    debug!("loading pipeline `{module_name}/{pipeline_name}` (graphics) from `{}`", archive_file.as_str());
 
     let archive = archive_handle.read()?;
     let (module, pipeline) = archive

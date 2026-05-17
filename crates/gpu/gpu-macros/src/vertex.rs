@@ -10,10 +10,7 @@ pub(crate) fn derive_vertex(input: proc_macro::TokenStream) -> syn::Result<Token
     let fields = match derive_input.data {
         syn::Data::Struct(ref struct_data) => &struct_data.fields,
         _ => {
-            return Err(syn::Error::new(
-                derive_input.span(),
-                "`Vertex` can only be derived on structs",
-            ));
+            return Err(syn::Error::new(derive_input.span(), "`Vertex` can only be derived on structs"));
         }
     };
 

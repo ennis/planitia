@@ -11,14 +11,6 @@ fn approx_equal(a: Vec2, b: Vec2) -> bool {
     a.distance_squared(b) < EPSILON * EPSILON
 }
 
-#[repr(C)]
-#[derive(Copy, Clone, Debug)]
-pub(crate) struct Contour {
-    pub(crate) start: u32,
-    pub(crate) end: u32,
-    pub(crate) path: u32,
-}
-
 /// Flattens a path into a list of line segments.
 ///
 /// Returns a tuple `(point_count, contour_count)` representing the number of added points and contours.
@@ -26,9 +18,8 @@ pub(super) fn flatten_path(
     path: PathSlice,
     transform: &Mat3,
     accuracy: f32,
-    path_index: u32,
     points: &mut Vec<Vec2>,
-    contours: &mut Vec<Contour>,
+    contours: &mut Vec<Range<usize>>,
 ) -> (Range<usize>, Range<usize>) {
     let start_points_len = points.len();
     let start_contours_len = contours.len();
@@ -40,11 +31,7 @@ pub(super) fn flatten_path(
             PathSegment::MoveTo(to) => {
                 // finish current contour and begin a new one
                 if let Some(start) = cur_contour {
-                    contours.push(Contour {
-                        start: start as u32,
-                        end: points.len() as u32,
-                        path: path_index,
-                    });
+                    contours.push(start..points.len());
                 }
 
                 cur_contour = Some(points.len());
@@ -77,20 +64,12 @@ pub(super) fn flatten_path(
                 if !approx_equal(pos, points[start]) {
                     points.push(points[start]);
                 }
-                contours.push(Contour {
-                    start: start as u32,
-                    end: points.len() as u32,
-                    path: path_index,
-                });
+                contours.push(start..points.len());
             }
         }
     }
     if let Some(start) = cur_contour {
-        contours.push(Contour {
-            start: start as u32,
-            end: points.len() as u32,
-            path: path_index,
-        });
+        contours.push(start..points.len());
     }
 
     (start_points_len..points.len(), start_contours_len..contours.len())

@@ -2,11 +2,7 @@
 
 /// Converts a linear sRGB component to non-linear sRGB.
 pub fn srgb_linear_to_encoded_f32(c: f32) -> f32 {
-    if c <= 0.0031308 {
-        c * 12.92
-    } else {
-        1.055 * c.powf(1.0 / 2.4) - 0.055
-    }
+    if c <= 0.0031308 { c * 12.92 } else { 1.055 * c.powf(1.0 / 2.4) - 0.055 }
 }
 
 pub fn srgb_linear_to_encoded(c: f32) -> u8 {
@@ -14,11 +10,7 @@ pub fn srgb_linear_to_encoded(c: f32) -> u8 {
 }
 
 pub fn srgb_encoded_f32_to_linear(c: f32) -> f32 {
-    if c <= 0.04045 {
-        c / 12.92
-    } else {
-        ((c + 0.055) / 1.055).powf(2.4)
-    }
+    if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
 }
 
 pub fn srgb_encoded_to_linear(c: u8) -> f32 {
@@ -103,9 +95,7 @@ impl Srgba8 {
         } else {
             let q = if l < 0.5 { l * (1.0 + s) } else { l + s - l * s };
             let p = 2.0 * l - q;
-            (hue_to_channel(p, q, h + 1.0 / 3.0),
-             hue_to_channel(p, q, h),
-             hue_to_channel(p, q, h - 1.0 / 3.0))
+            (hue_to_channel(p, q, h + 1.0 / 3.0), hue_to_channel(p, q, h), hue_to_channel(p, q, h - 1.0 / 3.0))
         };
 
         Srgba8 {
@@ -118,22 +108,27 @@ impl Srgba8 {
 }
 
 fn hue_to_channel(p: f32, q: f32, mut t: f32) -> f32 {
-    if t < 0.0 { t += 1.0; }
-    if t > 1.0 { t -= 1.0; }
-    if t < 1.0 / 6.0 { return p + (q - p) * 6.0 * t; }
-    if t < 1.0 / 2.0 { return q; }
-    if t < 2.0 / 3.0 { return p + (q - p) * (2.0 / 3.0 - t) * 6.0; }
+    if t < 0.0 {
+        t += 1.0;
+    }
+    if t > 1.0 {
+        t -= 1.0;
+    }
+    if t < 1.0 / 6.0 {
+        return p + (q - p) * 6.0 * t;
+    }
+    if t < 1.0 / 2.0 {
+        return q;
+    }
+    if t < 2.0 / 3.0 {
+        return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
+    }
     p
 }
 
 impl From<[u8; 4]> for Srgba8 {
     fn from(arr: [u8; 4]) -> Self {
-        Srgba8 {
-            r: arr[0],
-            g: arr[1],
-            b: arr[2],
-            a: arr[3],
-        }
+        Srgba8 { r: arr[0], g: arr[1], b: arr[2], a: arr[3] }
     }
 }
 

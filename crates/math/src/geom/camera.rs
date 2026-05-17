@@ -42,10 +42,7 @@ impl Camera {
     }
 
     pub fn screen_to_ndc_2d(&self, screen_pos: DVec2) -> DVec2 {
-        dvec2(
-            2.0 * screen_pos.x / self.screen_size.x - 1.0,
-            1.0 - 2.0 * screen_pos.y / self.screen_size.y,
-        )
+        dvec2(2.0 * screen_pos.x / self.screen_size.x - 1.0, 1.0 - 2.0 * screen_pos.y / self.screen_size.y)
     }
 
     /// Unprojects a screen-space position to a view-space ray direction.
@@ -88,11 +85,7 @@ impl Camera {
         let clip_pos = self.projection * view_pos;
         let ndc = clip_pos.xyz() / clip_pos.w;
         let ndc = ndc.as_dvec3();
-        dvec3(
-            0.5 * (ndc.x + 1.0) * self.screen_size.x,
-            0.5 * (1.0 - ndc.y) * self.screen_size.y,
-            ndc.z,
-        )
+        dvec3(0.5 * (ndc.x + 1.0) * self.screen_size.x, 0.5 * (1.0 - ndc.y) * self.screen_size.y, ndc.z)
     }
 
     pub fn world_to_screen_line(&self, a: DVec3, b: DVec3) -> (DVec3, DVec3) {

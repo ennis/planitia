@@ -1,7 +1,7 @@
+use crate::SceneInfo;
 use crate::experiments::winged_edge_mesh::WingedEdgeMesh;
 use math::Vec3;
 use std::path::Path;
-use crate::SceneInfo;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
@@ -22,11 +22,8 @@ struct ScreenSpaceContours {
 }
 
 impl ScreenSpaceContours {
-
     fn new() -> Self {
-        Self {
-            mesh: WingedEdgeMesh::new(&[], &[], |fv: &FaceVertex| fv.point),
-        }
+        Self { mesh: WingedEdgeMesh::new(&[], &[], |fv: &FaceVertex| fv.point) }
     }
 
     fn load_geometry(&mut self, path: &Path) {
@@ -50,10 +47,7 @@ impl ScreenSpaceContours {
                 }
                 let first_vertex = vertices.len();
                 for (i, vi) in prim.vertices().enumerate() {
-                    vertices.push(FaceVertex {
-                        point: geo.vertexpoint(vi),
-                        normal: geo.vertex(vi, "N"),
-                    });
+                    vertices.push(FaceVertex { point: geo.vertexpoint(vi), normal: geo.vertex(vi, "N") });
                     if i > 2 {
                         let v0 = vertices[first_vertex];
                         let v1 = vertices[first_vertex + i - 1];
@@ -69,11 +63,13 @@ impl ScreenSpaceContours {
         self.mesh = WingedEdgeMesh::new(&points, &vertices, |fv: &FaceVertex| fv.point);
     }
 
-    fn render(&mut self, cmd: &mut gpu::CommandBuffer,
-              color_target: &gpu::Image,
-              depth_target: &gpu::Image,
-              scene_info: &SceneInfo)
-    {
+    fn render(
+        &mut self,
+        cmd: &mut gpu::CommandBuffer,
+        color_target: &gpu::Image,
+        depth_target: &gpu::Image,
+        scene_info: &SceneInfo,
+    ) {
         //
     }
 }

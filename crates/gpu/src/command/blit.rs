@@ -23,9 +23,7 @@ impl CommandBuffer {
         let cb = self.get_or_create_command_buffer();
         unsafe {
             // SAFETY: FFI call and parameters are valid
-            Device::global()
-                .raw
-                .cmd_fill_buffer(cb, range.buffer.handle(), range.byte_offset, range.byte_size, data);
+            Device::global().raw.cmd_fill_buffer(cb, range.buffer.handle(), range.byte_offset, range.byte_size, data);
         }
     }
 
@@ -118,11 +116,7 @@ impl CommandBuffer {
                 cb,
                 source.handle(),
                 destination.handle(),
-                &[vk::BufferCopy {
-                    src_offset,
-                    dst_offset,
-                    size,
-                }],
+                &[vk::BufferCopy { src_offset, dst_offset, size }],
             );
         }
     }
@@ -146,11 +140,7 @@ impl CommandBuffer {
                 base_array_layer: 0,
                 layer_count: 1,
             },
-            image_offset: vk::Offset3D {
-                x: destination.origin.x,
-                y: destination.origin.y,
-                z: destination.origin.z,
-            },
+            image_offset: vk::Offset3D { x: destination.origin.x, y: destination.origin.y, z: destination.origin.z },
             image_extent: copy_size,
         }];
 

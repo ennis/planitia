@@ -83,11 +83,7 @@ fn allocate_descriptor_heap_memory(
     let alloc = allocator
         .allocate(&AllocationCreateDesc {
             name: "descriptor heap".into(),
-            requirements: vk::MemoryRequirements {
-                size: byte_size as u64,
-                alignment,
-                memory_type_bits: u32::MAX,
-            },
+            requirements: vk::MemoryRequirements { size: byte_size as u64, alignment, memory_type_bits: u32::MAX },
             location: gpu_allocator::MemoryLocation::CpuToGpu,
             linear: true,
             allocation_scheme: AllocationScheme::GpuAllocatorManaged,
@@ -112,15 +108,9 @@ fn allocate_descriptor_heap_memory(
         device
             .bind_buffer_memory(buffer, alloc.memory(), alloc.offset())
             .expect("failed to bind memory for descriptor heap buffer");
-        device_addr = device.get_buffer_device_address(&vk::BufferDeviceAddressInfo {
-            buffer,
-            ..Default::default()
-        });
+        device_addr = device.get_buffer_device_address(&vk::BufferDeviceAddressInfo { buffer, ..Default::default() });
     }
-    let ptr = alloc
-        .mapped_ptr()
-        .expect("failed to map descriptor heap memory")
-        .as_ptr();
+    let ptr = alloc.mapped_ptr().expect("failed to map descriptor heap memory").as_ptr();
 
     let start_offset;
     let stride;
@@ -130,12 +120,10 @@ fn allocate_descriptor_heap_memory(
             alignment = descriptor_heap_properties
                 .bufferDescriptorAlignment
                 .max(descriptor_heap_properties.imageDescriptorAlignment) as usize;
-            start_offset = descriptor_heap_properties
-                .minResourceHeapReservedRange
-                .next_multiple_of(alignment as u64) as usize;
-            stride = descriptor_heap_properties
-                .bufferDescriptorSize
-                .max(descriptor_heap_properties.imageDescriptorSize) as usize;
+            start_offset =
+                descriptor_heap_properties.minResourceHeapReservedRange.next_multiple_of(alignment as u64) as usize;
+            stride = descriptor_heap_properties.bufferDescriptorSize.max(descriptor_heap_properties.imageDescriptorSize)
+                as usize;
         }
         DescriptorHeapType::Sampler => {
             start_offset = descriptor_heap_properties
@@ -147,15 +135,7 @@ fn allocate_descriptor_heap_memory(
         }
     }
 
-    DescriptorHeapInfo {
-        alloc,
-        buffer,
-        ptr,
-        device_addr,
-        start_offset,
-        stride,
-        alignment,
-    }
+    DescriptorHeapInfo { alloc, buffer, ptr, device_addr, start_offset, stride, alignment }
 }
 
 pub(crate) struct DeviceDescriptorIndexTable {
@@ -191,10 +171,7 @@ impl DescriptorHeaps {
                         size: self.resource_heap.alloc.size(),
                     },
                     reservedRangeOffset: 0,
-                    reservedRangeSize: device
-                        .thread_safe
-                        .descriptor_heap_properties
-                        .minResourceHeapReservedRange,
+                    reservedRangeSize: device.thread_safe.descriptor_heap_properties.minResourceHeapReservedRange,
                 },
             );
             (ext.cmd_bind_sampler_heap)(
@@ -207,10 +184,7 @@ impl DescriptorHeaps {
                         size: self.sampler_heap.alloc.size(),
                     },
                     reservedRangeOffset: 0,
-                    reservedRangeSize: device
-                        .thread_safe
-                        .descriptor_heap_properties
-                        .minSamplerHeapReservedRange,
+                    reservedRangeSize: device.thread_safe.descriptor_heap_properties.minSamplerHeapReservedRange,
                 },
             );
         }
@@ -297,18 +271,12 @@ impl DescriptorHeaps {
             );
         }
 
-        SamplerDescriptorOffsetAndIndex {
-            offset: self.sampler_heap.descriptor_offset(index),
-            index,
-        }
+        SamplerDescriptorOffsetAndIndex { offset: self.sampler_heap.descriptor_offset(index), index }
     }
 
     fn reserve_resource_descriptor_slot(&self) -> ResourceDescriptorOffsetAndIndex {
         let index = self.indices.lock().unwrap().resource.insert(()).index() as usize;
-        ResourceDescriptorOffsetAndIndex {
-            offset: self.resource_heap.descriptor_offset(index),
-            index,
-        }
+        ResourceDescriptorOffsetAndIndex { offset: self.resource_heap.descriptor_offset(index), index }
     }
 
     fn register_image_descriptors(
@@ -376,9 +344,7 @@ impl DescriptorHeaps {
                     sType: VK_STRUCTURE_TYPE_RESOURCE_DESCRIPTOR_INFO_EXT,
                     pNext: ptr::null(),
                     typ: VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                    data: VkResourceDescriptorDataEXT {
-                        pImage: &main_texture_descriptor,
-                    },
+                    data: VkResourceDescriptorDataEXT { pImage: &main_texture_descriptor },
                 });
                 let slot = self.reserve_resource_descriptor_slot();
                 main_texture_offset = Some(slot);
@@ -398,9 +364,7 @@ impl DescriptorHeaps {
                     sType: VK_STRUCTURE_TYPE_RESOURCE_DESCRIPTOR_INFO_EXT,
                     pNext: ptr::null(),
                     typ: VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                    data: VkResourceDescriptorDataEXT {
-                        pImage: &main_storage_descriptor,
-                    },
+                    data: VkResourceDescriptorDataEXT { pImage: &main_storage_descriptor },
                 });
                 let slot = self.reserve_resource_descriptor_slot();
                 main_storage_offset = Some(slot);
@@ -423,9 +387,7 @@ impl DescriptorHeaps {
                     sType: VK_STRUCTURE_TYPE_RESOURCE_DESCRIPTOR_INFO_EXT,
                     pNext: ptr::null(),
                     typ: VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                    data: VkResourceDescriptorDataEXT {
-                        pImage: &stencil_texture_descriptor,
-                    },
+                    data: VkResourceDescriptorDataEXT { pImage: &stencil_texture_descriptor },
                 });
                 let slot = self.reserve_resource_descriptor_slot();
                 addr_ranges[n_descriptors].write(self.resource_heap.address_range_by_index(slot.index, 1));
@@ -444,9 +406,7 @@ impl DescriptorHeaps {
                     sType: VK_STRUCTURE_TYPE_RESOURCE_DESCRIPTOR_INFO_EXT,
                     pNext: ptr::null(),
                     typ: VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                    data: VkResourceDescriptorDataEXT {
-                        pImage: &stencil_storage_descriptor,
-                    },
+                    data: VkResourceDescriptorDataEXT { pImage: &stencil_storage_descriptor },
                 });
                 let slot = self.reserve_resource_descriptor_slot();
                 addr_ranges[n_descriptors].write(self.resource_heap.address_range_by_index(slot.index, 1));

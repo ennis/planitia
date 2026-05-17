@@ -3,6 +3,7 @@ use ash::vk;
 use gpu_allocator::MemoryLocation;
 use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
 use log::{trace, warn};
+use slotmap::Key;
 use std::alloc::Layout;
 use std::collections::Bound;
 use std::marker::PhantomData;
@@ -11,7 +12,6 @@ use std::ops::RangeBounds;
 use std::os::raw::c_void;
 use std::ptr::NonNull;
 use std::{mem, ptr, slice};
-use slotmap::Key;
 
 impl<T: ?Sized> Drop for Buffer<T> {
     fn drop(&mut self) {
@@ -86,10 +86,7 @@ impl<T: ?Sized> Buffer<T> {
 
     /// Returns the device address of the buffer, for use in shaders.
     pub fn ptr(&self) -> Ptr<T> {
-        Ptr {
-            raw: self.device_address,
-            _phantom: PhantomData,
-        }
+        Ptr { raw: self.device_address, _phantom: PhantomData }
     }
 
     /// Returns the usage flags of the buffer.
@@ -151,11 +148,7 @@ impl<T: Copy> Buffer<T> {
     pub fn resize_no_copy(&mut self, new_len: usize) {
         let buffer = Device::global().create_buffer(
             size_of::<T>(),
-            BufferCreateInfo {
-                len: new_len,
-                usage: self.usage,
-                memory_location: self.memory_location,
-            },
+            BufferCreateInfo { len: new_len, usage: self.usage, memory_location: self.memory_location },
         );
         unsafe { *self = buffer.cast() }
     }
@@ -167,11 +160,8 @@ impl<T: Copy> Buffer<T> {
 
     /// Creates a CpuToGpu buffer and copies data into it.
     pub fn from_slice_with_usage(usage: BufferUsage, data: &[T]) -> Buffer<T> {
-        let buffer = Buffer::new(BufferCreateInfo {
-            len: data.len(),
-            usage,
-            memory_location: MemoryLocation::CpuToGpu,
-        });
+        let buffer =
+            Buffer::new(BufferCreateInfo { len: data.len(), usage, memory_location: MemoryLocation::CpuToGpu });
         unsafe {
             // copy data to mapped buffer
             ptr::copy_nonoverlapping(data.as_ptr(), buffer.as_mut_ptr(), data.len());
@@ -187,10 +177,7 @@ impl<T: Copy> Buffer<T> {
     }
 
     fn check_valid_cast<U: Copy>(&self) {
-        assert!(
-            self.byte_size() % size_of::<U>() as u64 == 0,
-            "buffer size is not a multiple of the element size"
-        );
+        assert!(self.byte_size() % size_of::<U>() as u64 == 0, "buffer size is not a multiple of the element size");
 
         // Check that the host pointer is correctly aligned for U.
         if let Some(ptr) = self.mapped_ptr {
@@ -300,21 +287,14 @@ impl<T: Copy> Buffer<T> {
         let end = (end * elem_size) as u64;
         assert!(start <= self.size && end <= self.size);
 
-        BufferRange {
-            buffer: self,
-            byte_offset: start,
-            byte_size: end - start,
-        }
+        BufferRange { buffer: self, byte_offset: start, byte_size: end - start }
     }
 }
 
 // TODO: impl From<IntoIterator> for Buffer
 impl<T: ?Sized> std::fmt::Debug for Buffer<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Buffer")
-            .field("handle", &self.handle)
-            .field("size", &self.size)
-            .finish_non_exhaustive()
+        f.debug_struct("Buffer").field("handle", &self.handle).field("size", &self.size).finish_non_exhaustive()
     }
 }
 
@@ -349,7 +329,6 @@ impl Device {
         // we allow zero-sized buffers: in this case, we don't allocate any memory or create a
         // Vulkan buffer, but we still return a non-null, dangling, mapped pointer.
         if create_info.len == 0 || elem_size == 0 {
-
             // dummy struct to get a dangling NonNull with correct alignment
             #[repr(align(64))]
             struct Align64;
@@ -424,17 +403,14 @@ impl Device {
                 linear: true,
                 allocation_scheme: AllocationScheme::GpuAllocatorManaged,
             });
-            self.raw
-                .bind_buffer_memory(handle, allocation.memory(), allocation.offset())
-                .unwrap();
+            self.raw.bind_buffer_memory(handle, allocation.memory(), allocation.offset()).unwrap();
 
             let mapped_ptr = allocation.mapped_ptr();
             let allocation = ResourceAllocation::Allocation { allocation };
 
-            let device_address = self.raw.get_buffer_device_address(&vk::BufferDeviceAddressInfo {
-                buffer: handle,
-                ..Default::default()
-            });
+            let device_address = self
+                .raw
+                .get_buffer_device_address(&vk::BufferDeviceAddressInfo { buffer: handle, ..Default::default() });
 
             let id = self.allocate_resource_id();
             trace!("GPU: create buffer {handle:?} {id:?}");

@@ -3,6 +3,7 @@ pub(crate) mod egui_backend;
 mod icon_button;
 pub(crate) mod input_state;
 
+use crate::asset::{AssetCache, VfsPath, load_asset};
 use crate::imgui;
 use crate::imgui::input_state::EguiInputState;
 use crate::input::InputEvent;
@@ -10,9 +11,8 @@ use egui::{Align, Color32, FontData, FontDefinitions, FontFamily, RichText, Styl
 use gpu::CommandBuffer;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::{fs, mem};
 use std::sync::Arc;
-use crate::asset::{load_asset, AssetCache, VfsPath};
+use std::{fs, mem};
 
 pub struct ImGui<'a> {
     egui: &'a mut egui::Ui,
@@ -83,11 +83,7 @@ fn generic_list_header<R>(ui: &mut egui::Ui, label: &str, right_buttons: impl Fn
 pub(crate) fn style_to_text_format(style: &egui::Style) -> TextFormat {
     let mut text_format = TextFormat::default();
     text_format.color = style.visuals.text_color();
-    text_format.font_id = style
-        .override_text_style
-        .clone()
-        .unwrap_or(TextStyle::Body)
-        .resolve(style);
+    text_format.font_id = style.override_text_style.clone().unwrap_or(TextStyle::Body).resolve(style);
     text_format
 }
 
@@ -120,12 +116,7 @@ impl ImguiContext {
             }
         }
 
-        Self {
-            renderer,
-            ctx,
-            input: EguiInputState::default(),
-            output: egui::FullOutput::default(),
-        }
+        Self { renderer, ctx, input: EguiInputState::default(), output: egui::FullOutput::default() }
     }
 
     pub(crate) fn handle_input(&mut self, event: &InputEvent) -> bool {

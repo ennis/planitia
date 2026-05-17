@@ -1,6 +1,5 @@
-use std::f32::consts::FRAC_2_PI;
 use math::Vec2;
-
+use std::f32::consts::FRAC_2_PI;
 
 /// Represents a segment of a path.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -37,9 +36,9 @@ pub enum PathVerb {
 #[derive(Clone, Debug)]
 pub struct Path {
     /// List of path verbs.
-    verbs: Box<[PathVerb]>,
+    pub verbs: Box<[PathVerb]>,
     /// List of points for all segments.
-    points: Box<[Vec2]>,
+    pub points: Box<[Vec2]>,
 }
 
 /// Borrowed view of a path.
@@ -51,19 +50,13 @@ pub struct PathSlice<'a> {
 
 impl<'a> From<&'a PathBuilder> for PathSlice<'a> {
     fn from(builder: &'a PathBuilder) -> Self {
-        PathSlice {
-            verbs: builder.verbs.as_slice(),
-            points: builder.points.as_slice(),
-        }
+        PathSlice { verbs: builder.verbs.as_slice(), points: builder.points.as_slice() }
     }
 }
 
 impl<'a> From<&'a Path> for PathSlice<'a> {
     fn from(path: &'a Path) -> Self {
-        PathSlice {
-            verbs: &path.verbs,
-            points: &path.points,
-        }
+        PathSlice { verbs: &path.verbs, points: &path.points }
     }
 }
 
@@ -71,33 +64,31 @@ impl<'a> PathSlice<'a> {
     /// Iterates over the segments of the path, yielding a `PathSegment` for each verb and its associated points.
     pub fn iter(&self) -> impl Iterator<Item = PathSegment> + '_ {
         let mut point_index = 0;
-        self.verbs.iter().map(move |verb| {
-            match verb {
-                PathVerb::MoveTo => {
-                    let to = self.points[point_index];
-                    point_index += 1;
-                    PathSegment::MoveTo(to)
-                },
-                PathVerb::LineTo => {
-                    let to = self.points[point_index];
-                    point_index += 1;
-                    PathSegment::LineTo(to)
-                },
-                PathVerb::QuadTo => {
-                    let ctrl = self.points[point_index];
-                    let to = self.points[point_index + 1];
-                    point_index += 2;
-                    PathSegment::QuadTo { ctrl, to }
-                },
-                PathVerb::CubicTo => {
-                    let ctrl1 = self.points[point_index];
-                    let ctrl2 = self.points[point_index + 1];
-                    let to = self.points[point_index + 2];
-                    point_index += 3;
-                    PathSegment::CubicTo { ctrl1, ctrl2, to }
-                },
-                PathVerb::Close => PathSegment::Close,
+        self.verbs.iter().map(move |verb| match verb {
+            PathVerb::MoveTo => {
+                let to = self.points[point_index];
+                point_index += 1;
+                PathSegment::MoveTo(to)
             }
+            PathVerb::LineTo => {
+                let to = self.points[point_index];
+                point_index += 1;
+                PathSegment::LineTo(to)
+            }
+            PathVerb::QuadTo => {
+                let ctrl = self.points[point_index];
+                let to = self.points[point_index + 1];
+                point_index += 2;
+                PathSegment::QuadTo { ctrl, to }
+            }
+            PathVerb::CubicTo => {
+                let ctrl1 = self.points[point_index];
+                let ctrl2 = self.points[point_index + 1];
+                let to = self.points[point_index + 2];
+                point_index += 3;
+                PathSegment::CubicTo { ctrl1, ctrl2, to }
+            }
+            PathVerb::Close => PathSegment::Close,
         })
     }
 }
@@ -133,18 +124,12 @@ fn arc_to_beziers(angle_start: f32, angle_extent: f32, out: &mut Vec<Vec2>) -> u
 impl PathBuilder {
     /// Creates a new empty path builder.
     pub fn new() -> Self {
-        Self {
-            verbs: Vec::new(),
-            points: Vec::new(),
-        }
+        Self { verbs: Vec::new(), points: Vec::new() }
     }
 
     /// Finishes building the path and returns an immutable `Path` object.
     pub fn finish(self) -> Path {
-        Path {
-            verbs: self.verbs.into_boxed_slice(),
-            points: self.points.into_boxed_slice(),
-        }
+        Path { verbs: self.verbs.into_boxed_slice(), points: self.points.into_boxed_slice() }
     }
 
     /// Moves the current point of the path.
@@ -198,7 +183,8 @@ impl PathBuilder {
         let x1p2 = x1p * x1p;
         let y1p2 = y1p * y1p;
 
-        let rr = f32::sqrt((rx2*ry2-rx2*y1p2-ry2*x1p2) / (rx2*y1p2+ry2*x1p2)) * if large_arc == sweep { -1.0 } else { 1.0 };
+        let rr = f32::sqrt((rx2 * ry2 - rx2 * y1p2 - ry2 * x1p2) / (rx2 * y1p2 + ry2 * x1p2))
+            * if large_arc == sweep { -1.0 } else { 1.0 };
         let cxp = rr * rx * y1p / ry;
         let cyp = rr * -ry * x1p / rx;
         let cx = cxp * cosphi - cyp * sinphi + (from.x + to.x) / 2.0;
@@ -219,7 +205,7 @@ impl PathBuilder {
         } else if sweep && extent < 0.0 {
             extent += 2.0 * std::f32::consts::PI;
         }
-        theta  = theta.rem_euclid(std::f32::consts::TAU);
+        theta = theta.rem_euclid(std::f32::consts::TAU);
         extent = extent.rem_euclid(std::f32::consts::TAU);
 
         let transform = |p: Vec2| {
@@ -243,5 +229,27 @@ impl PathBuilder {
     pub fn close(&mut self) {
         self.verbs.push(PathVerb::Close);
     }
+
+    pub fn clear(&mut self) {
+        self.verbs.clear();
+        self.points.clear();
+    }
 }
 
+
+/// Trait for types that can be converted into a `PathSlice`.
+pub trait AsPathSlice {
+    fn as_path_slice(&self) -> PathSlice<'_>;
+}
+
+impl AsPathSlice for Path {
+    fn as_path_slice(&self) -> PathSlice<'_> {
+        PathSlice::from(self)
+    }
+}
+
+impl AsPathSlice for PathBuilder {
+    fn as_path_slice(&self) -> PathSlice<'_> {
+        PathSlice::from(self)
+    }
+}

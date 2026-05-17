@@ -154,7 +154,7 @@ pub struct Pass {
     pub kind: PipelineKind,
     pub root_params: RootParamLayout,
     ///
-    pub signature: Offset<reflection::Signature>
+    pub signature: Offset<reflection::Signature>,
 }
 
 #[repr(C)]
@@ -270,7 +270,6 @@ pub struct ColorTarget {
 pub struct ShaderArchive(Cow<'static, ArchiveReader<ShaderArchiveRoot>>);
 
 impl ShaderArchive {
-
     fn data(&self) -> &ShaderArchiveRoot {
         self.0.root()
     }
@@ -305,9 +304,7 @@ impl ShaderArchive {
     pub fn shader_sources<'a>(&'a self) -> impl Iterator<Item = &'a FileDependency> + 'a {
         let data = self.data();
         let entries = &self[data.modules];
-        entries.iter().map(move |entry| {
-            &entry.file
-        })
+        entries.iter().map(move |entry| &entry.file)
     }
 
     /// Checks whether any dependency of the archive has changed compared to the recorded modification times.
@@ -386,7 +383,7 @@ impl ShaderArchive {
         for entry in &self[module.passes] {
             if entry.name.as_str() == name {
                 match &entry.kind {
-                    PipelineKind::Graphics(p) => return Some((module,p)),
+                    PipelineKind::Graphics(p) => return Some((module, p)),
                     _ => continue,
                 }
             }
@@ -395,19 +392,18 @@ impl ShaderArchive {
     }
 
     /// Finds a compute pipeline by name.
-    pub fn find_compute_pipeline(&self, module: &str, name: &str) -> Option<(&Module,&ComputePipeline)> {
+    pub fn find_compute_pipeline(&self, module: &str, name: &str) -> Option<(&Module, &ComputePipeline)> {
         let module = self.find_module(module)?;
         for entry in &self[module.passes] {
             if entry.name.as_str() == name {
                 match &entry.kind {
-                    PipelineKind::Compute(p) => return Some((module,p)),
+                    PipelineKind::Compute(p) => return Some((module, p)),
                     _ => continue,
                 }
             }
         }
         None
     }
-
 
     /// Returns the manifest path used to generate this pipeline archive.
     pub fn manifest_file(&self) -> &FileDependency {
@@ -475,18 +471,12 @@ mod tests {
                     depth_stencil_attachment: None,
                     shaders: Offset::INVALID,
                 }),
-                root_params: RootParamLayout {
-                    byte_size: 0,
-                    parameters: Offset::INVALID,
-                },
+                root_params: RootParamLayout { byte_size: 0, parameters: Offset::INVALID },
                 signature: Offset::INVALID,
             }],
         );
         writer.write_root(&ShaderArchiveRoot {
-            manifest: FileDependency {
-                path: Offset::INVALID,
-                mtime: 0,
-            },
+            manifest: FileDependency { path: Offset::INVALID, mtime: 0 },
             modules: Offset::INVALID,
             images: Offset::INVALID,
         });

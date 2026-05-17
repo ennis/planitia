@@ -20,10 +20,7 @@ pub struct EguiInputState {
 
 impl Default for EguiInputState {
     fn default() -> Self {
-        Self {
-            cursor_pos: Pos2::new(0.0, 0.0),
-            raw: egui::RawInput::default(),
-        }
+        Self { cursor_pos: Pos2::new(0.0, 0.0), raw: egui::RawInput::default() }
     }
 }
 
@@ -80,9 +77,7 @@ impl EguiInputState {
 
         match input_event {
             InputEvent::CursorMoved { x, y } => {
-                self.raw
-                    .events
-                    .push(egui::Event::PointerMoved(egui::pos2(*x as f32, *y as f32)));
+                self.raw.events.push(egui::Event::PointerMoved(egui::pos2(*x as f32, *y as f32)));
                 self.cursor_pos = egui::pos2(*x as f32, *y as f32);
                 ctx.is_using_pointer()
             }
@@ -115,10 +110,8 @@ impl EguiInputState {
                 ctx.wants_keyboard_input()
             }
             &InputEvent::Resized { width, height } => {
-                self.raw.screen_rect = Some(egui::Rect::from_min_size(
-                    Pos2::new(0.0, 0.0),
-                    egui::vec2(width as f32, height as f32),
-                ));
+                self.raw.screen_rect =
+                    Some(egui::Rect::from_min_size(Pos2::new(0.0, 0.0), egui::vec2(width as f32, height as f32)));
                 false
             }
             &InputEvent::MouseWheel(delta) => {
@@ -237,13 +230,7 @@ fn key_event_to_egui(key: &keyboard_types::KeyboardEvent) -> Option<egui::Event>
                 physical_key: None,
                 pressed: key.state == keyboard_types::KeyState::Down,
                 repeat: false,
-                modifiers: egui::Modifiers {
-                    alt,
-                    ctrl,
-                    shift,
-                    mac_cmd: meta,
-                    command: meta,
-                },
+                modifiers: egui::Modifiers { alt, ctrl, shift, mac_cmd: meta, command: meta },
             })
         }
 

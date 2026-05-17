@@ -28,10 +28,6 @@ pub struct TextFormat {
 
 impl Default for TextFormat {
     fn default() -> Self {
-        Self {
-            font: Font::default_regular().clone(),
-            size: DEFAULT_SIZE as f32,
-            color: Srgba8::BLACK,
-        }
+        Self { font: Font::default_regular().clone(), size: DEFAULT_SIZE as f32, color: Srgba8::BLACK }
     }
 }

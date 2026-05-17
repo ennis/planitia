@@ -10,24 +10,16 @@ pub struct Rect {
 }
 
 impl Rect {
-    pub const INFINITE: Self = Self {
-        min: Vec2::new(f32::NEG_INFINITY, f32::NEG_INFINITY),
-        max: Vec2::new(f32::INFINITY, f32::INFINITY),
-    };
-    pub const ZERO: Self = Self {
-        min: Vec2::ZERO,
-        max: Vec2::ZERO,
-    };
+    pub const INFINITE: Self =
+        Self { min: Vec2::new(f32::NEG_INFINITY, f32::NEG_INFINITY), max: Vec2::new(f32::INFINITY, f32::INFINITY) };
+    pub const ZERO: Self = Self { min: Vec2::ZERO, max: Vec2::ZERO };
 
     pub const fn from_min_max(min: Vec2, max: Vec2) -> Self {
         Self { min, max }
     }
 
     pub const fn from_origin_size(origin: Vec2, size: Vec2) -> Self {
-        Self {
-            min: origin,
-            max: vec2(origin.x + size.x, origin.y + size.y),
-        }
+        Self { min: origin, max: vec2(origin.x + size.x, origin.y + size.y) }
     }
 
     pub const fn top_left(&self) -> Vec2 {
@@ -90,10 +82,7 @@ impl Rect {
 }
 
 pub const fn rect_xywh(x: f32, y: f32, w: f32, h: f32) -> Rect {
-    Rect {
-        min: Vec2::new(x, y),
-        max: Vec2::new(x + w, y + h),
-    }
+    Rect { min: Vec2::new(x, y), max: Vec2::new(x + w, y + h) }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
@@ -105,20 +94,14 @@ pub struct IRect {
 }
 
 impl IRect {
-    pub const ZERO: Self = Self {
-        min: IVec2::ZERO,
-        max: IVec2::ZERO,
-    };
+    pub const ZERO: Self = Self { min: IVec2::ZERO, max: IVec2::ZERO };
 
     pub const fn from_min_max(min: IVec2, max: IVec2) -> Self {
         Self { min, max }
     }
 
     pub const fn from_origin_size(origin: IVec2, size: IVec2) -> Self {
-        Self {
-            min: origin,
-            max: IVec2::new(origin.x + size.x, origin.y + size.y),
-        }
+        Self { min: origin, max: IVec2::new(origin.x + size.x, origin.y + size.y) }
     }
 
     pub const fn top_left(&self) -> IVec2 {
@@ -167,10 +150,7 @@ impl IRect {
     }
 }
 pub const fn irect_xywh(x: i32, y: i32, w: i32, h: i32) -> IRect {
-    IRect {
-        min: IVec2::new(x, y),
-        max: IVec2::new(x + w, y + h),
-    }
+    IRect { min: IVec2::new(x, y), max: IVec2::new(x + w, y + h) }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -194,39 +174,23 @@ impl IBox3D {
     }
 
     pub const fn size(&self) -> IVec3 {
-        ivec3(
-            self.max.x - self.min.x,
-            self.max.y - self.min.y,
-            self.max.z - self.min.z,
-        )
+        ivec3(self.max.x - self.min.x, self.max.y - self.min.y, self.max.z - self.min.z)
     }
 
     pub const fn from_origin_size_2d(origin: IVec2, size: IVec2) -> Self {
-        Self {
-            min: origin.extend(0),
-            max: ivec3(origin.x + size.x, origin.y + size.y, 1),
-        }
+        Self { min: origin.extend(0), max: ivec3(origin.x + size.x, origin.y + size.y, 1) }
     }
 
     pub const fn from_min_max_2d(min: IVec2, max: IVec2) -> Self {
-        Self {
-            min: min.extend(0),
-            max: max.extend(1),
-        }
+        Self { min: min.extend(0), max: max.extend(1) }
     }
 
     pub const fn from_xywh(x: i32, y: i32, width: u32, height: u32) -> Self {
-        Self {
-            min: ivec3(x, y, 0),
-            max: ivec3(x + width as i32, y + height as i32, 1),
-        }
+        Self { min: ivec3(x, y, 0), max: ivec3(x + width as i32, y + height as i32, 1) }
     }
 
     pub const fn from_irect(rect: IRect) -> Self {
-        Self {
-            min: ivec3(rect.min.x, rect.min.y, 0),
-            max: ivec3(rect.max.x, rect.max.y, 1),
-        }
+        Self { min: ivec3(rect.min.x, rect.min.y, 0), max: ivec3(rect.max.x, rect.max.y, 1) }
     }
 }
 
@@ -238,10 +202,7 @@ pub struct Box3D {
 }
 
 impl Box3D {
-    pub const NULL: Self = Self {
-        min: Vec3::ZERO,
-        max: Vec3::ZERO,
-    };
+    pub const NULL: Self = Self { min: Vec3::ZERO, max: Vec3::ZERO };
 
     /// Returns the size of the box.
     pub fn size(&self) -> Vec3 {
@@ -276,10 +237,7 @@ impl Box3D {
 
     /// Returns the union of this box with another.
     pub fn union(&self, other: &Box3D) -> Box3D {
-        Box3D {
-            min: self.min.min(other.min),
-            max: self.max.max(other.max),
-        }
+        Box3D { min: self.min.min(other.min), max: self.max.max(other.max) }
     }
 }
 

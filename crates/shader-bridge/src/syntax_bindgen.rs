@@ -235,17 +235,11 @@ struct SyntaxError {
 
 impl SyntaxError {
     fn new(range: Range<usize>, message: impl Into<String>) -> Self {
-        Self {
-            range,
-            message: message.into(),
-        }
+        Self { range, message: message.into() }
     }
 
     fn eof() -> Self {
-        Self {
-            range: 0..0,
-            message: "unexpected end of file".to_string(),
-        }
+        Self { range: 0..0, message: "unexpected end of file".to_string() }
     }
 }
 
@@ -308,11 +302,7 @@ fn translate_type(source: &str, lexer: &mut Lexer) -> Result<TokenStream, Syntax
 
     let (is_array, array_len) = parse_array_declarator(source, lexer)?;
 
-    let ident = if let Some(assoc) = associated {
-        format_ident!("{ident}_{assoc}")
-    } else {
-        format_ident!("{ident}")
-    };
+    let ident = if let Some(assoc) = associated { format_ident!("{ident}_{assoc}") } else { format_ident!("{ident}") };
 
     let mut t = if let Some(generic) = generic {
         quote! { #ident<#generic> }
@@ -358,11 +348,7 @@ fn translate_variable(source: &str, lexer: &mut Lexer, is_field: bool) -> Result
 
     lexer.expect(SEMICOLON)?;
 
-    let ident_snake = if is_field {
-        ident.to_snake_case()
-    } else {
-        ident.to_shouty_snake_case()
-    };
+    let ident_snake = if is_field { ident.to_snake_case() } else { ident.to_shouty_snake_case() };
     let ident_snake = format_ident!("{ident_snake}");
 
     let initializer = initializer.iter();

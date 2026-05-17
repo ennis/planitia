@@ -7,10 +7,7 @@ fn get_slang_global_session() -> slang::GlobalSession {
         static SESSION: OnceCell<slang::GlobalSession> = OnceCell::new();
     }
 
-    SESSION.with(|s| {
-        s.get_or_init(|| slang::GlobalSession::new().expect("Failed to create Slang session"))
-            .clone()
-    })
+    SESSION.with(|s| s.get_or_init(|| slang::GlobalSession::new().expect("Failed to create Slang session")).clone())
 }
 
 pub(crate) struct SessionOptions<'a> {
@@ -35,29 +32,19 @@ pub(crate) fn create_session(options: &SessionOptions) -> slang::Session {
         .matrix_layout_column(true)
         .optimization(slang::OptimizationLevel::Default)
         .vulkan_use_entry_point_name(true)
-        .debug_information(if options.debug {
-            DebugInfoLevel::Maximal
-        } else {
-            DebugInfoLevel::None
-        })
+        .debug_information(if options.debug { DebugInfoLevel::Maximal } else { DebugInfoLevel::None })
         .profile(profile);
 
     for (k, v) in options.macro_definitions {
         compiler_options = compiler_options.macro_define(k, v);
     }
 
-    let target_desc = slang::TargetDesc::default()
-        .format(slang::CompileTarget::Spirv)
-        .options(&compiler_options);
+    let target_desc = slang::TargetDesc::default().format(slang::CompileTarget::Spirv).options(&compiler_options);
     let targets = [target_desc];
 
-    let session_desc = slang::SessionDesc::default()
-        .targets(&targets)
-        .search_paths(&search_path_ptrs)
-        .options(&compiler_options);
+    let session_desc =
+        slang::SessionDesc::default().targets(&targets).search_paths(&search_path_ptrs).options(&compiler_options);
 
-    let session = global_session
-        .create_session(&session_desc)
-        .expect("failed to create session");
+    let session = global_session.create_session(&session_desc).expect("failed to create session");
     session
 }

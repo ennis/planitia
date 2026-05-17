@@ -44,14 +44,7 @@ impl Device {
         width: u32,
         height: u32,
     ) -> SwapChain {
-        let mut swapchain = SwapChain {
-            handle: Default::default(),
-            surface,
-            images: vec![],
-            format,
-            width,
-            height,
-        };
+        let mut swapchain = SwapChain { handle: Default::default(), surface, images: vec![], format, width, height };
         self.resize_swapchain(&mut swapchain, width, height);
         swapchain
     }
@@ -83,11 +76,7 @@ impl Device {
             format,
             mip_levels: 1,
             array_layers: 1,
-            size: Size3D {
-                width,
-                height,
-                depth: 1,
-            },
+            size: Size3D { width, height, depth: 1 },
             samples: 0,
         }
     }
@@ -164,16 +153,12 @@ impl Device {
     /// Resizes a swap chain.
     pub unsafe fn resize_swapchain(&self, swapchain: &mut SwapChain, width: u32, height: u32) {
         let phy = self.thread_safe.physical_device;
-        let capabilities = vk_khr_surface()
-            .get_physical_device_surface_capabilities(phy, swapchain.surface)
-            .unwrap();
+        let capabilities = vk_khr_surface().get_physical_device_surface_capabilities(phy, swapchain.surface).unwrap();
         /*let formats = self
         .vk_khr_surface
         .get_physical_device_surface_formats(phy, swapchain.surface)
         .unwrap();*/
-        let present_modes = vk_khr_surface()
-            .get_physical_device_surface_present_modes(phy, swapchain.surface)
-            .unwrap();
+        let present_modes = vk_khr_surface().get_physical_device_surface_present_modes(phy, swapchain.surface).unwrap();
 
         let present_mode = get_preferred_present_mode(&present_modes);
         let image_extent = get_preferred_swap_extent((width, height), &capabilities);
@@ -206,11 +191,7 @@ impl Device {
             ..Default::default()
         };
 
-        let new_handle = self
-            .extensions
-            .khr_swapchain
-            .create_swapchain(&create_info, None)
-            .unwrap();
+        let new_handle = self.extensions.khr_swapchain.create_swapchain(&create_info, None).unwrap();
         if swapchain.handle != vk::SwapchainKHR::null() {
             // FIXME the images may be in use, we should wait for the device to be idle
             self.extensions.khr_swapchain.destroy_swapchain(swapchain.handle, None);
@@ -226,11 +207,7 @@ impl Device {
         }
         swapchain.images = Vec::with_capacity(image_count as usize);
 
-        let images = self
-            .extensions
-            .khr_swapchain
-            .get_swapchain_images(swapchain.handle)
-            .unwrap();
+        let images = self.extensions.khr_swapchain.get_swapchain_images(swapchain.handle).unwrap();
         for image in images {
             let render_finished = self.get_or_create_semaphore();
             swapchain.images.push(SwapchainImage {

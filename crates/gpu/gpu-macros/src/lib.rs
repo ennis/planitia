@@ -26,10 +26,7 @@ impl ToTokens for CrateName {
 fn expect_struct_fields<'a>(input: &'a syn::DeriveInput, derive_name: &str) -> syn::Result<&'a syn::Fields> {
     match input.data {
         syn::Data::Struct(ref data_struct) => Ok(&data_struct.fields),
-        _ => Err(syn::Error::new(
-            input.span(),
-            format!("`{derive_name}` can only be derived on structs"),
-        )),
+        _ => Err(syn::Error::new(input.span(), format!("`{derive_name}` can only be derived on structs"))),
     }
 }
 

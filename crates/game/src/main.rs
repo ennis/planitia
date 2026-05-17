@@ -247,6 +247,7 @@ impl AppHandler for Game {
         }
 
         // --- CAMERA ---
+        self.svg_experiment.input(&input_event);
         if self.camera_control.handle_input(&input_event) {
             return;
         }

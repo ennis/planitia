@@ -1,12 +1,16 @@
-use log::warn;
 use crate::paint::fill::{Fill, rect_transform};
 use crate::paint::flatten::flatten_path;
-use crate::paint::render::{DrawOp, RenderScene, RenderScene2, render_scene, render_scene_2};
-use crate::paint::tessellation::Tessellator;
-use crate::paint::{GlyphRun, PaintRenderParams, Painter, Path, PathBuilder, PathSlice, RRect};
-use color::{srgba8, Srgba8};
-use gpu::CommandBuffer;
-use math::{Mat3, Rect, Vec2, vec2};
+use crate::paint::pipelines::PaintRootParams;
+use crate::paint::renderer::DrawCommand;
+use crate::paint::tessellation::{Mesh, Tessellator};
+use crate::paint::{
+    AsPathSlice, GlyphRun, PaintRenderParams, PaintVertex, Painter, Path, PathBuilder, PathSlice, RRect, renderer,
+};
+use color::{Srgba8, srgba8};
+use gpu::PrimitiveTopology::TriangleList;
+use gpu::{CommandBuffer, Ptr, PushDataSource};
+use log::warn;
+use math::{Mat3, Rect, Vec2, Vec3, vec2, vec3};
 
 /// Options for drawing a glyph run.
 #[derive(Clone, Debug, Default)]
@@ -21,11 +25,11 @@ pub struct DrawGlyphRunOptions {
 pub struct PaintScene<'a> {
     painter: &'a mut Painter,
     pub(crate) tess: Tessellator,
-    scene: RenderScene,
+    old_scene: RenderScene,
     clip_stack: Vec<Rect>,
     transform_stack: Vec<Mat3>,
     transform: Mat3,
-    scene_2: RenderScene2,
+    scene: renderer::Scene,
 }
 
 impl<'a> PaintScene<'a> {
@@ -33,18 +37,18 @@ impl<'a> PaintScene<'a> {
         Self {
             painter,
             tess: Tessellator::new(),
-            scene: RenderScene::default(),
+            old_scene: RenderScene::default(),
             clip_stack: vec![Rect::INFINITE],
             transform_stack: vec![],
             transform: Default::default(),
-            scene_2: RenderScene2::default(),
+            scene: renderer::Scene::default(),
         }
     }
 
     fn push_draw_op(&mut self, fill: impl Into<Fill>) {
         let fill = fill.into();
         let device_to_local = Mat3::IDENTITY; // TODO transform stack
-        self.scene.ops.push(DrawOp {
+        self.old_scene.ops.push(DrawOp {
             mesh: self.tess.finish_and_reset(),
             clip: self.clip_rect(),
             device_to_local,
@@ -57,27 +61,6 @@ impl<'a> PaintScene<'a> {
         let fill = fill.into();
         self.tess.fill_rrect(RRect { rect, radius });
         self.push_draw_op(fill);
-
-     //  //v2 scene
-     //  let mut path = PathBuilder::new();
-     //  path.move_to(rect.min);
-     //  path.line_to(vec2(rect.max.x, rect.min.y - 233.0));
-     //  path.line_to(rect.max);
-     //  path.line_to(vec2(rect.min.x + 20.0, rect.max.y));
-     //  path.close();
-
-     // self.tess.stroke_path(PathSlice::from(&path), 1.0);
-     // self.push_draw_op(Fill::Solid(srgba8(255, 255, 0, 255)));
-
-     //  flatten_path(
-     //      PathSlice::from(&path),
-     //      &Mat3::IDENTITY,
-     //      1.0,
-     //      self.scene_2.path_index,
-     //      &mut self.scene_2.vertices,
-     //      &mut self.scene_2.contours,
-     //  );
-     //  self.scene_2.path_index += 1;
     }
 
     pub fn save(&mut self) {
@@ -90,27 +73,28 @@ impl<'a> PaintScene<'a> {
         } else {
             warn!("restore() called without a matching save()");
         }
+        self.scene.draw_commands.push(DrawCommand::SetTransform(self.transform));
     }
 
     pub fn transform(&mut self, transform: Mat3) {
         self.transform = self.transform * transform;
+        self.scene.draw_commands.push(DrawCommand::SetTransform(self.transform));
     }
 
-    pub fn fill_path(&mut self, path: &Path, fill: impl Into<Fill>) {
-        let (vertices, contours) = flatten_path(
-            PathSlice::from(path),
-            &self.transform,
-            1.0,
-            self.scene_2.path_index,
-            &mut self.scene_2.vertices,
-            &mut self.scene_2.contours,
-        );
-        self.scene_2.paths.push(contours);
-        self.scene_2.fills.push(fill.into());
-        self.scene_2.path_index += 1;
+    pub fn fill_path(&mut self, path: &impl AsPathSlice, fill: impl Into<Fill>) {
+        let path = path.as_path_slice();
+        let base_vertex = self.scene.path_points.len();
+        let base_verb = self.scene.path_verbs.len();
+        self.scene.path_points.extend_from_slice(&path.points);
+        self.scene.path_verbs.extend_from_slice(&path.verbs);
+        let fill_index = self.scene.fills.len();
+        self.scene.fills.push(fill.into());
 
-       // self.tess.stroke_path(PathSlice::from(path), 1.0);
-       // self.push_draw_op(Fill::Solid(srgba8(255, 255, 0, 255)));
+        self.scene.draw_commands.push(DrawCommand::FillPath {
+            verb_range: base_verb..self.scene.path_verbs.len(),
+            base_vertex,
+            fill: fill_index,
+        });
     }
 
     pub fn draw_line(&mut self, p0: Vec2, p1: Vec2, width: f32, fill: impl Into<Fill>) {
@@ -178,7 +162,131 @@ impl<'a> PaintScene<'a> {
     }
 
     pub fn finish(mut self, cmd: &mut CommandBuffer, params: &PaintRenderParams) {
-        render_scene_2(cmd, self.painter, params, &self.scene_2);
-        render_scene(cmd, self.painter, params, &self.scene);
+        renderer::render_scene(cmd, self.painter, params, &self.scene);
+        render_scene(cmd, self.painter, params, &self.old_scene);
     }
+}
+
+//--------------------------------------------------------------------------------------------------
+
+struct DrawOp {
+    mesh: Mesh,
+    clip: Rect,
+    device_to_local: Mat3,
+    fill: Fill,
+}
+
+struct RenderScene {
+    vertices: Vec<PaintVertex>,
+    indices: Vec<u32>,
+    ops: Vec<DrawOp>,
+}
+
+impl Default for RenderScene {
+    fn default() -> Self {
+        Self { vertices: vec![], indices: vec![], ops: vec![] }
+    }
+}
+
+fn render_scene(cmd: &mut CommandBuffer, painter: &mut Painter, params: &PaintRenderParams, scene: &RenderScene) {
+    assert_eq!(params.color_target.format(), painter.color_format, "mismatched color target format");
+    assert_eq!(
+        params.depth_target.as_ref().map(|d| d.format()),
+        painter.depth_format,
+        "mismatched depth target format"
+    );
+
+    // prepare texture atlas
+    let _atlas = painter.texture_atlas.prepare_texture(cmd);
+
+    // setup encoder
+    let mut encoder = cmd.begin_rendering(
+        &[gpu::ColorAttachment { image: &params.color_target, clear: None }],
+        params.depth_target.as_ref().map(|d| gpu::DepthStencilAttachment {
+            image: d,
+            depth_clear: None,
+            stencil_clear: None,
+        }),
+    );
+
+    let width = params.color_target.width();
+    let height = params.color_target.height();
+    encoder.set_viewport(0.0, 0.0, width as f32, height as f32, 0.0, 1.0);
+    encoder.set_scissor(0, 0, width, height);
+    encoder.bind_graphics_pipeline(&painter.pipelines.paint);
+
+    for prim in scene.ops.iter() {
+        if prim.clip.is_null() {
+            continue;
+        }
+
+        let texture;
+        let device_to_uv_transform;
+        let mut color = Srgba8::WHITE;
+
+        match prim.fill {
+            Fill::Solid(solid_color) => {
+                texture = painter.texture_atlas.texture_handle();
+                device_to_uv_transform = Mat3::from_cols(
+                    Vec3::ZERO,
+                    Vec3::ZERO,
+                    vec3(painter.white_pixel_uv_f.x, painter.white_pixel_uv_f.y, 1.0),
+                );
+                color = solid_color;
+            }
+            Fill::Texture { texture: tex, uv_transform } => {
+                texture = tex;
+                device_to_uv_transform = prim.device_to_local * uv_transform;
+            }
+        };
+
+        let root_params = encoder.upload(&PaintRootParams {
+            screen_size: [width as f32, height as f32],
+            line_width: 1.0,
+            device_to_uv_transform,
+            texture,
+            sampler: painter.sampler.device_handle(),
+            color,
+        });
+        draw_mesh(&mut encoder, params, &prim.mesh, prim.clip, root_params);
+    }
+    encoder.finish();
+}
+
+fn set_scissor(encoder: &mut gpu::RenderEncoder, params: &PaintRenderParams, clip: Rect) {
+    let width = params.color_target.width();
+    let height = params.color_target.height();
+
+    // Transform clip rect to physical pixels
+    let pixels_per_point = 1.0;
+    let clip_min_x = ((pixels_per_point * clip.min.x).round() as i32).clamp(0, width as i32);
+    let clip_min_y = ((pixels_per_point * clip.min.y).round() as i32).clamp(0, height as i32);
+    let clip_max_x = ((pixels_per_point * clip.max.x).round() as i32).clamp(clip_min_x, width as i32);
+    let clip_max_y = ((pixels_per_point * clip.max.y).round() as i32).clamp(clip_min_y, height as i32);
+
+    encoder.set_scissor(clip_min_x, clip_min_y, clip_max_x as u32, clip_max_y as u32);
+}
+
+fn draw_mesh(
+    encoder: &mut gpu::RenderEncoder,
+    params: &PaintRenderParams,
+    mesh: &Mesh,
+    clip: Rect,
+    root_params: Ptr<PaintRootParams>,
+) {
+    if mesh.vertices.is_empty() || mesh.indices.is_empty() {
+        return;
+    }
+    let vertex_buffer = gpu::Buffer::from_slice(&mesh.vertices);
+    let index_buffer = gpu::Buffer::from_slice(&mesh.indices);
+    set_scissor(encoder, params, clip);
+    encoder.draw_indexed(
+        TriangleList,
+        &index_buffer,
+        0..mesh.indices.len() as u32,
+        Some(vertex_buffer.as_bytes()),
+        0,
+        0..1,
+        PushDataSource::Indirect(root_params),
+    );
 }

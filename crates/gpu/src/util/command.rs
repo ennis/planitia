@@ -10,18 +10,10 @@ impl CommandBuffer {
         self.copy_buffer_to_image(
             ImageCopyBuffer {
                 buffer: staging_buffer.as_bytes(),
-                layout: ImageDataLayout {
-                    offset: 0,
-                    texel_row_length: Some(size.width),
-                    row_count: Some(size.height),
-                },
+                layout: ImageDataLayout { offset: 0, texel_row_length: Some(size.width), row_count: Some(size.height) },
             },
             image,
-            vk::Extent3D {
-                width: size.width,
-                height: size.height,
-                depth: size.depth,
-            },
+            vk::Extent3D { width: size.width, height: size.height, depth: size.depth },
         );
     }
 
@@ -30,17 +22,8 @@ impl CommandBuffer {
         create_info_with_transfer_dst.usage |= ImageUsage::TRANSFER_DST;
         let image = Device::global().create_image(create_info);
         self.upload_image_data(
-            ImageCopyView {
-                image: &image,
-                mip_level: 0,
-                origin: Offset3D::ZERO,
-                aspect,
-            },
-            Size3D {
-                width: create_info.width,
-                height: create_info.height,
-                depth: create_info.depth,
-            },
+            ImageCopyView { image: &image, mip_level: 0, origin: Offset3D::ZERO, aspect },
+            Size3D { width: create_info.width, height: create_info.height, depth: create_info.depth },
             data,
         );
         image
@@ -52,24 +35,10 @@ impl CommandBuffer {
         self.blit_image(
             &src,
             ImageSubresourceLayers { layer_count: 1, .. },
-            Rect3D {
-                min: Offset3D { x: 0, y: 0, z: 0 },
-                max: Offset3D {
-                    x: width,
-                    y: height,
-                    z: 1,
-                },
-            },
+            Rect3D { min: Offset3D { x: 0, y: 0, z: 0 }, max: Offset3D { x: width, y: height, z: 1 } },
             &dst,
             ImageSubresourceLayers { layer_count: 1, .. },
-            Rect3D {
-                min: Offset3D { x: 0, y: 0, z: 0 },
-                max: Offset3D {
-                    x: width,
-                    y: height,
-                    z: 1,
-                },
-            },
+            Rect3D { min: Offset3D { x: 0, y: 0, z: 0 }, max: Offset3D { x: width, y: height, z: 1 } },
             vk::Filter::NEAREST,
         );
     }

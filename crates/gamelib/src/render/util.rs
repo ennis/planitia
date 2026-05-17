@@ -14,11 +14,7 @@ pub struct RenderTarget {
 impl RenderTarget {
     /// Creates a new render target with no allocated image.
     pub fn new(format: gpu::Format, usage: ImageUsage) -> Self {
-        RenderTarget {
-            inner: None,
-            usage,
-            format,
-        }
+        RenderTarget { inner: None, usage, format }
     }
 
     /// Allocates or resizes the render target image as needed to match the specified dimensions and format.
@@ -35,13 +31,7 @@ impl RenderTarget {
         let _ = self.inner.take();
 
         // allocate a new image with the specified dimensions and format
-        let image = Image::new(ImageCreateInfo {
-            width,
-            height,
-            format: self.format,
-            usage: self.usage,
-            ..
-        });
+        let image = Image::new(ImageCreateInfo { width, height, format: self.format, usage: self.usage, .. });
 
         self.inner = Some(RenderTargetInner { image, width, height });
     }
@@ -69,10 +59,7 @@ impl RenderTarget {
 
     /// Returns a color attachment descriptor for the image.
     pub fn as_color_attachment(&self, clear_color: impl Into<Option<[f64; 4]>>) -> ColorAttachment<'_> {
-        ColorAttachment {
-            image: self.image(),
-            clear: clear_color.into(),
-        }
+        ColorAttachment { image: self.image(), clear: clear_color.into() }
     }
 
     /// Returns a depth attachment descriptor for the image.

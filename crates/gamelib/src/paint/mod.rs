@@ -1,13 +1,13 @@
 mod atlas;
 mod fill;
+mod flatten;
 mod path;
+mod pipelines;
+mod renderer;
+mod scene;
 mod shape;
 mod tessellation;
 mod text;
-mod scene;
-mod render;
-mod pipelines;
-mod flatten;
 
 pub use path::*;
 pub use scene::{DrawGlyphRunOptions, PaintScene};
@@ -19,11 +19,11 @@ use crate::paint::fill::Fill;
 use crate::paint::pipelines::Pipelines;
 use crate::paint::tessellation::Mesh;
 use crate::paint::text::GlyphCache;
-use color::Srgba8;
-use gpu::{vk, ImageUsage, Sampler, Vertex as GpuVertex};
-use math::geom::Camera;
-use math::{u16vec2, uvec2, vec2, IVec2, Mat3, Rect, U16Vec2, UVec2, Vec2};
 use crate::render::RenderTarget;
+use color::Srgba8;
+use gpu::{ImageUsage, Sampler, Vertex as GpuVertex, vk};
+use math::geom::Camera;
+use math::{IVec2, Mat3, Rect, U16Vec2, UVec2, Vec2, u16vec2, uvec2, vec2};
 
 /// Vertex used in the painting shaders.
 #[repr(C)]
@@ -43,17 +43,12 @@ impl PaintVertex {
     }
 }
 
-
 /// Converts a texel coordinate into u16 normalized UV coordinates.
 ///
 /// Equivalent to `pos / texture_size * 65535`.
 pub fn texel_to_normalized_texcoord(pos: Vec2, texture_size: UVec2) -> U16Vec2 {
-    u16vec2(
-        ((pos.x / texture_size.x as f32) * 65535.0) as u16,
-        ((pos.y / texture_size.y as f32) * 65535.0) as u16,
-    )
+    u16vec2(((pos.x / texture_size.x as f32) * 65535.0) as u16, ((pos.y / texture_size.y as f32) * 65535.0) as u16)
 }
-
 
 pub struct PaintRenderParams<'a> {
     pub camera: Camera,
@@ -80,19 +75,12 @@ impl Painter {
     /// Creates a new painter.
     ///
     /// `target_color_format` and `target_depth_format` specify the formats of the render targets that will be used during rendering.
-    pub fn new(target_color_format: gpu::Format, target_depth_format: Option<gpu::Format>) -> Painter
-    {
-
+    pub fn new(target_color_format: gpu::Format, target_depth_format: Option<gpu::Format>) -> Painter {
         let (atlas, white_pixel_uv) = init_atlas();
-        let sampler = Sampler::new(gpu::SamplerCreateInfo {
-            mag_filter: vk::Filter::LINEAR,
-            min_filter: vk::Filter::LINEAR,
-            ..
-        });
-        let white_pixel_uv_f = vec2(
-            white_pixel_uv.x as f32 / (u16::MAX as f32),
-            white_pixel_uv.y as f32 / (u16::MAX as f32),
-        );
+        let sampler =
+            Sampler::new(gpu::SamplerCreateInfo { mag_filter: vk::Filter::LINEAR, min_filter: vk::Filter::LINEAR, .. });
+        let white_pixel_uv_f =
+            vec2(white_pixel_uv.x as f32 / (u16::MAX as f32), white_pixel_uv.y as f32 / (u16::MAX as f32));
 
         Painter {
             pipelines: Pipelines::create(target_color_format, target_depth_format),
@@ -103,7 +91,10 @@ impl Painter {
             white_pixel_uv,
             white_pixel_uv_f,
             sampler,
-            coverage_target: RenderTarget::new(vk::Format::R32G32B32A32_SFLOAT, ImageUsage::COLOR_ATTACHMENT | ImageUsage::TRANSFER_DST | ImageUsage::STORAGE),
+            coverage_target: RenderTarget::new(
+                vk::Format::R32G32B32A32_SFLOAT,
+                ImageUsage::COLOR_ATTACHMENT | ImageUsage::TRANSFER_DST | ImageUsage::STORAGE,
+            ),
         }
     }
 
@@ -127,8 +118,6 @@ fn init_atlas() -> (Atlas, U16Vec2) {
     );
     (atlas, pos)
 }
-
-
 
 #[cfg(test)]
 mod test {}

@@ -88,20 +88,12 @@ impl Atlas {
         self.dirty.start = (rect.min.y as u32).min(self.dirty.start);
         self.dirty.end = (rect.max.y as u32).max(self.dirty.end);
 
-        AtlasSliceMut {
-            data: &mut self.data[start..],
-            rect,
-            stride: self.width,
-        }
+        AtlasSliceMut { data: &mut self.data[start..], rect, stride: self.width }
     }
 
     /// Writes the specified image in the atlas and returns the rectangle.
     pub fn write(&mut self, width: u32, height: u32, data: &[Srgba8], gap_after_x: u32, gap_after_y: u32) -> IRect {
-        assert_eq!(
-            data.len(),
-            width as usize * height as usize,
-            "Data size does not match image dimensions"
-        );
+        assert_eq!(data.len(), width as usize * height as usize, "Data size does not match image dimensions");
 
         let mut slice = self.allocate(width, height, gap_after_x, gap_after_y);
 
@@ -160,18 +152,10 @@ impl Atlas {
             ImageCopyView {
                 image: &self.texture,
                 mip_level: 0,
-                origin: gpu::Offset3D {
-                    x: 0,
-                    y: self.dirty.start as i32,
-                    z: 0,
-                },
+                origin: gpu::Offset3D { x: 0, y: self.dirty.start as i32, z: 0 },
                 aspect: ImageAspect::All,
             },
-            Size3D {
-                width: self.width,
-                height,
-                depth: 1,
-            },
+            Size3D { width: self.width, height, depth: 1 },
             unsafe { slice_to_u8(&self.data[range]) },
         );
 

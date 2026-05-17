@@ -1,5 +1,5 @@
 use crate::{Vec2, Vec3};
-use std::iter;
+
 macro_rules! impl_bezier {
     ($(#[$attr:meta])* $name:ident, $vec:ty) => {
         $(#[$attr])*

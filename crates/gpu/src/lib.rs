@@ -1,8 +1,5 @@
 #![feature(default_field_values)]
-#![allow(
-    unsafe_op_in_unsafe_fn,
-    reason = "too verbose, and my IDE already highlights unsafe call sites"
-)]
+#![allow(unsafe_op_in_unsafe_fn, reason = "too verbose, and my IDE already highlights unsafe call sites")]
 #![expect(unused, reason = "noisy")]
 
 mod buffer;
@@ -69,27 +66,18 @@ pub struct Ptr<T: ?Sized + 'static> {
 
 impl<T: ?Sized + 'static> Ptr<T> {
     /// Null (invalid) device address.
-    pub const NULL: Self = Ptr {
-        raw: 0,
-        _phantom: PhantomData,
-    };
+    pub const NULL: Self = Ptr { raw: 0, _phantom: PhantomData };
 }
 
 impl<T: 'static> Ptr<T> {
     pub fn offset(self, offset: usize) -> Self {
-        Ptr {
-            raw: self.raw + (offset * size_of::<T>()) as u64,
-            _phantom: PhantomData,
-        }
+        Ptr { raw: self.raw + (offset * size_of::<T>()) as u64, _phantom: PhantomData }
     }
 }
 
 impl<T: ?Sized + 'static> Clone for Ptr<T> {
     fn clone(&self) -> Self {
-        Ptr {
-            raw: self.raw,
-            _phantom: PhantomData,
-        }
+        Ptr { raw: self.raw, _phantom: PhantomData }
     }
 }
 
@@ -106,10 +94,7 @@ pub struct TextureHandle {
 }
 
 impl TextureHandle {
-    pub const INVALID: Self = TextureHandle {
-        index: u32::MAX,
-        _unused: 0,
-    };
+    pub const INVALID: Self = TextureHandle { index: u32::MAX, _unused: 0 };
 }
 
 /// Bindless handle to a storage image.
@@ -123,10 +108,7 @@ pub struct StorageImageHandle {
 }
 
 impl StorageImageHandle {
-    pub const INVALID: Self = StorageImageHandle {
-        index: u32::MAX,
-        _unused: 0,
-    };
+    pub const INVALID: Self = StorageImageHandle { index: u32::MAX, _unused: 0 };
 }
 
 /// Bindless handle to a sampler.
@@ -140,10 +122,7 @@ pub struct SamplerHandle {
 }
 
 impl SamplerHandle {
-    pub const INVALID: Self = SamplerHandle {
-        index: u32::MAX,
-        _unused: 0,
-    };
+    pub const INVALID: Self = SamplerHandle { index: u32::MAX, _unused: 0 };
 }
 
 /// Graphics pipelines.
@@ -254,10 +233,7 @@ impl Sampler {
 
     /// Returns the bindless sampler handle.
     pub fn device_handle(&self) -> SamplerHandle {
-        SamplerHandle {
-            index: self.descriptor_index.index(),
-            _unused: 0,
-        }
+        SamplerHandle { index: self.descriptor_index.index(), _unused: 0 }
     }
 }
 
@@ -280,16 +256,9 @@ impl CommandPool {
             queue_family_index,
             ..Default::default()
         };
-        let command_pool = device
-            .create_command_pool(&create_info, None)
-            .expect("failed to create a command pool");
+        let command_pool = device.create_command_pool(&create_info, None).expect("failed to create a command pool");
 
-        CommandPool {
-            queue_family: queue_family_index,
-            command_pool,
-            free: vec![],
-            used: vec![],
-        }
+        CommandPool { queue_family: queue_family_index, command_pool, free: vec![], used: vec![] }
     }
 
     fn alloc(&mut self, device: &ash::Device) -> vk::CommandBuffer {
@@ -300,9 +269,7 @@ impl CommandPool {
                 command_buffer_count: 1,
                 ..Default::default()
             };
-            let buffers = device
-                .allocate_command_buffers(&allocate_info)
-                .expect("failed to allocate command buffers");
+            let buffers = device.allocate_command_buffers(&allocate_info).expect("failed to allocate command buffers");
             buffers[0]
         });
         self.used.push(cb);
@@ -310,9 +277,7 @@ impl CommandPool {
     }
 
     unsafe fn reset(&mut self, device: &ash::Device) {
-        device
-            .reset_command_pool(self.command_pool, vk::CommandPoolResetFlags::empty())
-            .unwrap();
+        device.reset_command_pool(self.command_pool, vk::CommandPoolResetFlags::empty()).unwrap();
         self.free.append(&mut self.used)
     }
 }
@@ -414,27 +379,11 @@ pub struct ImageCopyView<'a> {
 
 /// Description of one argument in an argument block.
 pub enum Descriptor<'a> {
-    SampledImage {
-        image: &'a Image,
-        layout: vk::ImageLayout,
-    },
-    StorageImage {
-        image: &'a Image,
-        layout: vk::ImageLayout,
-    },
-    UniformBuffer {
-        buffer: &'a BufferUntyped,
-        offset: u64,
-        size: u64,
-    },
-    StorageBuffer {
-        buffer: &'a BufferUntyped,
-        offset: u64,
-        size: u64,
-    },
-    Sampler {
-        sampler: Sampler,
-    },
+    SampledImage { image: &'a Image, layout: vk::ImageLayout },
+    StorageImage { image: &'a Image, layout: vk::ImageLayout },
+    UniformBuffer { buffer: &'a BufferUntyped, offset: u64, size: u64 },
+    StorageBuffer { buffer: &'a BufferUntyped, offset: u64, size: u64 },
+    Sampler { sampler: Sampler },
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -450,11 +399,7 @@ pub struct BufferRange<'a, T> {
 // #26925 clone impl
 impl<T> Clone for BufferRange<'_, T> {
     fn clone(&self) -> Self {
-        Self {
-            buffer: self.buffer,
-            byte_offset: self.byte_offset,
-            byte_size: self.byte_size,
-        }
+        Self { buffer: self.buffer, byte_offset: self.byte_offset, byte_size: self.byte_size }
     }
 }
 
@@ -474,19 +419,11 @@ impl<'a, T: Copy + 'static> BufferRange<'a, T> {
     }
 
     pub fn storage_descriptor(&self) -> Descriptor<'_> {
-        Descriptor::StorageBuffer {
-            buffer: self.buffer.as_bytes(),
-            offset: self.byte_offset,
-            size: self.byte_size,
-        }
+        Descriptor::StorageBuffer { buffer: self.buffer.as_bytes(), offset: self.byte_offset, size: self.byte_size }
     }
 
     pub fn uniform_descriptor(&self) -> Descriptor<'_> {
-        Descriptor::UniformBuffer {
-            buffer: self.buffer.as_bytes(),
-            offset: self.byte_offset,
-            size: self.byte_size,
-        }
+        Descriptor::UniformBuffer { buffer: self.buffer.as_bytes(), offset: self.byte_offset, size: self.byte_size }
     }
 
     pub fn as_bytes(&self) -> BufferRange<'a, u8> {
@@ -547,12 +484,7 @@ impl ColorAttachment<'_> {
                     ],
                 },
                 FormatNumericType::SInt => vk::ClearColorValue {
-                    int32: [
-                        clear_value[0] as i32,
-                        clear_value[1] as i32,
-                        clear_value[2] as i32,
-                        clear_value[3] as i32,
-                    ],
+                    int32: [clear_value[0] as i32, clear_value[1] as i32, clear_value[2] as i32, clear_value[3] as i32],
                 },
                 FormatNumericType::Float => vk::ClearColorValue {
                     float32: [
@@ -660,10 +592,7 @@ pub enum PreRasterizationShaders<'a> {
         //geometry: Option<ShaderDescriptor<'a>>,
     },
     /// Shaders of the mesh shading pipeline (the new mesh and task shaders).
-    MeshShading {
-        task: Option<ShaderEntryPoint<'a>>,
-        mesh: ShaderEntryPoint<'a>,
-    },
+    MeshShading { task: Option<ShaderEntryPoint<'a>>, mesh: ShaderEntryPoint<'a> },
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -710,17 +639,11 @@ pub fn is_depth_format(fmt: vk::Format) -> bool {
 }
 
 pub fn is_depth_and_stencil_format(fmt: vk::Format) -> bool {
-    matches!(
-        fmt,
-        Format::D16_UNORM_S8_UINT | Format::D24_UNORM_S8_UINT | Format::D32_SFLOAT_S8_UINT
-    )
+    matches!(fmt, Format::D16_UNORM_S8_UINT | Format::D24_UNORM_S8_UINT | Format::D32_SFLOAT_S8_UINT)
 }
 
 pub fn is_depth_only_format(fmt: vk::Format) -> bool {
-    matches!(
-        fmt,
-        Format::D16_UNORM | Format::X8_D24_UNORM_PACK32 | Format::D32_SFLOAT
-    )
+    matches!(fmt, Format::D16_UNORM | Format::X8_D24_UNORM_PACK32 | Format::D32_SFLOAT)
 }
 
 pub fn is_stencil_only_format(fmt: vk::Format) -> bool {
@@ -888,12 +811,8 @@ pub const fn append_attributes<const N: usize>(
     base_location: u32,
     tail: &'static [VertexAttributeDescription],
 ) -> [VertexInputAttributeDescription; N] {
-    const NULL_ATTR: VertexInputAttributeDescription = VertexInputAttributeDescription {
-        location: 0,
-        binding: 0,
-        format: Format::UNDEFINED,
-        offset: 0,
-    };
+    const NULL_ATTR: VertexInputAttributeDescription =
+        VertexInputAttributeDescription { location: 0, binding: 0, format: Format::UNDEFINED, offset: 0 };
     let mut result = [NULL_ATTR; N];
     let mut i = 0;
     while i < head.len() {

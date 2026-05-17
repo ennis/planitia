@@ -22,34 +22,23 @@ struct App {
 
 impl App {
     pub fn new(evproxy: EventLoopProxy<WebViewEvent>) -> Self {
-        Self {
-            evproxy,
-            window: None,
-            webview: None,
-        }
+        Self { evproxy, window: None, webview: None }
     }
 }
 
 impl ApplicationHandler<WebViewEvent> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let window = event_loop
-            .create_window(Window::default_attributes().with_title("Pipeline Editor"))
-            .unwrap();
+        let window = event_loop.create_window(Window::default_attributes().with_title("Pipeline Editor")).unwrap();
         let webview = WebViewBuilder::new()
             .with_custom_protocol("res".to_string(), move |_id, request| {
                 let path = request.uri().path().strip_prefix("/").unwrap();
                 eprintln!("request URI: {}", request.uri());
                 eprintln!("{:?}", path);
                 if let Some(file) = PROJECT_DIR.get_file(path) {
-                    wry::http::Response::builder()
-                        .body(Cow::Borrowed(file.contents()))
-                        .unwrap()
+                    wry::http::Response::builder().body(Cow::Borrowed(file.contents())).unwrap()
                 } else {
                     error!("file not found: {}", path);
-                    wry::http::Response::builder()
-                        .status(404)
-                        .body(Cow::Borrowed(&[][..]))
-                        .unwrap()
+                    wry::http::Response::builder().status(404).body(Cow::Borrowed(&[][..])).unwrap()
                 }
             })
             .with_document_title_changed_handler({
@@ -121,11 +110,7 @@ struct Args {
 }
 
 fn main() {
-    env_logger::builder()
-        .parse_default_env()
-        .format_target(false)
-        .format_timestamp(None)
-        .init();
+    env_logger::builder().parse_default_env().format_target(false).format_timestamp(None).init();
 
     let args = Args::parse();
 

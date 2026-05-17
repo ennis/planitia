@@ -1,11 +1,10 @@
+use gpu::Ptr;
 use math::Vec3;
 use std::collections::HashMap;
-use gpu::Ptr;
 
 #[derive(Default, Copy, Clone, Debug)]
 #[repr(C)]
 pub struct WingedEdge {
-
     pub src_point: u32,
     pub dst_point: u32,
 
@@ -72,7 +71,7 @@ impl<PointData: Copy, FaceVertexData: Copy> Default for WingedEdgeMesh<PointData
 
 #[repr(C)]
 #[derive(Copy, Clone)]
-pub struct WEMeshDataGPU<PointData: Copy+'static, FaceVertexData: Copy+'static> {
+pub struct WEMeshDataGPU<PointData: Copy + 'static, FaceVertexData: Copy + 'static> {
     pub points: Ptr<WEPoint<PointData>>,
     pub face_vertices: Ptr<WEFaceVertex<FaceVertexData>>,
     pub edges: Ptr<WingedEdge>,
@@ -84,7 +83,6 @@ pub struct WEMeshDataGPU<PointData: Copy+'static, FaceVertexData: Copy+'static> 
 }
 
 impl<PointData: Copy, FaceVertexData: Copy> WingedEdgeMesh<PointData, FaceVertexData> {
-
     /// Returns a struct containing GPU pointers and counts for the mesh data, suitable for use in shaders.
     pub fn gpu_data(&self) -> WEMeshDataGPU<PointData, FaceVertexData> {
         WEMeshDataGPU {
@@ -110,10 +108,7 @@ impl<PointData: Copy, FaceVertexData: Copy> WingedEdgeMesh<PointData, FaceVertex
         face_vertices: &[FaceVertexData],
         get_point: impl Fn(&FaceVertexData) -> u32,
     ) -> WingedEdgeMesh<PointData, FaceVertexData> {
-        assert!(
-            face_vertices.len() % 3 == 0,
-            "invalid number of indices: must be a multiple of 3"
-        );
+        assert!(face_vertices.len() % 3 == 0, "invalid number of indices: must be a multiple of 3");
 
         let mut faces: Vec<WEFace> = Vec::with_capacity(face_vertices.len() / 3);
         let mut edge_map: HashMap<(u32, u32), u32> = HashMap::new();
@@ -125,12 +120,7 @@ impl<PointData: Copy, FaceVertexData: Copy> WingedEdgeMesh<PointData, FaceVertex
         let face_vertices: Vec<_> = face_vertices
             .iter()
             .enumerate()
-            .map(|(i, fv)| {
-                WEFaceVertex {
-                    data: *fv,
-                    incident_edge: u32::MAX,
-                }
-            })
+            .map(|(i, fv)| WEFaceVertex { data: *fv, incident_edge: u32::MAX })
             .collect();
 
         for fvs in face_vertices.chunks(3) {
@@ -206,5 +196,4 @@ impl<PointData: Copy, FaceVertexData: Copy> WingedEdgeMesh<PointData, FaceVertex
             faces_gpu,
         }
     }
-
 }

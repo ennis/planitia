@@ -14,10 +14,7 @@ const CSZ: f32 = 22.0;
 
 /// Grid rectangle
 fn g_rect(x: i32, y: i32, w: i32, h: i32) -> egui::Rect {
-    egui::Rect::from_min_size(
-        egui::pos2(x as f32 * CSZ, y as f32 * CSZ),
-        egui::vec2(w as f32 * CSZ, h as f32 * CSZ),
-    )
+    egui::Rect::from_min_size(egui::pos2(x as f32 * CSZ, y as f32 * CSZ), egui::vec2(w as f32 * CSZ, h as f32 * CSZ))
 }
 
 fn edit_cell(ui: &mut egui::Ui) {
@@ -45,11 +42,7 @@ enum CellData {
 #[derive(Clone, Serialize, Deserialize)]
 enum CellFormat {
     Text,
-    Number {
-        min: Option<f64>,
-        max: Option<f64>,
-        step: Option<f64>,
-    },
+    Number { min: Option<f64>, max: Option<f64>, step: Option<f64> },
 }
 
 /*
@@ -133,7 +126,6 @@ fn cell_gui(ui: &mut egui::Ui, pos: Vec2, size: Vec2, cell: &mut Cell, styles: &
 
 impl Grid {
     fn gui(&mut self, ui: &mut egui::Ui) {
-
         self.paint_borders(ui.painter());
 
         let mut x_pos = 0;
@@ -220,53 +212,19 @@ impl Grid {
     }
 
     pub fn new(column_count: usize, row_count: usize) -> Self {
-        let columns = vec![
-            Track {
-                size: 100,
-                collapsed: false
-            };
-            column_count
-        ];
-        let rows = vec![
-            Track {
-                size: 22,
-                collapsed: false
-            };
-            row_count
-        ];
+        let columns = vec![Track { size: 100, collapsed: false }; column_count];
+        let rows = vec![Track { size: 22, collapsed: false }; row_count];
 
         let cells = vec![
-            Cell {
-                style: 0,
-                data: CellData::Text("Hello".to_string()),
-                format: CellFormat::Text,
-            };
+            Cell { style: 0, data: CellData::Text("Hello".to_string()), format: CellFormat::Text };
             column_count * row_count
         ];
-        let styles = vec![CellStyle {
-            background: Srgba8::new(0, 0, 0, 255),
-        }];
+        let styles = vec![CellStyle { background: Srgba8::new(0, 0, 0, 255) }];
 
-        let h_borders = vec![
-            vec![
-                BorderStyle {
-                    width: 1,
-                    color: Srgba8::new(255, 255, 255, 255),
-                };
-                column_count
-            ];
-            row_count + 1
-        ];
-        let v_borders = vec![
-            vec![
-                BorderStyle {
-                    width: 1,
-                    color: Srgba8::new(255, 255, 255, 255),
-                };
-                row_count
-            ];
-            column_count + 1
-        ];
+        let h_borders =
+            vec![vec![BorderStyle { width: 1, color: Srgba8::new(255, 255, 255, 255) }; column_count]; row_count + 1];
+        let v_borders =
+            vec![vec![BorderStyle { width: 1, color: Srgba8::new(255, 255, 255, 255) }; row_count]; column_count + 1];
 
         Grid {
             pos: IVec2::ZERO,
@@ -302,9 +260,7 @@ impl Default for Worksheet {
 
 impl Worksheet {
     pub fn new(column_count: usize, row_count: usize) -> Self {
-        Self {
-            root_grid: Grid::new(column_count, row_count),
-        }
+        Self { root_grid: Grid::new(column_count, row_count) }
     }
 
     pub fn gui(&mut self, ui: &mut egui::Ui) {
@@ -322,4 +278,3 @@ impl Worksheet {
         Ok(worksheet)
     }
 }
-

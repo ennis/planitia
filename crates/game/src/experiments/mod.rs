@@ -1,28 +1,24 @@
+pub mod automaton;
 pub mod coat;
 mod dcel;
 pub mod lines;
 pub mod outlines;
+mod ss_contours;
+pub mod svg;
 mod sweep;
 mod winged_edge_mesh;
-mod ss_contours;
-pub mod automaton;
-pub mod svg;
 
 use color::Srgba8;
 use gamelib::paint::{DrawGlyphRunOptions, PaintRenderParams, Painter, TextFormat, TextLayout};
 use math::geom::rect_xywh;
 use math::vec2;
 
-
 pub(super) fn painting_test(painter: &mut Painter, cmd: &mut gpu::CommandBuffer, target: &gpu::Image, color: Srgba8) {
     let mut scene = painter.build_scene();
     scene.fill_rrect(rect_xywh(100.0, 100.0, 200.0, 200.0), 20.0, color);
 
     let mut text = TextLayout::new(
-        &TextFormat {
-            size: 48.0,
-            ..Default::default()
-        },
+        &TextFormat { size: 48.0, ..Default::default() },
         r"Innumerable force of Spirits armed,
 That durst dislike his reign, and, me preferring,
 His utmost power with adverse power opposed
@@ -39,12 +35,5 @@ And what is else not to be overcome?",
         scene.draw_glyph_run(vec2(0.0, 0.0), &glyph_run, &DrawGlyphRunOptions::default());
     }*/
 
-    scene.finish(
-        cmd,
-        &PaintRenderParams {
-            camera: Default::default(),
-            color_target: target,
-            depth_target: None,
-        },
-    );
+    scene.finish(cmd, &PaintRenderParams { camera: Default::default(), color_target: target, depth_target: None });
 }

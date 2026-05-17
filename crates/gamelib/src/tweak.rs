@@ -81,11 +81,7 @@ pub struct TweakOptions {
 
 #[track_caller]
 pub fn tweak_value<T: Tweakable + Clone>(name: &str, default: T, options: TweakOptions) -> T {
-    TWEAKS
-        .lock()
-        .unwrap()
-        .get_or_insert(Location::caller(), name, default, options)
-        .clone()
+    TWEAKS.lock().unwrap().get_or_insert(Location::caller(), name, default, options).clone()
 }
 
 pub fn show_tweaks_gui(ui: &mut Ui) {
@@ -126,9 +122,7 @@ struct Tweaks {
 
 impl Tweaks {
     fn new() -> Self {
-        Self {
-            entries: HashMap::new(),
-        }
+        Self { entries: HashMap::new() }
     }
 
     fn get_or_insert<T: Tweakable>(
@@ -138,18 +132,9 @@ impl Tweaks {
         default: T,
         options: TweakOptions,
     ) -> &mut T {
-        let key = Key {
-            name: name.to_string(),
-            location,
-        };
+        let key = Key { name: name.to_string(), location };
         if !self.entries.contains_key(&key) {
-            self.entries.insert(
-                key.clone(),
-                Tweak {
-                    value: Box::new(default),
-                    options,
-                },
-            );
+            self.entries.insert(key.clone(), Tweak { value: Box::new(default), options });
         }
         let value = &mut *self.entries.get_mut(&key).unwrap().value;
         (value as &mut dyn Any).downcast_mut::<T>().unwrap()

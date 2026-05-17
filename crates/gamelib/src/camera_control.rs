@@ -70,11 +70,7 @@ impl CameraControl {
             zoom: 1.0,
             screen_size: dvec2(screen_width as f64, screen_height as f64),
             cursor_pos: None,
-            frame: CameraFrame {
-                eye: dvec3(0.0, 0.0, 10.0),
-                up: dvec3(0.0, 1.0, 0.0),
-                center: dvec3(0.0, 0.0, 0.0),
-            },
+            frame: CameraFrame { eye: dvec3(0.0, 0.0, 10.0), up: dvec3(0.0, 1.0, 0.0), center: dvec3(0.0, 0.0, 0.0) },
             input_mode: Mode::None,
             last_cam: Cell::new(None),
         }
@@ -140,15 +136,9 @@ impl CameraControl {
                     handled = true;
                     match self.input_mode {
                         Mode::None | Mode::Pan { .. } if pressed => {
-                            self.input_mode = Mode::Pan {
-                                anchor_screen: pos,
-                                orig_frame: self.frame,
-                            };
+                            self.input_mode = Mode::Pan { anchor_screen: pos, orig_frame: self.frame };
                         }
-                        Mode::Pan {
-                            orig_frame,
-                            anchor_screen,
-                        } if !pressed => {
+                        Mode::Pan { orig_frame, anchor_screen } if !pressed => {
                             self.handle_pan(&orig_frame, pos - anchor_screen);
                             self.input_mode = Mode::None;
                         }
@@ -161,15 +151,9 @@ impl CameraControl {
                     handled = true;
                     match self.input_mode {
                         Mode::None | Mode::Tumble { .. } if pressed => {
-                            self.input_mode = Mode::Tumble {
-                                anchor_screen: pos,
-                                orig_frame: self.frame,
-                            };
+                            self.input_mode = Mode::Tumble { anchor_screen: pos, orig_frame: self.frame };
                         }
-                        Mode::Tumble {
-                            orig_frame,
-                            anchor_screen,
-                        } if !pressed => {
+                        Mode::Tumble { orig_frame, anchor_screen } if !pressed => {
                             self.handle_tumble(&orig_frame, anchor_screen, pos);
                             self.input_mode = Mode::None;
                         }
@@ -197,17 +181,11 @@ impl CameraControl {
     fn cursor_moved(&mut self, position: DVec2) -> bool {
         self.cursor_pos = Some(position);
         match self.input_mode {
-            Mode::Tumble {
-                orig_frame,
-                anchor_screen,
-            } => {
+            Mode::Tumble { orig_frame, anchor_screen } => {
                 self.handle_tumble(&orig_frame, anchor_screen, position);
                 true
             }
-            Mode::Pan {
-                orig_frame,
-                anchor_screen,
-            } => {
+            Mode::Pan { orig_frame, anchor_screen } => {
                 self.handle_pan(&orig_frame, position - anchor_screen);
                 true
             }
@@ -245,11 +223,7 @@ impl CameraControl {
 
     /// Returns the look-at matrix
     fn look_at(&self) -> Mat4 {
-        Mat4::look_at_rh(
-            self.frame.eye.as_vec3(),
-            self.frame.center.as_vec3(),
-            self.frame.up.as_vec3(),
-        )
+        Mat4::look_at_rh(self.frame.eye.as_vec3(), self.frame.center.as_vec3(), self.frame.up.as_vec3())
     }
 
     /// Returns a `Camera` for the current viewpoint.
@@ -262,12 +236,9 @@ impl CameraControl {
         let view_inverse = view.inverse();
 
         let flip_y = Mat4::from_scale(Vec3::new(1.0, -1.0, 1.0));
-        let projection = Mat4::perspective_rh(
-            self.fov_y_radians as f32,
-            aspect_ratio as f32,
-            self.z_near as f32,
-            self.z_far as f32,
-        ) * flip_y;
+        let projection =
+            Mat4::perspective_rh(self.fov_y_radians as f32, aspect_ratio as f32, self.z_near as f32, self.z_far as f32)
+                * flip_y;
         let projection_inverse = projection.inverse();
         let cam = Camera {
             frustum: Frustum {

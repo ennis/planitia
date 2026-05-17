@@ -1,5 +1,5 @@
 use color::Srgba8;
-use math::{mat3, vec3, Affine2, Affine3A, Mat3, Mat3A};
+use math::{Affine2, Affine3A, Mat3, Mat3A, mat3, vec3};
 
 /// Represents a fill style for painting shapes.
 pub enum Fill {
@@ -33,6 +33,3 @@ pub fn rect_transform(source_local_rect: math::Rect, target_uv_rect: math::Rect)
 }
 
 // TODO Gradient fills
-
-
-

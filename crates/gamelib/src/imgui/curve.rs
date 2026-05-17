@@ -26,14 +26,8 @@ pub fn curve_editor(ui: &mut Ui, abscissae: &mut [f64], values: &mut [f64]) -> R
         for y in 1..grid_divisions {
             let mut pos = to_area.transform_pos(pos2(x as f32, y as f32) / grid_divisions as f32);
             pos = pos.round_to_pixels(painter.pixels_per_point());
-            painter.line_segment(
-                [Pos2::new(pos.x + 0.5, rect.min.y), Pos2::new(pos.x + 0.5, rect.max.y)],
-                grid_stroke,
-            );
-            painter.line_segment(
-                [Pos2::new(rect.min.x, pos.y + 0.5), Pos2::new(rect.max.x, pos.y + 0.5)],
-                grid_stroke,
-            );
+            painter.line_segment([Pos2::new(pos.x + 0.5, rect.min.y), Pos2::new(pos.x + 0.5, rect.max.y)], grid_stroke);
+            painter.line_segment([Pos2::new(rect.min.x, pos.y + 0.5), Pos2::new(rect.max.x, pos.y + 0.5)], grid_stroke);
         }
     }
 
@@ -58,12 +52,7 @@ pub fn curve_editor(ui: &mut Ui, abscissae: &mut [f64], values: &mut [f64]) -> R
             values[values.len() - 1] = values[values.len() - 2];
         }
 
-        painter.circle(
-            center,
-            handle_radius,
-            Color32::TRANSPARENT,
-            Stroke::new(1., Color32::WHITE),
-        );
+        painter.circle(center, handle_radius, Color32::TRANSPARENT, Stroke::new(1., Color32::WHITE));
     }
 
     // draw curve

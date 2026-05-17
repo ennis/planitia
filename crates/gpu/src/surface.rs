@@ -26,9 +26,7 @@ mod platform {
             ..Default::default()
         };
         unsafe {
-            VK_KHR_SURFACE_WIN32
-                .create_win32_surface(&create_info, None)
-                .expect("failed to create win32 surface")
+            VK_KHR_SURFACE_WIN32.create_win32_surface(&create_info, None).expect("failed to create win32 surface")
         }
     }
 }

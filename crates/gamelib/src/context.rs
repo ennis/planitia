@@ -99,8 +99,7 @@ impl Context {
     fn start_renderdoc_capture(&self) {
         if let Some(rdoc) = &self.rdoc {
             info!("starting RenderDoc capture");
-            rdoc.borrow_mut()
-                .start_frame_capture(unsafe { rdoc_instance_ptr() }, std::ptr::null());
+            rdoc.borrow_mut().start_frame_capture(unsafe { rdoc_instance_ptr() }, std::ptr::null());
         }
     }
 
@@ -178,11 +177,7 @@ impl<H: AppHandler + Default + 'static> App<H> {
             load_renderdoc_dll();
         }
 
-        env_logger::builder()
-            .parse_default_env()
-            .format_target(false)
-            .format_timestamp(None)
-            .init();
+        env_logger::builder().parse_default_env().format_target(false).format_timestamp(None).init();
 
         //gpu::initialize_debug_messenger();
         tracy_client::set_thread_name!("main thread");

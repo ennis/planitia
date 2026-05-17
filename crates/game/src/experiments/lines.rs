@@ -33,7 +33,6 @@ struct RootParams {
     //filter_width: f32,
 }
 
-
 /// Draws 3d polylines with given line width in world units.
 pub fn draw_lines<'a>(
     encoder: &mut gpu::RenderEncoder,
@@ -53,11 +52,8 @@ pub fn draw_lines<'a>(
     let lines_buffer = gpu::Buffer::from_slice(lines);
 
     // use indirect draws to reduce the overhead a bit when drawing many (~1000+) lines
-    let mut commands = gpu::Buffer::new(BufferCreateInfo {
-        len: lines.len(),
-        memory_location: MemoryLocation::CpuToGpu,
-        ..
-    });
+    let mut commands =
+        gpu::Buffer::new(BufferCreateInfo { len: lines.len(), memory_location: MemoryLocation::CpuToGpu, .. });
     for (i, line) in lines.iter().enumerate() {
         unsafe {
             // SAFETY: we have exclusive access to the buffer, the GPU is not using it right now
@@ -82,10 +78,6 @@ pub fn draw_lines<'a>(
         None,
         &commands,
         0..lines.len() as u32,
-        &RootParams {
-            scene_info: scene_info.gpu,
-            vertices: vertices_buffer.ptr(),
-            lines: lines_buffer.ptr(),
-        },
+        &RootParams { scene_info: scene_info.gpu, vertices: vertices_buffer.ptr(), lines: lines_buffer.ptr() },
     );
 }

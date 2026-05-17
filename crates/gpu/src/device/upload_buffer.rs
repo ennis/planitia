@@ -27,12 +27,7 @@ pub(super) struct UploadBuffer {
 
 impl UploadBuffer {
     pub(super) fn new(usage: BufferUsage) -> Self {
-        Self {
-            full: vec![],
-            offset: 0,
-            usage,
-            current: None,
-        }
+        Self { full: vec![], offset: 0, usage, current: None }
     }
 
     /// Ensures that there is space for an allocation of `size` bytes in the current buffer,
@@ -75,10 +70,7 @@ impl UploadBuffer {
         unsafe {
             ptr::copy_nonoverlapping(data as *const T, ptr as *mut T, 1);
         }
-        Ptr {
-            raw: raw_addr,
-            _phantom: PhantomData,
-        }
+        Ptr { raw: raw_addr, _phantom: PhantomData }
     }
 
     pub(super) fn allocate_slice<T: Copy>(&mut self, data: &[T]) -> Ptr<T> {
@@ -86,9 +78,6 @@ impl UploadBuffer {
         unsafe {
             ptr::copy_nonoverlapping(data.as_ptr(), ptr as *mut T, data.len());
         }
-        Ptr {
-            raw: raw_addr,
-            _phantom: PhantomData,
-        }
+        Ptr { raw: raw_addr, _phantom: PhantomData }
     }
 }

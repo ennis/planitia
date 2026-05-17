@@ -294,10 +294,7 @@ impl AttributeStorage {
             StorageKind::FpReal64 => AttributeStorage::FpReal64(Vec::new()),
             StorageKind::Int32 => AttributeStorage::Int32(Vec::new()),
             StorageKind::Int64 => AttributeStorage::Int64(Vec::new()),
-            StorageKind::String => AttributeStorage::Strings {
-                values: Vec::new(),
-                indices: Vec::new(),
-            },
+            StorageKind::String => AttributeStorage::Strings { values: Vec::new(), indices: Vec::new() },
         }
     }
 }
@@ -651,10 +648,7 @@ fn read_point_attribute(p: &mut dyn Parser) -> Result<Attribute, Error> {
             AttributeStorage::Int64(v) => v.iter().map(|&x| x as i32).collect(),
             _ => return Err(Malformed("invalid storage type for string attribute")),
         };
-        storage = AttributeStorage::Strings {
-            values: strings,
-            indices,
-        };
+        storage = AttributeStorage::Strings { values: strings, indices };
     }
 
     Ok(Attribute { name, size, storage })
@@ -1008,21 +1002,12 @@ fn read_file(p: &mut dyn Parser) -> Result<Geo, Error> {
 
     // Sanity checks for the position attribute.
     // TODO make this errors instead of panics
-    assert!(
-        geo.point_attributes.len() > 0,
-        "the geometry should contain at least one point attribute"
-    );
+    assert!(geo.point_attributes.len() > 0, "the geometry should contain at least one point attribute");
     let positions = &geo.point_attributes[0];
-    assert_eq!(
-        positions.name, "P",
-        "the first point attribute should be the point position"
-    );
+    assert_eq!(positions.name, "P", "the first point attribute should be the point position");
     assert_eq!(positions.size, 3, "the position attribute should have 3 components");
     let positions_fp32 = positions.cast::<f32>();
-    assert!(
-        positions_fp32.len() % 3 == 0,
-        "the number of positions should be a multiple of 3"
-    );
+    assert!(positions_fp32.len() % 3 == 0, "the number of positions should be a multiple of 3");
     assert_eq!(positions_fp32.len(), geo.point_count * 3);
 
     Ok(geo)

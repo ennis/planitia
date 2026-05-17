@@ -1,3 +1,4 @@
+use crate::get_file_mtime;
 use crate::manifest::Error::{InvalidType, MissingField};
 use anyhow::{Context, anyhow};
 use log::error;
@@ -7,7 +8,6 @@ use sharc::{ColorBlendEquation, gpu};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use toml::Value as TomlValue;
-use crate::get_file_mtime;
 
 /// The maximum number of color targets in graphics states.
 pub const MAX_COLOR_TARGETS: usize = 8;
@@ -142,11 +142,7 @@ impl DepthStencilAttachment {
         let clear_stencil = toml.get_optional_integer("clear_stencil")?.map(|v| v as u32);
         let resource = toml.get_optional_str("resource")?.map(|s| s.to_string());
 
-        Ok(DepthStencilAttachment {
-            resource,
-            clear_depth,
-            clear_stencil,
-        })
+        Ok(DepthStencilAttachment { resource, clear_depth, clear_stencil })
     }
 }
 
@@ -173,11 +169,7 @@ impl Pass {
             None
         };
 
-        Ok(Pass {
-            raw: toml.clone(),
-            color_attachments,
-            depth_stencil_attachment: depth_attachment,
-        })
+        Ok(Pass { raw: toml.clone(), color_attachments, depth_stencil_attachment: depth_attachment })
     }
 }
 
@@ -209,7 +201,6 @@ impl BuildManifest {
     }
 
     pub fn from_toml(toml: &TomlValue, manifest_path: PathBuf) -> anyhow::Result<Self> {
-
         let (canonical_manifest_path, mtime) = get_file_mtime(&manifest_path)?;
 
         // input_files = ["file1.slang", "file2.slang", "../*.slang", ...]
@@ -218,11 +209,7 @@ impl BuildManifest {
             if let Some(array) = input_files_toml.as_array() {
                 array
                     .iter()
-                    .map(|v| {
-                        v.as_str()
-                            .ok_or(InvalidType("input_files array element"))
-                            .map(|s| s.to_string())
-                    })
+                    .map(|v| v.as_str().ok_or(InvalidType("input_files array element")).map(|s| s.to_string()))
                     .collect::<Result<Vec<String>, Error>>()?
             } else if let Some(s) = input_files_toml.as_str() {
                 vec![s.to_string()]
@@ -236,28 +223,18 @@ impl BuildManifest {
             .get_optional_array("include_paths")?
             .unwrap_or(&vec![])
             .iter()
-            .map(|v| {
-                v.as_str()
-                    .ok_or(InvalidType("include_paths array element"))
-                    .map(|s| s.to_string())
-            })
+            .map(|v| v.as_str().ok_or(InvalidType("include_paths array element")).map(|s| s.to_string()))
             .collect::<Result<Vec<String>, Error>>()?;
 
         // output file
-        let output_file = toml
-            .get_optional_str("output_file")?
-            .ok_or(MissingField("output_file"))?
-            .to_string();
+        let output_file = toml.get_optional_str("output_file")?.ok_or(MissingField("output_file"))?.to_string();
 
         // default graphics state
         let mut default = GraphicsState::default();
         default.read(toml.get("default").ok_or(MissingField("default"))?)?;
 
         // shader profile
-        let shader_profile = toml
-            .get_optional_str("shader_profile")?
-            .unwrap_or(DEFAULT_SHADER_PROFILE)
-            .to_string();
+        let shader_profile = toml.get_optional_str("shader_profile")?.unwrap_or(DEFAULT_SHADER_PROFILE).to_string();
 
         // passes
         let mut overrides = BTreeMap::new();
@@ -384,9 +361,7 @@ impl GraphicsState {
 
         // The color targets array is mandatory: the "default" would be an empty array and this
         // is too error-prone.
-        let color_targets = toml
-            .get_optional_table_or_array("color_targets")?
-            .ok_or(MissingField("color_targets"))?;
+        let color_targets = toml.get_optional_table_or_array("color_targets")?.ok_or(MissingField("color_targets"))?;
         read_color_targets(color_targets, &mut self.color_targets)?;
 
         Ok(())

@@ -2,32 +2,34 @@ use crate::experiments::lines::draw_lines;
 use crate::experiments::winged_edge_mesh::{WEMeshDataGPU, WingedEdgeMesh};
 use crate::{SceneInfo, SceneInfoUniforms};
 use bytesize::ByteSize;
-use color::{srgba8, Srgba8};
+use color::{Srgba8, srgba8};
 use gamelib::asset::{AssetLoadError, AssetReadGuard, Handle, VfsPath, VfsPathBuf};
 use gamelib::input::InputEvent;
-use gamelib::render::pipeline_cache::{get_compute_pipeline, get_graphics_pipeline};
 use gamelib::render::RenderTarget;
+use gamelib::render::pipeline_cache::{get_compute_pipeline, get_graphics_pipeline};
+use gamelib::worksheet::Worksheet;
 use gamelib::{egui, static_assets, tweak};
 use gpu::PrimitiveTopology::TriangleList;
-use gpu::{Buffer, BufferCreateInfo, DrawIndirectCommand, Image, InvalidateFlags, MemoryLocation, Ptr, PushDataSource, Size3D};
+use gpu::{
+    Buffer, BufferCreateInfo, DrawIndirectCommand, Image, InvalidateFlags, MemoryLocation, Ptr, PushDataSource, Size3D,
+};
 use hgeo::util::polygons_to_triangle_mesh;
 use log::{info, warn};
 use math::geom::Camera;
 use math::{IVec2, Mat4, Vec3};
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 use std::alloc::Layout;
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 use std::path::Path;
 use std::{fmt, ptr};
-use gamelib::worksheet::Worksheet;
 
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct PointData {
     position: Vec3,
     normal: Vec3,
-    id: u32
+    id: u32,
 }
 
 #[repr(C)]
@@ -95,9 +97,7 @@ struct ContoursRootParams {
     angle_texture: gpu::TextureHandle,
     normal_texture: gpu::TextureHandle,
     shading_texture: gpu::TextureHandle,
-
 }
-
 
 /// Vertices emitted by the outline extraction compute shader.
 #[repr(C)]
@@ -130,9 +130,8 @@ struct ContourSegmentBuffer {
 
 impl ContourSegmentBuffer {
     fn layout(count: usize) -> Layout {
-        let (layout, _array_offset) = Layout::new::<u32>()
-            .extend(Layout::array::<ContourSegment>(count).unwrap())
-            .unwrap();
+        let (layout, _array_offset) =
+            Layout::new::<u32>().extend(Layout::array::<ContourSegment>(count).unwrap()).unwrap();
         layout.pad_to_align()
     }
 }
@@ -144,7 +143,6 @@ struct ContourPoint {
     group_id: u32,
     next: u32,
 }
-
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -217,9 +215,18 @@ impl OutlineExperiment {
                 first_vertex: 0,
                 first_instance: 0,
             }]),
-            angle_texture: RenderTarget::new(gpu::Format::R16G16B16A16_UINT, gpu::ImageUsage::SAMPLED | gpu::ImageUsage::STORAGE | gpu::ImageUsage::COLOR_ATTACHMENT),
-            normal_texture: RenderTarget::new(gpu::Format::A2B10G10R10_UNORM_PACK32, gpu::ImageUsage::SAMPLED | gpu::ImageUsage::STORAGE | gpu::ImageUsage::COLOR_ATTACHMENT),
-            shading_texture: RenderTarget::new(gpu::Format::R8G8B8A8_UNORM, gpu::ImageUsage::SAMPLED | gpu::ImageUsage::STORAGE | gpu::ImageUsage::COLOR_ATTACHMENT),
+            angle_texture: RenderTarget::new(
+                gpu::Format::R16G16B16A16_UINT,
+                gpu::ImageUsage::SAMPLED | gpu::ImageUsage::STORAGE | gpu::ImageUsage::COLOR_ATTACHMENT,
+            ),
+            normal_texture: RenderTarget::new(
+                gpu::Format::A2B10G10R10_UNORM_PACK32,
+                gpu::ImageUsage::SAMPLED | gpu::ImageUsage::STORAGE | gpu::ImageUsage::COLOR_ATTACHMENT,
+            ),
+            shading_texture: RenderTarget::new(
+                gpu::Format::R8G8B8A8_UNORM,
+                gpu::ImageUsage::SAMPLED | gpu::ImageUsage::STORAGE | gpu::ImageUsage::COLOR_ATTACHMENT,
+            ),
             lock_view: false,
             locked_eye: Vec3::ZERO,
             worksheet: Worksheet::default(),
@@ -235,7 +242,7 @@ impl OutlineExperiment {
             .map(|ptnum| {
                 let position = geo.point(ptnum as u32, "P");
                 let id = geo.point(ptnum as u32, "id");
-                let normal = Vec3::default();   // initialized later
+                let normal = Vec3::default(); // initialized later
                 PointData { position, normal, id }
             })
             .collect::<Vec<_>>();
@@ -259,10 +266,7 @@ impl OutlineExperiment {
                     let point_index = geo.vertexpoint(vi);
                     let normal = geo.vertex(vi, "N");
                     points[point_index as usize].normal = normal;
-                    vertices.push(FaceVertexData {
-                        point: point_index,
-                        normal,
-                    });
+                    vertices.push(FaceVertexData { point: point_index, normal });
                 }
             }
             vertices
@@ -272,13 +276,10 @@ impl OutlineExperiment {
         let vertex_count = vertices.len();
         self.mesh = WingedEdgeMesh::new(&points, &vertices, |fv: &FaceVertexData| fv.point);
 
-
-
         self.segments = unsafe { Buffer::from_layout(ContourSegmentBuffer::layout(self.mesh.edges.len())) };
         self.global_to_contour_index_map.resize_no_copy(point_count);
         self.contour_rank_successors.resize_no_copy(point_count);
         self.contour_rank_successors_1.resize_no_copy(point_count);
-
 
         // num points + some for subdivision
         let subdiv_points = point_count * 8;
@@ -316,33 +317,25 @@ impl OutlineExperiment {
     Total:                      {}
 ",
             path.display(),
-
             self.mesh.points.len(),
             ByteSize::b(self.mesh.points_gpu.byte_size()).display().si(),
             self.mesh.points_gpu.byte_size() / self.mesh.points_gpu.len() as u64,
-
             self.mesh.faces.len(),
             ByteSize::b(self.mesh.faces_gpu.byte_size()).display().si(),
             self.mesh.faces_gpu.byte_size() / self.mesh.faces_gpu.len() as u64,
-
             self.mesh.face_vertices.len(),
             ByteSize::b(self.mesh.face_vertices_gpu.byte_size()).display().si(),
             self.mesh.face_vertices_gpu.byte_size() / self.mesh.face_vertices_gpu.len() as u64,
-
             self.mesh.edges.len(),
             ByteSize::b(self.mesh.edges_gpu.byte_size()).display().si(),
             self.mesh.edges_gpu.byte_size() / self.mesh.edges_gpu.len() as u64,
-
             total_gpu_size
         );
     }
 
     pub(crate) fn input(&mut self, input_event: &InputEvent) {
         if input_event.is_shortcut("Ctrl+O") {
-            if let Some(path) = rfd::FileDialog::new()
-                .add_filter("Houdini Geometry", &["geo", "bgeo"])
-                .pick_file()
-            {
+            if let Some(path) = rfd::FileDialog::new().add_filter("Houdini Geometry", &["geo", "bgeo"]).pick_file() {
                 self.load_geometry(&path);
             }
         }
@@ -367,7 +360,6 @@ impl OutlineExperiment {
         depth_target: &gpu::Image,
         scene_info: &SceneInfo,
     ) -> Result<(), AssetLoadError> {
-
         if self.mesh.points.is_empty() {
             // nothing to render
             return Ok(());
@@ -451,7 +443,12 @@ impl OutlineExperiment {
         cmd.barrier(IF::STORAGE);
 
         cmd.bind_compute_pipeline(&*EXTRACT_INTERPOLATED_CONTOURS.read()?);
-        cmd.dispatch(self.mesh.faces.len().div_ceil(EXTRACT_CONTOURS_THREAD_GROUP_SIZE as usize) as u32, 1, 1, root_params);
+        cmd.dispatch(
+            self.mesh.faces.len().div_ceil(EXTRACT_CONTOURS_THREAD_GROUP_SIZE as usize) as u32,
+            1,
+            1,
+            root_params,
+        );
 
         cmd.barrier(IF::STORAGE | IF::INDIRECT | IF::TEXTURE);
 
@@ -548,18 +545,9 @@ impl OutlineExperiment {
         /////////////////////////////////////////////////////////
         // render contours
         {
-            let mut encoder = cmd.begin_rendering(
-                &[color_target.as_color_attachment(None)],
-                None,
-            );
+            let mut encoder = cmd.begin_rendering(&[color_target.as_color_attachment(None)], None);
             encoder.bind_graphics_pipeline(&*RENDER_OUTLINES.read()?);
-            encoder.draw_indirect(
-                TriangleList,
-                None,
-                &self.expanded_contours_draw_command,
-                0..1,
-                root_params,
-            );
+            encoder.draw_indirect(TriangleList, None, &self.expanded_contours_draw_command, 0..1, root_params);
             encoder.finish();
         }
 
@@ -575,8 +563,8 @@ mod tests {
     use rand::rng;
     use rayon::iter::ParallelIterator;
     use rayon::prelude::IntoParallelIterator;
-    use std::sync::atomic::Ordering::Relaxed;
     use std::sync::atomic::AtomicU64;
+    use std::sync::atomic::Ordering::Relaxed;
 
     #[test]
     fn test_edge_linking() {
@@ -678,10 +666,8 @@ mod tests {
 
         // parallel ver.
         {
-            let mut sx: Vec<AtomicU64> = vec![0xFFFF_FFFF_0000_0000; edges.len() * 2]
-                .into_iter()
-                .map(AtomicU64::new)
-                .collect();
+            let mut sx: Vec<AtomicU64> =
+                vec![0xFFFF_FFFF_0000_0000; edges.len() * 2].into_iter().map(AtomicU64::new).collect();
 
             const NULL32: usize = 0xFFFF_FFFF;
             for &(p0, p1) in &edges {

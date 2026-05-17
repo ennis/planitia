@@ -4,10 +4,7 @@ use gamelib::egui::DragValue;
 use gamelib::input::InputEvent;
 use gamelib::render::RenderTarget;
 use gamelib::{egui, static_assets, tweak};
-use gpu::{
-    Buffer, BufferCreateInfo, Image, ImageUsage, InvalidateFlags,
-    PrimitiveTopology,
-};
+use gpu::{Buffer, BufferCreateInfo, Image, ImageUsage, InvalidateFlags, PrimitiveTopology};
 use math::{IVec2, Vec3};
 use std::path::Path;
 
@@ -144,26 +141,11 @@ impl AutomatonExperiment {
                 gpu::Format::R32G32B32A32_SFLOAT,
                 ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
             ),
-            trails_0: RenderTarget::new(
-                gpu::Format::R32G32B32A32_SFLOAT,
-                ImageUsage::STORAGE | ImageUsage::SAMPLED,
-            ),
-            trails_1: RenderTarget::new(
-                gpu::Format::R32G32B32A32_SFLOAT,
-                ImageUsage::STORAGE | ImageUsage::SAMPLED,
-            ),
-            edge_x: RenderTarget::new(
-                gpu::Format::R8_SNORM,
-                ImageUsage::STORAGE | ImageUsage::SAMPLED,
-            ),
-            edge_y: RenderTarget::new(
-                gpu::Format::R32_SFLOAT,
-                ImageUsage::STORAGE | ImageUsage::SAMPLED,
-            ),
-            emitters: Buffer::new(BufferCreateInfo {
-                len: EMITTERS_COUNT,
-                ..
-            }),
+            trails_0: RenderTarget::new(gpu::Format::R32G32B32A32_SFLOAT, ImageUsage::STORAGE | ImageUsage::SAMPLED),
+            trails_1: RenderTarget::new(gpu::Format::R32G32B32A32_SFLOAT, ImageUsage::STORAGE | ImageUsage::SAMPLED),
+            edge_x: RenderTarget::new(gpu::Format::R8_SNORM, ImageUsage::STORAGE | ImageUsage::SAMPLED),
+            edge_y: RenderTarget::new(gpu::Format::R32_SFLOAT, ImageUsage::STORAGE | ImageUsage::SAMPLED),
+            emitters: Buffer::new(BufferCreateInfo { len: EMITTERS_COUNT, .. }),
             sim_step: 0,
             max_sim_steps: 30,
             debug_mode: DebugMode::Shading,
@@ -172,10 +154,7 @@ impl AutomatonExperiment {
 
     pub(crate) fn input(&mut self, input_event: &InputEvent) {
         if input_event.is_shortcut("Ctrl+O") {
-            if let Some(path) = rfd::FileDialog::new()
-                .add_filter("Houdini Geometry", &["geo", "bgeo"])
-                .pick_file()
-            {
+            if let Some(path) = rfd::FileDialog::new().add_filter("Houdini Geometry", &["geo", "bgeo"]).pick_file() {
                 self.load_geometry(&path);
             }
         }
@@ -190,11 +169,7 @@ impl AutomatonExperiment {
                 ui.selectable_value(&mut self.debug_mode, DebugMode::Normals, "Normals");
                 ui.selectable_value(&mut self.debug_mode, DebugMode::Depth, "Depth");
                 ui.selectable_value(&mut self.debug_mode, DebugMode::Aux, "Aux");
-                ui.selectable_value(
-                    &mut self.debug_mode,
-                    DebugMode::ContoursMaxCurv,
-                    "Contours (max curvature)",
-                );
+                ui.selectable_value(&mut self.debug_mode, DebugMode::ContoursMaxCurv, "Contours (max curvature)");
                 ui.selectable_value(&mut self.debug_mode, DebugMode::ContoursAngle, "Contours (angle)");
                 ui.selectable_value(&mut self.debug_mode, DebugMode::SimTrails, "Simulation trails");
             });
@@ -202,12 +177,7 @@ impl AutomatonExperiment {
                 self.sim_step = 0;
             }
             //ui.add(Slider::new(&mut self.sim_step, 0..=self.max_sim_steps).text("Sim step").step_by(1.0));
-            ui.add(
-                DragValue::new(&mut self.max_sim_steps)
-                    .range(0..=1000)
-                    .prefix("Max sim steps: ")
-                    .speed(1.0),
-            );
+            ui.add(DragValue::new(&mut self.max_sim_steps).range(0..=1000).prefix("Max sim steps: ").speed(1.0));
         });
     }
 
@@ -293,18 +263,9 @@ impl AutomatonExperiment {
         {
             let mut encoder = cmd.begin_rendering(
                 &[
-                    gpu::ColorAttachment {
-                        image: self.shading_texture.image(),
-                        clear: Some([0.0, 0.0, 0.0, 0.0]),
-                    },
-                    gpu::ColorAttachment {
-                        image: self.normal_texture.image(),
-                        clear: Some([0.0, 0.0, 0.0, 0.0]),
-                    },
-                    gpu::ColorAttachment {
-                        image: self.aux_texture.image(),
-                        clear: Some([0.0, 0.0, 0.0, 0.0]),
-                    },
+                    gpu::ColorAttachment { image: self.shading_texture.image(), clear: Some([0.0, 0.0, 0.0, 0.0]) },
+                    gpu::ColorAttachment { image: self.normal_texture.image(), clear: Some([0.0, 0.0, 0.0, 0.0]) },
+                    gpu::ColorAttachment { image: self.aux_texture.image(), clear: Some([0.0, 0.0, 0.0, 0.0]) },
                 ],
                 Some(gpu::DepthStencilAttachment {
                     image: self.depth_texture.image(),
@@ -314,23 +275,14 @@ impl AutomatonExperiment {
             );
 
             encoder.bind_graphics_pipeline(&*BASE_RENDER.read()?);
-            encoder.draw(
-                PrimitiveTopology::TriangleList,
-                None,
-                0..self.vertex_count,
-                0..1,
-                params,
-            );
+            encoder.draw(PrimitiveTopology::TriangleList, None, 0..self.vertex_count, 0..1, params);
             encoder.finish();
         }
 
         // contour detection
         {
             let mut encoder = cmd.begin_rendering(
-                &[gpu::ColorAttachment {
-                    image: &self.contour_target.image(),
-                    clear: Some([0.0, 0.0, 0.0, 0.0]),
-                }],
+                &[gpu::ColorAttachment { image: &self.contour_target.image(), clear: Some([0.0, 0.0, 0.0, 0.0]) }],
                 None,
             );
 
@@ -372,15 +324,8 @@ impl AutomatonExperiment {
             cmd.barrier(InvalidateFlags::STORAGE);
 
             let mut encoder = cmd.begin_rendering(
-                &[gpu::ColorAttachment {
-                    image: &color_target,
-                    clear: None,
-                }],
-                Some(gpu::DepthStencilAttachment {
-                    image: &depth_target,
-                    depth_clear: None,
-                    stencil_clear: None,
-                }),
+                &[gpu::ColorAttachment { image: &color_target, clear: None }],
+                Some(gpu::DepthStencilAttachment { image: &depth_target, depth_clear: None, stencil_clear: None }),
             );
             encoder.bind_graphics_pipeline(&*SIM_RENDER.read()?);
             encoder.draw_screen_quad(params);
@@ -390,15 +335,8 @@ impl AutomatonExperiment {
         // debug
         {
             let mut encoder = cmd.begin_rendering(
-                &[gpu::ColorAttachment {
-                    image: &color_target,
-                    clear: None,
-                }],
-                Some(gpu::DepthStencilAttachment {
-                    image: &depth_target,
-                    depth_clear: None,
-                    stencil_clear: None,
-                }),
+                &[gpu::ColorAttachment { image: &color_target, clear: None }],
+                Some(gpu::DepthStencilAttachment { image: &depth_target, depth_clear: None, stencil_clear: None }),
             );
             encoder.bind_graphics_pipeline(&*AUTOMATON_DEBUG.read()?);
             encoder.draw_screen_quad(params);

@@ -259,16 +259,12 @@ impl Geo {
 
     /// Reads a point attribute value.
     pub fn point<T: AttributeType>(&self, point_index: u32, name: &str) -> T {
-        self.point_attribute_typed::<T>(name)
-            .map(|a| a[point_index as usize].clone())
-            .unwrap_or_default()
+        self.point_attribute_typed::<T>(name).map(|a| a[point_index as usize].clone()).unwrap_or_default()
     }
 
     /// Reads a primitive attribute value.
     pub fn prim<T: AttributeType>(&self, prim_index: u32, name: &str) -> T {
-        self.primitive_attribute_typed::<T>(name)
-            .map(|a| a[prim_index as usize].clone())
-            .unwrap_or_default()
+        self.primitive_attribute_typed::<T>(name).map(|a| a[prim_index as usize].clone()).unwrap_or_default()
     }
 
     /// Returns the contents of the position attribute (`P`).
@@ -304,10 +300,7 @@ impl Geo {
             .iter()
             .filter_map(|run| {
                 if let PrimRunKind::BezierRun(ref bezier_run) = run.kind {
-                    Some(BezierRunIter {
-                        run: bezier_run,
-                        index: 0,
-                    })
+                    Some(BezierRunIter { run: bezier_run, index: 0 })
                 } else {
                     None
                 }
@@ -524,12 +517,7 @@ impl<'a> Iterator for BezierRunIter<'a> {
 
         self.index += 1;
 
-        Some(BezierRef {
-            primnum: primitive_index,
-            vertices,
-            closed,
-            basis,
-        })
+        Some(BezierRef { primnum: primitive_index, vertices, closed, basis })
     }
 }
 

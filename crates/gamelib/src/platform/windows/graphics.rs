@@ -58,9 +58,7 @@ impl GraphicsContext {
             use std::os::windows::ffi::OsStringExt;
             let name = &desc.Description[..];
             let name_len = name.iter().take_while(|&&c| c != 0).count();
-            let name = OsString::from_wide(&desc.Description[..name_len])
-                .to_string_lossy()
-                .into_owned();
+            let name = OsString::from_wide(&desc.Description[..name_len]).to_string_lossy().into_owned();
             let is_software = (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32) != 0;
             info!(
                 "DXGI adapter: {} (LUID:{:08x}{:08x}{})",
@@ -113,10 +111,7 @@ impl GraphicsContext {
         };
 
         let cmd_alloc = unsafe {
-            let command_allocator = d3d_device
-                .0
-                .CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT)
-                .unwrap();
+            let command_allocator = d3d_device.0.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT).unwrap();
             ThreadBound::new(command_allocator)
         };
 
@@ -135,27 +130,13 @@ impl GraphicsContext {
         }*/
 
         let fence = unsafe {
-            let fence = d3d_device
-                .CreateFence::<ID3D12Fence>(0, D3D12_FENCE_FLAG_NONE)
-                .expect("CreateFence failed");
+            let fence = d3d_device.CreateFence::<ID3D12Fence>(0, D3D12_FENCE_FLAG_NONE).expect("CreateFence failed");
             let event = Owned::new(CreateEventW(None, false, false, None).unwrap());
 
-            GpuFenceData {
-                fence,
-                event,
-                value: Cell::new(0),
-            }
+            GpuFenceData { fence, event, value: Cell::new(0) }
         };
 
-        Self {
-            adapter,
-            d3d_device,
-            cmd_queue,
-            cmd_alloc,
-            compositor,
-            dxgi_factory,
-            fence,
-        }
+        Self { adapter, d3d_device, cmd_queue, cmd_alloc, compositor, dxgi_factory, fence }
     }
 
     /// Waits for submitted GPU commands to complete.
@@ -165,14 +146,9 @@ impl GraphicsContext {
             let mut val = self.fence.value.get();
             val += 1;
             self.fence.value.set(val);
-            self.cmd_queue
-                .Signal(&self.fence.fence, val)
-                .expect("ID3D12CommandQueue::Signal failed");
+            self.cmd_queue.Signal(&self.fence.fence, val).expect("ID3D12CommandQueue::Signal failed");
             if self.fence.fence.GetCompletedValue() < val {
-                self.fence
-                    .fence
-                    .SetEventOnCompletion(val, *self.fence.event)
-                    .expect("SetEventOnCompletion failed");
+                self.fence.fence.SetEventOnCompletion(val, *self.fence.event).expect("SetEventOnCompletion failed");
                 WaitForSingleObject(*self.fence.event, 0xFFFFFFFF);
             }
         }

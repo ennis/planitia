@@ -12,9 +12,7 @@ pub struct Notifier<T> {
 impl<T: 'static> Notifier<T> {
     /// Creates a new instance.
     pub fn new() -> Self {
-        Self {
-            cb: RefCell::new(Slab::new()),
-        }
+        Self { cb: RefCell::new(Slab::new()) }
     }
 
     /// Adds a callback to the list.
@@ -67,11 +65,7 @@ impl<T: 'static> Notifier<T> {
             // Callbacks is !Sync so all references to it are within the same thread.
             unsafe {
                 *waker_ptr = Some(cx.waker().clone());
-                if (*result_ptr).is_some() {
-                    Poll::Ready(())
-                } else {
-                    Poll::Pending
-                }
+                if (*result_ptr).is_some() { Poll::Ready(()) } else { Poll::Pending }
             }
         })
         .await;

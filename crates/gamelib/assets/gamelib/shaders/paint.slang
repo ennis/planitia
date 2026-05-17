@@ -1,18 +1,5 @@
 import path;
-
-// FIXME
-[__AttributeUsage(_AttributeTargets.Function)]
-struct passAttribute
-{
-    string pass;
-}
-
-
-typedef uint8_t4 Srgba8;
-
-float4 srgba8_to_float4(Srgba8 srgba8) {
-    return float4(srgba8 / 255.0);
-}
+import common;
 
 // ---------------------------------------------------------------
 struct FeatherVertex
@@ -71,47 +58,6 @@ FragmentOutput paint_fragment_main(VertexOutput v, uniform RootParams* u)
     return o;
 }
 
-//----------------------------------------------------------------------------------------
-/*
-struct FlattenRootParams {
-    PathBuf path;
-
-    // output microline buffer
-    float2 *microline_buffer;
-    uint microline_count;
-};
-
-static const uint FLATTEN_WORKGROUP_SIZE = 64;
-
-// Flatten paths into line segments ("microlines") that fit into a tile.
-[shader("compute")]
-[numthreads(FLATTEN_WORKGROUP_SIZE, 1, 1)]
-void flatten_paths(uint3 dispatch_thread_id : SV_DispatchThreadID, uniform FlattenRootParams* u)
-{
-    uint seg_index = dispatch_thread_id.x;
-    if (seg_index >= u.path.segment_count) {
-        return;
-    }
-
-    let segment = u.path.segments[seg_index];
-
-
-    switch (segment.kind) {
-        case PathSegKind.Line: {
-            // Just copy the line segment as-is.
-            uint vertex_index = segment.start_vertex;
-            float2 p0 = u.path.vertices[vertex_index];
-            float2 p1 = u.path.vertices[vertex_index + 1];
-            uint out_index = atomicAdd(u.microline_count, 2);
-            u.microline_buffer[out_index] = p0;
-            u.microline_buffer[out_index + 1] = p1;
-            break;
-        }
-        case PathSegKind.Quad: {
-        }
-    };
-}*/
-
 struct RasterLinesParams {
     float2* vertices;
     uint start_vertex;
@@ -122,7 +68,6 @@ struct RasterLinesParams {
 static const uint RASTER_LINE_WORKGROUP_SIZE = 64;
 
 [shader("compute")]
-[pass("raster_lines")]
 [numthreads(RASTER_LINE_WORKGROUP_SIZE, 1, 1)]
 void raster_lines(uint3 dispatch_thread_id : SV_DispatchThreadID, uniform RasterLinesParams* u)
 {
@@ -199,89 +144,21 @@ void raster_lines(uint3 dispatch_thread_id : SV_DispatchThreadID, uniform Raster
 
         prev_x = x_clip;
     }
-
-    // for each scanline: spawn a workgroup that processes the row of pixels
-    //    - load groups of 32 (subgroup size) pixels on the row, prefix sum coverage, write the result
-    //
-
-    // issue: multiple paths?
-    // segments belonging to different paths can't be rasterized in the same texture since
-    // there's no way to differentiate their coverage delta.
-    // Instead, for each segment:
-    // - assign segment to a tile (x,y,path_id)
-    // - allocate tile data (pixels) somewhere
-    // - rasterize the segment into this tile
-    // -> segments at the same tile pos but different path_id are rasterized in different tiles
-    //
-    // sort produced tiles by (y,x,path_id)
-    // for each tile y:
-    //   go through tiles from min_x to max_x (extent of tiles on the row):
-    //   if tile totally covers the row:
-    //      set min_path_id to tile.path_id
-    //      subsequent tiles with inferior path_id are skipped
 }
 
 //----------------------------------------------------------------------------------------
 
-
-uint outcode(float2 p) {
-    uint code = 0;
-    if (p.x < 0.0) code |= 1;
-    if (p.x > 1.0) code |= 2;
-    if (p.y < 0.0) code |= 4;
-    if (p.y > 1.0) code |= 8;
-    return code;
-}
-
-// side: 1: right, 0: left
-// returns whether the line is culled (fully outside the clip boundary)
-bool clip_line_x(float xclip, bool side, inout float2 p, inout float2 q)
-{
-    float2 d = q - p;
-    let pclip_l = p.x < xclip;
-    let qclip_l = q.x < xclip;
-    if (pclip_l == qclip_l) {
-        return pclip_l == side;
-    }
-    float t = (xclip - p.x) / d.x;
-    float yclip = p.y + t * d.y;
-    float2 pclip = float2(xclip, yclip);
-    if ((side & p.x < xclip) || (!side & p.x > xclip)) {
-        p = pclip;
-    }
-    else {
-        q = pclip;
-    }
-    return true;
-}
-
-bool clip_line_y(float yclip, bool side, inout float2 p, inout float2 q)
-{
-    float2 d = q - p;
-    let pclip_l = p.y < yclip;
-    let qclip_l = q.y < yclip;
-    if (pclip_l == qclip_l) {
-        return pclip_l == side;
-    }
-    float t = (yclip - p.y) / d.y;
-    float xclip = p.x + t * d.x;
-    float2 pclip = float2(xclip, yclip);
-    if ((side & p.y < yclip) || (!side & p.y > yclip)) {
-        p = pclip;
-    }
-    else {
-        q = pclip;
-    }
-    return true;
-}
-
-//-----------------------------------------------------------------------------
-
+// NOTE: keep in sync with `paint::renderer::RASTER_TILE_SIZE`
 static const uint RASTER_TILE_SIZE = 16;
+
+struct FillData {
+    Srgba8 color;
+};
 
 struct TileCover {
     uint64_t id;
     int winding;
+    uint fill;
     uint seg_offset;
     uint seg_count;
 
@@ -305,6 +182,7 @@ struct RasterTilesParams {
     uint cover_count;
     TileCoverList* cover_lists;
     uint cover_lists_count;
+    FillData* fills;
     RWTexture2D<float4>.Handle output;
 };
 
@@ -313,9 +191,12 @@ void unpack_segment(uint8_t4 segment, out float4 decoded, out uint left_cross) {
     left_cross = (segment.x & 0x80) >> 7 | (segment.y & 0x80) >> 6;
 }
 
-groupshared float s_coverage[RASTER_TILE_SIZE * RASTER_TILE_SIZE * 2];
+// Winding numbers along the left edge of the tile.
+// First filled with winding number delta, the absolute values are calculated with a prefix sum in a second step.
+groupshared int s_winding_v[RASTER_TILE_SIZE];
+
+// Fractional winding numbers on every pixel of the left edge of the tile, quantized to [0,255].
 groupshared int s_winding_v_area[RASTER_TILE_SIZE];
-groupshared int s_winding_v_delta[RASTER_TILE_SIZE];
 
 [shader("compute")]
 [numthreads(RASTER_TILE_SIZE, RASTER_TILE_SIZE, 1)]
@@ -324,80 +205,87 @@ void raster_tiles(uint3 workgroup_id: SV_GroupID, uint3 group_thread_id : SV_Gro
     var cover_list = u.cover_lists[workgroup_id.x];
 
     let tile_coords = u.covers[cover_list.offset].tile_coords();
-    if (tile_coords.x < 0 || tile_coords.y < 0) {
-        return;
-    }
+    //if (tile_coords.x < 0 || tile_coords.y < 0) {
+    //    return;
+    //}
 
     let tsize = int2(RASTER_TILE_SIZE, RASTER_TILE_SIZE);
     let local     = int2(group_thread_id.xy);               // coordinates within the tile
     let tile_top_left = tile_coords * tsize;                      // tile top-left corner position in screen coordinates
     let pixel_center  = float2(local) + 0.5;  // pixel center in tile-local coordinates
 
-    var max_coverage = float2(0.0, 0.0);
+    var output_color = float4(0.0);
 
+    // for each tile cover
     for (uint i_cover = cover_list.offset; i_cover < cover_list.offset + cover_list.count; i_cover++) {
-        var tile_cover = u.covers[i_cover];
 
-        // compute vertical winding numbers at x = 0
-        // process segments in parallel
+        var tile_cover = u.covers[i_cover];
+        var fill_color = srgba8_to_float4(u.fills[tile_cover.fill].color);
+        fill_color.rgb *= fill_color.a; // premultiply alpha
+
+        //----------------------------------------------------------------------------
+        // 1. compute winding numbers on the left edge of the tile
+
+        // 1.1 clear shared memory
+        //
+        // parallel over all entries in the array
+        //
         let local_index = group_thread_id.y * RASTER_TILE_SIZE + group_thread_id.x;
         if (local_index < RASTER_TILE_SIZE) {
             s_winding_v_area[local_index] = 0;
-            s_winding_v_delta[local_index] = 0;
+            s_winding_v[local_index] = 0;
         }
 
         GroupMemoryBarrierWithGroupSync();
 
+        // 1.2 each thread processes one segment and writes the winding delta if the segment
+        //     crosses the left edge of the tile
+        //
+        // parallel over all segments of the cover
+        //
+        // FIXME: this misses segments if there are more than RASTER_TILE_SIZE^2
         if (local_index < tile_cover.seg_count) {
             float4 seg;
             uint left_cross;
             unpack_segment(u.segments[tile_cover.seg_offset + local_index], seg, left_cross);
-            float2 a = seg.xy;
-            float2 b = seg.zw;
-            float2 d = b - a;
 
             if (left_cross != 0) {
-                // TODO EXPLAIN THIS
-                let y = a.x == 0.0 ? (b.x == 0.0 ? min(b.y, a.y) : a.y) : b.y;
+                // crossing left to right: -1, crossing right to left: +1
+                // ... or maybe the opposite, idk
+                let sign = left_cross == 2 ? -1 : 1;
+                let y = sign < 0 ? seg.w : seg.y;       // sign < 0 ? b.y : a.y
                 let yi = int(floor(y)); // pixel row index of intersection
                 let yf = 1 - (y - yi);        // 1 - fractional part
                 let yf_quant = int(yf * 255.0); // quantized to 0..255
-                let sign = left_cross == 2 ? -1 : 1;    // crossing left to right: -1, crossing right to left: +1
+                InterlockedAdd(s_winding_v[yi], sign);
                 InterlockedAdd(s_winding_v_area[yi], sign * yf_quant);
-                InterlockedAdd(s_winding_v_delta[yi], sign);
             }
-
-            /*// Lines are clipped to the tile, so if they intersect the left edge they must have x == 0 at the endpoint.
-            // `a.x != b.x` rejects fully vertical lines which enter and exit the tile simultaneously.
-            if (a.x == 0.0 || b.x == 0.0) {
-                let y = a.x == 0.0 ? a.y : b.y;
-                // reject lines with endpoints at (0,0) as they are already counted in the tile winding number
-                // (as a top-edge intersection).
-                //if (y != 0) {
-                    let yi = int(floor(y)); // pixel row index of intersection
-                    let yf = 1 - (y - yi);        // 1 - fractional part
-                    let yf_quant = int(yf * 255.0); // quantized to 0..255
-                    let sign = int(sign(d.x));    // crossing left to right: -1, crossing right to left: +1
-                    // also, d.x can be 0 for vertical lines that straddle the left edge
-                    InterlockedAdd(s_winding_v_area[yi], sign * yf_quant);
-                    InterlockedAdd(s_winding_v_delta[yi], sign);
-                //}
-            }*/
         }
 
         GroupMemoryBarrierWithGroupSync();
 
-        // prefix sum vertical winding numbers in shared memory
-        // this can be done with subgroup ops
+        // 1.3. compute absolute winding numbers with prefix sum
+        // this can be done with subgroup ops as long as RASTER_TILE_SIZE <= wave size
+        //
+        // parallel over all entries in the array
+        //
         if (local_index < RASTER_TILE_SIZE) {
-             int winding = s_winding_v_delta[local_index];
+             int winding = s_winding_v[local_index];
              winding = WavePrefixSum(winding);
-             s_winding_v_delta[local_index] = winding;
+             s_winding_v[local_index] = winding;
         }
 
         GroupMemoryBarrierWithGroupSync();
 
-        float winding = (float) tile_cover.winding + s_winding_v_delta[local.y] + float(s_winding_v_area[local.y]) / 255.0;
+        //----------------------------------------------------------------------------
+        // 2. compute coverage for every pixel in the tile
+        //
+        // parallel over all pixels in the tile
+        //
+
+        // base winding number at tile-local coordinate (0, y)
+        float winding = (float) tile_cover.winding + s_winding_v[local.y] + float(s_winding_v_area[local.y]) / 255.0;
+
         for (uint i = 0; i < tile_cover.seg_count; i++) {
             uint8_t4 rawseg = u.segments[tile_cover.seg_offset + i];
             float4 seg;
@@ -416,37 +304,49 @@ void raster_tiles(uint3 workgroup_id: SV_GroupID, uint3 group_thread_id : SV_Gro
                 // horizontal segments don't contribute anything to the winding
                 continue;
             }
+
             if (d.x == 0.0) {
-                // vertical segments
+                // special-case for vertical segments
                 float y_min = saturate(min(a.y, b.y));
                 float y_max = saturate(max(a.y, b.y));
                 float x = a.x;
                 winding += sign(-d.y) * abs(y_max - y_min) * saturate(1.0 - x);
+                continue;
             }
-            else  {
-                // FIXME: for near-vertical segments this is super unstable
-                // good luck with that
-                float y_0 = a.y - a.x * d.y / d.x;
-                float y_1 = a.y + (1.0 - a.x) * d.y / d.x;
-                float y_min = saturate(min(a.y, b.y));
-                float y_max = saturate(max(a.y, b.y));
-                float x_0 = a.x + (y_min - a.y) / d.y * d.x;
-                float x_1 = a.x + (y_max - a.y) / d.y * d.x;
-                float a_1 = 0.5 * abs(y_min - y_0) * max(0.0, x_0);
-                float a_2 = 0.5 * abs(y_max - y_0) * max(0.0, x_1);
-                float a_3 = 0.5 * abs(y_min - y_1) * max(0.0, x_0 - 1.0);
-                float a_4 = 0.5 * abs(y_max - y_1) * max(0.0, x_1 - 1.0);
-                float area = (y_max - y_min) - abs(a_1 - a_2) + abs(a_3 - a_4);
-                //area += 0.000000001 * b.x;  // work around driver bug?
-                winding += area * sign(-d.y);
-            }
+
+            // General case: compute pixel coverage.
+            // The derivation is a bit long to write down here without pictures.
+            // Very roughly, this is the pixel area between the min/max y covered by a segment,
+            // adjusted by adding or subtracting the areas of some triangles formed by the intersection of the segment
+            // and the pixel bounds.
+
+            // FIXME: for near-vertical segments this might be unstable
+            float y_0 = a.y - a.x * d.y / d.x;
+            float y_1 = a.y + (1.0 - a.x) * d.y / d.x;
+            float y_min = saturate(min(a.y, b.y));
+            float y_max = saturate(max(a.y, b.y));
+            float x_0 = a.x + (y_min - a.y) / d.y * d.x;
+            float x_1 = a.x + (y_max - a.y) / d.y * d.x;
+            float a_1 = 0.5 * abs(y_min - y_0) * max(0.0, x_0);
+            float a_2 = 0.5 * abs(y_max - y_0) * max(0.0, x_1);
+            float a_3 = 0.5 * abs(y_min - y_1) * max(0.0, x_0 - 1.0);
+            float a_4 = 0.5 * abs(y_max - y_1) * max(0.0, x_1 - 1.0);
+            float area = (y_max - y_min) - abs(a_1 - a_2) + abs(a_3 - a_4);
+            //area += 0.000000001 * b.x;  // work around driver bug?
+            winding += area * sign(-d.y);
         }
 
-        max_coverage.x += 0.15 * winding;
-        //max_coverage.y -= 0.15 * min(0, winding);
+        //----------------------------------------------------------------------------
+        // 3. blend with color below
+        //
+        // parallel over all pixels in the tile
+        //
+        float coverage = abs(winding);
+        float4 input_color = fill_color * coverage;
+        output_color = input_color + output_color * (1.0 - input_color.a);
     }
 
-    u.output.Store(tile_coords * tsize + local, float4(max_coverage.xxx,  1.0) /*+ float4(float2(local)/tsize, 0.0, 1.0)*/);
+    u.output.Store(tile_coords * tsize + local, output_color);
     //u.output.Store(tile_coords * tsize + local, float4(float2(local)/tsize, 0.0, 1.0));
 }
 
@@ -456,30 +356,6 @@ void raster_tiles(uint3 workgroup_id: SV_GroupID, uint3 group_thread_id : SV_Gro
 struct CopyToScreenParams {
     RWTexture2D<float4>.Handle texture;
 };
-
-struct ScreenQuadVSOut
-{
-    float4 pos : SV_Position;
-    float2 uv;
-};
-
-/// Vertex shader for full-screen quad
-ScreenQuadVSOut screen_quad_vertex_shader(uint vertex_id)
-{
-    float2 positions[6] = {
-        float2(-1.0, -1.0),
-        float2( 1.0, -1.0),
-        float2(-1.0,  1.0),
-        float2(-1.0,  1.0),
-        float2( 1.0, -1.0),
-        float2( 1.0,  1.0)
-    };
-
-    ScreenQuadVSOut o;
-    o.pos = float4(positions[vertex_id], 0.0, 1.0);
-    o.uv = o.pos.xy * 0.5 + 0.5;
-    return o;
-}
 
 [shader("vertex")]
 ScreenQuadVSOut copy_to_screen_vertex(uint vertex_id : SV_VertexID)

@@ -124,11 +124,7 @@ pub struct CursorData {
 }
 
 impl CursorData {
-    pub const END: CursorData = CursorData {
-        text_pos: usize::MAX,
-        cluster: usize::MAX,
-        fragment: usize::MAX,
-    };
+    pub const END: CursorData = CursorData { text_pos: usize::MAX, cluster: usize::MAX, fragment: usize::MAX };
 }
 
 #[derive(Clone, Debug)]
@@ -202,14 +198,7 @@ impl<'a> Iterator for GlyphRunIter<'a> {
             self.fragment += 1;
         }
 
-        Some(GlyphRun {
-            layout: self.layout,
-            fragment,
-            line,
-            line_index: i_line,
-            x,
-            cluster_range: cluster..p,
-        })
+        Some(GlyphRun { layout: self.layout, fragment, line, line_index: i_line, x, cluster_range: cluster..p })
     }
 }
 
@@ -263,23 +252,21 @@ impl<'a> GlyphRun<'a> {
     /// Iterates over the glyphs in this run.
     pub fn glyphs(&self) -> impl Iterator<Item = Glyph> + 'a {
         //let y_baseline = self.line.position.y + self.line.metrics.baseline;
-        self.layout.clusters[self.cluster_range.clone()]
-            .iter()
-            .flat_map(move |cluster| {
-                if cluster.glyph_len == 0xFF {
-                    // simple cluster
-                    let glyph = Glyph {
-                        id: GlyphId(cluster.glyph_offset_or_id),
-                        offset: Vec2::ZERO, // zero for simple clusters
-                        advance: cluster.advance,
-                    };
-                    Some(glyph)
-                } else if cluster.glyph_len == 0 {
-                    None
-                } else {
-                    todo!("complex clusters");
-                }
-            })
+        self.layout.clusters[self.cluster_range.clone()].iter().flat_map(move |cluster| {
+            if cluster.glyph_len == 0xFF {
+                // simple cluster
+                let glyph = Glyph {
+                    id: GlyphId(cluster.glyph_offset_or_id),
+                    offset: Vec2::ZERO, // zero for simple clusters
+                    advance: cluster.advance,
+                };
+                Some(glyph)
+            } else if cluster.glyph_len == 0 {
+                None
+            } else {
+                todo!("complex clusters");
+            }
+        })
     }
 }
 
@@ -301,72 +288,56 @@ impl TextLayout {
         // map from
         let mut clusters = Vec::new();
 
-        shape_text(
-            &ShapingParams {
-                font: format.font.clone(),
-                size: format.size,
-            },
-            text,
-            &mut |cluster| {
-                //glyph_cluster_map.push((glyphs.len(), cluster.source_range.clone()));
+        shape_text(&ShapingParams { font: format.font.clone(), size: format.size }, text, &mut |cluster| {
+            //glyph_cluster_map.push((glyphs.len(), cluster.source_range.clone()));
 
-                let info = {
-                    let mut info = ClusterInfo::default();
-                    if cluster.possible_line_break {
-                        info.set_line_break_after();
-                    }
-                    if cluster.mandatory_line_break {
-                        info.set_mandatory_break_after();
-                    }
-                    if cluster.whitespace {
-                        info.set_whitespace();
-                    }
-                    info
-                };
-
-                let glyph_len;
-                let glyph_offset_or_id;
-
-                if cluster.glyphs.len() == 1 && cluster.glyphs[0].offset == Vec2::ZERO {
-                    // single-glyph cluster at zero offset, store glyph id directly
-                    glyph_len = 0xFF;
-                    glyph_offset_or_id = cluster.glyphs[0].id.0;
-                } else if cluster.glyphs.len() == 0 {
-                    glyph_len = 0;
-                    glyph_offset_or_id = 0;
-                } else {
-                    todo!("complex clusters");
-                    //glyph_data.extend_from_slice(cluster.glyphs);
+            let info = {
+                let mut info = ClusterInfo::default();
+                if cluster.possible_line_break {
+                    info.set_line_break_after();
                 }
+                if cluster.mandatory_line_break {
+                    info.set_mandatory_break_after();
+                }
+                if cluster.whitespace {
+                    info.set_whitespace();
+                }
+                info
+            };
 
-                let source_range = cluster.source_range.clone();
-                clusters.push(ClusterData {
-                    info,
-                    glyph_len,
-                    text_len: source_range.len() as u8,
-                    glyph_offset_or_id,
-                    // TODO split in multiple runs if too long
-                    text_offset: source_range.start as u16,
-                    advance: cluster.advance,
-                });
-            },
-        );
+            let glyph_len;
+            let glyph_offset_or_id;
+
+            if cluster.glyphs.len() == 1 && cluster.glyphs[0].offset == Vec2::ZERO {
+                // single-glyph cluster at zero offset, store glyph id directly
+                glyph_len = 0xFF;
+                glyph_offset_or_id = cluster.glyphs[0].id.0;
+            } else if cluster.glyphs.len() == 0 {
+                glyph_len = 0;
+                glyph_offset_or_id = 0;
+            } else {
+                todo!("complex clusters");
+                //glyph_data.extend_from_slice(cluster.glyphs);
+            }
+
+            let source_range = cluster.source_range.clone();
+            clusters.push(ClusterData {
+                info,
+                glyph_len,
+                text_len: source_range.len() as u8,
+                glyph_offset_or_id,
+                // TODO split in multiple runs if too long
+                text_offset: source_range.start as u16,
+                advance: cluster.advance,
+            });
+        });
 
         // for now there's only one fragment since we don't support heterogeneous text formats yet.
-        let fragment = FragmentData {
-            format: format.clone(),
-            text_range: 0..text.len(),
-            cluster_range: 0..clusters.len(),
-        };
+        let fragment =
+            FragmentData { format: format.clone(), text_range: 0..text.len(), cluster_range: 0..clusters.len() };
 
-        let layout = TextLayout {
-            width: 0.0,
-            height: 0.0,
-            fragments: vec![fragment],
-            lines: Vec::new(),
-            clusters,
-            glyph_data,
-        };
+        let layout =
+            TextLayout { width: 0.0, height: 0.0, fragments: vec![fragment], lines: Vec::new(), clusters, glyph_data };
         //dbg!(&layout);
         layout
     }
@@ -403,11 +374,7 @@ impl TextLayout {
     ///
     /// Only valid after calling `layout()`.
     pub fn baseline(&self) -> f32 {
-        if let Some(line) = self.lines.first() {
-            line.metrics.baseline
-        } else {
-            0.0
-        }
+        if let Some(line) = self.lines.first() { line.metrics.baseline } else { 0.0 }
     }
 
     fn cursor_at_end(&self, cursor: &CursorData) -> bool {
@@ -553,14 +520,7 @@ impl TextLayout {
 
     /// Iterates over the glyph runs in this layout.
     pub fn glyph_runs(&self) -> GlyphRunIter<'_> {
-        GlyphRunIter {
-            layout: self,
-            line: 0,
-            fragment: 0,
-            cluster: 0,
-            last_cluster: self.clusters.len(),
-            x: 0.0,
-        }
+        GlyphRunIter { layout: self, line: 0, fragment: 0, cluster: 0, last_cluster: self.clusters.len(), x: 0.0 }
     }
 }
 
@@ -610,12 +570,7 @@ mod tests {
             let y = glyph_run.baseline();
             let mut advance = 0.0;
             for glyph in glyph_run.glyphs() {
-                eprintln!(
-                    "   glyph id={} advance={} (x={})",
-                    glyph.id.0,
-                    glyph.advance,
-                    x + advance
-                );
+                eprintln!("   glyph id={} advance={} (x={})", glyph.id.0, glyph.advance, x + advance);
                 advance += glyph.advance;
             }
         }

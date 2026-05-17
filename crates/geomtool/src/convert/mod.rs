@@ -113,11 +113,7 @@ impl Converter {
             geom::Primitive::SweptStroke(swept_strokes),
         ]);
 
-        let _ = archive.write_root(&GeoArchiveHeader {
-            vertex_arrays: arrays,
-            primitives,
-            indices: mesh_indices,
-        });
+        let _ = archive.write_root(&GeoArchiveHeader { vertex_arrays: arrays, primitives, indices: mesh_indices });
 
         if !cfg().quiet {
             cprintln!(
@@ -214,13 +210,8 @@ impl Converter {
             cur_prim_indices.clear()
         }
 
-        self.meshes.push(Mesh {
-            parts: self.archive.write_slice(&[MeshPart {
-                start_index,
-                index_count,
-                base_vertex,
-            }]),
-        });
+        self.meshes
+            .push(Mesh { parts: self.archive.write_slice(&[MeshPart { start_index, index_count, base_vertex }]) });
         Ok(())
     }
 
@@ -340,10 +331,8 @@ impl Converter {
         self.required_attribs(g, &[("N", AttributeClass::Point, StorageKind::FpReal32, 3)]);
 
         let start_vertex = self.stroke_vertices.len() as u32;
-        let polyline = g
-            .polylines_in_group(group)
-            .next()
-            .ok_or_else(|| anyhow::anyhow!("no polyline found in group"))?;
+        let polyline =
+            g.polylines_in_group(group).next().ok_or_else(|| anyhow::anyhow!("no polyline found in group"))?;
         let vertex_count = polyline.vertex_count as u32;
         for vertex in polyline.vertices() {
             let point = g.vertexpoint(vertex);
@@ -355,11 +344,7 @@ impl Converter {
             });
         }
 
-        self.cross_sections.push(CrossSection {
-            name: name.to_string(),
-            start_vertex,
-            vertex_count,
-        });
+        self.cross_sections.push(CrossSection { name: name.to_string(), start_vertex, vertex_count });
 
         Ok(())
     }

@@ -41,10 +41,7 @@ impl fmt::Debug for LocalExecutor {
 impl LocalExecutor {
     /// Creates a new local executor.
     pub(crate) fn new() -> Self {
-        Self {
-            tasks: RefCell::new(FuturesUnordered::new()),
-            incoming: RefCell::new(Vec::new()),
-        }
+        Self { tasks: RefCell::new(FuturesUnordered::new()), incoming: RefCell::new(Vec::new()) }
     }
 
     /// Runs tasks until all are waiting or completed.

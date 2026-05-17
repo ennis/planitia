@@ -1,9 +1,6 @@
 #![expect(unused, reason = "noisy")]
 #![feature(default_field_values)]
-#![allow(
-    unsafe_op_in_unsafe_fn,
-    reason = "too verbose, and my IDE already highlights unsafe call sites"
-)]
+#![allow(unsafe_op_in_unsafe_fn, reason = "too verbose, and my IDE already highlights unsafe call sites")]
 extern crate alloc;
 
 pub mod asset;
@@ -22,16 +19,16 @@ mod shaders;
 mod timer;
 mod tweak;
 pub mod util;
-mod world;
 pub mod worksheet;
+mod world;
 
 //--- reexports ---
 pub use color;
 pub use egui;
 pub use gpu;
 pub use math;
-pub use tweak::*;
 pub use tracy_client;
+pub use tweak::*;
 
 ///////////////////////////////////////////////////////////////////
 

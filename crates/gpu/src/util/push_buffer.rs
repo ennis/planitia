@@ -11,10 +11,6 @@ pub struct PushBuffer<T: Copy + 'static> {
 
 impl<T: Copy + 'static> PushBuffer<T> {
     pub fn new(buffer: &Buffer<T>) -> Self {
-        Self {
-            base: buffer.ptr(),
-            offset: 0,
-            capacity: buffer.len() as u32,
-        }
+        Self { base: buffer.ptr(), offset: 0, capacity: buffer.len() as u32 }
     }
 }

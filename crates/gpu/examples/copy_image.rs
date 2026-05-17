@@ -65,21 +65,9 @@ fn load_image(cmd: &mut CommandBuffer, path: impl AsRef<Path>, usage: ImageUsage
         );
 
         cmd.copy_buffer_to_image(
-            ImageCopyBuffer {
-                buffer: &staging_buffer,
-                layout: ImageDataLayout::new(width, height),
-            },
-            ImageCopyView {
-                image: &image,
-                mip_level: 0,
-                origin: Offset3D::ZERO,
-                aspect: ImageAspect::All,
-            },
-            vk::Extent3D {
-                width,
-                height,
-                depth: 1,
-            },
+            ImageCopyBuffer { buffer: &staging_buffer, layout: ImageDataLayout::new(width, height) },
+            ImageCopyView { image: &image, mip_level: 0, origin: Offset3D::ZERO, aspect: ImageAspect::All },
+            vk::Extent3D { width, height, depth: 1 },
         );
     }
 
@@ -103,9 +91,8 @@ struct App {
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none() {
-            let window = event_loop
-                .create_window(WindowAttributes::default().with_no_redirection_bitmap(false))
-                .unwrap();
+            let window =
+                event_loop.create_window(WindowAttributes::default().with_no_redirection_bitmap(false)).unwrap();
             let size = window.inner_size();
             let surface = gpu::get_vulkan_surface(window.window_handle().unwrap().as_raw());
             let surface_format = unsafe { Device::global().get_preferred_surface_format(surface) };
@@ -113,20 +100,11 @@ impl ApplicationHandler for App {
                 unsafe { Device::global().create_swapchain(surface, surface_format, size.width, size.height) };
 
             let mut cmd = CommandBuffer::new();
-            let image = load_image(
-                &mut cmd,
-                "crates/gpu/examples/yukari.png",
-                ImageUsage::TRANSFER_SRC | ImageUsage::SAMPLED,
-            );
+            let image =
+                load_image(&mut cmd, "crates/gpu/examples/yukari.png", ImageUsage::TRANSFER_SRC | ImageUsage::SAMPLED);
             gpu::submit(cmd).unwrap();
 
-            self.window = Some(VulkanWindow {
-                window,
-                swap_chain,
-                width: size.width,
-                height: size.height,
-                image,
-            })
+            self.window = Some(VulkanWindow { window, swap_chain, width: size.width, height: size.height, image })
         }
     }
 
@@ -149,9 +127,7 @@ impl ApplicationHandler for App {
             WindowEvent::RedrawRequested => {
                 // SAFETY: swapchain is valid
                 let (index, swapchain_image) = unsafe {
-                    device
-                        .acquire_next_swapchain_image(&window.swap_chain, Duration::from_millis(100))
-                        .unwrap()
+                    device.acquire_next_swapchain_image(&window.swap_chain, Duration::from_millis(100)).unwrap()
                 };
 
                 let mut cmd = CommandBuffer::new();
@@ -161,11 +137,7 @@ impl ApplicationHandler for App {
 
                 let region = Rect3D {
                     min: Offset3D { x: 0, y: 0, z: 0 },
-                    max: Offset3D {
-                        x: blit_w as i32,
-                        y: blit_h as i32,
-                        z: 1,
-                    },
+                    max: Offset3D { x: blit_w as i32, y: blit_h as i32, z: 1 },
                 };
 
                 cmd.blit_image(

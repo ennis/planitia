@@ -50,11 +50,7 @@ impl Renderer {
             ..
         });
 
-        Renderer {
-            pipeline,
-            textures: HashMap::new(),
-            sampler,
-        }
+        Renderer { pipeline, textures: HashMap::new(), sampler }
     }
 
     pub fn update_textures(&mut self, cmd: &mut CommandBuffer, textures_delta: egui::TexturesDelta) {
@@ -109,27 +105,12 @@ impl Renderer {
                 Texture { image, sampler }
             });
 
-            let (x, y) = if let Some([x, y]) = tex.pos {
-                (x as i32, y as i32)
-            } else {
-                (0, 0)
-            };
+            let (x, y) = if let Some([x, y]) = tex.pos { (x as i32, y as i32) } else { (0, 0) };
 
-            debug!(
-                "upload_image_data {id:?} origin {x},{y} size {width}x{height} data {} bytes",
-                data.len()
-            );
+            debug!("upload_image_data {id:?} origin {x},{y} size {width}x{height} data {} bytes", data.len());
             cmd.upload_image_data(
-                ImageCopyView {
-                    image: &texture.image,
-                    origin: Offset3D { x, y, z: 0 },
-                    ..
-                },
-                Size3D {
-                    width,
-                    height,
-                    depth: 1,
-                },
+                ImageCopyView { image: &texture.image, origin: Offset3D { x, y, z: 0 }, .. },
+                Size3D { width, height, depth: 1 },
                 data,
             );
         }
@@ -179,18 +160,10 @@ impl Renderer {
 
         let width = color_target.width();
         let height = color_target.height();
-        let params = cmd.upload(&EguiRootParams {
-            screen_size: [width as f32, height as f32],
-        });
+        let params = cmd.upload(&EguiRootParams { screen_size: [width as f32, height as f32] });
 
         // encode draw commands
-        let mut enc = cmd.begin_rendering(
-            &[ColorAttachment {
-                image: color_target,
-                ..
-            }],
-            None,
-        );
+        let mut enc = cmd.begin_rendering(&[ColorAttachment { image: color_target, .. }], None);
 
         enc.bind_graphics_pipeline(&self.pipeline);
 
@@ -211,21 +184,13 @@ impl Renderer {
 
             /*enc.bind_vertex_buffer(0, vertex_buffer.slice(..).as_bytes());
             enc.bind_index_buffer(vk::IndexType::UINT32, index_buffer.slice(..).as_bytes());*/
-            enc.set_scissor(
-                clip_min_x,
-                clip_min_y,
-                (clip_max_x - clip_min_x) as u32,
-                (clip_max_y - clip_min_y) as u32,
-            );
+            enc.set_scissor(clip_min_x, clip_min_y, (clip_max_x - clip_min_x) as u32, (clip_max_y - clip_min_y) as u32);
             enc.set_viewport(0.0, 0.0, width as f32, height as f32, 0.0, 1.0);
 
             let texture = self.textures.get(&mesh.texture_id).expect("texture not found");
             enc.push_descriptors(
                 0,
-                &[
-                    (0, texture.image.texture_descriptor(vk::ImageLayout::GENERAL)),
-                    (1, self.sampler.descriptor()),
-                ],
+                &[(0, texture.image.texture_descriptor(vk::ImageLayout::GENERAL)), (1, self.sampler.descriptor())],
             );
 
             enc.draw_indexed(
@@ -291,9 +256,7 @@ fn create_pipeline() -> GraphicsPipeline {
                 },
             ],
         },
-        pre_rasterization_shaders: PreRasterizationShaders::PrimitiveShading {
-            vertex: EGUI_VERTEX_MAIN,
-        },
+        pre_rasterization_shaders: PreRasterizationShaders::PrimitiveShading { vertex: EGUI_VERTEX_MAIN },
         rasterization: RasterizationState {
             polygon_mode: vk::PolygonMode::FILL,
             cull_mode: Default::default(),

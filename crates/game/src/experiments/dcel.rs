@@ -41,10 +41,7 @@ pub struct HalfEdgeMesh {
 impl HalfEdgeMesh {
     /// Creates a PolyMesh from a triangle mesh specified as a position buffer and an index buffer.
     pub fn from_indexed_triangle_mesh(positions: impl IntoIterator<Item = Vec3>, indices: &[u32]) -> Self {
-        assert!(
-            indices.len() % 3 == 0,
-            "invalid number of indices: must be a multiple of 3"
-        );
+        assert!(indices.len() % 3 == 0, "invalid number of indices: must be a multiple of 3");
 
         let mut vertices = Vec::new();
         let mut faces = Vec::new();
@@ -52,10 +49,7 @@ impl HalfEdgeMesh {
 
         // copy positions
         for position in positions {
-            vertices.push(Vertex {
-                coordinates: Vec3::new(position[0], position[1], position[2]),
-                incident_edge: 0,
-            });
+            vertices.push(Vertex { coordinates: Vec3::new(position[0], position[1], position[2]), incident_edge: 0 });
         }
 
         let mut half_edge_map = HashMap::new();
@@ -72,21 +66,11 @@ impl HalfEdgeMesh {
             let (he0, he1, he2) = {
                 let mut insert_half_edge = |v0, v1| {
                     let he = half_edges.len() as HalfEdgeIndex;
-                    half_edges.push(HalfEdge {
-                        origin: 0,
-                        twin: 0,
-                        next: 0,
-                        prev: 0,
-                        incident_face: None,
-                    });
+                    half_edges.push(HalfEdge { origin: 0, twin: 0, next: 0, prev: 0, incident_face: None });
                     half_edge_map.insert((v0, v1), he);
                     he
                 };
-                (
-                    insert_half_edge(v0, v1),
-                    insert_half_edge(v1, v2),
-                    insert_half_edge(v2, v0),
-                )
+                (insert_half_edge(v0, v1), insert_half_edge(v1, v2), insert_half_edge(v2, v0))
             };
 
             half_edges[he0 as usize].origin = v0;
@@ -130,14 +114,7 @@ impl HalfEdgeMesh {
                     incident_face: None,
                 });
                 // boundary edge pointing to v0 starting from v1
-                boundary_edges.insert(
-                    v1,
-                    BoundaryEdge {
-                        src: v1,
-                        dst: v0,
-                        he: i as HalfEdgeIndex,
-                    },
-                );
+                boundary_edges.insert(v1, BoundaryEdge { src: v1, dst: v0, he: i as HalfEdgeIndex });
                 half_edge_map.insert((v1, v0), twin);
             }
         }
@@ -162,11 +139,7 @@ impl HalfEdgeMesh {
             }
         }
 
-        Self {
-            vertices,
-            faces,
-            half_edges,
-        }
+        Self { vertices, faces, half_edges }
     }
 
     fn dump(&self) {

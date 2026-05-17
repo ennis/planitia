@@ -38,11 +38,7 @@ pub struct InitOptions {
 
 impl Default for InitOptions {
     fn default() -> Self {
-        Self {
-            width: 800,
-            height: 600,
-            window_title: "Game",
-        }
+        Self { width: 800, height: 600, window_title: "Game" }
     }
 }
 

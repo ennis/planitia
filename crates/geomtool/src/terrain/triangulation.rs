@@ -15,10 +15,7 @@ struct PointWithHeight {
 
 impl PointWithHeight {
     fn new(x: f32, y: f32, height: f32) -> Self {
-        Self {
-            position: Point2::new(x, y),
-            height,
-        }
+        Self { position: Point2::new(x, y), height }
     }
 }
 
@@ -135,14 +132,7 @@ fn scan_triangle(face: InnerFaceHandle, heightmap: &HeightmapImage, error_thresh
         if max_error < error_threshold {
             return;
         }
-        heap.push(
-            Candidate {
-                face: face.index(),
-                x,
-                y,
-            },
-            OrdF32(max_error),
-        );
+        heap.push(Candidate { face: face.index(), x, y }, OrdF32(max_error));
     }
 }
 
@@ -157,9 +147,7 @@ fn insert(
     let y = candidate.y;
     let h = heightmap.get_pixel(x, y)[0];
 
-    let v = dt
-        .insert(PointWithHeight::new(x as f32 + 0.5, y as f32 + 0.5, h))
-        .unwrap();
+    let v = dt.insert(PointWithHeight::new(x as f32 + 0.5, y as f32 + 0.5, h)).unwrap();
 
     // scan affected (newly created) faces
     for out_edge in dt.vertex(v).out_edges() {
@@ -192,16 +180,9 @@ pub(super) fn tessellate_heightmap(
     {
         let sh = |x, y| -> f32 { heightmap.get_pixel(x, y)[0] };
         dt.insert(PointWithHeight::new(0.5, 0.5, sh(0, 0))).unwrap();
-        dt.insert(PointWithHeight::new(width as f32 - 0.5, 0.5, sh(width - 1, 0)))
-            .unwrap();
-        dt.insert(PointWithHeight::new(0.5, height as f32 - 0.5, sh(0, height - 1)))
-            .unwrap();
-        dt.insert(PointWithHeight::new(
-            width as f32 - 0.5,
-            height as f32 - 0.5,
-            sh(width - 1, height - 1),
-        ))
-        .unwrap();
+        dt.insert(PointWithHeight::new(width as f32 - 0.5, 0.5, sh(width - 1, 0))).unwrap();
+        dt.insert(PointWithHeight::new(0.5, height as f32 - 0.5, sh(0, height - 1))).unwrap();
+        dt.insert(PointWithHeight::new(width as f32 - 0.5, height as f32 - 0.5, sh(width - 1, height - 1))).unwrap();
     }
 
     let error_threshold = match (options.triangle_count_target, options.error_threshold) {

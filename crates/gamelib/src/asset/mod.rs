@@ -112,10 +112,7 @@ impl FileWatcher {
     }
 
     pub fn watch_file<P: AsRef<Path>>(&mut self, path: P) {
-        self.watcher
-            .watcher()
-            .watch(path.as_ref(), RecursiveMode::NonRecursive)
-            .unwrap();
+        self.watcher.watcher().watch(path.as_ref(), RecursiveMode::NonRecursive).unwrap();
     }
 }
 
@@ -129,9 +126,8 @@ pub struct FileMetadata {
     pub modified: SystemTime,
 }
 
-
 /// Trait that combines `io::Read` and `io::Seek`.
-pub trait ReadSeek : io::Read + io::Seek {}
+pub trait ReadSeek: io::Read + io::Seek {}
 
 // Blanket impl
 impl<T: io::Read + io::Seek> ReadSeek for T {}
@@ -209,11 +205,7 @@ impl Providers {
     /// Finds the appropriate provider for the given VFS path.
     fn find_provider(&self, path: &VfsPath) -> Result<(&dyn Provider, FileMetadata), io::Error> {
         let source = path.source().unwrap_or("");
-        trace!(
-            "find_provider: looking for provider for path `{}`, source = {}",
-            path.as_str(),
-            source
-        );
+        trace!("find_provider: looking for provider for path `{}`, source = {}", path.as_str(), source);
         if let Some(providers) = self.by_source.get(source) {
             for provider in providers.iter().rev() {
                 if let Ok(metadata) = provider.exists(path) {
@@ -223,10 +215,7 @@ impl Providers {
                 }
             }
         }
-        Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            format!("no provider found for path: {}", path.as_str()),
-        ))
+        Err(io::Error::new(io::ErrorKind::NotFound, format!("no provider found for path: {}", path.as_str())))
     }
 
     /*/// Loads an asset file from the given VFS path.
@@ -246,11 +235,7 @@ impl Providers {
     /// Returns the global instance of this registry.
     pub(crate) fn get() -> &'static RwLock<Providers> {
         static PROVIDERS: OnceLock<RwLock<Providers>> = OnceLock::new();
-        PROVIDERS.get_or_init(|| {
-            RwLock::new(Providers {
-                by_source: HashMap::new(),
-            })
-        })
+        PROVIDERS.get_or_init(|| RwLock::new(Providers { by_source: HashMap::new() }))
     }
 }
 
@@ -559,10 +544,7 @@ impl Dependencies {
     fn add_path<T: Asset>(&mut self, path: &VfsPath) {
         #[cfg(feature = "hot_reload")]
         {
-            let key = CacheKey {
-                path: path.to_path_buf(),
-                type_id: TypeId::of::<T>(),
-            };
+            let key = CacheKey { path: path.to_path_buf(), type_id: TypeId::of::<T>() };
             self.dependencies.insert(key);
         }
     }
@@ -579,10 +561,7 @@ impl Dependencies {
         {
             let path = path.as_ref();
             trace!("watching for changes: `{}`", path.display());
-            match self.local_files
-                .watcher()
-                .watch(path, RecursiveMode::NonRecursive)
-            {
+            match self.local_files.watcher().watch(path, RecursiveMode::NonRecursive) {
                 Ok(()) => (),
                 Err(err) => {
                     error!("failed to add watcher to path `{}`: {}", path.display(), err);
@@ -614,19 +593,13 @@ pub struct AssetCache {
 impl AssetCache {
     fn new() -> Self {
         Self {
-            inner: RwLock::new(Inner {
-                by_path: HashMap::new(),
-                dependency_graph: HashMap::new(),
-            }),
+            inner: RwLock::new(Inner { by_path: HashMap::new(), dependency_graph: HashMap::new() }),
             dirty_paths: Mutex::new(Default::default()),
         }
     }
 
     unsafe fn insert_inner<T: Asset>(&self, path: &VfsPath, loader: Loader) -> Handle<T> {
-        let key = CacheKey {
-            path: path.to_path_buf(),
-            type_id: TypeId::of::<T>(),
-        };
+        let key = CacheKey { path: path.to_path_buf(), type_id: TypeId::of::<T>() };
 
         // Check if an entry already exists and is clean.
         // The cache is locked only for the duration of the check.
@@ -677,11 +650,7 @@ impl AssetCache {
             for dep in dependencies.iter() {
                 debug!("asset `{}` depends on `{}`", path.as_str(), dep.path.as_str());
                 // TODO we track only one level of dependencies for now
-                inner
-                    .dependency_graph
-                    .entry(dep.clone())
-                    .or_default()
-                    .insert(key.clone());
+                inner.dependency_graph.entry(dep.clone()).or_default().insert(key.clone());
             }
         }
 
@@ -694,7 +663,6 @@ impl AssetCache {
     pub fn load<T: Asset>(&self, path: &VfsPath, loader: LoadFn<T>) -> Handle<T> {
         unsafe { self.insert_inner(path, Loader::new(loader)) }
     }
-
 
     pub fn do_reload(&self) {
         #[cfg(feature = "hot_reload")]
@@ -782,10 +750,7 @@ impl AssetCache {
     pub fn asset_changed(&self, path: &VfsPath) {
         //debug!("asset file changed: {}", path.as_str());
         #[cfg(feature = "hot_reload")]
-        self.dirty_paths
-            .lock()
-            .unwrap()
-            .insert(path.path_without_fragment().to_path_buf());
+        self.dirty_paths.lock().unwrap().insert(path.path_without_fragment().to_path_buf());
     }
 
     /// Returns the global instance of the asset cache.
@@ -797,12 +762,9 @@ impl AssetCache {
 
     pub fn register_directory(path: impl AsRef<std::path::Path>) {
         let mut providers = Providers::get().write().unwrap();
-        providers.register_overlay(Box::new(local_provider::LocalProvider::new(
-            path.as_ref().to_path_buf(),
-        )));
+        providers.register_overlay(Box::new(local_provider::LocalProvider::new(path.as_ref().to_path_buf())));
     }
 }
-
 
 /// Opens an asset file.
 pub fn open_asset(path: impl AsRef<VfsPath>) -> Result<Box<dyn ReadSeek>, AssetLoadError> {

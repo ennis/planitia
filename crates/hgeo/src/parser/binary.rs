@@ -114,8 +114,7 @@ impl<'a> ParserImpl<'a> {
     }
 
     fn read_f32(&mut self) -> Result<f32, Error> {
-        self.read_fixed_bytes::<4>()
-            .map(|bytes| f32::from_bits(u32::from_le_bytes(bytes)))
+        self.read_fixed_bytes::<4>().map(|bytes| f32::from_bits(u32::from_le_bytes(bytes)))
     }
 
     /*fn read_u64(&mut self) -> Result<u64, Error> {
@@ -127,8 +126,7 @@ impl<'a> ParserImpl<'a> {
     }
 
     fn read_f64(&mut self) -> Result<f64, Error> {
-        self.read_fixed_bytes::<8>()
-            .map(|bytes| f64::from_bits(u64::from_le_bytes(bytes)))
+        self.read_fixed_bytes::<8>().map(|bytes| f64::from_bits(u64::from_le_bytes(bytes)))
     }
 
     fn read_len(&mut self) -> Result<usize, Error> {
@@ -331,9 +329,7 @@ impl<'a> ParserImpl<'a> {
                     if !matches!(state, ArrayStart | ArrayNeedValue) {
                         return Err(Error::Malformed("unexpected array end"));
                     }
-                    self.state
-                        .pop()
-                        .ok_or(Error::Malformed("unbalanced array delimiters"))?;
+                    self.state.pop().ok_or(Error::Malformed("unbalanced array delimiters"))?;
                     next_event = Event::EndArray;
                 }
                 JID_MAP_END => {

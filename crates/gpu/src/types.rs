@@ -45,11 +45,7 @@ pub struct ImageDataLayout {
 
 impl ImageDataLayout {
     pub const fn new(width: u32, height: u32) -> Self {
-        Self {
-            offset: 0,
-            texel_row_length: Some(width),
-            row_count: Some(height),
-        }
+        Self { offset: 0, texel_row_length: Some(width), row_count: Some(height) }
     }
 }
 
@@ -376,23 +372,11 @@ impl Rect2D {
     }
 
     pub const fn from_origin_size(origin: Point2D, size: Size2D) -> Self {
-        Self {
-            min: origin,
-            max: Point2D {
-                x: origin.x + size.width as i32,
-                y: origin.y + size.height as i32,
-            },
-        }
+        Self { min: origin, max: Point2D { x: origin.x + size.width as i32, y: origin.y + size.height as i32 } }
     }
 
     pub const fn from_xywh(x: i32, y: i32, width: u32, height: u32) -> Self {
-        Self {
-            min: Point2D { x, y },
-            max: Point2D {
-                x: x + width as i32,
-                y: y + height as i32,
-            },
-        }
+        Self { min: Point2D { x, y }, max: Point2D { x: x + width as i32, y: y + height as i32 } }
     }
 }
 
@@ -412,11 +396,7 @@ impl Offset3D {
 
 impl Into<vk::Offset3D> for Offset3D {
     fn into(self) -> vk::Offset3D {
-        vk::Offset3D {
-            x: self.x,
-            y: self.y,
-            z: self.z,
-        }
+        vk::Offset3D { x: self.x, y: self.y, z: self.z }
     }
 }
 
@@ -443,11 +423,7 @@ impl Size3D {
 
 impl Into<vk::Extent3D> for Size3D {
     fn into(self) -> vk::Extent3D {
-        vk::Extent3D {
-            width: self.width,
-            height: self.height,
-            depth: self.depth,
-        }
+        vk::Extent3D { width: self.width, height: self.height, depth: self.depth }
     }
 }
 
@@ -472,25 +448,13 @@ impl Rect3D {
     }
 
     pub const fn size(&self) -> Size3D {
-        Size3D {
-            width: self.width(),
-            height: self.height(),
-            depth: self.depth(),
-        }
+        Size3D { width: self.width(), height: self.height(), depth: self.depth() }
     }
 
     pub const fn from_origin_size_2d(origin: Point2D, size: Size2D) -> Self {
         Self {
-            min: Offset3D {
-                x: origin.x,
-                y: origin.y,
-                z: 0,
-            },
-            max: Offset3D {
-                x: origin.x + size.width as i32,
-                y: origin.y + size.height as i32,
-                z: 1,
-            },
+            min: Offset3D { x: origin.x, y: origin.y, z: 0 },
+            max: Offset3D { x: origin.x + size.width as i32, y: origin.y + size.height as i32, z: 1 },
         }
     }
 
@@ -499,14 +463,7 @@ impl Rect3D {
     }
 
     pub const fn from_xywh(x: i32, y: i32, width: u32, height: u32) -> Self {
-        Self {
-            min: Offset3D { x, y, z: 0 },
-            max: Offset3D {
-                x: x + width as i32,
-                y: y + height as i32,
-                z: 1,
-            },
-        }
+        Self { min: Offset3D { x, y, z: 0 }, max: Offset3D { x: x + width as i32, y: y + height as i32, z: 1 } }
     }
 }
 
@@ -568,11 +525,7 @@ pub struct ColorTargetState {
 
 impl Default for ColorTargetState {
     fn default() -> Self {
-        Self {
-            format: vk::Format::UNDEFINED,
-            blend_equation: None,
-            color_write_mask: vk::ColorComponentFlags::RGBA,
-        }
+        Self { format: vk::Format::UNDEFINED, blend_equation: None, color_write_mask: vk::ColorComponentFlags::RGBA }
     }
 }
 
@@ -674,12 +627,7 @@ impl StencilState {
 
 impl Default for StencilState {
     fn default() -> Self {
-        Self {
-            front: StencilOpState::IGNORE,
-            back: StencilOpState::IGNORE,
-            read_mask: 0,
-            write_mask: 0,
-        }
+        Self { front: StencilOpState::IGNORE, back: StencilOpState::IGNORE, read_mask: 0, write_mask: 0 }
     }
 }
 
@@ -711,10 +659,7 @@ pub unsafe trait Vertex: Copy + 'static {
     const BUFFER_DESC: &'static VertexBufferLayoutDescription;
 
     fn vertex_input_state() -> VertexInputState<'static> {
-        VertexInputState {
-            buffers: slice::from_ref(Self::BUFFER_DESC),
-            attributes: Self::ATTRIBUTES,
-        }
+        VertexInputState { buffers: slice::from_ref(Self::BUFFER_DESC), attributes: Self::ATTRIBUTES }
     }
 }
 
@@ -873,11 +818,7 @@ pub struct MultisampleState {
 
 impl Default for MultisampleState {
     fn default() -> Self {
-        Self {
-            count: 1,
-            mask: !0,
-            alpha_to_coverage_enabled: false,
-        }
+        Self { count: 1, mask: !0, alpha_to_coverage_enabled: false }
     }
 }
 

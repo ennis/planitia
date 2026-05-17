@@ -32,10 +32,7 @@ impl<'a> Parser<'a> for ParserImpl<'a> {
 
 impl<'a> ParserImpl<'a> {
     pub(crate) fn new(data: &'a str) -> Self {
-        Self {
-            data,
-            state: Vec::new(),
-        }
+        Self { data, state: Vec::new() }
     }
 
     fn skip_ws(&mut self) {

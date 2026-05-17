@@ -5,8 +5,8 @@ use gamelib::asset::Handle;
 use gamelib::input::InputEvent;
 use gamelib::render::pipeline_cache::{get_compute_pipeline, get_graphics_pipeline};
 use gpu::PrimitiveTopology::TriangleList;
+use gpu::PushDataSource;
 use gpu::util::PushBuffer;
-use gpu::{PushDataSource};
 
 /// Post-stroke expansion vertex, already in clip space.
 #[repr(C)]
@@ -109,10 +109,7 @@ impl CoatExperiment {
     }
 
     fn open(&mut self) {
-        if let Some(path) = rfd::FileDialog::new()
-            .add_filter("Geometry Archive", &["geom"])
-            .pick_file()
-        {
+        if let Some(path) = rfd::FileDialog::new().add_filter("Geometry Archive", &["geom"]).pick_file() {
             match geom::GeoArchive::load(&path) {
                 Ok(geo) => {
                     self.geometry = Some(geo);
@@ -146,14 +143,9 @@ impl CoatExperiment {
         let mesh_indices = gpu::Buffer::from_slice(geometry.indices());
 
         let expansion_buffer_size = stroke_vertices.len() * NVERTEX;
-        let expansion_vertices = gpu::Buffer::new(gpu::BufferCreateInfo {
-            len: expansion_buffer_size,
-            ..
-        });
-        let expansion_indices = gpu::Buffer::new(gpu::BufferCreateInfo {
-            len: stroke_vertices.len() * (NVERTEX - 1) * 6,
-            ..
-        });
+        let expansion_vertices = gpu::Buffer::new(gpu::BufferCreateInfo { len: expansion_buffer_size, .. });
+        let expansion_indices =
+            gpu::Buffer::new(gpu::BufferCreateInfo { len: stroke_vertices.len() * (NVERTEX - 1) * 6, .. });
 
         self.gpu_data = Some(CoatData {
             stroke_vertex_buffer: stroke_vertices,
@@ -203,17 +195,9 @@ impl CoatExperiment {
 
                 for v in &stroke_vertices[vertex_range] {
                     //eprintln!("coat: v={:?}", v);
-                    line_vertices.push(LineVertex {
-                        position: v.position,
-                        color: srgba8(0, 0, 0, 255),
-                    });
+                    line_vertices.push(LineVertex { position: v.position, color: srgba8(0, 0, 0, 255) });
                 }
-                lines.push(Line {
-                    start_vertex,
-                    vertex_count: stroke.vertex_count,
-                    width: 5.0,
-                    ..
-                })
+                lines.push(Line { start_vertex, vertex_count: stroke.vertex_count, width: 5.0, .. })
             }
         }
 
@@ -241,10 +225,7 @@ impl CoatExperiment {
             workgroup_count,
             1,
             1,
-            PushDataSource::IndirectUpload(&ExpandStrokesRootParams {
-                scene_info: scene_info.gpu,
-                data: params,
-            }),
+            PushDataSource::IndirectUpload(&ExpandStrokesRootParams { scene_info: scene_info.gpu, data: params }),
         );
 
         //////////////////////////////////////////////////////////////////////////////////////////
@@ -252,21 +233,12 @@ impl CoatExperiment {
             return;
         };
         let mut encoder = cmd.begin_rendering(
-            &[gpu::ColorAttachment {
-                image: color_target,
-                clear: None,
-            }],
-            Some(gpu::DepthStencilAttachment {
-                image: &depth_target,
-                depth_clear: None,
-                stencil_clear: None,
-            }));
-        
+            &[gpu::ColorAttachment { image: color_target, clear: None }],
+            Some(gpu::DepthStencilAttachment { image: &depth_target, depth_clear: None, stencil_clear: None }),
+        );
+
         encoder.bind_graphics_pipeline(&*debug_stroke_pipeline);
-        let index_count = strokes
-            .iter()
-            .map(|s| (s.vertex_count - 1) * (NVERTEX as u32 - 1) * 6)
-            .sum::<u32>();
+        let index_count = strokes.iter().map(|s| (s.vertex_count - 1) * (NVERTEX as u32 - 1) * 6).sum::<u32>();
 
         let vertex_count = strokes.iter().map(|s| s.vertex_count).sum::<u32>();
         let stroke_count = strokes.len() as u32;

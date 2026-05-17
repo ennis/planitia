@@ -70,9 +70,7 @@ pub(crate) struct GlyphCache {
 impl GlyphCache {
     /// Creates a new empty glyph cache.
     pub(crate) fn new() -> Self {
-        Self {
-            entries: Default::default(),
-        }
+        Self { entries: Default::default() }
     }
 
     /// Rasterizes a glyph and stores it in the atlas if not already present.
@@ -100,13 +98,7 @@ impl GlyphCache {
         let subpixel_y = (subpixel_y_key as f32) / (SUBPIXEL_Y_GRID_SIZE as f32);
         let quantized_pos = vec2(position.x.floor(), position.y.floor());
 
-        let key = GlyphKey {
-            glyph_id: id,
-            font_id: font.id,
-            height: size,
-            subpixel_x_key,
-            subpixel_y_key,
-        };
+        let key = GlyphKey { glyph_id: id, font_id: font.id, height: size, subpixel_x_key, subpixel_y_key };
 
         if let Some(entry) = self.entries.get(&key) {
             return (GlyphEntry { ..*entry }, quantized_pos);

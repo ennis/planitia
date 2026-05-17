@@ -14,7 +14,6 @@ thread_local! {
     static PROF_STREAM: RefCell<Vec<u8>> = RefCell::new(Vec::new());
 }
 
-
 const PROF_TAG_SCOPE_ENTER: u8 = '(' as u8;
 const PROF_TAG_SCOPE_EXIT: u8 = ')' as u8;
 const PROF_TAG_STRING_DATA: u8 = '#' as u8;
@@ -91,7 +90,7 @@ pub struct ProfilerStream {
 }
 
 impl ProfilerStream {
-    pub fn iter(&self) -> impl Iterator<Item = ProfilerEvent<'_> > + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = ProfilerEvent<'_>> + '_ {
         struct Iter<'a> {
             data: &'a [u8],
         }
