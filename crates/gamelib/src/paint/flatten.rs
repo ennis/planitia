@@ -29,7 +29,7 @@ pub(super) fn flatten_path(
     path_index: u32,
     points: &mut Vec<Vec2>,
     contours: &mut Vec<Contour>,
-) -> (u32, u32) {
+) -> (Range<usize>, Range<usize>) {
     let start_points_len = points.len();
     let start_contours_len = contours.len();
 
@@ -93,9 +93,7 @@ pub(super) fn flatten_path(
         });
     }
 
-    let point_count = points.len() - start_points_len;
-    let contour_count = contours.len() - start_contours_len;
-    (point_count as u32, contour_count as u32)
+    (start_points_len..points.len(), start_contours_len..contours.len())
 }
 
 fn quadratic_to_cubic(from: Vec2, ctrl: Vec2, to: Vec2) -> CubicBezier2 {

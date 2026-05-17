@@ -9,7 +9,7 @@ use std::ptr;
 pub(super) const UPLOAD_BUFFER_ALIGNMENT: usize = 256;
 
 /// Upload buffer chunk size.
-pub(super) const UPLOAD_BUFFER_CHUNK_SIZE: usize = 1 * 1024 * 1024; // Allocate 1 MB chunks
+pub(super) const UPLOAD_BUFFER_CHUNK_SIZE: usize = 128 * 1024; // Allocate 128 KB chunks
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 

@@ -286,7 +286,7 @@ struct TileCover {
     uint seg_count;
 
     int2 tile_coords() {
-        return int2(id >> 32 & 0xFFFF, id >> 48 & 0xFFFF);
+        return int2(int(id >> 32 & 0xFFFF), int(id >> 48 & 0xFFFF));
     }
 
     uint2 path_id() {
@@ -308,8 +308,9 @@ struct RasterTilesParams {
     RWTexture2D<float4>.Handle output;
 };
 
-float4 unpack_segment(uint8_t4 segment) {
-    return float4(segment) / 255.0 * RASTER_TILE_SIZE;
+void unpack_segment(uint8_t4 segment, out float4 decoded, out uint left_cross) {
+    decoded = float4(segment & uint8_t4(0x7F)) / 127.0 * RASTER_TILE_SIZE;
+    left_cross = (segment.x & 0x80) >> 7 | (segment.y & 0x80) >> 6;
 }
 
 groupshared float s_coverage[RASTER_TILE_SIZE * RASTER_TILE_SIZE * 2];
@@ -332,7 +333,7 @@ void raster_tiles(uint3 workgroup_id: SV_GroupID, uint3 group_thread_id : SV_Gro
     let tile_top_left = tile_coords * tsize;                      // tile top-left corner position in screen coordinates
     let pixel_center  = float2(local) + 0.5;  // pixel center in tile-local coordinates
 
-    var max_coverage = 0.0;
+    var max_coverage = float2(0.0, 0.0);
 
     for (uint i_cover = cover_list.offset; i_cover < cover_list.offset + cover_list.count; i_cover++) {
         var tile_cover = u.covers[i_cover];
@@ -348,22 +349,40 @@ void raster_tiles(uint3 workgroup_id: SV_GroupID, uint3 group_thread_id : SV_Gro
         GroupMemoryBarrierWithGroupSync();
 
         if (local_index < tile_cover.seg_count) {
-            float4 seg = unpack_segment(u.segments[tile_cover.seg_offset + local_index]);
+            float4 seg;
+            uint left_cross;
+            unpack_segment(u.segments[tile_cover.seg_offset + local_index], seg, left_cross);
             float2 a = seg.xy;
             float2 b = seg.zw;
             float2 d = b - a;
-            // lines are clipped to the tile, so if they intersect the left edge
-            // they must have x == 0 at the endpoint
-            if (a.x == 0.0 || b.x == 0) {
-                let y = a.x == 0.0 ? a.y : b.y;
+
+            if (left_cross != 0) {
+                // TODO EXPLAIN THIS
+                let y = a.x == 0.0 ? (b.x == 0.0 ? min(b.y, a.y) : a.y) : b.y;
                 let yi = int(floor(y)); // pixel row index of intersection
                 let yf = 1 - (y - yi);        // 1 - fractional part
                 let yf_quant = int(yf * 255.0); // quantized to 0..255
-                let sign = int(sign(d.x));    // crossing left to right: -1, crossing right to left: +1
-                // also, d.x can be 0 for vertical lines that straddle the left edge
+                let sign = left_cross == 2 ? -1 : 1;    // crossing left to right: -1, crossing right to left: +1
                 InterlockedAdd(s_winding_v_area[yi], sign * yf_quant);
                 InterlockedAdd(s_winding_v_delta[yi], sign);
             }
+
+            /*// Lines are clipped to the tile, so if they intersect the left edge they must have x == 0 at the endpoint.
+            // `a.x != b.x` rejects fully vertical lines which enter and exit the tile simultaneously.
+            if (a.x == 0.0 || b.x == 0.0) {
+                let y = a.x == 0.0 ? a.y : b.y;
+                // reject lines with endpoints at (0,0) as they are already counted in the tile winding number
+                // (as a top-edge intersection).
+                //if (y != 0) {
+                    let yi = int(floor(y)); // pixel row index of intersection
+                    let yf = 1 - (y - yi);        // 1 - fractional part
+                    let yf_quant = int(yf * 255.0); // quantized to 0..255
+                    let sign = int(sign(d.x));    // crossing left to right: -1, crossing right to left: +1
+                    // also, d.x can be 0 for vertical lines that straddle the left edge
+                    InterlockedAdd(s_winding_v_area[yi], sign * yf_quant);
+                    InterlockedAdd(s_winding_v_delta[yi], sign);
+                //}
+            }*/
         }
 
         GroupMemoryBarrierWithGroupSync();
@@ -381,7 +400,9 @@ void raster_tiles(uint3 workgroup_id: SV_GroupID, uint3 group_thread_id : SV_Gro
         float winding = (float) tile_cover.winding + s_winding_v_delta[local.y] + float(s_winding_v_area[local.y]) / 255.0;
         for (uint i = 0; i < tile_cover.seg_count; i++) {
             uint8_t4 rawseg = u.segments[tile_cover.seg_offset + i];
-            float4 seg = unpack_segment(rawseg);
+            float4 seg;
+            uint left_cross;
+            unpack_segment(rawseg, seg, left_cross);
             float2 a = seg.xy - float2(local);
             float2 b = seg.zw - float2(local);
             // The line below produces very weird behavior when the line is horizontal (d.x == 0),
@@ -389,24 +410,22 @@ void raster_tiles(uint3 workgroup_id: SV_GroupID, uint3 group_thread_id : SV_Gro
             // For some reason this behavior disappears if we access b.x in the d.x != 0 branch.
             // This seems like a driver issue.
             //float2 d = seg.zw - seg.xy;
-            float2 d = float2(int2(rawseg.zw) - int2(rawseg.xy)) / 255.0 * RASTER_TILE_SIZE;
-
-            // good luck with that
+            float2 d = float2(int2(rawseg.zw & uint8_t2(0x7F)) - int2(rawseg.xy & uint8_t2(0x7F))) / 127.0 * RASTER_TILE_SIZE;
 
             if (d.y == 0.0) {
                 // horizontal segments don't contribute anything to the winding
                 continue;
             }
-
             if (d.x == 0.0) {
                 // vertical segments
                 float y_min = saturate(min(a.y, b.y));
                 float y_max = saturate(max(a.y, b.y));
                 float x = a.x;
-                winding += sign(-d.y) * (y_max - y_min) * saturate(1.0 - x);
+                winding += sign(-d.y) * abs(y_max - y_min) * saturate(1.0 - x);
             }
             else  {
                 // FIXME: for near-vertical segments this is super unstable
+                // good luck with that
                 float y_0 = a.y - a.x * d.y / d.x;
                 float y_1 = a.y + (1.0 - a.x) * d.y / d.x;
                 float y_min = saturate(min(a.y, b.y));
@@ -423,10 +442,11 @@ void raster_tiles(uint3 workgroup_id: SV_GroupID, uint3 group_thread_id : SV_Gro
             }
         }
 
-        max_coverage += 0.15 * abs(winding);
+        max_coverage.x += 0.15 * winding;
+        //max_coverage.y -= 0.15 * min(0, winding);
     }
 
-    u.output.Store(tile_coords * tsize + local, float4(max_coverage.xxx, 1.0) /*+ float4(float2(local)/tsize, 0.0, 1.0)*/);
+    u.output.Store(tile_coords * tsize + local, float4(max_coverage.xxx,  1.0) /*+ float4(float2(local)/tsize, 0.0, 1.0)*/);
     //u.output.Store(tile_coords * tsize + local, float4(float2(local)/tsize, 0.0, 1.0));
 }
 

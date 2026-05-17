@@ -87,6 +87,43 @@ impl Srgba8 {
             a: (a.clamp(0.0, 1.0) * 255.0).round() as u8,
         }
     }
+
+    /// Constructs an `Srgba8` color from HSLA components.
+    ///
+    /// - `h`: hue in the range `[0.0, 360.0)`
+    /// - `s`: saturation in the range `[0.0, 1.0]`
+    /// - `l`: lightness in the range `[0.0, 1.0]`
+    /// - `a`: alpha in the range `[0.0, 1.0]`
+    /// TODO review
+    pub fn from_hsla(h: f32, s: f32, l: f32, a: f32) -> Self {
+        let h = h / 360.0;
+
+        let (r, g, b) = if s == 0.0 {
+            (l, l, l)
+        } else {
+            let q = if l < 0.5 { l * (1.0 + s) } else { l + s - l * s };
+            let p = 2.0 * l - q;
+            (hue_to_channel(p, q, h + 1.0 / 3.0),
+             hue_to_channel(p, q, h),
+             hue_to_channel(p, q, h - 1.0 / 3.0))
+        };
+
+        Srgba8 {
+            r: (r.clamp(0.0, 1.0) * 255.0).round() as u8,
+            g: (g.clamp(0.0, 1.0) * 255.0).round() as u8,
+            b: (b.clamp(0.0, 1.0) * 255.0).round() as u8,
+            a: (a.clamp(0.0, 1.0) * 255.0).round() as u8,
+        }
+    }
+}
+
+fn hue_to_channel(p: f32, q: f32, mut t: f32) -> f32 {
+    if t < 0.0 { t += 1.0; }
+    if t > 1.0 { t -= 1.0; }
+    if t < 1.0 / 6.0 { return p + (q - p) * 6.0 * t; }
+    if t < 1.0 / 2.0 { return q; }
+    if t < 2.0 / 3.0 { return p + (q - p) * (2.0 / 3.0 - t) * 6.0; }
+    p
 }
 
 impl From<[u8; 4]> for Srgba8 {

@@ -97,7 +97,7 @@ impl<'a> PaintScene<'a> {
     }
 
     pub fn fill_path(&mut self, path: &Path, fill: impl Into<Fill>) {
-        flatten_path(
+        let (vertices, contours) = flatten_path(
             PathSlice::from(path),
             &self.transform,
             1.0,
@@ -105,11 +105,12 @@ impl<'a> PaintScene<'a> {
             &mut self.scene_2.vertices,
             &mut self.scene_2.contours,
         );
+        self.scene_2.paths.push(contours);
         self.scene_2.fills.push(fill.into());
         self.scene_2.path_index += 1;
 
-        self.tess.stroke_path(PathSlice::from(path), 1.0);
-        self.push_draw_op(Fill::Solid(srgba8(255, 255, 0, 255)));
+       // self.tess.stroke_path(PathSlice::from(path), 1.0);
+       // self.push_draw_op(Fill::Solid(srgba8(255, 255, 0, 255)));
     }
 
     pub fn draw_line(&mut self, p0: Vec2, p1: Vec2, width: f32, fill: impl Into<Fill>) {
