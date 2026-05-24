@@ -1,20 +1,20 @@
 //! Flatten paths into a list of line segments.
 
 use crate::paint::{PathSegment, PathSlice};
-use math::geom::CubicBezier2;
+use math::CubicBezier2;
 use math::{Mat3, Vec2};
 use std::ops::Range;
 
 /// Returns whether two points are approximately equal, within a small epsilon.
-fn approx_equal(a: Vec2, b: Vec2) -> bool {
-    const EPSILON: f32 = 0.03125; // 1/32th of a pixel
+pub(crate) fn approx_equal(a: Vec2, b: Vec2) -> bool {
+    const EPSILON: f32 = 0.00390625; // 1/256th of a pixel
     a.distance_squared(b) < EPSILON * EPSILON
 }
 
 /// Flattens a path into a list of line segments.
 ///
 /// Returns a tuple `(point_count, contour_count)` representing the number of added points and contours.
-pub(super) fn flatten_path(
+pub(crate) fn flatten_path(
     path: PathSlice,
     transform: &Mat3,
     accuracy: f32,
@@ -31,6 +31,9 @@ pub(super) fn flatten_path(
             PathSegment::MoveTo(to) => {
                 // finish current contour and begin a new one
                 if let Some(start) = cur_contour {
+                    if !approx_equal(pos, points[start]) {
+                        points.push(points[start]);
+                    }
                     contours.push(start..points.len());
                 }
 
@@ -60,8 +63,13 @@ pub(super) fn flatten_path(
                 pos = tto;
             }
             PathSegment::Close => {
-                let start = cur_contour.take().expect("malformed path: close outside of active contour");
+                let Some(start) = cur_contour.take() else {
+                    //panic!("malformed path: close outside active contour");
+                    continue;
+                };
+                //let start = cur_contour.take().expect("malformed path: close outside active contour");
                 if !approx_equal(pos, points[start]) {
+                    // this saves us from having to track whether the contour is closed or not
                     points.push(points[start]);
                 }
                 contours.push(start..points.len());

@@ -3,8 +3,8 @@ use crate::paint::texel_to_normalized_texcoord;
 use crate::paint::text::{Font, FontId, GlyphId};
 use ab_glyph::{Font as FontTrait, ScaleFont};
 use color::srgba8;
-use math::geom::IRect;
-use math::{IVec2, U16Vec2, Vec2, ivec2, u16vec2, uvec2, vec2};
+use math::IRect;
+use math::{ivec2, uvec2, vec2, IVec2, Vec2};
 use std::collections::HashMap;
 
 const SUBPIXEL_X_GRID_SIZE: u32 = 8;
@@ -26,8 +26,7 @@ pub(crate) struct GlyphEntry {
     pub(crate) px_bounds: IRect,
     /// Position of the glyph in the atlas texture.
     pub(crate) atlas_pos: IVec2,
-    // Normalized texture coordinates (min/max) in the atlas texture.
-    //pub(crate) normalized_texcoords: [U16Vec2; 2],
+    /// Normalized texture coordinates (min/max) in the atlas texture.
     pub(crate) uv: [Vec2; 2],
     /// Horizontal advance of the glyph in layout coordinates.
     pub(crate) advance: f32,

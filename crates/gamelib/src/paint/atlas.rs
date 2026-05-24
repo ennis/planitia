@@ -1,7 +1,7 @@
 use crate::paint::Srgba8;
 use gpu::{ImageAspect, ImageCopyView, ImageCreateInfo, InvalidateFlags, MemoryLocation, Size3D, vk};
 use log::debug;
-use math::geom::{IRect, irect_xywh};
+use math::{IRect, irect_xywh};
 use math::{U16Vec2, u16vec2};
 use std::cell::RefCell;
 use std::ops::{Index, IndexMut, Range};

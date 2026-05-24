@@ -22,13 +22,14 @@
  ✔ Import shader-bridge @done (25-10-06 22:26)
  ✔ move to a separate repo @done (25-10-06 22:26)
  ☐ Shadertool should emit one file per slang module
- ☐ move common.slang to gamelib
+ ✔ move common.slang to gamelib @done (26-05-17 22:50)
  ☐ get rid of winit
  ☐ get rid of arboard
  ☐ get rid of egui
  ☐ object picking
  ☐ arbitrary data containers based on archive format
  ☐ Mesh file format
+ ☐ Fix memory leak
  ☐ Move assets, painting, platform etc. to another crate for potential reuse
  ☐ async asset reloading
  ☐ move egui shaders to shader-archive
@@ -268,6 +269,7 @@ Generic data viewer:
         point accessor 
         triangle face accessor (generates indices into point accessor)
 
+
 e.g. for winged-edge repr:
     debug_geometry:
         vertex: *(base.#0)[@vertex].#4
@@ -343,26 +345,6 @@ World:
     ✔ Text @done (25-10-04 23:30)
     ☐ Font selection by name
 
-GPU vector rendering:
-Compute shader: flatten paths into lines
-Compute shader: place lines into 16x16 tiles
-    Issue: maximum number of lines per tiles?
-For each tile with lines: render coverage delta with bresenham conservative rasterizer
-For each tile with lines: prefix-sum coverage delta and evaluate fills
-
-
-Alternative: flatten path into lines
-rasterize lines into screen-size texture, conservatively
-for each touched pixel, compute area and coverage delta
-for each touched tile, append tile to queue
-
-then, sort tiles by scanline then by path
-group consecutive tiles into strips
-then, spawn a workgroup for each strip, compute columns in parallel across threads of the strip
-    - for each thread, maintain a running sum of the coverage
-    - fill each pixel in the column, in parallel, according to the running coverage
-    Issue: for overlapping paths, lots of overdraw (strips completely occluding each other)
-
 
 Shaders:
     ✔ [shader-bridge] `struct ShaderLibrary`: represents a loaded/parsed slang source file (in shader-bridge), as a collection of entry points; used to retrieve ShaderEntryPoint objects @done (25-10-06 22:25)
@@ -428,28 +410,3 @@ Bugs:
         \Device\Video3
         Error occurred on GPUID: 700
 
-
-For each path, we have a continuous sequence of TileSeg that records an intersection between a tile and a line segment.
-TileSeg records are of the form { x, y, path_id }, where x,y is the tile coordinate.
-These records are sorted by y then by x (contiguous columns first, then contiguous rows).
-
-The goal is to convert these lists (one per path) into per-tile lists of TileSeg records, sorted by path.
-This should exploit GPU parallelism.
-
-Attempt 1:
-It's possible to build for each path a 2D grid containing, in each tile of the grid, the offset to the start of the TileSeg records for the tile.
-Thus we can assume that for each path, we have a data structure (the TileSegMap) containing the mapping between from (tile_x, tile_y) -> beginning of TileSeg records
-
-To combine them, naively: go through each tile of the screen (covered by the drawing) then loop for each path: if path.TileSegMap[tile_x, tile_y] is not null, then
-add it to the list for this tile. This can be done in parallel.
-However, this means doing a loop over all paths. This is O(number of paths) which can be extremely costly. Also we'd need to allocate storage for the tiles in advance.
-
-As an optimization: keep a bitmap PathTileCover that tells, for each tile, whether a given path intersects the tile. This would be a TILES_COUNT_X x TILES_COUNT_Y x PATH_COUNT bitmap.
-Then, only iterate over non-zero bits. 
-
-In practice: if there are large numbers of paths (say, ~10000),
-spawn a TG per group of 128 (e.g.) path. Have the TG fill a PathTileCover bitmap for those 128 paths only (TILES_X x TILES_Y x 128, stored in shmem).
-Build the PathTileCover bitmap for the 128 paths, 
-then build the PerTileCommandList (PTCL) for this group of 128 paths.
-
-Then, in a separate pass, merge the PTCLs for all groups, can be done in parallel for each tile.

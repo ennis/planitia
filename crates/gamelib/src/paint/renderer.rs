@@ -5,15 +5,16 @@ mod prepare;
 use crate::asset::AssetLoadError;
 use crate::paint::fill::Fill;
 use crate::paint::renderer::prepare::prepare_scene;
-use crate::paint::{PaintRenderParams, Painter, PathVerb};
+use crate::paint::{
+    GradientExtendMode, GradientRampData, GradientIntegralSegment, PaintRenderParams, Painter, PathVerb,
+};
 use crate::static_assets;
 use color::Srgba8;
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::{ClearColorValue, CommandBuffer, InvalidateFlags, Ptr, root_params};
-use math::{IVec2, Mat3, Rect, U8Vec4, Vec2, ivec2, uvec2};
+use math::{IVec2, Mat3, Rect, U8Vec4, Vec2, ivec2, uvec2, UVec2, Vec4};
 use std::ops::Range;
 use std::sync::Once;
-
 
 //--------------------------------------------------------------------------------------------------
 
@@ -49,22 +50,34 @@ pub(super) struct Scene {
     pub(super) path_points: Vec<Vec2>,
     pub(super) fills: Vec<Fill>,
     pub(super) draw_commands: Vec<DrawCommand>,
+    pub(super) gradient_integral_segments: Vec<GradientIntegralSegment>,
+    pub(super) gradient_ramps: Vec<GradientRampData>,
 
     // List of paths (ranges into `contours`)
     //pub(super) paths: Vec<Range<usize>>, // range of contours
     pub(super) paths_bbox: Rect,
 }
 
-//--------------------------------------------------------------------------------
-// GPU structs
+impl Scene {
+    pub(super) fn is_fill_opaque(&self, fill_index: usize) -> bool {
+        match self.fills[fill_index] {
+            Fill::Solid(color) => color.is_opaque(),
+            Fill::Texture { .. } => false,
+            Fill::LinearGradient(g) => self.gradient_ramps[g.ramp].opaque,
+        }
+    }
+}
 
-/// Represents a covering of a tile by one single path.
+//--------------------------------------------------------------------------------
+// GPU types
+
+/// Represents a covering of a tile by one path.
 #[derive(Copy, Clone, Debug)]
 #[repr(C)]
 struct TileCover {
     /// Packed ID+tile coordinates.
     ///
-    /// MSB <y:16> <x:16> <path:32> LSB
+    /// See `pack_tile_cover_id`.
     id: u64,
     /// Tile-level winding number (winding number at the top-left point of the tile).
     winding: i32,
@@ -77,17 +90,24 @@ struct TileCover {
 }
 
 impl TileCover {
+    /// Returns the coordinates of the tile (in tiles, not pixels).
+    ///
+    /// E.g. for a tile covering pixels (32..48, 16..32), this would return (2, 1) if the tile size is 16.
     fn tile_coords(&self) -> IVec2 {
         let x = (self.id >> 32 & 0xFFFF) as i16;
         let y = (self.id >> 48 & 0xFFFF) as i16;
         ivec2(x as i32, y as i32)
     }
 
+    /// Returns the path ID.
     fn path(&self) -> u32 {
         (self.id & 0xFFFFFFFF) as u32
     }
 }
 
+/// Packs tile coordinates and path ID into a single u64 for efficient sorting.
+///
+/// The format is: `(MSB) <y:16> <x:16> <path:32> (LSB)`
 fn pack_tile_cover_id(x: i32, y: i32, path: u32) -> u64 {
     ((y as u64) << 48) | ((x as u64) << 32) | (path as u64)
 }
@@ -102,11 +122,89 @@ struct TileCoverList {
 }
 
 #[derive(Copy, Clone, Debug)]
+#[repr(u32)]
+enum FillType {
+    Solid = 0,
+    Texture = 1,
+    LinearGradient = 2,
+}
+
+#[derive(Copy, Clone, Debug)]
 #[repr(C)]
-struct FillData {
+struct SolidFill {
+    tag: u32 = FillType::Solid as u32,
     color: Srgba8,
 }
 
+impl SolidFill {
+    fn to_fill_data(&self) -> FillData {
+        FillData { solid_fill: *self }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+#[repr(C)]
+struct TextureFill {
+    tag: u32 = FillType::Texture as u32,
+    texture: gpu::TextureHandle,
+    sampler: gpu::SamplerHandle,
+    local_to_uv: Mat3,
+}
+
+impl TextureFill {
+    fn to_fill_data(&self) -> FillData {
+        FillData { texture_fill: *self }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+#[repr(C)]
+struct LinearGradientFill {
+    tag: u32 = FillType::LinearGradient as u32,
+    extend_mode: GradientExtendMode,
+    start: Vec2,
+    end: Vec2,
+    seg_range: UVec2,
+    integral: Vec4,
+}
+
+impl LinearGradientFill {
+    fn to_fill_data(&self) -> FillData {
+        FillData { linear_gradient_fill: *self }
+    }
+}
+
+#[derive(Copy, Clone)]
+#[repr(C)]
+union FillData {
+    tag: u32,
+    data: [u32; 16],
+    texture_fill: TextureFill,
+    solid_fill: SolidFill,
+    linear_gradient_fill: LinearGradientFill,
+}
+
+impl From<SolidFill> for FillData {
+    fn from(solid_fill: SolidFill) -> Self {
+        FillData { solid_fill }
+    }
+}
+
+impl From<TextureFill> for FillData {
+    fn from(texture_fill: TextureFill) -> Self {
+        FillData { texture_fill }
+    }
+}
+
+impl From<LinearGradientFill> for FillData {
+    fn from(linear_gradient_fill: LinearGradientFill) -> Self {
+        FillData { linear_gradient_fill }
+    }
+}
+
+const _: () = assert!(size_of::<FillData>() == 64, "FillData must be exactly 64 bytes");
+
+/// Shader parameters for the `raster_tiles` pass.
 #[derive(Copy, Clone)]
 #[repr(C)]
 struct RasterTilesParams {
@@ -116,6 +214,7 @@ struct RasterTilesParams {
     cover_lists: Ptr<TileCoverList>,
     cover_list_count: u32,
     fills: Ptr<FillData>,
+    gradient_integral_segments: Ptr<GradientIntegralSegment>,
     output: gpu::StorageImageHandle,
 }
 
@@ -129,7 +228,6 @@ struct PreparedSceneData {
     tile_cover_lists: Vec<TileCoverList>,
     fills: Vec<FillData>,
 }
-
 
 static DEBUG_DUMP_SCENE: Once = Once::new();
 
@@ -172,6 +270,7 @@ pub(super) fn render_scene(
         cover_lists: cb.upload_slice(&prep_scene.tile_cover_lists[..]),
         cover_list_count: prep_scene.tile_cover_lists.len() as u32,
         fills: cb.upload_slice(&prep_scene.fills[..]),
+        gradient_integral_segments: cb.upload_slice(&scene.gradient_integral_segments),
         output: painter.coverage_target.storage_handle(),
     };
 

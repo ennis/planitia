@@ -154,10 +154,6 @@ impl Device {
     pub unsafe fn resize_swapchain(&self, swapchain: &mut SwapChain, width: u32, height: u32) {
         let phy = self.thread_safe.physical_device;
         let capabilities = vk_khr_surface().get_physical_device_surface_capabilities(phy, swapchain.surface).unwrap();
-        /*let formats = self
-        .vk_khr_surface
-        .get_physical_device_surface_formats(phy, swapchain.surface)
-        .unwrap();*/
         let present_modes = vk_khr_surface().get_physical_device_surface_present_modes(phy, swapchain.surface).unwrap();
 
         let present_mode = get_preferred_present_mode(&present_modes);
@@ -191,7 +187,10 @@ impl Device {
             ..Default::default()
         };
 
+
         let new_handle = self.extensions.khr_swapchain.create_swapchain(&create_info, None).unwrap();
+
+        // destroy the old swapchain if it exists
         if swapchain.handle != vk::SwapchainKHR::null() {
             // FIXME the images may be in use, we should wait for the device to be idle
             self.extensions.khr_swapchain.destroy_swapchain(swapchain.handle, None);

@@ -119,9 +119,10 @@ impl PlatformInterface for Win32Platform {
     fn render(&self, render_callback: &mut dyn FnMut(RenderTargetImage)) {
         let mut window = self.window.borrow_mut();
         let window = window.as_mut().unwrap();
-        let image = window.get_swap_chain_image();
-        render_callback(RenderTargetImage { image });
-        window.present();
+        if let Some(image) = window.get_swap_chain_image() {
+            render_callback(RenderTargetImage { image });
+            window.present();
+        }
     }
 
     fn wake_at_next_vsync(&self) {

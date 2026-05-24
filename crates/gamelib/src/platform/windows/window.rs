@@ -4,7 +4,7 @@ use crate::platform::windows::swap_chain::{DxgiVulkanInteropSwapChain, dxgi_to_v
 use crate::platform::windows::{Error, get_hwnd};
 use crate::util::env_flag;
 use gpu::vk;
-use log::info;
+use log::{error, info};
 use std::cell::Cell;
 use std::env;
 use std::time::Duration;
@@ -41,7 +41,6 @@ pub(super) enum SwapChainImage<'a> {
 pub(super) struct Window {
     pub(super) inner: winit::window::Window,
     dcomp: Option<DCompState>,
-    //pub(super) swap_chain: DxgiVulkanInteropSwapChain,
     swap_chain_mode: SwapChainMode,
     swap_chain_image_index: Cell<usize>,
     first_present: bool,
@@ -120,17 +119,23 @@ impl Window {
         }
     }
 
-    pub(super) fn get_swap_chain_image(&self) -> &gpu::Image {
+    pub(super) fn get_swap_chain_image(&self) -> Option<&gpu::Image> {
         match &self.swap_chain_mode {
-            SwapChainMode::DirectComposition(swap_chain) => swap_chain.get_image(),
+            SwapChainMode::DirectComposition(swap_chain) => Some(swap_chain.get_image()),
             SwapChainMode::Vulkan(swap_chain) => {
                 let device = gpu::Device::global();
                 unsafe {
-                    let (index, image) = device
+                    let (index, image) = match device
                         .acquire_next_swapchain_image(swap_chain, Duration::from_millis(1000))
-                        .expect("failed to acquire swap chain image");
+                    {
+                        Ok(result) => result,
+                        Err(err) => {
+                            error!("failed to acquire next swap chain image: {err}");
+                            return None;
+                        }
+                    };
                     self.swap_chain_image_index.set(index);
-                    image
+                    Some(image)
                 }
             }
         }
@@ -158,8 +163,9 @@ impl Window {
                 }
             }
             SwapChainMode::Vulkan(ref mut swap_chain) => {
-                gpu::present(swap_chain, self.swap_chain_image_index.get())
-                    .expect("failed to present swap chain image");
+                if let Err(err) = gpu::present(swap_chain, self.swap_chain_image_index.get()) {
+                    error!("failed to present swap chain image: {err}");
+                }
             }
         }
     }

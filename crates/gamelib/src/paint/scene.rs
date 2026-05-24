@@ -1,16 +1,18 @@
-use crate::paint::fill::{Fill, rect_transform};
+use crate::paint::fill::Fill;
 use crate::paint::flatten::flatten_path;
+use crate::paint::gradient::ColorStop;
 use crate::paint::pipelines::PaintRootParams;
 use crate::paint::renderer::DrawCommand;
 use crate::paint::tessellation::{Mesh, Tessellator};
 use crate::paint::{
-    AsPathSlice, GlyphRun, PaintRenderParams, PaintVertex, Painter, Path, PathBuilder, PathSlice, RRect, renderer,
+    AsPathSlice, GlyphRun, GradientRampData, GradientIntegralSegment, PaintRenderParams, PaintVertex, Painter, Path,
+    PathBuilder, PathSlice, RRect, compute_gradient_integral, renderer,
 };
 use color::{Srgba8, srgba8};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::{CommandBuffer, Ptr, PushDataSource};
-use log::warn;
-use math::{Mat3, Rect, Vec2, Vec3, vec2, vec3};
+use log::{error, warn};
+use math::{Mat3, Rect, Vec2, Vec3, Vec4, rect_transform, vec2, vec3};
 
 /// Options for drawing a glyph run.
 #[derive(Clone, Debug, Default)]
@@ -20,6 +22,12 @@ pub struct DrawGlyphRunOptions {
     /// Glyph size in points.
     pub size: f32,
 }
+
+/// Represents a gradient ramp (a list of color stops).
+///
+/// Gradient ramps are valid only while a scene is being built.
+/// Storing a [`GradientRamp`] between scenes is not allowed and may lead to undefined behavior.
+pub type GradientRamp = usize;
 
 /// Representation of a painter scene being drawn.
 pub struct PaintScene<'a> {
@@ -56,11 +64,69 @@ impl<'a> PaintScene<'a> {
         });
     }
 
+    /// Creates a [`GradientRamp`] from the specified list of color stops.
+    ///
+    /// The returned [`GradientRamp`] is valid only for this scene.
+    pub fn create_gradient_ramp(&mut self, stops: &[ColorStop]) -> GradientRamp {
+        let ramp = compute_gradient_integral(stops, &mut self.scene.gradient_integral_segments);
+        self.scene.gradient_ramps.push(ramp);
+        self.scene.gradient_ramps.len() - 1
+    }
+
     /// Draws a rounded rectangle at the specified position with the given size and corner radius.
     pub fn fill_rrect(&mut self, rect: Rect, radius: f32, fill: impl Into<Fill>) {
-        let fill = fill.into();
+        let fill = fill.into().transform(&self.transform);
         self.tess.fill_rrect(RRect { rect, radius });
         self.push_draw_op(fill);
+    }
+
+    /// Fills a circle.
+    ///
+    /// # Arguments
+    ///
+    /// - `center` the center of the circle
+    /// - `radius` the radius of the circle
+    /// - `fill` how to fill the circle
+    pub fn fill_circle(&mut self, center: Vec2, radius: f32, fill: impl Into<Fill>) {
+        // Approximate the circle with cubic Bézier curves.
+        // Four arcs of 90°, each controlled by the "magic" constant k = 4*(sqrt(2)-1)/3.
+        const K: f32 = 0.5522847498;
+        let r = radius;
+        let k = K * r;
+        let mut b = PathBuilder::new();
+        b.move_to(center + vec2(r, 0.0));
+        b.cubic_to(center + vec2(r, k), center + vec2(k, r), center + vec2(0.0, r));
+        b.cubic_to(center + vec2(-k, r), center + vec2(-r, k), center + vec2(-r, 0.0));
+        b.cubic_to(center + vec2(-r, -k), center + vec2(-k, -r), center + vec2(0.0, -r));
+        b.cubic_to(center + vec2(k, -r), center + vec2(r, -k), center + vec2(r, 0.0));
+        b.close();
+        self.fill_path(&b.finish(), fill);
+    }
+
+    /// Fills a path.
+    ///
+    /// # Arguments
+    ///
+    /// - `path` the path to fill
+    /// - `fill` how to fill the path
+    pub fn fill_path(&mut self, path: &impl AsPathSlice, fill: impl Into<Fill>) {
+        let path = path.as_path_slice();
+        let base_vertex = self.scene.path_points.len();
+        let base_verb = self.scene.path_verbs.len();
+        self.scene.path_points.extend_from_slice(&path.points);
+        self.scene.path_verbs.extend_from_slice(&path.verbs);
+
+        let fill_index = self.scene.fills.len();
+        // Fills may contain local coordinates (e.g. gradient lines). Transform them to screen space
+        // now so that we don't have to worry about it later.
+        let fill = fill.into().transform(&self.transform);
+        self.scene.fills.push(fill);
+
+        self.scene.draw_commands.push(DrawCommand::FillPath {
+            verb_range: base_verb..self.scene.path_verbs.len(),
+            base_vertex,
+            fill: fill_index,
+        });
     }
 
     pub fn save(&mut self) {
@@ -79,22 +145,6 @@ impl<'a> PaintScene<'a> {
     pub fn transform(&mut self, transform: Mat3) {
         self.transform = self.transform * transform;
         self.scene.draw_commands.push(DrawCommand::SetTransform(self.transform));
-    }
-
-    pub fn fill_path(&mut self, path: &impl AsPathSlice, fill: impl Into<Fill>) {
-        let path = path.as_path_slice();
-        let base_vertex = self.scene.path_points.len();
-        let base_verb = self.scene.path_verbs.len();
-        self.scene.path_points.extend_from_slice(&path.points);
-        self.scene.path_verbs.extend_from_slice(&path.verbs);
-        let fill_index = self.scene.fills.len();
-        self.scene.fills.push(fill.into());
-
-        self.scene.draw_commands.push(DrawCommand::FillPath {
-            verb_range: base_verb..self.scene.path_verbs.len(),
-            base_vertex,
-            fill: fill_index,
-        });
     }
 
     pub fn draw_line(&mut self, p0: Vec2, p1: Vec2, width: f32, fill: impl Into<Fill>) {
@@ -156,13 +206,16 @@ impl<'a> PaintScene<'a> {
             self.tess.quad(quad.min, quad.max);
             self.push_draw_op(Fill::Texture {
                 texture: self.painter.texture_atlas.texture_handle(),
-                uv_transform: rect_transform(quad, Rect::from_min_max(entry.uv[0], entry.uv[1])),
+                sampler: self.painter.sampler.device_handle(),
+                local_to_uv: rect_transform(quad, Rect::from_min_max(entry.uv[0], entry.uv[1])),
             });
         }
     }
 
     pub fn finish(mut self, cmd: &mut CommandBuffer, params: &PaintRenderParams) {
-        renderer::render_scene(cmd, self.painter, params, &self.scene);
+        if let Err(err) = renderer::render_scene(cmd, self.painter, params, &self.scene) {
+            error!("failed to render scene: {err}");
+        }
         render_scene(cmd, self.painter, params, &self.old_scene);
     }
 }
@@ -234,9 +287,18 @@ fn render_scene(cmd: &mut CommandBuffer, painter: &mut Painter, params: &PaintRe
                 );
                 color = solid_color;
             }
-            Fill::Texture { texture: tex, uv_transform } => {
+            Fill::Texture { texture: tex, sampler, local_to_uv: uv_transform } => {
                 texture = tex;
                 device_to_uv_transform = prim.device_to_local * uv_transform;
+            }
+            _ => {
+                // TODO dummy
+                texture = painter.texture_atlas.texture_handle();
+                device_to_uv_transform = Mat3::from_cols(
+                    Vec3::ZERO,
+                    Vec3::ZERO,
+                    vec3(painter.white_pixel_uv_f.x, painter.white_pixel_uv_f.y, 1.0),
+                );
             }
         };
 

@@ -17,7 +17,7 @@ use color::{Srgba8, srgba8};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::{Image, Ptr, PushDataSource, root_params};
 use log::debug;
-use math::geom::{Camera, rect_xywh};
+use math::{Camera, rect_xywh};
 use math::{Mat4, Vec2, Vec3, vec2};
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};

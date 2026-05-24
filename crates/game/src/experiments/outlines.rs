@@ -15,7 +15,7 @@ use gpu::{
 };
 use hgeo::util::polygons_to_triangle_mesh;
 use log::{info, warn};
-use math::geom::Camera;
+use math::Camera;
 use math::{IVec2, Mat4, Vec3};
 use smallvec::{SmallVec, smallvec};
 use std::alloc::Layout;

@@ -9,12 +9,13 @@ mod sweep;
 mod winged_edge_mesh;
 
 use color::Srgba8;
-use gamelib::paint::{DrawGlyphRunOptions, PaintRenderParams, Painter, TextFormat, TextLayout};
-use math::geom::rect_xywh;
-use math::vec2;
+use gamelib::paint::{PaintRenderParams, Painter, TextFormat, TextLayout};
+use math::rect_xywh;
 
 pub(super) fn painting_test(painter: &mut Painter, cmd: &mut gpu::CommandBuffer, target: &gpu::Image, color: Srgba8) {
     let mut scene = painter.build_scene();
+
+
     scene.fill_rrect(rect_xywh(100.0, 100.0, 200.0, 200.0), 20.0, color);
 
     let mut text = TextLayout::new(

@@ -1,50 +1,87 @@
-use math::Vec2;
+//! 2D vector path representation and construction.
+//!
+//! A [`Path`] (or its borrowed counterpart [`PathSlice`]) describes a sequence of contours made up
+//! of straight lines and Bézier curves. Paths are built incrementally with [`PathBuilder`].
+
+use math::{Mat3, Vec2};
 use std::f32::consts::FRAC_2_PI;
 
-/// Represents a segment of a path.
+/// A single segment of a path, with its points already extracted.
+///
+/// In general, avoid storing path data as `PathSegment` arrays, instead prefer the more compact [`Path`] representation which
+/// packs points and segment types into separate arrays.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PathSegment {
+    /// Move the current point without drawing anything.
     MoveTo(Vec2),
+    /// Draw a straight line from the current point to the given endpoint.
     LineTo(Vec2),
+    /// Draw a quadratic Bézier curve through `ctrl` to `to`.
     QuadTo { ctrl: Vec2, to: Vec2 },
+    /// Draw a cubic Bézier curve with two control points.
     CubicTo { ctrl1: Vec2, ctrl2: Vec2, to: Vec2 },
+    /// Close the current contour by connecting back to its starting point.
     Close,
 }
 
-/// Verbs that define the type of each path segment.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Defines the type of path segment in a [`Path`].
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum PathVerb {
+    /// Start a new contour at a point.
     MoveTo,
+    /// Straight line to a point.
     LineTo,
+    /// Quadratic Bézier curve (1 control point + endpoint).
     QuadTo,
+    /// Cubic Bézier curve (2 control points + endpoint).
     CubicTo,
+    /// Close the current contour.
     Close,
 }
 
-/// Represents a 2D path.
+/// Owned, immutable 2D path.
 ///
-/// It consists of a sequence of segments, each defined by a verb and its associated points.
+/// Paths are encoded as an array of verbs with associated points.
+/// A path may contain any number of disconnected "contours", each starting with a `MoveTo` verb.
+/// The starting `MoveTo` sets the initial point of the contour, and is followed by any number
+/// of `LineTo`, `QuadTo`, and `CubicTo` verbs that append curve segments.
+/// `Close` verbs make the contour closed by connecting the last point back to the starting `MoveTo` of the contour.
 ///
-/// Not all verbs require the same number of points in `points`:
+/// Can be borrowed as a [`PathSlice`] via the [`AsPathSlice`] trait.
+/// To iterate over each verb, see [`PathSlice::iter`].
+///
+/// # Encoding
+///
+/// Each verb consumes a certain number of points from the `points` array, in order:
+///
 /// - `MoveTo` and `LineTo`: 1
 /// - `QuadTo`: 2 (control, endpoint)
 /// - `CubicTo`: 3 (control1, control2, endpoint)
 /// - `Close`: 0
-///
-/// The points are tightly packed in the `points` array, and as such there's no direct way to
-/// associate a verb with its points without iterating through the verbs.
 #[derive(Clone, Debug)]
 pub struct Path {
-    /// List of path verbs.
+    /// List of verbs defining the type of each segment.
     pub verbs: Box<[PathVerb]>,
-    /// List of points for all segments.
+    /// Flat array of control/endpoint positions for all verbs, in order.
     pub points: Box<[Vec2]>,
 }
 
-/// Borrowed view of a path.
+impl Path {
+    /// Applies `transform` to every point in the path in-place.
+    pub fn transform_in_place(&mut self, transform: Mat3) {
+        for p in self.points.iter_mut() {
+            *p = transform.transform_point2(*p);
+        }
+    }
+}
+
+/// Borrowed view of a [`Path`] (or [`PathBuilder`]).
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct PathSlice<'a> {
+    /// List of verbs defining the type of each segment.
     pub verbs: &'a [PathVerb],
+    /// Flat array of control/endpoint positions for all verbs, in order.
     pub points: &'a [Vec2],
 }
 
@@ -61,7 +98,7 @@ impl<'a> From<&'a Path> for PathSlice<'a> {
 }
 
 impl<'a> PathSlice<'a> {
-    /// Iterates over the segments of the path, yielding a `PathSegment` for each verb and its associated points.
+    /// Iterates over all verbs of the path as decoded [`PathSegment`] values.
     pub fn iter(&self) -> impl Iterator<Item = PathSegment> + '_ {
         let mut point_index = 0;
         self.verbs.iter().map(move |verb| match verb {
@@ -93,15 +130,34 @@ impl<'a> PathSlice<'a> {
     }
 }
 
-
-/// Constructs a path incrementally.
+/// Incremental builder for [`Path`] values.
+///
+/// Call [`finish`](PathBuilder::finish) to convert the
+/// builder into an immutable [`Path`], or use [`AsPathSlice`] to borrow the in-progress data
+/// without consuming the builder.
+///
+/// # Example
+/// ```ignore
+/// let mut b = PathBuilder::new();
+/// b.move_to(vec2(0.0, 0.0))
+///  .line_to(vec2(100.0, 0.0))
+///  .line_to(vec2(100.0, 100.0))
+///  .close();
+/// let path = b.finish();
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct PathBuilder {
     verbs: Vec<PathVerb>,
     points: Vec<Vec2>,
 }
 
-/// Approximates an arc with a sequence of cubic Bézier curves, and appends the control points to `out`.
+/// Approximates a circular arc (centred at the origin, radius 1) as a sequence of cubic Bézier
+/// curves and appends the control/endpoint triples to `out`.
+///
+/// Returns the number of cubic segments emitted.
+///
+/// The caller is responsible for emitting the initial `MoveTo` and adding the corresponding
+/// [`PathVerb::CubicTo`] entries.
 fn arc_to_beziers(angle_start: f32, angle_extent: f32, out: &mut Vec<Vec2>) -> u32 {
     let segment_count = (angle_extent.abs() * FRAC_2_PI).ceil() as usize;
     let segment_angle = angle_extent / (segment_count as f32);
@@ -122,34 +178,33 @@ fn arc_to_beziers(angle_start: f32, angle_extent: f32, out: &mut Vec<Vec2>) -> u
 }
 
 impl PathBuilder {
-    /// Creates a new empty path builder.
+    /// Creates a new, empty path builder.
     pub fn new() -> Self {
         Self { verbs: Vec::new(), points: Vec::new() }
     }
 
-    /// Finishes building the path and returns an immutable `Path` object.
+    /// Consumes the builder and returns the finished [`Path`].
     pub fn finish(self) -> Path {
         Path { verbs: self.verbs.into_boxed_slice(), points: self.points.into_boxed_slice() }
     }
 
-    /// Moves the current point of the path.
+    /// Begins a new sub-path at `to`, without drawing anything.
     ///
-    /// If this is the first command in the path, it sets the starting point.
-    /// Otherwise, it starts a new contour.
+    /// If the builder is not empty this starts a new, disconnected contour.
     pub fn move_to(&mut self, to: Vec2) -> &mut Self {
         self.verbs.push(PathVerb::MoveTo);
         self.points.push(to);
         self
     }
 
-    /// Adds a line segment.
+    /// Appends a straight line from the current point to `to`.
     pub fn line_to(&mut self, to: Vec2) -> &mut Self {
         self.verbs.push(PathVerb::LineTo);
         self.points.push(to);
         self
     }
 
-    /// Adds a quadratic Bézier segment.
+    /// Appends a quadratic Bézier curve.
     pub fn quad_to(&mut self, control: Vec2, endpoint: Vec2) -> &mut Self {
         self.verbs.push(PathVerb::QuadTo);
         self.points.push(control);
@@ -157,7 +212,7 @@ impl PathBuilder {
         self
     }
 
-    /// Adds a cubic Bézier segment.
+    /// Appends a cubic Bézier curve.
     pub fn cubic_to(&mut self, ctrl1: Vec2, ctrl2: Vec2, endpoint: Vec2) -> &mut Self {
         self.verbs.push(PathVerb::CubicTo);
         self.points.push(ctrl1);
@@ -166,7 +221,7 @@ impl PathBuilder {
         self
     }
 
-    /// Adds an elliptical arc segment.
+    /// Appends an elliptical arc segment
     pub fn arc_to_endpoint(&mut self, to: Vec2, radii: Vec2, phi: f32, large_arc: bool, sweep: bool) -> &mut Self {
         let from = self.points.last().copied().unwrap_or(Vec2::ZERO);
 
@@ -219,25 +274,34 @@ impl PathBuilder {
         for i in ptcount..self.points.len() {
             self.points[i] = transform(self.points[i]);
         }
-        for i in 0..bezier_count {
+        for _ in 0..bezier_count {
             self.verbs.push(PathVerb::CubicTo);
         }
         self
     }
 
-    /// Closes the current contour by connecting the last point to the starting point.
+    /// Closes the current contour by connecting the last point back to the starting `MoveTo` point.
     pub fn close(&mut self) {
         self.verbs.push(PathVerb::Close);
     }
 
+    /// Applies `transform` to every point in the builder in-place.
+    pub fn transform_in_place(&mut self, transform: Mat3) {
+        for p in self.points.iter_mut() {
+            *p = transform.transform_point2(*p);
+        }
+    }
+
+    /// Clears all verbs and points, resetting the builder to an empty state.
     pub fn clear(&mut self) {
         self.verbs.clear();
         self.points.clear();
     }
 }
 
-
-/// Trait for types that can be converted into a `PathSlice`.
+/// Implemented by types that can be borrowed as a [`PathSlice`].
+///
+/// Both [`Path`] and [`PathBuilder`] implement this.
 pub trait AsPathSlice {
     fn as_path_slice(&self) -> PathSlice<'_>;
 }

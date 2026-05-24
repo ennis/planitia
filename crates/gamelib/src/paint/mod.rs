@@ -8,22 +8,25 @@ mod scene;
 mod shape;
 mod tessellation;
 mod text;
+mod stroke;
+mod gradient;
 
 pub use path::*;
 pub use scene::{DrawGlyphRunOptions, PaintScene};
 pub use shape::*;
+pub use gradient::*;
+pub use fill::*;
 pub use text::{GlyphRun, TextFormat, TextLayout};
 
 use crate::paint::atlas::Atlas;
-use crate::paint::fill::Fill;
 use crate::paint::pipelines::Pipelines;
-use crate::paint::tessellation::Mesh;
 use crate::paint::text::GlyphCache;
 use crate::render::RenderTarget;
 use color::Srgba8;
-use gpu::{ImageUsage, Sampler, Vertex as GpuVertex, vk};
-use math::geom::Camera;
-use math::{IVec2, Mat3, Rect, U16Vec2, UVec2, Vec2, u16vec2, uvec2, vec2};
+use gpu::{vk, ImageUsage, Sampler, Vertex as GpuVertex};
+use math::Camera;
+use math::{u16vec2, uvec2, vec2, U16Vec2, UVec2, Vec2};
+
 
 /// Vertex used in the painting shaders.
 #[repr(C)]
@@ -66,7 +69,6 @@ pub struct Painter {
     sampler: gpu::Sampler,
     color_format: vk::Format,
     depth_format: Option<vk::Format>,
-
     // V2 renderer
     coverage_target: RenderTarget,
 }

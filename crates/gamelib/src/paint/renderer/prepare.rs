@@ -4,10 +4,11 @@ use crate::paint::PathSlice;
 use crate::paint::fill::Fill;
 use crate::paint::flatten::flatten_path;
 use crate::paint::renderer::{
-    DrawCommand, FillData, PreparedSceneData, RASTER_TILE_SIZE, Scene, TileCover, TileCoverList, pack_tile_cover_id,
+    DrawCommand, FillData, LinearGradientFill, PreparedSceneData, RASTER_TILE_SIZE, Scene, SolidFill, TextureFill,
+    TileCover, TileCoverList, pack_tile_cover_id,
 };
 use color::Srgba8;
-use math::{Mat3, Rect, U8Vec2, U8Vec4, UVec2, Vec2, ivec2, u8vec2, u8vec4, vec2};
+use math::{Mat3, Rect, U8Vec2, U8Vec4, UVec2, Vec2, ivec2, u8vec2, u8vec4, vec2, uvec2};
 use std::ops::Range;
 
 /// Prepares the given scene for rendering.
@@ -31,8 +32,22 @@ pub(super) fn prepare_scene(scene: &Scene, viewport: UVec2) -> PreparedSceneData
         .fills
         .iter()
         .map(|f| match f {
-            Fill::Solid(color) => FillData { color: *color },
-            Fill::Texture { .. } => FillData { color: Srgba8::WHITE }, // TODO handle textured fills
+            Fill::Solid(color) => SolidFill { color: *color, .. }.into(),
+            Fill::Texture { texture, sampler, local_to_uv } => {
+                TextureFill { texture: *texture, sampler: *sampler, local_to_uv: *local_to_uv, .. }.into()
+            }
+            Fill::LinearGradient(g) => {
+                let ramp = &scene.gradient_ramps[g.ramp];
+                LinearGradientFill {
+                    start: g.start,
+                    end: g.end,
+                    seg_range: uvec2(ramp.segments.start as u32,ramp.segments.end as u32),
+                    extend_mode: g.extend_mode,
+                    integral: ramp.integral,
+                    ..
+                }
+            }
+                .into(),
         })
         .collect();
 
@@ -323,11 +338,9 @@ pub(super) fn prepare_scene(scene: &Scene, viewport: UVec2) -> PreparedSceneData
             } else {
                 // if the cover is fully opaque and has a non-zero winding, and doesn't have any segment,
                 // then it fully covers the previous cover tiles, and we can trim the previous covers
-                if b.winding != 0 && b.seg_count == 0 {
-                    if fills[b.fill as usize].color.a == 255 {
-                        culled_fully_covered_tiles += i as u32 - offset;
-                        offset = i as u32;
-                    }
+                if b.winding != 0 && b.seg_count == 0 && scene.is_fill_opaque(b.fill as usize) {
+                    culled_fully_covered_tiles += i as u32 - offset;
+                    offset = i as u32;
                 }
             }
             cur_coords = coords;
@@ -338,7 +351,6 @@ pub(super) fn prepare_scene(scene: &Scene, viewport: UVec2) -> PreparedSceneData
     }
 
     //let total_tiles_to_render = covers.len() as u32 - culled_fully_covered_tiles;
-
     //info!("{} cover tiles to render", total_tiles_to_render);
     //info!("culled {} fully covered tiles", culled_fully_covered_tiles);
     //info!("culled {} tiles outside viewport", culled_viewport_tiles);

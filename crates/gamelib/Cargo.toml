@@ -34,6 +34,7 @@ shadertool = { workspace = true, optional = true }
 libloading = "0.9.0"
 ron = "0.12.0"
 serde = { version = "1.0.228", features = ["derive"] }
+color-print = "0.3.7"
 
 [target.'cfg(target_os="windows")'.dependencies]
 windows = { version = "0.61.3", features = [

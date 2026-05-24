@@ -1,6 +1,6 @@
 use crate::input::{InputEvent, MouseScrollDelta, PointerButton};
 use log::debug;
-use math::geom::{Box3D, Camera, Frustum};
+use math::{Box3D, Camera, Frustum};
 use math::{DQuat, DVec2, DVec3, Mat4, Vec3, Vec3Swizzles, Vec4Swizzles, dvec2, dvec3, vec3};
 use std::cell::Cell;
 use std::f32::consts::PI;

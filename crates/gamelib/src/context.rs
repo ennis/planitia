@@ -19,6 +19,8 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, OnceLock};
 use std::{mem, ptr};
+use color_print::cwriteln;
+use env_logger::fmt::style::AnsiColor;
 use threadbound::ThreadBound;
 
 /// Holds the application's global objects and services.
@@ -177,7 +179,27 @@ impl<H: AppHandler + Default + 'static> App<H> {
             load_renderdoc_dll();
         }
 
-        env_logger::builder().parse_default_env().format_target(false).format_timestamp(None).init();
+        env_logger::builder().parse_default_env()
+            .format(|fmt, record| {
+                use env_logger::fmt::style::{Style, AnsiColor};
+                use std::io::Write;
+
+                let style = fmt.default_level_style(record.level());
+                let args = record.args();
+
+                let message_color = match record.level() {
+                    log::Level::Error => AnsiColor::Red,
+                    log::Level::Warn => AnsiColor::Yellow,
+                    log::Level::Info => AnsiColor::Black,
+                    log::Level::Debug => AnsiColor::BrightBlack,
+                    log::Level::Trace => AnsiColor::BrightBlack
+                };
+               // let target = record.target();
+                let msg_sty = Style::new().fg_color(Some(message_color.into()));
+                let target_sty = Style::new().fg_color(Some(AnsiColor::BrightBlack.into())).italic();
+                writeln!(fmt, "{msg_sty}{args}{msg_sty:#} {target_sty} {target_sty:#}")
+            })
+            .format_target(false).format_timestamp(None).init();
 
         //gpu::initialize_debug_messenger();
         tracy_client::set_thread_name!("main thread");

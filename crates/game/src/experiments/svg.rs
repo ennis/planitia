@@ -1,9 +1,11 @@
 use color::Srgba8;
 use gamelib::input::{InputEvent, MouseScrollDelta, PointerButton};
-use gamelib::paint::{PaintRenderParams, PaintScene, Painter, PathBuilder, TextFormat, TextLayout};
+use gamelib::paint::{
+    ColorStop, GradientExtendMode, LinearGradientFill, PaintRenderParams, PaintScene, Painter, PathBuilder, TextFormat,
+    TextLayout,
+};
 use gamelib::tracy_client;
-use math::geom::rect_xywh;
-use math::{Mat3, Vec2, vec2};
+use math::{Mat3, Vec2, rect_xywh, vec2};
 use usvg::Node;
 
 pub(crate) struct SvgExperiment {
@@ -17,7 +19,6 @@ pub(crate) struct SvgExperiment {
 }
 
 fn render_node(scene: &mut PaintScene, node: &Node) {
-
     let mut path_builder = PathBuilder::new();
     match node {
         Node::Image(image) => {
@@ -44,11 +45,40 @@ fn render_node(scene: &mut PaintScene, node: &Node) {
                     }
                 }
             }
+            path_builder.close();
             if let Some(fill) = path.fill() {
                 match fill.paint() {
                     usvg::Paint::Color(c) => {
                         let conv_color = Srgba8::new(c.red, c.green, c.blue, fill.opacity().to_u8());
                         scene.fill_path(&path_builder, conv_color);
+                    }
+                    usvg::Paint::LinearGradient(gradient) => {
+                        let stops = gradient
+                            .stops()
+                            .iter()
+                            .map(|stop| {
+                                let color = stop.color();
+                                let conv_color =
+                                    Srgba8::new(color.red, color.green, color.blue, fill.opacity().to_u8());
+                                let position = stop.offset().get_finite().get();
+                                ColorStop { position, color: conv_color }
+                            })
+                            .collect::<Vec<_>>();
+                        let ramp = scene.create_gradient_ramp(&stops);
+
+                        scene.fill_path(
+                            &path_builder,
+                            LinearGradientFill {
+                                start: vec2(gradient.x1(), gradient.y1()),
+                                end: vec2(gradient.x2(), gradient.y2()),
+                                ramp,
+                                extend_mode: match gradient.spread_method() {
+                                    usvg::SpreadMethod::Pad => GradientExtendMode::Clamp,
+                                    usvg::SpreadMethod::Repeat => GradientExtendMode::Repeat,
+                                    usvg::SpreadMethod::Reflect => GradientExtendMode::Mirror,
+                                },
+                            },
+                        );
                     }
                     _ => {
                         // TODO other paints
@@ -79,7 +109,7 @@ fn render_group(scene: &mut PaintScene, group: &usvg::Group) {
 
 impl SvgExperiment {
     pub fn new() -> Self {
-        let svg_data = include_str!("misery.svg");
+        let svg_data = include_str!("grid.svg");
         let document = usvg::Tree::from_str(svg_data, &usvg::Options::default()).unwrap();
         Self {
             document,

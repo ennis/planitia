@@ -5,8 +5,7 @@ mod layout;
 mod text_run;
 
 use ab_glyph::{Font as FontTrait, ScaleFont};
-use math::geom::IRect;
-use math::{Vec2, vec2};
+use math::{IRect, Vec2, vec2};
 use std::ops::Range;
 
 pub use font::{Font, FontId};
