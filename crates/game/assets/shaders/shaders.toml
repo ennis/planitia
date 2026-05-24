@@ -21,7 +21,7 @@ depth_stencil.format = "D32F_S8UI"  # 32-bit float depth, 8-bit stencil
 depth_stencil.compare_op = "less"
 depth_stencil.write_enable = true
 color_targets = [
-    { format = "RGBA8", blend = { src_color = "src_alpha", dst_color = "one_minus_src_alpha", color_op = "add", src_alpha = "one", dst_alpha = "zero", alpha = "add" } }
+    { format = "RGBA8", blend = { src_color = "src_alpha", dst_color = "one_minus_src_alpha", color_op = "add", src_alpha = "one", dst_alpha = "zero", alpha_op = "add" } }
 ]
 
 ######################################################################

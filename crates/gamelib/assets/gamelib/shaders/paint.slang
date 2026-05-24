@@ -175,7 +175,8 @@ struct TextureFill {
     uint tag;
     Texture2D<float4>.Handle texture;
     SamplerState.Handle sampler;
-    float3x3 localToTexel;
+    float3x3 deviceToTexCoord;
+    Srgba8 color;
 };
 
 struct LinearGradientFill {
@@ -431,15 +432,17 @@ void raster_tiles(uint3 workgroup_id: SV_GroupID, uint3 group_thread_id : SV_Gro
 
         float4 fill_color;
         uint fill_index = tile_cover.fill;
-        switch (u.fills[fill_index].tag) {
+        switch (u.fills[fill_index].tag & 0x7FFFFFFF) {
             case FillType.SolidColor: {
                 fill_color = srgba8_to_float4(reinterpret<SolidColorFill>(u.fills[fill_index]).color);
                 break;
             }
             case FillType.Texture: {
                 TextureFill fill = reinterpret<TextureFill>(u.fills[fill_index]);
-                float2 uv = mul(fill.localToTexel, float3(pixel_center_screen, 1.0)).xy;
+                float2 uv = mul(fill.deviceToTexCoord, float3(pixel_center_screen, 1.0)).xy;
                 fill_color = fill.texture.Sample(fill.sampler, uv);
+                //fill_color = float4(uv, 0.0, 1.0); // debug
+                //fill_color.rgb = float3(fill_color.a);
                 break;
             }
             case FillType.LinearGradient: {
@@ -453,8 +456,14 @@ void raster_tiles(uint3 workgroup_id: SV_GroupID, uint3 group_thread_id : SV_Gro
         // parallel over all pixels in the tile
         //
         float coverage = abs(winding);
+        fill_color.rgb *= fill_color.a;
         float4 input_color = fill_color * coverage;
         output_color = input_color + output_color * (1.0 - input_color.a);
+    }
+
+    // unpremultiply alpha
+    if (output_color.a > 0.0) {
+        output_color.rgb /= output_color.a;
     }
 
     u.output.Store(tile_coords * tsize + local, output_color);

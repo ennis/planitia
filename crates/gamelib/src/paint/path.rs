@@ -3,7 +3,7 @@
 //! A [`Path`] (or its borrowed counterpart [`PathSlice`]) describes a sequence of contours made up
 //! of straight lines and Bézier curves. Paths are built incrementally with [`PathBuilder`].
 
-use math::{Mat3, Vec2};
+use math::{vec2, Mat3, Rect, Vec2};
 use std::f32::consts::FRAC_2_PI;
 
 /// A single segment of a path, with its points already extracted.
@@ -145,7 +145,7 @@ impl<'a> PathSlice<'a> {
 ///  .close();
 /// let path = b.finish();
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct PathBuilder {
     verbs: Vec<PathVerb>,
     points: Vec<Vec2>,
@@ -159,20 +159,27 @@ pub struct PathBuilder {
 /// The caller is responsible for emitting the initial `MoveTo` and adding the corresponding
 /// [`PathVerb::CubicTo`] entries.
 fn arc_to_beziers(angle_start: f32, angle_extent: f32, out: &mut Vec<Vec2>) -> u32 {
+    // TODO review
+
+    // Split the arc into segments of at most 90° so the cubic approximation stays accurate.
     let segment_count = (angle_extent.abs() * FRAC_2_PI).ceil() as usize;
-    let segment_angle = angle_extent / (segment_count as f32);
-    let k = 4.0 / 3.0 * f32::tan(0.5 * segment_angle);
+    if segment_count == 0 {
+        return 0;
+    }
+    let segment_angle = angle_extent / segment_count as f32;
+
+    // Magic constant for circular arc approximation with cubics
+    let k = 4.0 / 3.0 * (segment_angle * 0.25).tan();
+
     out.reserve(segment_count * 3);
     for i in 0..segment_count {
         let theta1 = angle_start + i as f32 * segment_angle;
         let theta2 = theta1 + segment_angle;
-        let cos1 = theta1.cos();
-        let sin1 = theta1.sin();
-        let cos2 = theta2.cos();
-        let sin2 = theta2.sin();
-        out.push(Vec2::new(cos1 - k * sin1, sin1 + k * cos1));
-        out.push(Vec2::new(cos2 + k * sin2, sin2 - k * cos2));
-        out.push(Vec2::new(cos2, sin2));
+        let (sin1, cos1) = theta1.sin_cos();
+        let (sin2, cos2) = theta2.sin_cos();
+        out.push(Vec2::new(cos1 - k * sin1, sin1 + k * cos1)); // ctrl1
+        out.push(Vec2::new(cos2 + k * sin2, sin2 - k * cos2)); // ctrl2
+        out.push(Vec2::new(cos2,             sin2));           // endpoint
     }
     segment_count as u32
 }
@@ -221,62 +228,175 @@ impl PathBuilder {
         self
     }
 
-    /// Appends an elliptical arc segment
+    /// Appends an elliptical arc from the current point to `to`.
+    ///
+    /// Follows the SVG endpoint-to-center conversion:
+    /// <https://www.w3.org/TR/SVG11/implnote.html#ArcConversionEndpointToCenter>
+    ///
+    /// # Arguments
+    /// - `to`: arc endpoint.
+    /// - `radii`: x and y radii of the ellipse. Negative values are treated as their absolute value.
+    /// - `phi`: rotation angle of the ellipse x-axis relative to the screen x-axis, in radians.
+    /// - `large_arc`: chooses the larger of the two possible arcs when `true`.
+    /// - `sweep`: draws the arc in the positive-angle (clockwise in screen space) direction when `true`.
+    ///
+    /// If the current point equals `to`, or either radius is zero, the arc degenerates to a
+    /// straight line and a `LineTo` is emitted instead.
     pub fn arc_to_endpoint(&mut self, to: Vec2, radii: Vec2, phi: f32, large_arc: bool, sweep: bool) -> &mut Self {
+        // TODO review
         let from = self.points.last().copied().unwrap_or(Vec2::ZERO);
 
-        // convert to center parameterization
+        // F.6.6 Correction of out-of-range radii
+        // "If rx = 0 or ry = 0, then treat this as a straight line from (x1, y1) to (x2, y2)"
+        if from == to || radii.x == 0.0 || radii.y == 0.0 {
+            return self.line_to(to);
+        }
+
+        // F.6.5 Conversion from endpoint to center parameterization
         // https://www.w3.org/TR/SVG11/implnote.html#ArcConversionEndpointToCenter
-        let cosphi = phi.cos();
-        let sinphi = phi.sin();
-        let x1p = (from.x - to.x) / 2.0 * cosphi + (from.y - to.y) / 2.0 * sinphi;
-        let y1p = -(from.x - to.x) / 2.0 * sinphi + (from.y - to.y) / 2.0 * cosphi;
+
+        let (sin_phi, cos_phi) = phi.sin_cos();
+
+        // Correction of out-of-range radii
+        // (F.6.6.1)
         let rx = radii.x.abs();
         let ry = radii.y.abs();
-        let rx2 = rx * rx;
-        let ry2 = ry * ry;
+
+        // Step 1: Compute (x1′, y1′)
+        // (F.6.5.1)
+        let mid = (from - to) * 0.5;
+        let x1p =  cos_phi * mid.x + sin_phi * mid.y;
+        let y1p = -sin_phi * mid.x + cos_phi * mid.y;
+
+        // F.6.6 Correction of out-of-range radii.
+        // Step 3: Ensure radii are large enough
         let x1p2 = x1p * x1p;
         let y1p2 = y1p * y1p;
-
-        let rr = f32::sqrt((rx2 * ry2 - rx2 * y1p2 - ry2 * x1p2) / (rx2 * y1p2 + ry2 * x1p2))
-            * if large_arc == sweep { -1.0 } else { 1.0 };
-        let cxp = rr * rx * y1p / ry;
-        let cyp = rr * -ry * x1p / rx;
-        let cx = cxp * cosphi - cyp * sinphi + (from.x + to.x) / 2.0;
-        let cy = cxp * sinphi + cyp * cosphi + (from.y + to.y) / 2.0;
-
-        let u = Vec2::new((x1p - cxp) / rx, (y1p - cyp) / ry);
-        let v = Vec2::new((-x1p - cxp) / rx, (-y1p - cyp) / ry);
-
-        let unorm = u.length();
-        let vnorm = v.length();
-        let un = u / unorm;
-        let vn = v / vnorm;
-        let mut theta = f32::acos(u.x / unorm).copysign(u.y);
-        let mut extent = f32::acos(un.dot(vn)).copysign(u.x * v.y - u.y * v.x);
-
-        if !sweep && extent > 0.0 {
-            extent -= 2.0 * std::f32::consts::PI;
-        } else if sweep && extent < 0.0 {
-            extent += 2.0 * std::f32::consts::PI;
-        }
-        theta = theta.rem_euclid(std::f32::consts::TAU);
-        extent = extent.rem_euclid(std::f32::consts::TAU);
-
-        let transform = |p: Vec2| {
-            let xp = p.x * rx * phi.cos() - p.y * ry * phi.sin() + cx;
-            let yp = p.x * rx * phi.sin() + p.y * ry * phi.cos() + cy;
-            Vec2::new(xp, yp)
+        let rx2 = rx * rx;
+        let ry2 = ry * ry;
+        let lambda = x1p2 / rx2 + y1p2 / ry2; // (F.6.6.2)
+        let (rx, ry, rx2, ry2) = if lambda > 1.0 {
+            // (F.6.6.3)
+            let s = lambda.sqrt();
+            let rx = s * rx;
+            let ry = s * ry;
+            (rx, ry, rx * rx, ry * ry)
+        } else {
+            (rx, ry, rx2, ry2)
         };
 
-        let ptcount = self.points.len();
+        // Step 2: Compute (cx′, cy′)
+        // (F.6.5.2)
+        let sq = {
+            let num = rx2 * ry2 - rx2 * y1p2 - ry2 * x1p2;
+            let den = rx2 * y1p2 + ry2 * x1p2;
+            (num / den).max(0.0).sqrt()
+        };
+        let sign = if large_arc == sweep { -1.0_f32 } else { 1.0_f32 };
+        let cxp =  sign * sq * rx * y1p / ry;
+        let cyp = -sign * sq * ry * x1p / rx;
+
+        // Step 3: Compute (cx, cy) from (cx′, cy′)
+        // (F.6.5.3)
+        let center = Vec2::new(
+            cos_phi * cxp - sin_phi * cyp + (from.x + to.x) * 0.5,
+            sin_phi * cxp + cos_phi * cyp + (from.y + to.y) * 0.5,
+        );
+
+        // Step 4: Compute θ1 and Δθ
+
+        let ux = (x1p - cxp) / rx;
+        let uy = (y1p - cyp) / ry;
+        let vx = (-x1p - cxp) / rx;
+        let vy = (-y1p - cyp) / ry;
+
+        // (F.6.5.5) (adapted)
+        let theta = uy.atan2(ux);
+
+        // (F.6.5.6)
+        let u_len = (ux * ux + uy * uy).sqrt();
+        let cos_d = ((ux * vx + uy * vy) / u_len).clamp(-1.0, 1.0);
+        let mut extent = cos_d.acos().copysign(ux * vy - uy * vx);
+
+        // Force the sign to match the requested sweep direction.
+        if !sweep && extent > 0.0 {
+            extent -= std::f32::consts::TAU;
+        } else if sweep && extent < 0.0 {
+            extent += std::f32::consts::TAU;
+        }
+
+        // convert the arc to cubic Bézier segments
+
+        // arc_to_beziers produces points on a unit circle; transform them into the
+        // target ellipse by scaling by (rx, ry) and rotating by phi
+        let transform = |p: Vec2| Vec2::new(
+            cos_phi * p.x * rx - sin_phi * p.y * ry + center.x,
+            sin_phi * p.x * rx + cos_phi * p.y * ry + center.y,
+        );
+
+        let pt_start = self.points.len();
         let bezier_count = arc_to_beziers(theta, extent, &mut self.points);
-        for i in ptcount..self.points.len() {
+        for i in pt_start..self.points.len() {
             self.points[i] = transform(self.points[i]);
         }
         for _ in 0..bezier_count {
             self.verbs.push(PathVerb::CubicTo);
         }
+        self
+    }
+
+    /// Appends a closed circle contour centred at `center` with the given `radius`.
+    pub fn circle(&mut self, center: Vec2, radius: f32) -> &mut Self {
+        let right = center + Vec2::new(radius, 0.0);
+        let left  = center - Vec2::new(radius, 0.0);
+        let r = Vec2::splat(radius);
+        self.move_to(right);
+        self.arc_to_endpoint(left,  r, 0.0, false, true);
+        self.arc_to_endpoint(right, r, 0.0, false, true);
+        self.close();
+        self
+    }
+
+    /// Appends a closed ellipse contour centred at `center` with semi-axes `radii` and
+    /// x-axis rotation `phi` (in radians).
+    pub fn ellipse(&mut self, center: Vec2, radii: Vec2, phi: f32) -> &mut Self {
+        let (sin_phi, cos_phi) = phi.sin_cos();
+        let start = center + Vec2::new(radii.x * cos_phi, radii.x * sin_phi);
+        let end   = center - Vec2::new(radii.x * cos_phi, radii.x * sin_phi);
+        self.move_to(start);
+        self.arc_to_endpoint(end,   radii, phi, false, true);
+        self.arc_to_endpoint(start, radii, phi, false, true);
+        self.close();
+        self
+    }
+
+    /// Appends a rectangle with top-left corner `origin` and size `size`.
+    pub fn rect(&mut self, rect: &Rect) -> &mut Self {
+        self.move_to(rect.min);
+        self.line_to(vec2(rect.max.x, rect.min.y));
+        self.line_to(rect.max);
+        self.line_to(vec2(rect.min.x, rect.max.y));
+        self.close();
+        self
+    }
+
+    /// Appends a rectangle with top-left corner `origin` and size `size`.
+    pub fn rect_origin_size(&mut self, origin: Vec2, size: Vec2) -> &mut Self {
+        self.rect(&Rect { min: origin, max: origin + size })
+    }
+
+    /// Appends a rounded rectangle with top-left corner `origin`, size `size`, and corner radii `radii`.
+    pub fn rrect(&mut self, rect: &Rect, radii: Vec2) -> &mut Self {
+        let r = radii.min(rect.size() * 0.5);
+        self.move_to(rect.min + vec2(r.x, 0.0));
+        self.line_to(vec2(rect.max.x - r.x, rect.min.y));
+        self.arc_to_endpoint(vec2(rect.max.x, rect.min.y + r.y), r, 0.0, false, true);
+        self.line_to(vec2(rect.max.x, rect.max.y - r.y));
+        self.arc_to_endpoint(vec2(rect.max.x - r.x, rect.max.y), r, 0.0, false, true);
+        self.line_to(vec2(rect.min.x + r.x, rect.max.y));
+        self.arc_to_endpoint(vec2(rect.min.x, rect.max.y - r.y), r, 0.0, false, true);
+        self.line_to(vec2(rect.min.x, rect.min.y + r.y));
+        self.arc_to_endpoint(rect.min + vec2(r.x, 0.0), r, 0.0, false, true);
         self
     }
 

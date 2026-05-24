@@ -1,5 +1,4 @@
 //! Preparation of Scenes for rendering by the GPU.
-
 use crate::paint::PathSlice;
 use crate::paint::fill::Fill;
 use crate::paint::flatten::flatten_path;
@@ -10,6 +9,9 @@ use crate::paint::renderer::{
 use color::Srgba8;
 use math::{Mat3, Rect, U8Vec2, U8Vec4, UVec2, Vec2, ivec2, u8vec2, u8vec4, vec2, uvec2};
 use std::ops::Range;
+
+/// Shorter alias
+const TILE: i32 = RASTER_TILE_SIZE as i32;
 
 /// Prepares the given scene for rendering.
 ///
@@ -23,33 +25,8 @@ use std::ops::Range;
 pub(super) fn prepare_scene(scene: &Scene, viewport: UVec2) -> PreparedSceneData {
     let _span = tracy_client::span!("prepare_scene");
 
-    const TILE: i32 = RASTER_TILE_SIZE as i32;
 
     let viewport_tile_size = ivec2(viewport.x.div_ceil(TILE as u32) as i32, viewport.y.div_ceil(TILE as u32) as i32);
-
-    // convert fills to GPU format
-    let fills: Vec<FillData> = scene
-        .fills
-        .iter()
-        .map(|f| match f {
-            Fill::Solid(color) => SolidFill { color: *color, .. }.into(),
-            Fill::Texture { texture, sampler, local_to_uv } => {
-                TextureFill { texture: *texture, sampler: *sampler, local_to_uv: *local_to_uv, .. }.into()
-            }
-            Fill::LinearGradient(g) => {
-                let ramp = &scene.gradient_ramps[g.ramp];
-                LinearGradientFill {
-                    start: g.start,
-                    end: g.end,
-                    seg_range: uvec2(ramp.segments.start as u32,ramp.segments.end as u32),
-                    extend_mode: g.extend_mode,
-                    integral: ramp.integral,
-                    ..
-                }
-            }
-                .into(),
-        })
-        .collect();
 
     // stats
     let mut culled_viewport_tiles = 0;
@@ -64,16 +41,7 @@ pub(super) fn prepare_scene(scene: &Scene, viewport: UVec2) -> PreparedSceneData
     let mut contours: Vec<Range<usize>> = vec![];
     let mut path_index = 0;
 
-    #[derive(Copy, Clone, Debug)]
-    struct Tile {
-        x: i32,
-        y: i32,
-        a: U8Vec2,
-        b: U8Vec2,
-        winding: i32,
-        path: u32,
-    }
-    let mut tiles: Vec<Tile> = vec![];
+    let mut tiles: Vec<TileFragment> = vec![];
 
     for cmd in scene.draw_commands.iter() {
         let (verb_range, base_vertex, fill) = match cmd {
@@ -82,11 +50,18 @@ pub(super) fn prepare_scene(scene: &Scene, viewport: UVec2) -> PreparedSceneData
                 cur_transform = *transform;
                 continue;
             }
+            DrawCommand::BeginGroup(group_options) => {
+                continue;
+            }
+            DrawCommand::EndGroup => {
+                continue;
+
+            }
         };
 
         // flatten path to segments
         {
-            let _span = tracy_client::span!("flatten_path");
+            let _span = tracy_client::span!("flattening");
             flatten_path(
                 PathSlice { verbs: &scene.path_verbs[verb_range], points: &scene.path_points[base_vertex..] },
                 &cur_transform,
@@ -96,136 +71,11 @@ pub(super) fn prepare_scene(scene: &Scene, viewport: UVec2) -> PreparedSceneData
             );
         }
 
-        for c in contours.iter() {
-            let range = c.start as usize..c.end as usize;
-
-            {
-                let _span = tracy_client::span!("contour");
-                for [p, q] in flattened_vertices[range].array_windows() {
-                    // quantize coordinates to 1/128th of a tile
-                    //let quant = TILE as f32 / 128.0;
-                    //let quantize_in = |v: f32| (v / quant as f32).round() * quant as f32;
-
-                    //let p = vec2(quantize_in(p_orig.x), quantize_in(p_orig.y));
-                    //let q = vec2(quantize_in(q_orig.x), quantize_in(q_orig.y));
-
-                    // coarse conservative rasterization of line segment pq
-                    let d = q - p;
-                    let dxi = d.x.signum() as i32;
-                    let dyi = d.y.signum() as i32;
-
-                    let p_t_x = (p.x / TILE as f32).floor() as i32;
-                    //let q_t_x = q.x as i32 / TILE;
-                    let p_t_y = (p.y / TILE as f32).floor() as i32;
-                    let q_t_y = (q.y / TILE as f32).floor() as i32;
-
-                    let quantize = |v: f32| (v / TILE as f32 * 127.0f32).round() as u8;
-
-                    let mut entry_t_x = p_t_x; // current row entry tile x coord
-                    let mut entry_loc_x = p.x - (entry_t_x * TILE) as f32; // current row entry x coord in tile coord space
-                    //let mut row_entry_x_quant = quantize(row_entry_x);
-                    //let mut row_entry_y = p.y - (p_t_y * TILE) as f32; // current row entry y coord in tile coord space
-
-                    let mut t_y = p_t_y;
-                    while t_y != q_t_y + dyi {
-                        // tile-local Y coordinate of exit of segment
-                        //let row_exit_y = ((dyi.max(0) * TILE) as f32).min(q.y);
-
-                        let y_1 = ((t_y + dyi.max(0)) * TILE) as f32;
-                        // solve intersection of the segment with the bottom or top edge of the tile row
-                        let t = (y_1 - p.y) / d.y;
-
-                        let isect = if t_y != q_t_y { p.x + t * d.x } else { q.x };
-                        // x coord of tile that contains the intersection, aka the "exit tile" for the current row
-                        let exit_t_x = (isect / TILE as f32).floor() as i32;
-
-                        debug_assert!((exit_t_x >= entry_t_x && d.x >= 0.0) || (exit_t_x <= entry_t_x && d.x <= 0.0));
-
-                        let exit_loc_x = isect - (exit_t_x * TILE) as f32;
-                        let mut t_x = entry_t_x;
-                        while t_x != exit_t_x + dxi {
-                            // compute winding number delta given segment entry and exits from the top edge
-                            // If the segment enters from (0,0) we don't count that as an entry or exit
-                            // and this won't contribute to the winding number. However, the vertical winding number
-                            // calculation inside the shader will pick it up and add the contribution properly.
-
-                            // entry from the top edge if
-                            // - going down (dyi > 0)
-                            // - and we're at the entry tile of the row (t_x == row_t_x)
-                            // - and not entering from (0,0)
-                            let top_in = if t_x == entry_t_x && t_y != p_t_y && dyi > 0 { -1 } else { 0 };
-                            // exit through the top edge:
-                            // - going up (dyi < 0)
-                            // - and we're at the intersection tile (t_x == isc_t_x)
-                            // - and not exiting through (0,0)
-                            let top_out = if t_x == exit_t_x && t_y != q_t_y && dyi < 0 { 1 } else { 0 };
-                            let delta_cov = top_in + top_out /* + right_in + left_out*/;
-
-                            let left_in = t_x != entry_t_x && dxi > 0;
-                            let left_out = t_x != exit_t_x && dxi < 0;
-
-                            //eprintln!("segment {} (path {}) intersects tile ({}, {}) isc_t_x={}, row_t_x={}, t_y={}, p_t_y={}, q_t_y={}, d=({:.1}, {:.1}), dxi={}/dyi={}",
-                            //          i_segment, c.path, t_x, t_y, isc_t_x, row_t_x, t_y, p_t_y, q_t_y, d.x, d.y, dxi, dyi
-                            //);
-
-                            // clip pq to tile
-                            let p_clip_x = if t_x == entry_t_x { entry_loc_x } else { ((-dxi).max(0) * TILE) as f32 };
-                            let q_clip_x = if t_x == exit_t_x { exit_loc_x } else { (dxi.max(0) * TILE) as f32 };
-                            // Local Y of the segment's entry point into this tile row:
-                            // - first row: the start point p itself
-                            // - going down: segment entered from the top edge (y=0)
-                            // - going up:   segment entered from the bottom edge (y=TILE)
-                            let entry_y_local = if t_y == p_t_y {
-                                p.y - (t_y * TILE) as f32
-                            } else if dyi > 0 {
-                                0.0
-                            } else {
-                                TILE as f32
-                            };
-                            let p_clip_y;
-                            let q_clip_y;
-                            if exit_t_x == entry_t_x {
-                                p_clip_y = (p.y - (t_y * TILE) as f32).clamp(0.0, TILE as f32);
-                                q_clip_y = (q.y - (t_y * TILE) as f32).clamp(0.0, TILE as f32);
-                            } else {
-                                p_clip_y = (entry_y_local
-                                    + d.y / d.x * (p_clip_x + ((t_x - entry_t_x) * TILE) as f32 - entry_loc_x))
-                                    .clamp(0.0, TILE as f32);
-                                q_clip_y = (entry_y_local
-                                    + d.y / d.x * (q_clip_x + ((t_x - entry_t_x) * TILE) as f32 - entry_loc_x))
-                                    .clamp(0.0, TILE as f32);
-                            }
-                            //eprintln!("  tile ({}, {}), delta_cov={}, p_clip=({:.1}, {:.1}), q_clip=({:.1}, {:.1}) row_loc_x={row_loc_x}", t_x, t_y, delta_cov, p_clip_x, p_clip_y, q_clip_x, q_clip_y);
-
-                            //debug_assert!(p_clip_x >= 0.0 && p_clip_x <= TILE as f32, "p_clip_x={}", p_clip_x);
-                            //debug_assert!(q_clip_x >= 0.0 && q_clip_x <= TILE as f32, "q_clip_x={}", q_clip_x);
-                            //debug_assert!(p_clip_y >= 0.0 && p_clip_y <= TILE as f32, "p_clip_y={}", p_clip_y);
-                            //debug_assert!(q_clip_y >= 0.0 && q_clip_y <= TILE as f32, "q_clip_y={}", q_clip_y);
-
-                            let mut p_clip_x_q = quantize(p_clip_x);
-                            let mut p_clip_y_q = quantize(p_clip_y);
-                            p_clip_x_q |= if left_in { 0x80 } else { 0 };
-                            p_clip_y_q |= if left_out { 0x80 } else { 0 };
-                            let q_clip_x_q = quantize(q_clip_x);
-                            let q_clip_y_q = quantize(q_clip_y);
-
-                            tiles.push(Tile {
-                                x: t_x,
-                                y: t_y,
-                                a: u8vec2(p_clip_x_q, p_clip_y_q),
-                                b: u8vec2(q_clip_x_q, q_clip_y_q),
-                                winding: delta_cov,
-                                path: path_index,
-                            });
-
-                            t_x += dxi;
-                        }
-
-                        entry_t_x = exit_t_x;
-                        entry_loc_x = exit_loc_x;
-                        t_y += dyi;
-                    }
-                }
+        // coarse rasterization of the path to tiles
+        {
+            let _span = tracy_client::span!("coarse_rasterization");
+            for c in contours.iter() {
+                coarse_rasterize_path(path_index, &flattened_vertices[c.clone()], &mut tiles);
             }
         }
 
@@ -315,7 +165,7 @@ pub(super) fn prepare_scene(scene: &Scene, viewport: UVec2) -> PreparedSceneData
 
     if covers.is_empty() {
         // possibly all cover tiles have been culled
-        return PreparedSceneData { clip_segs, tile_covers: covers, tile_cover_lists: vec![], fills };
+        return PreparedSceneData { clip_segs, tile_covers: covers, tile_cover_lists: vec![] };
     }
 
     // sort covers by row, column, path
@@ -338,7 +188,7 @@ pub(super) fn prepare_scene(scene: &Scene, viewport: UVec2) -> PreparedSceneData
             } else {
                 // if the cover is fully opaque and has a non-zero winding, and doesn't have any segment,
                 // then it fully covers the previous cover tiles, and we can trim the previous covers
-                if b.winding != 0 && b.seg_count == 0 && scene.is_fill_opaque(b.fill as usize) {
+                if b.winding != 0 && b.seg_count == 0 && scene.fills[b.fill as usize].is_opaque() {
                     culled_fully_covered_tiles += i as u32 - offset;
                     offset = i as u32;
                 }
@@ -355,5 +205,145 @@ pub(super) fn prepare_scene(scene: &Scene, viewport: UVec2) -> PreparedSceneData
     //info!("culled {} fully covered tiles", culled_fully_covered_tiles);
     //info!("culled {} tiles outside viewport", culled_viewport_tiles);
 
-    PreparedSceneData { clip_segs, tile_covers: covers, tile_cover_lists: cover_lists, fills }
+    PreparedSceneData { clip_segs, tile_covers: covers, tile_cover_lists: cover_lists }
+}
+
+#[derive(Copy, Clone, Debug)]
+struct TileFragment {
+    x: i32,
+    y: i32,
+    a: U8Vec2,
+    b: U8Vec2,
+    winding: i32,
+    path: u32,
+}
+
+/// Coarse path rasterization
+fn coarse_rasterize_path(path_index: usize, polyline: &[Vec2], tiles: &mut Vec<TileFragment>) {
+
+    for [p, q] in polyline.array_windows() {
+        // quantize coordinates to 1/128th of a tile
+        //let quant = TILE as f32 / 128.0;
+        //let quantize_in = |v: f32| (v / quant as f32).round() * quant as f32;
+
+        //let p = vec2(quantize_in(p_orig.x), quantize_in(p_orig.y));
+        //let q = vec2(quantize_in(q_orig.x), quantize_in(q_orig.y));
+
+        // coarse conservative rasterization of line segment pq
+        let d = q - p;
+        let dxi = d.x.signum() as i32;
+        let dyi = d.y.signum() as i32;
+
+        let p_t_x = (p.x / TILE as f32).floor() as i32;
+        //let q_t_x = q.x as i32 / TILE;
+        let p_t_y = (p.y / TILE as f32).floor() as i32;
+        let q_t_y = (q.y / TILE as f32).floor() as i32;
+
+        let quantize = |v: f32| (v / TILE as f32 * 127.0f32).round() as u8;
+
+        let mut entry_t_x = p_t_x; // current row entry tile x coord
+        let mut entry_loc_x = p.x - (entry_t_x * TILE) as f32; // current row entry x coord in tile coord space
+        //let mut row_entry_x_quant = quantize(row_entry_x);
+        //let mut row_entry_y = p.y - (p_t_y * TILE) as f32; // current row entry y coord in tile coord space
+
+        let mut t_y = p_t_y;
+        while t_y != q_t_y + dyi {
+            // tile-local Y coordinate of exit of segment
+            //let row_exit_y = ((dyi.max(0) * TILE) as f32).min(q.y);
+
+            let y_1 = ((t_y + dyi.max(0)) * TILE) as f32;
+            // solve intersection of the segment with the bottom or top edge of the tile row
+            let t = (y_1 - p.y) / d.y;
+
+            let isect = if t_y != q_t_y { p.x + t * d.x } else { q.x };
+            // x coord of tile that contains the intersection, aka the "exit tile" for the current row
+            let exit_t_x = (isect / TILE as f32).floor() as i32;
+
+            debug_assert!((exit_t_x >= entry_t_x && d.x >= 0.0) || (exit_t_x <= entry_t_x && d.x <= 0.0));
+
+            let exit_loc_x = isect - (exit_t_x * TILE) as f32;
+            let mut t_x = entry_t_x;
+            while t_x != exit_t_x + dxi {
+                // compute winding number delta given segment entry and exits from the top edge
+                // If the segment enters from (0,0) we don't count that as an entry or exit
+                // and this won't contribute to the winding number. However, the vertical winding number
+                // calculation inside the shader will pick it up and add the contribution properly.
+
+                // entry from the top edge if
+                // - going down (dyi > 0)
+                // - and we're at the entry tile of the row (t_x == row_t_x)
+                // - and not entering from (0,0)
+                let top_in = if t_x == entry_t_x && t_y != p_t_y && dyi > 0 { -1 } else { 0 };
+                // exit through the top edge:
+                // - going up (dyi < 0)
+                // - and we're at the intersection tile (t_x == isc_t_x)
+                // - and not exiting through (0,0)
+                let top_out = if t_x == exit_t_x && t_y != q_t_y && dyi < 0 { 1 } else { 0 };
+                let delta_cov = top_in + top_out /* + right_in + left_out*/;
+
+                let left_in = t_x != entry_t_x && dxi > 0;
+                let left_out = t_x != exit_t_x && dxi < 0;
+
+                //eprintln!("segment {} (path {}) intersects tile ({}, {}) isc_t_x={}, row_t_x={}, t_y={}, p_t_y={}, q_t_y={}, d=({:.1}, {:.1}), dxi={}/dyi={}",
+                //          i_segment, c.path, t_x, t_y, isc_t_x, row_t_x, t_y, p_t_y, q_t_y, d.x, d.y, dxi, dyi
+                //);
+
+                // clip pq to tile
+                let p_clip_x = if t_x == entry_t_x { entry_loc_x } else { ((-dxi).max(0) * TILE) as f32 };
+                let q_clip_x = if t_x == exit_t_x { exit_loc_x } else { (dxi.max(0) * TILE) as f32 };
+                // Local Y of the segment's entry point into this tile row:
+                // - first row: the start point p itself
+                // - going down: segment entered from the top edge (y=0)
+                // - going up:   segment entered from the bottom edge (y=TILE)
+                let entry_y_local = if t_y == p_t_y {
+                    p.y - (t_y * TILE) as f32
+                } else if dyi > 0 {
+                    0.0
+                } else {
+                    TILE as f32
+                };
+                let p_clip_y;
+                let q_clip_y;
+                if exit_t_x == entry_t_x {
+                    p_clip_y = (p.y - (t_y * TILE) as f32).clamp(0.0, TILE as f32);
+                    q_clip_y = (q.y - (t_y * TILE) as f32).clamp(0.0, TILE as f32);
+                } else {
+                    p_clip_y = (entry_y_local
+                        + d.y / d.x * (p_clip_x + ((t_x - entry_t_x) * TILE) as f32 - entry_loc_x))
+                        .clamp(0.0, TILE as f32);
+                    q_clip_y = (entry_y_local
+                        + d.y / d.x * (q_clip_x + ((t_x - entry_t_x) * TILE) as f32 - entry_loc_x))
+                        .clamp(0.0, TILE as f32);
+                }
+                //eprintln!("  tile ({}, {}), delta_cov={}, p_clip=({:.1}, {:.1}), q_clip=({:.1}, {:.1}) row_loc_x={row_loc_x}", t_x, t_y, delta_cov, p_clip_x, p_clip_y, q_clip_x, q_clip_y);
+
+                //debug_assert!(p_clip_x >= 0.0 && p_clip_x <= TILE as f32, "p_clip_x={}", p_clip_x);
+                //debug_assert!(q_clip_x >= 0.0 && q_clip_x <= TILE as f32, "q_clip_x={}", q_clip_x);
+                //debug_assert!(p_clip_y >= 0.0 && p_clip_y <= TILE as f32, "p_clip_y={}", p_clip_y);
+                //debug_assert!(q_clip_y >= 0.0 && q_clip_y <= TILE as f32, "q_clip_y={}", q_clip_y);
+
+                let mut p_clip_x_q = quantize(p_clip_x);
+                let mut p_clip_y_q = quantize(p_clip_y);
+                p_clip_x_q |= if left_in { 0x80 } else { 0 };
+                p_clip_y_q |= if left_out { 0x80 } else { 0 };
+                let q_clip_x_q = quantize(q_clip_x);
+                let q_clip_y_q = quantize(q_clip_y);
+
+                tiles.push(TileFragment {
+                    x: t_x,
+                    y: t_y,
+                    a: u8vec2(p_clip_x_q, p_clip_y_q),
+                    b: u8vec2(q_clip_x_q, q_clip_y_q),
+                    winding: delta_cov,
+                    path: path_index as u32,
+                });
+
+                t_x += dxi;
+            }
+
+            entry_t_x = exit_t_x;
+            entry_loc_x = exit_loc_x;
+            t_y += dyi;
+        }
+    }
 }

@@ -198,13 +198,14 @@ impl Game {
         );
         text.layout(1000.0);
 
-        for glyph_run in text.glyph_runs() {
-            scene.draw_glyph_run(vec2(0.0, 0.0), &glyph_run, &DrawGlyphRunOptions::default());
-        }
-
-        scene.finish(cmd, &PaintRenderParams { camera: Default::default(), color_target: target, depth_target: None });
+        //for glyph_run in text.glyph_runs() {
+        //    scene.draw_glyph_run(vec2(0.0, 0.0), &glyph_run, &DrawGlyphRunOptions::default());
+        //}
+//
+        //scene.finish(cmd, &PaintRenderParams { camera: Default::default(), color_target: target, depth_target: None });
 
         if self.cfg.show_painting_demo {
+            self.svg_experiment.render(&mut self.painter, cmd, target);
             experiments::painting_test(
                 &mut self.painter,
                 cmd,
@@ -212,7 +213,6 @@ impl Game {
                 Srgba8::from(self.color.to_srgba_unmultiplied()),
             );
 
-            self.svg_experiment.render(&mut self.painter, cmd, target);
         }
     }
 }

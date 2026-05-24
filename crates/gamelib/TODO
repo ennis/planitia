@@ -29,10 +29,11 @@
  ☐ object picking
  ☐ arbitrary data containers based on archive format
  ☐ Mesh file format
- ☐ Fix memory leak
+ ☐ Fix memory leak 
  ☐ Move assets, painting, platform etc. to another crate for potential reuse
  ☐ async asset reloading
  ☐ move egui shaders to shader-archive
+ ☐ better error reporting in shadertool (notably, more validation of the manifest)
  ✔ shadertool: make the `[pass]` attribute optional on compute shaders @done (26-05-03 22:06)
  ✔ shadertool: the `[pass]` attribute shouldn't need a module import (it should be builtin) @done (26-05-03 22:06)
  ☐ Deprecate shader-bridge? Move functionality to shadertool

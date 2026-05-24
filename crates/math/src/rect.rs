@@ -1,5 +1,5 @@
 use crate::{vec2, Vec2};
-use glam::{ivec3, IVec2, IVec3, Vec3};
+use glam::{ivec2, ivec3, IVec2, IVec3, Vec3};
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
@@ -64,6 +64,10 @@ impl Rect {
 
     pub const fn height(&self) -> f32 {
         self.max.y - self.min.y
+    }
+
+    pub const fn size(&self) -> Vec2 {
+        vec2(self.width(), self.height())
     }
 
     pub const fn is_infinite(&self) -> bool {
@@ -140,6 +144,10 @@ impl IRect {
 
     pub const fn height(&self) -> i32 {
         self.max.y - self.min.y
+    }
+
+    pub const fn size(&self) -> IVec2 {
+        ivec2(self.width(), self.height())
     }
 
     pub const fn to_rect(&self) -> Rect {

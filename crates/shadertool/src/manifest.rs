@@ -20,8 +20,39 @@ pub enum Error {
     MissingField(&'static str),
     #[error("invalid type for field {0}")]
     InvalidType(&'static str),
+    #[error("invalid field")]
+    InvalidField,
     #[error("{0}")]
     Other(&'static str),
+}
+
+fn validate_keys(toml_value: &TomlValue, mandatory: &[&str], optional: &[&str]) -> anyhow::Result<()> {
+    let mut has_errors = false;
+    if let Some(table) = toml_value.as_table() {
+        for key in table.keys() {
+            if !mandatory.contains(&key.as_str()) && !optional.contains(&key.as_str()) {
+                error!("unknown field: {}", key);
+                has_errors = true;
+            }
+        }
+
+        for mandatory_key in mandatory {
+            if !table.contains_key(*mandatory_key) {
+                error!("missing mandatory field: {}", mandatory_key);
+                has_errors = true;
+            }
+        }
+
+        if has_errors {
+            Err(Error::InvalidField.into())
+        } else {
+            Ok(())
+        }
+
+    } else {
+        error!("expected a table");
+        Err(Error::Other("expected a table").into())
+    }
 }
 
 fn get_image_usage(usage_str: &str) -> Result<gpu::ImageUsage, Error> {
@@ -574,6 +605,8 @@ fn read_depth_stencil_state(toml: &TomlValue, out: &mut sharc::DepthStencilState
 }
 
 fn read_blend(toml: &TomlValue) -> anyhow::Result<Option<ColorBlendEquation>> {
+
+
     if let Some(str) = toml.as_str() {
         match str {
             "disabled" => Ok(None),
@@ -596,6 +629,10 @@ fn read_blend(toml: &TomlValue) -> anyhow::Result<Option<ColorBlendEquation>> {
             _ => Err(anyhow!("unknown predefined blend mode").context("in blend")),
         }
     } else {
+        validate_keys(toml, &[],
+                      &["src_color", "dst_color", "color_op", "src_alpha", "dst_alpha", "alpha_op"])
+            .context("in blend")?;
+
         let mut blend = ColorBlendEquation::default();
         if let Some(src_color_blend_factor) = toml.get_optional_str("src_color")? {
             blend.src_color_blend_factor = get_blend_factor(src_color_blend_factor)?;
@@ -620,6 +657,7 @@ fn read_blend(toml: &TomlValue) -> anyhow::Result<Option<ColorBlendEquation>> {
 }
 
 fn read_color_target(toml: &TomlValue, out: &mut sharc::ColorTarget) -> anyhow::Result<()> {
+    validate_keys(toml, &[], &["format", "blend"]).context("in color target")?;
     if let Some(format_str) = toml.get_optional_str("format")? {
         out.format = get_format(format_str)?;
     }
