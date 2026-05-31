@@ -42,6 +42,7 @@ pub(super) fn prepare_scene(scene: &Scene, viewport: UVec2) -> PreparedSceneData
     let mut path_index = 0;
 
     let mut tiles: Vec<TileFragment> = vec![];
+    let mut path_group: Vec<u32> = vec![]; // group id for each path
 
     for cmd in scene.draw_commands.iter() {
         let (verb_range, base_vertex, fill) = match cmd {
@@ -168,11 +169,28 @@ pub(super) fn prepare_scene(scene: &Scene, viewport: UVec2) -> PreparedSceneData
         return PreparedSceneData { clip_segs, tile_covers: covers, tile_cover_lists: vec![] };
     }
 
-    // sort covers by row, column, path
+    // sort covers by row, column, group, path
     {
         let _span = tracy_client::span!("cover_sort");
         covers.sort_unstable_by(|a, b| a.id.cmp(&b.id));
     }
+
+    // e.g. for tile at (i,j)
+    //
+    // T0-T2: group 0
+    // T3-T5: group 2
+    //
+    // group 0 = root
+    //     group 1 = group with opacity = 0.5
+    //         group 2 = group with opacity = 0.5, blend mode = multiply
+    //
+    // When traversing the cover list:
+    // transition from group 0 to group 2:
+    //   - emit push (for group 1)
+    //   - emit push (for group 2)
+    //   - emit group 2 commands
+    //   - emit pop (for group 2)
+    //   - emit pop (for group 1)
 
     let mut cover_lists: Vec<TileCoverList> = vec![];
 

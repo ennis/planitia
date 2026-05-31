@@ -184,19 +184,23 @@ impl<H: AppHandler + Default + 'static> App<H> {
                 use env_logger::fmt::style::{Style, AnsiColor};
                 use std::io::Write;
 
-                let style = fmt.default_level_style(record.level());
+                //let style = fmt.default_level_style(record.level());
                 let args = record.args();
 
                 let message_color = match record.level() {
-                    log::Level::Error => AnsiColor::Red,
-                    log::Level::Warn => AnsiColor::Yellow,
-                    log::Level::Info => AnsiColor::Black,
-                    log::Level::Debug => AnsiColor::BrightBlack,
-                    log::Level::Trace => AnsiColor::BrightBlack
+                    log::Level::Error => Some(AnsiColor::Red),
+                    log::Level::Warn => Some(AnsiColor::Yellow),
+                    log::Level::Info => None,
+                    log::Level::Debug => Some(AnsiColor::BrightBlack),
+                    log::Level::Trace => Some(AnsiColor::BrightBlack)
                 };
                // let target = record.target();
-                let msg_sty = Style::new().fg_color(Some(message_color.into()));
-                let target_sty = Style::new().fg_color(Some(AnsiColor::BrightBlack.into())).italic();
+                let mut msg_sty = Style::new();
+                let mut target_sty = Style::new().italic();
+                if let Some(color) = message_color {
+                    msg_sty = msg_sty.fg_color(Some(color.into()));
+                    target_sty = target_sty.fg_color(Some(AnsiColor::BrightBlack.into()));
+                }
                 writeln!(fmt, "{msg_sty}{args}{msg_sty:#} {target_sty} {target_sty:#}")
             })
             .format_target(false).format_timestamp(None).init();

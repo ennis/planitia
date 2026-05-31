@@ -417,11 +417,11 @@ void raster_tiles(uint3 workgroup_id: SV_GroupID, uint3 group_thread_id : SV_Gro
             float y_max = saturate(max(a.y, b.y));
             float x_0 = a.x + (y_min - a.y) / d.y * d.x;
             float x_1 = a.x + (y_max - a.y) / d.y * d.x;
-            float a_1 = 0.5 * abs(y_min - y_0) * max(0.0, x_0);
-            float a_2 = 0.5 * abs(y_max - y_0) * max(0.0, x_1);
-            float a_3 = 0.5 * abs(y_min - y_1) * max(0.0, x_0 - 1.0);
-            float a_4 = 0.5 * abs(y_max - y_1) * max(0.0, x_1 - 1.0);
-            float area = (y_max - y_min) - abs(a_1 - a_2) + abs(a_3 - a_4);
+            float a_1 = abs(y_min - y_0) * max(0.0, x_0);
+            float a_2 = abs(y_max - y_0) * max(0.0, x_1);
+            float a_3 = abs(y_min - y_1) * max(0.0, x_0 - 1.0);
+            float a_4 = abs(y_max - y_1) * max(0.0, x_1 - 1.0);
+            float area = (y_max - y_min) + 0.5 * (abs(a_3 - a_4) - abs(a_1 - a_2));
             //area += 0.000000001 * b.x;  // work around driver bug?
             winding += area * sign(-d.y);
         }
