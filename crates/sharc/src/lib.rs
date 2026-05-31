@@ -378,13 +378,16 @@ impl ShaderArchive {
     }
 
     /// Finds a graphics pipeline by name.
-    pub fn find_graphics_pipeline(&self, module: &str, name: &str) -> Option<(&Module, &GraphicsPipeline)> {
-        let module = self.find_module(module)?;
-        for entry in &self[module.passes] {
-            if entry.name.as_str() == name {
-                match &entry.kind {
-                    PipelineKind::Graphics(p) => return Some((module, p)),
-                    _ => continue,
+    pub fn find_graphics_pipeline(&self, name: &str) -> Option<(&Module, &GraphicsPipeline)> {
+        let data = self.data();
+        let modules = &self.0[data.modules];
+        for module in modules {
+            for entry in &self[module.passes] {
+                if entry.name.as_str() == name {
+                    match &entry.kind {
+                        PipelineKind::Graphics(p) => return Some((module, p)),
+                        _ => continue,
+                    }
                 }
             }
         }
@@ -392,13 +395,16 @@ impl ShaderArchive {
     }
 
     /// Finds a compute pipeline by name.
-    pub fn find_compute_pipeline(&self, module: &str, name: &str) -> Option<(&Module, &ComputePipeline)> {
-        let module = self.find_module(module)?;
-        for entry in &self[module.passes] {
-            if entry.name.as_str() == name {
-                match &entry.kind {
-                    PipelineKind::Compute(p) => return Some((module, p)),
-                    _ => continue,
+    pub fn find_compute_pipeline(&self, name: &str) -> Option<(&Module, &ComputePipeline)> {
+        let data = self.data();
+        let modules = &self.0[data.modules];
+        for module in modules {
+            for entry in &self[module.passes] {
+                if entry.name.as_str() == name {
+                    match &entry.kind {
+                        PipelineKind::Compute(p) => return Some((module, p)),
+                        _ => continue,
+                    }
                 }
             }
         }

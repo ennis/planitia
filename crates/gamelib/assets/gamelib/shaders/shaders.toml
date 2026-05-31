@@ -1,5 +1,4 @@
 input_files = "paint.slang"
-output_file = "gamelib_shaders.sharc"
 
 [default]
 rasterizer.cull_mode = "none"

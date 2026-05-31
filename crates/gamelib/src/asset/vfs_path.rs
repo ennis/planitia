@@ -1,3 +1,4 @@
+use core::fmt::Display;
 use std::ops::Deref;
 
 /// Represents a VFS path.
@@ -102,6 +103,23 @@ impl VfsPath {
         }
     }
 
+    /// Returns the file stem of the path (excluding directory, fragment, and extension).
+    pub fn file_stem(&self) -> &str {
+        let s = &self.0;
+        let s = match s.rfind('#') {
+            Some(pos) => &s[..pos],
+            None => s,
+        };
+        let s = match s.rfind('/') {
+            Some(pos) => &s[pos + 1..],
+            None => s,
+        };
+        match s.rfind('.') {
+            Some(pos) => &s[..pos],
+            None => s,
+        }
+    }
+
     /// Returns the directory part of the path (including the trailing slash).
     ///
     /// # Examples
@@ -137,11 +155,19 @@ impl AsRef<VfsPath> for str {
     }
 }
 
-impl ToString for VfsPath {
-    fn to_string(&self) -> String {
-        self.0.to_string()
+impl Display for VfsPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.to_string())
     }
 }
+
+impl PartialEq for VfsPath {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl Eq for VfsPath {}
 
 /// Owned version of VfsPath.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
@@ -184,13 +210,12 @@ impl AsRef<VfsPath> for VfsPathBuf {
     }
 }
 
-impl PartialEq for VfsPath {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
+impl Display for VfsPathBuf {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
-impl Eq for VfsPath {}
 
 #[cfg(test)]
 mod tests {

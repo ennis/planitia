@@ -2,9 +2,6 @@
 input_files = "*.slang"
 include_paths = ["../../../gamelib/assets/gamelib/shaders"]
 
-# OUTPUT FILE
-output_file = "game_shaders.sharc"
-
 [compiler]
 profile = "glsl_460"
 optimize = true      # Enable SPIR-V optimizations

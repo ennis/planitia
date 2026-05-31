@@ -1,7 +1,7 @@
 use crate::asset::{AssetCache, DefaultLoader, Dependencies, FileMetadata, Handle, LoadResult, Provider, VfsPath};
 use crate::render::load_shader_archive;
 use crate::render::reflection::GraphicsPipelineReflection;
-use gpu::{PreRasterizationShaders, ShaderEntryPoint, set_debug_name, vk};
+use gpu::{PreRasterizationShaders, ShaderEntryPoint, vk};
 use log::{debug, warn};
 use sharc::{Shader, ShaderArchive};
 use std::ops::Deref;
@@ -10,6 +10,10 @@ use std::time::SystemTime;
 use std::{fs, io};
 use utils::archive::Offset;
 
+// TODO simplify this error type (and most error types in general).
+//      No caller is ever going to inspect the error, nor do any kind of recovery given specific
+//      error variants. Most callers will just either pass the error up the stack or display it to
+//      the user. A simple error string is sufficient here.
 #[derive(thiserror::Error, Debug)]
 pub enum PipelineCreateError {
     #[error("failed to load pipeline archive: {0}")]
@@ -38,7 +42,7 @@ fn get_shader_entry_point<'a>(
 fn create_graphics_pipeline_from_archive(
     archive: &ShaderArchive,
     module: &sharc::Module,
-    name: &str,
+    debug_name: &str,
     entry: &sharc::GraphicsPipeline,
 ) -> Result<gpu::GraphicsPipeline, PipelineCreateError> {
     let color_targets: Vec<_> = {
@@ -140,7 +144,7 @@ fn create_graphics_pipeline_from_archive(
     let pipeline = gpu::GraphicsPipeline::new(gpci)?;
 
     unsafe {
-        let name = format!("{}/{}", &archive[module.name], name);
+        let name = format!("{}/{}", &archive[module.name], debug_name);
         gpu::set_debug_name(&pipeline, name);
     }
 
@@ -169,13 +173,57 @@ fn create_compute_pipeline_from_archive(
     Ok(pipeline)
 }
 
-fn get_module_and_pipeline_name(path: &VfsPath) -> LoadResult<(&str, &str)> {
+fn get_pipeline_name(path: &VfsPath) -> LoadResult<&str> {
     let Some(name) = path.fragment() else {
         return Err(PipelineCreateError::PipelineNotFound(path.to_string()).into());
     };
-    name.split_once('/')
-        .map(|(module_name, pipeline_name)| (module_name, pipeline_name))
-        .ok_or_else(|| PipelineCreateError::PipelineNotFound(name.to_string()).into())
+    Ok(name)
+    //name.split_once('/')
+    //    .map(|(module_name, pipeline_name)| (module_name, pipeline_name))
+    //    .ok_or_else(|| PipelineCreateError::PipelineNotFound(name.to_string()).into())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PassType {
+    Graphics,
+    Compute,
+}
+
+fn find_pass_by_name<'a>(
+    path: &VfsPath,
+    name: Option<&str>,
+    archive: &'a ShaderArchive,
+    pass_type: PassType,
+) -> Result<(&'a sharc::Module, &'a sharc::Pass), PipelineCreateError> {
+    let mut found = None;
+    let root = archive.root();
+    let modules = &archive[root.modules];
+
+    for module in modules {
+        for pass in &archive[module.passes] {
+            if name.is_some_and(|name| pass.name.as_str() == name) || name.is_none() {
+                match pass.kind {
+                    sharc::PipelineKind::Graphics(_) if pass_type == PassType::Graphics => (),
+                    sharc::PipelineKind::Compute(_) if pass_type == PassType::Compute => (),
+                    _ => continue,
+                }
+
+                if found.is_some() {
+                    if let Some(name) = name {
+                        warn!("multiple pipelines named `{name}` found in archive");
+                        return Err(PipelineCreateError::PipelineNotFound(name.to_string()).into());
+                    } else {
+                        warn!("multiple pipelines found in archive but no pipeline name specified. Specify a pipeline name in the path (e.g. `{path}#my_pipeline`).");
+                        return Err(PipelineCreateError::PipelineNotFound("<default>".to_string()).into());
+                    }
+                }
+                found = Some((module, pass));
+            }
+        }
+    }
+
+
+    found.ok_or_else(|| PipelineCreateError::PipelineNotFound(name.unwrap_or("<default>").to_string()))
 }
 
 fn load_graphics_pipeline(
@@ -185,17 +233,20 @@ fn load_graphics_pipeline(
     _dependencies: &mut Dependencies,
 ) -> LoadResult<gpu::GraphicsPipeline> {
     let archive_file = path.path_without_fragment();
-    let (module_name, pipeline_name) = get_module_and_pipeline_name(path)?;
+    let pipeline_name = path.fragment();
+
+    if let Some(pipeline_name) = pipeline_name {
+        debug!("loading graphics pipeline `{pipeline_name}` from `{archive_file}`");
+    } else {
+        debug!("loading default graphics pipeline from `{archive_file}`");
+    }
+
     let archive_handle = load_shader_archive(archive_file);
-
-    debug!("loading pipeline `{module_name}/{pipeline_name}` (graphics) from `{}`", archive_file.as_str());
-
     let archive = archive_handle.read()?;
-    let (module, pipeline) = archive
-        .find_graphics_pipeline(module_name, pipeline_name)
-        .ok_or_else(|| PipelineCreateError::PipelineNotFound(path.to_string()))?;
-
-    Ok(create_graphics_pipeline_from_archive(&*archive, module, pipeline_name, pipeline)?)
+    let (module, pass) = find_pass_by_name(path, pipeline_name, &*archive, PassType::Graphics)?;
+    let pipeline = pass.kind.as_graphics().unwrap();
+    let debug_name = pipeline_name.unwrap_or(path.file_stem());
+    Ok(create_graphics_pipeline_from_archive(&*archive, module, debug_name, pipeline)?)
 }
 
 fn load_compute_pipeline(
@@ -205,16 +256,20 @@ fn load_compute_pipeline(
     _dependencies: &mut Dependencies,
 ) -> LoadResult<gpu::ComputePipeline> {
     let archive_file = path.path_without_fragment();
-    let (module_name, pipeline_name) = get_module_and_pipeline_name(path)?;
+    let pipeline_name = path.fragment();
+
+    if let Some(pipeline_name) = pipeline_name {
+        debug!("loading compute pipeline `{pipeline_name}` from `{archive_file}`");
+    } else {
+        debug!("loading default compute pipeline from `{archive_file}`");
+    }
+
     let archive_handle = load_shader_archive(archive_file);
-
-    debug!("loading pipeline `{module_name}/{pipeline_name}` (compute) from `{}`", archive_file.as_str());
-
     let archive = archive_handle.read()?;
-    let (module, pipeline) = archive
-        .find_compute_pipeline(module_name, pipeline_name)
-        .ok_or_else(|| PipelineCreateError::PipelineNotFound(path.to_string()))?;
-    Ok(create_compute_pipeline_from_archive(&*archive, module, pipeline_name, pipeline)?)
+    let (module, pass) = find_pass_by_name(path, pipeline_name, &*archive, PassType::Compute)?;
+    let pipeline = pass.kind.as_compute().unwrap();
+    let debug_name = pipeline_name.unwrap_or(path.file_stem());
+    Ok(create_compute_pipeline_from_archive(&*archive, module, debug_name, pipeline)?)
 }
 
 /// Loads a graphics pipeline object from the specified archive file and pipeline name.

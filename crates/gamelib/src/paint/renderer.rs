@@ -28,9 +28,9 @@ const RASTER_TILE_SIZE: u32 = 16;
 const _: () = assert!(RASTER_TILE_SIZE <= 32, "RASTER_TILE_SIZE must not exceed the minimum shader subgroup size (32)");
 
 static_assets! {
-    static RASTER_LINES: gpu::ComputePipeline = "/gamelib/shaders/gamelib_shaders.sharc#paint/raster_lines";
-    static RASTER_TILES: gpu::ComputePipeline = "/gamelib/shaders/gamelib_shaders.sharc#paint/raster_tiles";
-    static COPY_TO_SCREEN: gpu::GraphicsPipeline = "/gamelib/shaders/gamelib_shaders.sharc#paint/copy_to_screen";
+    static RASTER_LINES: gpu::ComputePipeline = "/gamelib/shaders/paint.sharc#raster_lines";
+    static RASTER_TILES: gpu::ComputePipeline = "/gamelib/shaders/paint.sharc#raster_tiles";
+    static COPY_TO_SCREEN: gpu::GraphicsPipeline = "/gamelib/shaders/paint.sharc#copy_to_screen";
 }
 
 //--------------------------------------------------------------------------------

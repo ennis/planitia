@@ -1,7 +1,6 @@
 #![expect(unused, reason = "noisy")]
 #![feature(default_field_values)]
 #![allow(unsafe_op_in_unsafe_fn, reason = "too verbose, and my IDE already highlights unsafe call sites")]
-extern crate alloc;
 
 pub mod asset;
 pub mod camera_control;

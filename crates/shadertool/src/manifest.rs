@@ -211,7 +211,7 @@ pub struct BuildManifest {
     pub canonical_manifest_path: PathBuf,
     pub mtime: u64,
     pub include_paths: Vec<String>,
-    pub output_file: String,
+    pub output_directory: Option<String>,
     pub default: GraphicsState,
     pub shader_profile: String,
     pub compiler: CompilerOptions,
@@ -257,8 +257,8 @@ impl BuildManifest {
             .map(|v| v.as_str().ok_or(InvalidType("include_paths array element")).map(|s| s.to_string()))
             .collect::<Result<Vec<String>, Error>>()?;
 
-        // output file
-        let output_file = toml.get_optional_str("output_file")?.ok_or(MissingField("output_file"))?.to_string();
+        // output directory
+        let output_directory = toml.get_optional_str("output_directory")?.map(|s| s.to_string());
 
         // default graphics state
         let mut default = GraphicsState::default();
@@ -302,7 +302,7 @@ impl BuildManifest {
             canonical_manifest_path,
             mtime,
             include_paths,
-            output_file,
+            output_directory,
             default,
             pass: overrides,
             compiler,
