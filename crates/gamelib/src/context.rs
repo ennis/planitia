@@ -4,7 +4,7 @@ use crate::imgui;
 use crate::imgui::ImguiContext;
 use crate::input::InputEvent;
 pub use crate::platform::LoopHandler;
-use crate::platform::{EventToken, InitOptions, Platform, PlatformInterface, RenderTargetImage, UserEvent};
+use crate::platform::{InitOptions, Platform, RenderTargetImage, WindowHandle};
 use crate::tweak::show_tweaks_gui;
 use crate::util::env_flag;
 use futures::future::AbortHandle;
@@ -21,7 +21,9 @@ use std::sync::{LazyLock, OnceLock};
 use std::{mem, ptr};
 use color_print::cwriteln;
 use env_logger::fmt::style::AnsiColor;
+use scoped_tls::scoped_thread_local;
 use threadbound::ThreadBound;
+use crate::event::UserEvent;
 
 /// Holds the application's global objects and services.
 pub(crate) struct Context {
@@ -128,25 +130,28 @@ impl Context {
 
 #[allow(unused_variables)]
 pub trait AppHandler {
+    /// Called when the event loop starts running.
+    fn started(&mut self) {}
+
     /// Called when the event loop receives an input event.
-    fn input(&mut self, input_event: InputEvent);
+    fn input(&mut self, window: WindowHandle, input_event: InputEvent);
 
     /// Called when the event loop receives a custom event.
     fn event(&mut self, event: UserEvent);
 
     /// Called when the window is resized.
-    fn resized(&mut self, width: u32, height: u32);
+    fn resized(&mut self, window: WindowHandle,width: u32, height: u32);
 
     /// Called when the vsync signal is received.
     fn vsync(&mut self);
 
     /// Renders the current frame.
-    fn render(&mut self, image: RenderTargetImage<'_>) {}
+    fn render(&mut self, window: WindowHandle, image: RenderTargetImage<'_>) {}
 
     /// Called when a watched file or directory has changed.
     fn file_changed(&mut self) {}
 
-    fn close_requested(&mut self) {}
+    fn close_requested(&mut self, window: WindowHandle) {}
     fn imgui(&mut self, ctx: &egui::Context) {}
 
     fn exiting(&mut self) {}
@@ -314,11 +319,19 @@ impl<H> AppInner<H> {
     }
 }
 
+scoped_thread_local!(pub(crate) static CURRENT_CTX: Context);
+
 impl<Inner> LoopHandler for &'static AppInner<Inner>
 where
     Inner: AppHandler,
 {
-    fn input(&mut self, input_event: InputEvent) {
+    fn started(&mut self) {
+        CURRENT_CTX.set(self.get_context(), || {
+            self.get_handler().borrow_mut().started();
+        });
+    }
+
+    fn input(&mut self, window: WindowHandle, input_event: InputEvent) {
         let ctx = self.get_context();
 
         if ctx.imgui.borrow_mut().handle_input(&input_event) {
@@ -349,15 +362,15 @@ where
         }
 
         // Otherwise, pass the event to the inner handler
-        self.get_handler().borrow_mut().input(input_event);
+        self.get_handler().borrow_mut().input(window, input_event);
     }
 
     fn event(&mut self, event: UserEvent) {
         self.get_handler().borrow_mut().event(event);
     }
 
-    fn resized(&mut self, width: u32, height: u32) {
-        self.get_handler().borrow_mut().resized(width, height)
+    fn resized(&mut self, window: WindowHandle, width: u32, height: u32) {
+        self.get_handler().borrow_mut().resized(window, width, height)
     }
 
     fn vsync(&mut self) {
@@ -386,8 +399,8 @@ where
         }
 
         // render the frame (the application is expected to render the GUI as part of its rendering)
-        ctx.platform.render(&mut |render_target| {
-            handler.render(render_target);
+        ctx.platform.render_all(&mut |window, render_target| {
+            handler.render(window, render_target);
         });
 
         // end frame capture
@@ -410,8 +423,8 @@ where
         // TODO
     }
 
-    fn close_requested(&mut self) {
-        self.get_handler().borrow_mut().close_requested();
+    fn close_requested(&mut self, window: WindowHandle) {
+        self.get_handler().borrow_mut().close_requested(window);
     }
 
     fn exiting(&mut self) {

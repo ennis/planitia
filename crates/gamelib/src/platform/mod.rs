@@ -2,17 +2,21 @@
 
 use crate::input::InputEvent;
 use std::any::Any;
-use std::fmt;
-use std::path::Path;
-use std::time::Instant;
+use std::fmt::Debug;
+use std::hash::Hash;
 
 #[cfg(windows)]
-pub mod windows;
+pub mod win32;
+use crate::event::UserEvent;
 #[cfg(windows)]
-pub use windows::wake_event_loop;
+pub use win32::wake_event_loop;
 
 #[cfg(windows)]
-pub type Platform = windows::Win32Platform;
+pub type Platform = win32::Win32Platform;
+#[cfg(windows)]
+pub type PlatformWindowCreateInfo = win32::Win32WindowCreateInfo;
+#[cfg(windows)]
+pub type WindowHandle = win32::Win32WindowHandle;
 
 //----------------------------------------------------------------------------------
 
@@ -22,68 +26,36 @@ pub struct RenderTargetImage<'a> {
     pub image: &'a gpu::Image,
 }
 
-/// A token that uniquely identifies a non-input event.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct EventToken(pub u64);
 
 /// Platform initialization options.
 #[derive(Debug, Clone, Copy)]
 pub struct InitOptions {
-    /// The initial size of the window.
-    pub width: u32,
-    /// The initial height of the window.
-    pub height: u32,
-    pub window_title: &'static str,
+    // nothing for now
 }
 
 impl Default for InitOptions {
     fn default() -> Self {
-        Self { width: 800, height: 600, window_title: "Game" }
-    }
-}
-
-pub enum UserEvent {
-    Timeout(EventToken),
-    Callback(Box<dyn FnOnce() + Send>),
-}
-
-impl fmt::Debug for UserEvent {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            UserEvent::Timeout(token) => write!(f, "UserEvent::Timeout({:?})", token),
-            UserEvent::Callback(_) => write!(f, "UserEvent::Callback(<fn>)"),
-        }
+        Self { }
     }
 }
 
 /// Defines methods that are called when the event loop resumes.
 #[allow(unused_variables)]
 pub trait LoopHandler {
-    fn input(&mut self, input_event: InputEvent);
+    /// Called when the event loop starts running.
+    fn started(&mut self);
+    /// Called when the event loop receives an input event.
+    fn input(&mut self, window: WindowHandle, input_event: InputEvent);
+    /// Called when the event loop receives a user event.
     fn event(&mut self, payload: UserEvent);
-    fn resized(&mut self, width: u32, height: u32);
+    /// Called when a window is resized.
+    fn resized(&mut self, window: WindowHandle, width: u32, height: u32);
+    /// Called on VSync events.
     fn vsync(&mut self);
+    /// Called continuously when the event loop is idle.
     fn poll(&mut self);
-    fn close_requested(&mut self);
+    /// Called when the user requested to close a window.
+    fn close_requested(&mut self, window: WindowHandle);
+    /// Called when the application is exiting.
     fn exiting(&mut self);
-}
-
-/// Trait to control the event loop and rendering of the application.
-pub trait PlatformInterface {
-    /// Releases global resources.
-    fn teardown(&self);
-
-    /// Acquires a render target image that can be used for rendering.
-    fn render(&self, render_callback: &mut dyn FnMut(RenderTargetImage));
-
-    /// Signals the event loop to wake up on the next vsync.
-    fn wake_at_next_vsync(&self);
-
-    /// Registers a timeout.
-    fn add_timeout(&self, at: Instant, token: EventToken);
-
-    /// Runs the event loop with the given handler.
-    fn run(&'static self, handler: Box<dyn LoopHandler + '_>);
-
-    fn quit(&self);
 }

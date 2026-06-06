@@ -1,24 +1,20 @@
-use event_listener::{EventListener, IntoNotification, Listener};
+use std::fmt;
 
-pub struct Event<T> {
-    event: event_listener::Event<T>,
+/// A token that uniquely identifies a non-input event.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct EventToken(pub u64);
+
+
+pub enum UserEvent {
+    Timeout(EventToken),
+    Callback(Box<dyn FnOnce() + Send>),
 }
 
-impl<T> Event<T> {
-    pub const fn new() -> Self {
-        Self { event: event_listener::Event::with_tag() }
-    }
-}
-
-impl<T: Clone> Event<T> {
-    pub fn notify(&self, data: T) {
-        let count = self.event.total_listeners();
-        // takes "IntoNotification" which conceptually represents a number of listeners + a payload
-        // instead of having a method with two parameters
-        self.event.notify(count.tag(data));
-    }
-
-    pub fn listen(&self) -> EventListener<T> {
-        self.event.listen()
+impl fmt::Debug for UserEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            UserEvent::Timeout(token) => write!(f, "UserEvent::Timeout({:?})", token),
+            UserEvent::Callback(_) => write!(f, "UserEvent::Callback(<fn>)"),
+        }
     }
 }

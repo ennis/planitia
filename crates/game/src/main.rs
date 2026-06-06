@@ -3,13 +3,13 @@
 
 use gamelib::asset::{AssetCache, FileSystemEvent, Handle};
 use gamelib::camera_control::{CameraControl, CameraControlInput};
-use gamelib::context::{App, AppHandler, LoopHandler};
-use gamelib::egui;
+use gamelib::{App, AppHandler, UserEvent};
 use gamelib::egui::{Color32, Scene};
 use gamelib::input::{InputEvent, PointerButton};
 use gamelib::paint::{DrawGlyphRunOptions, PaintRenderParams, PaintScene, Painter, TextFormat, TextLayout};
-use gamelib::platform::{EventToken, InitOptions, RenderTargetImage, UserEvent};
+use gamelib::platform::{RenderTargetImage};
 use gamelib::render::pipeline_cache::get_graphics_pipeline;
+use gamelib::{WindowCreateInfo, WindowHandle, egui};
 use std::ops::Deref;
 
 use color::{Srgba8, srgba8};
@@ -17,8 +17,7 @@ use color::{Srgba8, srgba8};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::{Image, Ptr, PushDataSource, root_params};
 use log::debug;
-use math::{Camera, rect_xywh};
-use math::{Mat4, Vec2, Vec3, vec2};
+use math::{Camera, Mat4, Vec2, Vec3, rect_xywh, vec2};
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
 
@@ -201,7 +200,7 @@ impl Game {
         //for glyph_run in text.glyph_runs() {
         //    scene.draw_glyph_run(vec2(0.0, 0.0), &glyph_run, &DrawGlyphRunOptions::default());
         //}
-//
+        //
         //scene.finish(cmd, &PaintRenderParams { camera: Default::default(), color_target: target, depth_target: None });
 
         if self.cfg.show_painting_demo {
@@ -212,13 +211,17 @@ impl Game {
                 target,
                 Srgba8::from(self.color.to_srgba_unmultiplied()),
             );
-
         }
     }
 }
 
 impl AppHandler for Game {
-    fn input(&mut self, input_event: InputEvent) {
+    fn started(&mut self) {
+        // create the window
+        let _ = gamelib::create_window(&WindowCreateInfo { width: WIDTH, height: HEIGHT, title: "Planitia", .. });
+    }
+
+    fn input(&mut self, _window: WindowHandle, input_event: InputEvent) {
         // --- SHORTCUTS ---
 
         // App exit
@@ -264,7 +267,7 @@ impl AppHandler for Game {
         }*/
     }
 
-    fn resized(&mut self, width: u32, height: u32) {
+    fn resized(&mut self, _window: WindowHandle, width: u32, height: u32) {
         self.width = width;
         self.height = height;
         // TODO painter.resize() method
@@ -276,7 +279,7 @@ impl AppHandler for Game {
 
     fn vsync(&mut self) {}
 
-    fn render(&mut self, target: RenderTargetImage) {
+    fn render(&mut self, _window: WindowHandle, target: RenderTargetImage) {
         // TODO: that's not the right time to reload assets.
         //       Ideally this should be done asynchronously, on another thread, so as not
         //       to block the GUI and rendering.
@@ -337,7 +340,7 @@ impl AppHandler for Game {
         gpu::submit(cmd).unwrap();
     }
 
-    fn close_requested(&mut self) {
+    fn close_requested(&mut self, _window: WindowHandle) {
         APP.quit();
     }
 
@@ -388,5 +391,5 @@ fn main() {
     AssetCache::register_directory(concat!(env!("CARGO_MANIFEST_DIR"), "/assets"));
     gamelib::register_asset_directory();
 
-    APP.run(&InitOptions { width: WIDTH, height: HEIGHT, window_title: "Planitia", ..Default::default() });
+    APP.run(&Default::default());
 }

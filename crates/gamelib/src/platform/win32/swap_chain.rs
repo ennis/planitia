@@ -1,6 +1,6 @@
 use crate::platform::RenderTargetImage;
-use crate::platform::windows::SWAP_CHAIN_BUFFER_COUNT;
-use crate::platform::windows::graphics::GraphicsContext;
+use crate::platform::win32::SWAP_CHAIN_BUFFER_COUNT;
+use crate::platform::win32::graphics::GraphicsContext;
 use gpu::{Device, SyncWait, vk};
 use log::warn;
 use std::cell::Cell;

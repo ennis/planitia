@@ -1,5 +1,5 @@
-use crate::platform::windows::WakeReason;
-use crate::platform::windows::event_loop::EVENT_LOOP_PROXY;
+use crate::platform::win32::WakeReason;
+use crate::platform::win32::event_loop::EVENT_LOOP_PROXY;
 use log::{error, info, trace};
 use std::ffi::c_void;
 use std::sync::Arc;

@@ -1,9 +1,11 @@
 //! Windows platform backend
-use crate::platform::{EventToken, InitOptions, PlatformInterface, RenderTargetImage, UserEvent};
+use crate::platform::{InitOptions, RenderTargetImage, UserEvent};
 use log::error;
 use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
+use std::marker::PhantomData;
 use std::time::Instant;
+use slotmap::SlotMap;
 use windows::Win32::Foundation::{HANDLE, HWND};
 use windows::Win32::Graphics::Direct3D12::{ID3D12CommandQueue, ID3D12Device, ID3D12Fence};
 use windows::Win32::Graphics::Dxgi::IDXGIFactory4;
@@ -15,15 +17,18 @@ use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 mod compositor_clock;
 mod event_loop;
 mod graphics;
-mod key_code;
+mod keys;
 mod swap_chain;
 mod window;
 
 use crate::context::LoopHandler;
-use crate::platform::windows::compositor_clock::CompositorClock;
-use crate::platform::windows::graphics::GraphicsContext;
-use crate::platform::windows::window::Window;
+use crate::platform::win32::compositor_clock::CompositorClock;
+use crate::platform::win32::graphics::GraphicsContext;
+use crate::platform::win32::window::Window;
 pub use event_loop::wake_event_loop;
+use crate::event::EventToken;
+use crate::platform::win32::event_loop::ACTIVE_EVENT_LOOP;
+use crate::WindowCreateInfo;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -98,38 +103,115 @@ struct TimerEntry {
     token: EventToken,
 }
 
-/// Global platform-specific objects.
+slotmap::new_key_type! {
+    pub(crate) struct WindowKey;
+}
+
+/// Win32 window handle.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct Win32WindowHandle {
+    key: WindowKey,
+}
+
+/// Win32-specific window creation options.
+#[derive(Debug, Copy, Clone)]
+pub struct Win32WindowCreateInfo {
+    // nothing for now
+    pub _dummy: PhantomData<()> = PhantomData,
+}
+
+impl Default for Win32WindowCreateInfo {
+    fn default() -> Self {
+        Self { .. }
+    }
+}
+
+
+/// Win32 platform state.
 #[allow(dead_code)]
 pub struct Win32Platform {
     options: InitOptions,
+    /// Controls the compositor clock used to trigger VSync events.
     vsync_clock: CompositorClock,
-    window: RefCell<Option<Window>>,
+    //window: RefCell<Option<Window>>,
+    /// Active timers.
     timers: RefCell<Vec<TimerEntry>>,
     poll_requested: Cell<bool>,
+    /// Something has requested application exit.
     quit_requested: Cell<bool>,
+    /// Open windows.
+    windows: RefCell<SlotMap<WindowKey, Window>>,
 }
 
-impl PlatformInterface for Win32Platform {
-    fn teardown(&self) {
-        // release window resources
-        self.window.borrow_mut().take();
+
+impl Win32Platform {
+
+    /// Creates a window.
+    pub(crate) fn create_window(&self, create_info: &WindowCreateInfo) -> Win32WindowHandle {
+        ACTIVE_EVENT_LOOP.with(|event_loop| {
+            let window = Window::new(event_loop, create_info.title, create_info.width, create_info.height)
+                .expect("failed to create window");
+            let mut windows = self.windows.borrow_mut();
+            let key = windows.insert(window);
+            Win32WindowHandle { key }
+        })
+    }
+
+    /// Destroys a window.
+    pub(crate) fn destroy_window(&self, handle: Win32WindowHandle) {
+        let mut windows = self.windows.borrow_mut();
+        windows.remove(handle.key);
+    }
+
+    /// Finds a window by its winit ID.
+    fn find_window_by_id(&self, id: winit::window::WindowId) -> Option<Win32WindowHandle> {
+        let windows = self.windows.borrow();
+        windows.iter().find_map(|(key, window)| {
+            if window.inner.id() == id {
+                Some(Win32WindowHandle { key })
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Releases the platform's internal resources in preparation for application exit.
+    pub(crate) fn teardown(&self) {
+        self.windows.borrow_mut().clear();
         self.vsync_clock.stop();
     }
 
-    fn render(&self, render_callback: &mut dyn FnMut(RenderTargetImage)) {
-        let mut window = self.window.borrow_mut();
-        let window = window.as_mut().unwrap();
-        if let Some(image) = window.get_swap_chain_image() {
-            render_callback(RenderTargetImage { image });
-            window.present();
+    /// Renders all windows that need to be rendered.
+    pub(crate) fn render_all(&self, render_callback: &mut dyn FnMut(Win32WindowHandle, RenderTargetImage)) {
+        let mut windows = self.windows.borrow_mut();
+        for (key, window) in windows.iter_mut() {
+            if let Some(image) = window.get_swap_chain_image() {
+                render_callback(Win32WindowHandle { key }, RenderTargetImage { image });
+                window.present();
+            }
         }
     }
 
-    fn wake_at_next_vsync(&self) {
+    /// Renders a frame to the given window.
+    pub(crate) fn render(&self, window: Win32WindowHandle, render_callback: &mut dyn FnMut(RenderTargetImage)) {
+        let mut windows = self.windows.borrow_mut();
+        if let Some(window) = windows.get_mut(window.key) {
+            if let Some(image) = window.get_swap_chain_image() {
+                render_callback(RenderTargetImage { image });
+                window.present();
+            }
+        } else {
+            error!("render called with invalid window handle: {:?}", window);
+        }
+    }
+
+    /// Schedules a wakeup of the event loop (see `LoopHandler::vsync`) on the next VSync.
+    pub(crate) fn wake_at_next_vsync(&self) {
         self.vsync_clock.trigger();
     }
 
-    fn add_timeout(&self, at: Instant, token: EventToken) {
+    /// Registers a timeout to trigger at the given time.
+    pub(crate) fn add_timeout(&self, at: Instant, token: EventToken) {
         let mut timers = self.timers.borrow_mut();
         // insert the timer in sorted order
         let entry = TimerEntry { deadline: at, token };
@@ -138,11 +220,15 @@ impl PlatformInterface for Win32Platform {
         debug_assert!(timers.is_sorted());
     }
 
-    fn run(&'static self, handler: Box<dyn LoopHandler + '_>) {
+    /// Enters the event loop, which will run until `quit` is called.
+    pub(crate) fn run(&'static self, handler: Box<dyn LoopHandler + '_>) {
         self.run_event_loop(handler);
     }
 
-    fn quit(&self) {
+    /// Requests to quit the application.
+    ///
+    /// This causes `Platform::run` to return to the caller.
+    pub(crate) fn quit(&self) {
         self.quit_requested.set(true);
     }
 }
@@ -157,11 +243,11 @@ impl Win32Platform {
 
         Win32Platform {
             vsync_clock,
-            window: RefCell::new(None),
             options: options.clone(),
             poll_requested: Cell::new(false),
             timers: RefCell::new(vec![]),
             quit_requested: Cell::new(false),
+            windows: RefCell::new(SlotMap::with_key()),
         }
     }
 }

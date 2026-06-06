@@ -1,7 +1,7 @@
 use crate::platform::RenderTargetImage;
-use crate::platform::windows::graphics::GraphicsContext;
-use crate::platform::windows::swap_chain::{DxgiVulkanInteropSwapChain, dxgi_to_vk_format};
-use crate::platform::windows::{Error, get_hwnd};
+use crate::platform::win32::graphics::GraphicsContext;
+use crate::platform::win32::swap_chain::{DxgiVulkanInteropSwapChain, dxgi_to_vk_format};
+use crate::platform::win32::{Error, get_hwnd};
 use crate::util::env_flag;
 use gpu::vk;
 use log::{error, info};
@@ -27,24 +27,34 @@ struct DCompState {
 
 const SWAP_CHAIN_FORMAT: DXGI_FORMAT = DXGI_FORMAT_R8G8B8A8_UNORM;
 
-pub(super) enum SwapChainMode {
+/// Swap chain implementation details.
+pub(super) enum SwapChainImpl {
+    /// Vulkan layered over a DXGI swap chain bound to a DirectComposition visual.
+    ///
+    /// Use this if:
+    /// - you want to make use of DXGI flip models as documented in https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/for-best-performance--use-dxgi-flip-model
+    /// - you are comfortable layering things through 3 under-documented APIs, and trust
+    ///   things to synchronize without issues
     DirectComposition(DxgiVulkanInteropSwapChain),
+    /// Vulkan swap chains (VK_KHR_swapchain).
     Vulkan(gpu::SwapChain),
 }
 
-pub(super) enum SwapChainImage<'a> {
-    DirectComposition(&'a gpu::Image),
-    Vulkan(u32, &'a gpu::Image),
-}
+/// 
 
-/// Win32 window with associated composition swap chain and vulkan interop.
+
+/// Win32 window with associated swap chain.
 pub(super) struct Window {
+    /// Winit window object.
     pub(super) inner: winit::window::Window,
+    /// DirectComposition state, if using DirectComposition.
     dcomp: Option<DCompState>,
-    swap_chain_mode: SwapChainMode,
+    /// Swap chain
+    swap_chain_impl: SwapChainImpl,
+    /// Index of the currently acquired swap chain image (Vulkan swap chain only).
     swap_chain_image_index: Cell<usize>,
+    /// `true` before the first present, `false` afterwards.
     first_present: bool,
-    last_size: PhysicalSize<u32>,
 }
 
 impl Window {
@@ -82,7 +92,7 @@ impl Window {
             }
 
             let swap_chain_mode = if use_directcomposition {
-                SwapChainMode::DirectComposition(DxgiVulkanInteropSwapChain::new(
+                SwapChainImpl::DirectComposition(DxgiVulkanInteropSwapChain::new(
                     SWAP_CHAIN_FORMAT,
                     width,
                     height,
@@ -100,7 +110,7 @@ impl Window {
                     width,
                     height,
                 );
-                SwapChainMode::Vulkan(swapchain)
+                SwapChainImpl::Vulkan(swapchain)
             };
 
             // Bind the swap chain to the root visual.
@@ -112,17 +122,16 @@ impl Window {
                 inner,
                 dcomp,
                 first_present: true,
-                swap_chain_mode,
-                last_size: Default::default(),
+                swap_chain_impl: swap_chain_mode,
                 swap_chain_image_index: Default::default(),
             })
         }
     }
 
     pub(super) fn get_swap_chain_image(&self) -> Option<&gpu::Image> {
-        match &self.swap_chain_mode {
-            SwapChainMode::DirectComposition(swap_chain) => Some(swap_chain.get_image()),
-            SwapChainMode::Vulkan(swap_chain) => {
+        match &self.swap_chain_impl {
+            SwapChainImpl::DirectComposition(swap_chain) => Some(swap_chain.get_image()),
+            SwapChainImpl::Vulkan(swap_chain) => {
                 let device = gpu::Device::global();
                 unsafe {
                     let (index, image) = match device
@@ -142,8 +151,8 @@ impl Window {
     }
 
     pub(super) fn present(&mut self) {
-        match self.swap_chain_mode {
-            SwapChainMode::DirectComposition(ref mut swap_chain) => {
+        match self.swap_chain_impl {
+            SwapChainImpl::DirectComposition(ref mut swap_chain) => {
                 swap_chain.present();
 
                 // If this is the first present, the swap chain was just created and not yet
@@ -162,7 +171,7 @@ impl Window {
                     }
                 }
             }
-            SwapChainMode::Vulkan(ref mut swap_chain) => {
+            SwapChainImpl::Vulkan(ref mut swap_chain) => {
                 if let Err(err) = gpu::present(swap_chain, self.swap_chain_image_index.get()) {
                     error!("failed to present swap chain image: {err}");
                 }
@@ -171,8 +180,8 @@ impl Window {
     }
 
     pub(super) fn resize(&mut self, width: u32, height: u32) {
-        match self.swap_chain_mode {
-            SwapChainMode::DirectComposition(ref mut swap_chain) => {
+        match self.swap_chain_impl {
+            SwapChainImpl::DirectComposition(ref mut swap_chain) => {
                 *swap_chain = DxgiVulkanInteropSwapChain::new(
                     SWAP_CHAIN_FORMAT,
                     width,
@@ -180,7 +189,7 @@ impl Window {
                     gpu::ImageUsage::COLOR_ATTACHMENT | gpu::ImageUsage::TRANSFER_DST,
                 );
             }
-            SwapChainMode::Vulkan(ref mut swap_chain) => {
+            SwapChainImpl::Vulkan(ref mut swap_chain) => {
                 let device = gpu::Device::global();
                 unsafe {
                     device.resize_swapchain(swap_chain, width, height);

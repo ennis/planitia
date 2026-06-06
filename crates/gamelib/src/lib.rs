@@ -20,6 +20,13 @@ mod tweak;
 pub mod util;
 pub mod worksheet;
 mod world;
+mod window;
+
+pub use window::{WindowCreateInfo, WindowInputState, create_window};
+pub use platform::{WindowHandle, wake_event_loop};
+pub use event::{UserEvent};
+pub use input::InputEvent;
+pub use context::{AppHandler, App};
 
 //--- reexports ---
 pub use color;

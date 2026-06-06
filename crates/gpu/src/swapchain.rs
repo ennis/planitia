@@ -11,7 +11,7 @@ pub struct SwapchainImage {
     pub render_finished: vk::Semaphore,
 }
 
-/// Represents a swap chain.
+/// Represents a Vulkan swap chain.
 #[derive(Debug)]
 pub struct SwapChain {
     pub handle: vk::SwapchainKHR,
