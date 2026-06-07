@@ -227,7 +227,7 @@ impl AppHandler for Game {
         // App exit
         if input_event.is_shortcut("Ctrl+Q") {
             debug!("Quit requested via Ctrl+Q");
-            APP.quit();
+            gamelib::quit();
         }
 
         // Home camera
@@ -334,14 +334,14 @@ impl AppHandler for Game {
         //-------------------------------
         // Render GUI
         if self.cfg.show_imgui {
-            APP.render_imgui(&mut cmd, &target.image);
+            gamelib::render_imgui(&mut cmd, &target.image);
         }
 
         gpu::submit(cmd).unwrap();
     }
 
     fn close_requested(&mut self, _window: WindowHandle) {
-        APP.quit();
+        gamelib::quit();
     }
 
     fn imgui(&mut self, ctx: &egui::Context) {

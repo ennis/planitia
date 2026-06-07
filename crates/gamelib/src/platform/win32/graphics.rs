@@ -1,4 +1,3 @@
-use crate::context::Context;
 use crate::platform::win32::{D3D12CommandQueue, D3D12Device, DXGIFactory4, GpuFenceData};
 use log::info;
 use std::cell::{Cell, OnceCell};

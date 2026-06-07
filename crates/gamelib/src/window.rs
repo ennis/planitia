@@ -1,5 +1,5 @@
 use math::IVec2;
-use crate::context::CURRENT_CTX;
+use crate::app::{with_app_ctx, CURRENT_CTX};
 use crate::input::PointerButtons;
 use crate::platform::{PlatformWindowCreateInfo, WindowHandle};
 
@@ -23,10 +23,12 @@ pub struct WindowCreateInfo<'a> {
     /// Window title.
     pub title: &'a str = "Window",
     /// Platform-specific options.
-    pub ext: PlatformWindowCreateInfo = PlatformWindowCreateInfo { .. },
+    pub platform: PlatformWindowCreateInfo = PlatformWindowCreateInfo { .. },
 }
 
 
 pub fn create_window(create_info: &WindowCreateInfo) -> WindowHandle {
-    CURRENT_CTX.with(|ctx| ctx.platform.create_window(create_info))
+    with_app_ctx(|ctx| {
+        ctx.platform.create_window(create_info)
+    })
 }

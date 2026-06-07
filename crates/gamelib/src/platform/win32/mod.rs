@@ -1,11 +1,11 @@
 //! Windows platform backend
-use crate::platform::{InitOptions, RenderTargetImage, UserEvent};
+use crate::platform::{LoopHandler, RenderTargetImage, UserEvent};
 use log::error;
+use slotmap::SlotMap;
 use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
 use std::marker::PhantomData;
 use std::time::Instant;
-use slotmap::SlotMap;
 use windows::Win32::Foundation::{HANDLE, HWND};
 use windows::Win32::Graphics::Direct3D12::{ID3D12CommandQueue, ID3D12Device, ID3D12Fence};
 use windows::Win32::Graphics::Dxgi::IDXGIFactory4;
@@ -21,14 +21,14 @@ mod keys;
 mod swap_chain;
 mod window;
 
-use crate::context::LoopHandler;
+use crate::WindowCreateInfo;
+use crate::app::AppOptions;
+use crate::event::EventToken;
 use crate::platform::win32::compositor_clock::CompositorClock;
+use crate::platform::win32::event_loop::ACTIVE_EVENT_LOOP;
 use crate::platform::win32::graphics::GraphicsContext;
 use crate::platform::win32::window::Window;
 pub use event_loop::wake_event_loop;
-use crate::event::EventToken;
-use crate::platform::win32::event_loop::ACTIVE_EVENT_LOOP;
-use crate::WindowCreateInfo;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -126,11 +126,10 @@ impl Default for Win32WindowCreateInfo {
     }
 }
 
-
 /// Win32 platform state.
 #[allow(dead_code)]
 pub struct Win32Platform {
-    options: InitOptions,
+    options: AppOptions,
     /// Controls the compositor clock used to trigger VSync events.
     vsync_clock: CompositorClock,
     //window: RefCell<Option<Window>>,
@@ -143,9 +142,7 @@ pub struct Win32Platform {
     windows: RefCell<SlotMap<WindowKey, Window>>,
 }
 
-
 impl Win32Platform {
-
     /// Creates a window.
     pub(crate) fn create_window(&self, create_info: &WindowCreateInfo) -> Win32WindowHandle {
         ACTIVE_EVENT_LOOP.with(|event_loop| {
@@ -166,13 +163,11 @@ impl Win32Platform {
     /// Finds a window by its winit ID.
     fn find_window_by_id(&self, id: winit::window::WindowId) -> Option<Win32WindowHandle> {
         let windows = self.windows.borrow();
-        windows.iter().find_map(|(key, window)| {
-            if window.inner.id() == id {
-                Some(Win32WindowHandle { key })
-            } else {
-                None
-            }
-        })
+        windows.iter().find_map(
+            |(key, window)| {
+                if window.inner.id() == id { Some(Win32WindowHandle { key }) } else { None }
+            },
+        )
     }
 
     /// Releases the platform's internal resources in preparation for application exit.
@@ -234,7 +229,7 @@ impl Win32Platform {
 }
 
 impl Win32Platform {
-    pub(crate) fn new(options: &InitOptions) -> Win32Platform {
+    pub(crate) fn new(options: &AppOptions) -> Win32Platform {
         unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).unwrap() };
 
         // intialize graphics context

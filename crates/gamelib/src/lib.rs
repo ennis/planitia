@@ -5,7 +5,7 @@
 pub mod asset;
 pub mod camera_control;
 mod component;
-pub mod context;
+pub mod app;
 mod event;
 pub mod executor;
 pub mod imgui;
@@ -26,7 +26,7 @@ pub use window::{WindowCreateInfo, WindowInputState, create_window};
 pub use platform::{WindowHandle, wake_event_loop};
 pub use event::{UserEvent};
 pub use input::InputEvent;
-pub use context::{AppHandler, App};
+pub use app::{AppHandler, App, quit, render_imgui};
 
 //--- reexports ---
 pub use color;

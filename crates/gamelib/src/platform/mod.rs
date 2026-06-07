@@ -27,18 +27,6 @@ pub struct RenderTargetImage<'a> {
 }
 
 
-/// Platform initialization options.
-#[derive(Debug, Clone, Copy)]
-pub struct InitOptions {
-    // nothing for now
-}
-
-impl Default for InitOptions {
-    fn default() -> Self {
-        Self { }
-    }
-}
-
 /// Defines methods that are called when the event loop resumes.
 #[allow(unused_variables)]
 pub trait LoopHandler {
