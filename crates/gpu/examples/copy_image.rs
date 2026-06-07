@@ -166,12 +166,6 @@ impl ApplicationHandler for App {
 }
 
 fn main() {
-    tracing_subscriber::fmt()
-        .with_target(false)
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::ACTIVE)
-        .init();
-
     let event_loop = EventLoop::new().expect("failed to create event loop");
     let _device = Device::global();
     let mut app = App { window: None };

@@ -1,24 +1,22 @@
 use crate::paint::fill::Fill;
 use crate::paint::flatten::flatten_path;
 use crate::paint::gradient::ColorStop;
-use crate::paint::pipelines::PaintRootParams;
 use crate::paint::renderer::DrawCommand;
 use crate::paint::tessellation::{Mesh, Tessellator};
-use crate::paint::{AsPathSlice, GlyphRun, GradientIntegralSegment, GradientRampData, PaintRenderParams, PaintVertex, Painter, Path, PathBuilder, PathSlice, RRect, compute_gradient_integral, renderer, TextureFill};
+use crate::paint::{AsPathSlice, GlyphRun, GradientIntegralSegment, GradientRampData, PaintRenderParams, PaintVertex, Painter, Path, PathBuilder, PathSlice, RRect, TextureFill, compute_gradient_integral, renderer, TextFormat, TextLayout};
 use color::{Srgba8, srgba8};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::{CommandBuffer, Ptr, PushDataSource};
 use log::{error, warn};
 use math::{Mat3, Rect, Vec2, Vec3, Vec4, rect_transform, vec2, vec3};
 use std::mem;
+use ron::de::Position;
 
 /// Options for drawing a glyph run.
 #[derive(Clone, Debug, Default)]
 pub struct DrawGlyphRunOptions {
     /// Glyph color.
     pub color: Srgba8,
-    /// Glyph size in points.
-    pub size: f32,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -42,7 +40,7 @@ pub enum BlendMode {
 #[derive(Clone, Copy, Debug)]
 pub struct GroupOptions {
     pub blend_mode: BlendMode,
-    pub opacity: f32
+    pub opacity: f32,
 }
 
 /// Represents a gradient ramp (a list of color stops).
@@ -57,18 +55,18 @@ pub struct PaintScene<'a> {
     clip_stack: Vec<Rect>,
     transform_stack: Vec<Mat3>,
     transform: Mat3,
-    rscene: renderer::Scene,
     tmp_path: PathBuilder,
+    rscene: renderer::Scene,
 }
 
 impl<'a> PaintScene<'a> {
-    pub(super) fn new(painter: &'a mut Painter) -> Self {
+    pub(super) fn new(painter: &'a mut Painter, clear_color: Srgba8) -> Self {
         Self {
             painter,
             clip_stack: vec![Rect::INFINITE],
             transform_stack: vec![],
             transform: Default::default(),
-            rscene: renderer::Scene::default(),
+            rscene: renderer::Scene::new(clear_color),
             tmp_path: PathBuilder::new(),
         }
     }
@@ -81,6 +79,12 @@ impl<'a> PaintScene<'a> {
         self.rscene.gradient_ramps.push(ramp);
         self.rscene.gradient_ramps.len() - 1
     }
+
+    /// Clears the drawing area with the specified color.
+    pub fn clear(&mut self, color: Srgba8) {
+        self.rscene.draw_commands.push(DrawCommand::Clear(color));
+    }
+
 
     /// Draws a rounded rectangle at the specified position with the given size and corner radius.
     pub fn fill_rrect(&mut self, rect: Rect, radius: f32, fill: impl Into<Fill>) {
@@ -169,11 +173,16 @@ impl<'a> PaintScene<'a> {
     }
 
     ///
-    pub fn pop_group(&mut self) {
+    pub fn pop_group(&mut self) {}
 
+    /// Draws text at the specified position with the given format and color.
+    pub fn draw_text(&mut self, position: Vec2, text: &str, format: &TextFormat, color: Srgba8) {
+        let mut layout = TextLayout::new(format, text);
+        layout.layout(1000.0);
+        for glyph_run in layout.glyph_runs() {
+            self.draw_glyph_run(position, &glyph_run, &DrawGlyphRunOptions { color });
+        }
     }
-
-
 
     /// Draws a glyph run.
     pub fn draw_glyph_run(&mut self, position: Vec2, glyph_run: &GlyphRun<'_>, options: &DrawGlyphRunOptions) {

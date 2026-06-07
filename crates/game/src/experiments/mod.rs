@@ -13,8 +13,7 @@ use gamelib::paint::{DrawGlyphRunOptions, PaintRenderParams, Painter, TextFormat
 use math::{rect_xywh, vec2};
 
 pub(super) fn painting_test(painter: &mut Painter, cmd: &mut gpu::CommandBuffer, target: &gpu::Image, color: Srgba8) {
-    let mut scene = painter.build_scene();
-
+    let mut scene = painter.build_scene(Srgba8::TRANSPARENT);
 
     scene.fill_rrect(rect_xywh(100.0, 100.0, 200.0, 200.0), 20.0, color);
 

@@ -1,4 +1,4 @@
-input_files = "paint.slang"
+input_files = ["paint.slang", "egui.slang"]
 
 [default]
 rasterizer.cull_mode = "none"

@@ -5,10 +5,8 @@ edition = "2024"
 
 [dependencies]
 math = { workspace = true }
-gpu = { workspace = true, optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 
 [features]
-default = ["gpu-support", "serialization"]
-gpu-support = ["dep:gpu"]
+default = ["serialization"]
 serialization = ["dep:serde"]

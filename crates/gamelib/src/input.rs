@@ -1,50 +1,71 @@
+//! Input event types and keyboard shortcut parsing.
+
 pub use keyboard_types::{Key, KeyState, KeyboardEvent, Location, Modifiers, NamedKey};
 use log::error;
 use std::fmt;
 use std::str::FromStr;
 
-/// Represents a pointer button.
+/// Identifies a single pointer (mouse / pen / touch) button.
+///
+/// The inner `u16` is the zero-based button index as reported by the platform.
+/// The well-known buttons are available as associated constants.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct PointerButton(pub u16);
 
 impl PointerButton {
-    pub const LEFT: PointerButton = PointerButton(0); // Or touch/pen contact
+    /// Primary mouse button, or touch/pen contact.
+    pub const LEFT: PointerButton = PointerButton(0);
+    /// Middle mouse button (wheel click).
     pub const MIDDLE: PointerButton = PointerButton(1);
-    pub const RIGHT: PointerButton = PointerButton(2); // Or pen barrel
+    /// Secondary mouse button, or pen barrel button.
+    pub const RIGHT: PointerButton = PointerButton(2);
+    /// First extra (back) mouse button.
     pub const X1: PointerButton = PointerButton(3);
+    /// Second extra (forward) mouse button.
     pub const X2: PointerButton = PointerButton(4);
+    /// Pen eraser button.
     pub const ERASER: PointerButton = PointerButton(5);
 }
 
-/// The state of the mouse buttons.
-// TODO why u no bitflags?
+/// Bitset recording which pointer buttons are currently pressed.
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
 pub struct PointerButtons(pub u32);
 
 impl PointerButtons {
+    /// A value with every button bit set.
     pub const ALL: PointerButtons = PointerButtons(0xFFFFFFFF);
 
+    /// Returns a new [`PointerButtons`] with no buttons pressed.
     pub fn new() -> PointerButtons {
         PointerButtons(0)
     }
 
+    /// Returns a copy of `self` with `button` added.
     pub fn with(self, button: PointerButton) -> Self {
         PointerButtons(self.0 | (1u32 << button.0 as u32))
     }
 
-    /// Checks if the specified mouse button is pressed.
+    /// Returns `true` if `button` is currently pressed.
     pub fn test(self, button: PointerButton) -> bool {
         self.0 & (1u32 << button.0 as u32) != 0
     }
+
+    /// Marks `button` as pressed.
     pub fn set(&mut self, button: PointerButton) {
         self.0 |= 1u32 << button.0 as u32;
     }
+
+    /// Marks `button` as released.
     pub fn reset(&mut self, button: PointerButton) {
         self.0 &= !(1u32 << button.0 as u32);
     }
+
+    /// Returns `true` if any of the buttons in `buttons` are pressed.
     pub fn intersects(&self, buttons: PointerButtons) -> bool {
         (self.0 & buttons.0) != 0
     }
+
+    /// Returns `true` if no buttons are pressed.
     pub fn is_empty(&self) -> bool {
         self.0 == 0
     }
@@ -80,36 +101,70 @@ impl Default for PointerButtons {
     }
 }
 
-/// Represents an amount of scrolling from pointer wheel input.
+/// The amount of scrolling produced by a single mouse-wheel event.
+///
+/// Platforms may report scroll in either line or pixel units depending on the
+/// input device and the OS.  Callers that need a uniform unit should apply
+/// their own line-to-pixel conversion factor for [`LineDelta`](Self::LineDelta).
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum MouseScrollDelta {
-    /// Scroll amount in lines.
+    /// Scroll amount in logical lines.
+    ///
+    /// Positive `y` means scroll up / towards the user; positive `x` means
+    /// scroll right.
     LineDelta { x: f32, y: f32 },
-    /// Scroll amount in pixels.
+    /// Scroll amount in physical pixels.
+    ///
+    /// Positive `y` means scroll up / towards the user; positive `x` means
+    /// scroll right.
     PixelDelta { x: f32, y: f32 },
 }
 
-/// Represents an input event (mouse, keyboard, window resize).
+/// Input event.
+///
+/// The event loop produces these events and routes them through
+/// [`AppHandler::input`](crate::app::AppHandler::input).
+///
+/// # Coordinate system
+///
+/// Pointer coordinates (`x`, `y`) are in physical (device) pixels relative to
+/// the top-left corner of the client area of the window.
 #[derive(Clone, Debug, PartialEq)]
 pub enum InputEvent {
-    /// The cursor moved to the specified window coordinates.
-    CursorMoved { x: u32, y: u32 },
-    /// A pointer button was pressed.
-    PointerDown { button: PointerButton, x: u32, y: u32 },
-    /// A pointer button was released.
-    PointerUp { button: PointerButton, x: u32, y: u32 },
-    /// The mouse wheel was scrolled.
+    /// The pointer moved to the given client-area coordinates (in physical pixels).
+    CursorMoved { x: i32, y: i32 },
+    /// A pointer button was pressed at the given client-area coordinates.
+    PointerDown { button: PointerButton, x: i32, y: i32 },
+    /// A pointer button was released at the given client-area coordinates.
+    PointerUp { button: PointerButton, x: i32, y: i32 },
+    /// The mouse wheel (or trackpad) was scrolled.
     MouseWheel(MouseScrollDelta),
-    /// A key was pressed or released.
+    /// A keyboard key was pressed, held (key-repeat), or released.
     KeyboardEvent(KeyboardEvent),
-    /// The application window was resized.
+    /// The window client area was resized to the given dimensions in physical pixels.
     Resized { width: u32, height: u32 },
 }
 
 impl InputEvent {
-    /// Returns whether the event matches the specified keyboard shortcut.
+    /// Returns `true` if this event is a key-down (or key-repeat) event that
+    /// matches `shortcut`.
     ///
-    /// Specifically, this looks for key down events (possibly repeated) that match the shortcut.
+    /// `shortcut` can be any type that converts to [`Shortcut`], most
+    /// conveniently a `&str` in the format accepted by [`Shortcut::parse`]
+    /// (e.g.: `"Ctrl+S"`, `"Shift+F9"`, `"Escape"`).
+    ///
+    /// If `shortcut` cannot be parsed, the method returns `false`.
+    ///
+    /// # Character matching
+    ///
+    /// Character keys are compared case-insensitively, so `"Ctrl+s"` and `"Ctrl+S"` are equivalent.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// if event.is_shortcut("Ctrl+Z") { self.undo(); }
+    /// if event.is_shortcut("F5")     { self.refresh(); }
+    /// ```
     pub fn is_shortcut<S>(&self, shortcut: S) -> bool
     where
         S: TryInto<Shortcut>,
@@ -118,7 +173,8 @@ impl InputEvent {
         let shortcut = match shortcut.try_into() {
             Ok(s) => s,
             Err(err) => {
-                panic!("{err}");
+                error!("could not parse shortcut: {err}");
+                return false;
             }
         };
         match self {
@@ -130,24 +186,31 @@ impl InputEvent {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Represents the non-modifier key in a keyboard shortcut.
+/// The non-modifier key portion of a [`Shortcut`].
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ShortcutKey {
-    /// The key is a character key.
+    /// A printable character key (e.g. `'s'`, `'/'`, `'1'`).
     Character(char),
-    /// The key is a named key that does not correspond to a character (e.g., Enter, Escape, function keys, etc.).
+    /// A named key that does not produce a character (e.g. `F5`, `Escape`, `Enter`, arrow keys).
     Named(NamedKey),
 }
 
 /// Represents a keyboard shortcut, consisting of zero or more modifier keys and a single non-modifier key.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Shortcut {
+    /// Modifiers (e.g. `Modifiers::CONTROL | Modifiers::SHIFT` for `Ctrl+Shift`).
     pub modifiers: Modifiers,
+    /// The primary (non-modifier) key (e.g. "A").
     pub key: ShortcutKey,
 }
 
 impl Shortcut {
-    /// Checks if the given key and modifiers match this shortcut.
+    /// Returns `true` if `key` and `modifiers` satisfy this shortcut.
+    ///
+    /// - [`ShortcutKey::Character`] keys are matched case-insensitively in the
+    ///   ASCII range.  Only single-character strings are
+    ///   considered; multi-character sequences are treated as no match.
+    /// - [`ShortcutKey::Named`] keys require an exact [`NamedKey`] match.
     pub fn matches(&self, key: &Key, modifiers: Modifiers) -> bool {
         if self.modifiers == modifiers {
             match (key, &self.key) {
@@ -163,11 +226,24 @@ impl Shortcut {
         }
     }
 
-    /// Parses a keyboard shortcut string.
+    /// Parses a shortcut from a human-readable string.
     ///
-    /// # Example
+    /// The expected format is:
     ///
-    /// TODO
+    /// ```text
+    /// [Modifier+]* Key
+    /// ```
+    ///
+    /// where each `Modifier` is one of `Ctrl`, `Alt`, `Shift`, or `Meta`,
+    /// and `Key` is either:
+    /// - a single ASCII character (e.g. `S`, `1`, `/`), or
+    /// - a named key string recognized by [`NamedKey`] (e.g. `F5`, `Escape`,
+    ///   `Enter`, `ArrowUp`).
+    ///
+    /// Modifiers must appear in the fixed order `Ctrl` → `Alt` → `Shift` → `Meta`.
+    /// Alternative orderings (e.g. `"Alt+Ctrl+S"`) are not accepted and
+    /// will return an error.
+    ///
     pub fn parse(mut keys: &str) -> Result<Shortcut, ParseShortcutError> {
         let mut mods = Modifiers::empty();
         if let Some(rest) = keys.strip_prefix("Ctrl+") {
@@ -198,9 +274,10 @@ impl Shortcut {
     }
 }
 
+/// Error returned when a shortcut string cannot be parsed.
 #[derive(thiserror::Error, Debug)]
 pub enum ParseShortcutError {
-    #[error("invalid key in shortcut")]
+    #[error("unrecognised key in shortcut string")]
     UnrecognizedKey,
 }
 

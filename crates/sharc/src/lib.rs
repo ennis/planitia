@@ -455,7 +455,7 @@ mod tests {
             })];
             writer.write_slice(color_targets)
         };
-        let entries = writer.write_iter(
+        let _entries = writer.write_iter(
             1,
             [Pass {
                 name: ZString64::new("example_pipeline"),

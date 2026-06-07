@@ -153,7 +153,7 @@ impl SvgExperiment {
     }
 
     pub fn render(&mut self, painter: &mut Painter, cmd: &mut gpu::CommandBuffer, target: &gpu::Image) {
-        let mut scene = painter.build_scene();
+        let mut scene = painter.build_scene(Srgba8::TRANSPARENT);
 
         {
             let _span = tracy_client::span!("svg_build_scene");

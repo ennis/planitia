@@ -284,8 +284,8 @@ pub struct TextLayout {
 impl TextLayout {
     /// Constructs a new text layout from a default text style and attributed text runs.
     pub fn new(format: &TextFormat, text: &str) -> TextLayout {
+        
         let mut glyph_data = Vec::new();
-        // map from
         let mut clusters = Vec::new();
 
         shape_text(&ShapingParams { font: format.font.clone(), size: format.size }, text, &mut |cluster| {

@@ -187,7 +187,6 @@ impl Device {
             ..Default::default()
         };
 
-
         let new_handle = self.extensions.khr_swapchain.create_swapchain(&create_info, None).unwrap();
 
         // destroy the old swapchain if it exists

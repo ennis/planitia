@@ -68,7 +68,7 @@ struct Converter {
 
 impl Converter {
     fn new() -> Converter {
-        let mut archive = ArchiveWriter::new();
+        let archive = ArchiveWriter::new();
 
         Converter {
             archive,
@@ -133,7 +133,7 @@ impl Converter {
         Ok(())
     }
 
-    fn convert(&mut self, geo_file: &Path, config: &ConvertConfig) -> Result<()> {
+    fn convert(&mut self, geo_file: &Path, _config: &ConvertConfig) -> Result<()> {
         let geo = Geo::load(geo_file)?;
 
         self.convert_coats(&geo)?;
@@ -335,7 +335,7 @@ impl Converter {
             g.polylines_in_group(group).next().ok_or_else(|| anyhow::anyhow!("no polyline found in group"))?;
         let vertex_count = polyline.vertex_count as u32;
         for vertex in polyline.vertices() {
-            let point = g.vertexpoint(vertex);
+            let _point = g.vertexpoint(vertex);
             let position: Vec3 = g.vertex(vertex, "P");
             let normal: Vec3 = g.vertex(vertex, "N");
             self.cross_section_vertices.push(geom::coat::PosNorm2DVertex {

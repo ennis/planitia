@@ -13,7 +13,7 @@ members = [
     "crates/geomtool",        # Tool for generating geometry files, like terrain meshes
     "crates/terrain-file",    # Terrain file format and related functions
     "crates/geom",            # Common geometry types and definition of various geometry file formats
-    "crates/hgeo",            # Reads houdini JSON-based .geo/.bgeo files
+    "crates/hgeo", "crates/editor",            # Reads houdini JSON-based .geo/.bgeo files
 ]
 resolver = "2"
 

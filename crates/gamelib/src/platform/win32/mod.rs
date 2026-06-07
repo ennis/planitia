@@ -107,6 +107,8 @@ slotmap::new_key_type! {
     pub(crate) struct WindowKey;
 }
 
+pub type Win32InputDeviceId = winit::event::DeviceId;
+
 /// Win32 window handle.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct Win32WindowHandle {
@@ -216,7 +218,7 @@ impl Win32Platform {
     }
 
     /// Enters the event loop, which will run until `quit` is called.
-    pub(crate) fn run(&'static self, handler: Box<dyn LoopHandler + '_>) {
+    pub(crate) fn run(&'static self, handler: &mut dyn LoopHandler) {
         self.run_event_loop(handler);
     }
 

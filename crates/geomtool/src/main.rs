@@ -1,7 +1,8 @@
 //! Geometry processing tool.
 //!
 //! Handles the generation of terrain meshes.
-#![feature(default_field_values)]
+
+//#![feature(default_field_values)]
 
 use crate::terrain::{TerrainConfig, generate_terrain_meshes};
 use clap::{Parser, Subcommand};

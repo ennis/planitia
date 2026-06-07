@@ -1,9 +1,10 @@
-use math::IVec2;
-use crate::app::{with_app_ctx, CURRENT_CTX};
+use crate::app::{CURRENT_CTX, with_app_ctx};
 use crate::input::PointerButtons;
 use crate::platform::{PlatformWindowCreateInfo, WindowHandle};
+use math::IVec2;
 
 /// Window input state.
+#[derive(Debug, Clone, Copy, Default)]
 pub struct WindowInputState {
     /// Currently active key modifiers.
     pub modifiers: keyboard_types::Modifiers,
@@ -26,9 +27,6 @@ pub struct WindowCreateInfo<'a> {
     pub platform: PlatformWindowCreateInfo = PlatformWindowCreateInfo { .. },
 }
 
-
 pub fn create_window(create_info: &WindowCreateInfo) -> WindowHandle {
-    with_app_ctx(|ctx| {
-        ctx.platform.create_window(create_info)
-    })
+    with_app_ctx(|ctx| ctx.platform.create_window(create_info))
 }

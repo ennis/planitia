@@ -1,11 +1,11 @@
 //! Terrain mesh generation from heightmaps.
 mod triangulation;
 
-use crate::terrain::triangulation::{TriangulationOptions, tessellate_heightmap};
-use crate::{CONFIG, Config, cfg};
+use crate::terrain::triangulation::{tessellate_heightmap, TriangulationOptions};
+use crate::cfg;
 use color_print::cprintln;
 use image::ImageReader;
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::ProgressBar;
 use std::path::Path;
 
 pub struct TerrainConfig {

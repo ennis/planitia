@@ -43,12 +43,7 @@ fn validate_keys(toml_value: &TomlValue, mandatory: &[&str], optional: &[&str]) 
             }
         }
 
-        if has_errors {
-            Err(Error::InvalidField.into())
-        } else {
-            Ok(())
-        }
-
+        if has_errors { Err(Error::InvalidField.into()) } else { Ok(()) }
     } else {
         error!("expected a table");
         Err(Error::Other("expected a table").into())
@@ -605,8 +600,6 @@ fn read_depth_stencil_state(toml: &TomlValue, out: &mut sharc::DepthStencilState
 }
 
 fn read_blend(toml: &TomlValue) -> anyhow::Result<Option<ColorBlendEquation>> {
-
-
     if let Some(str) = toml.as_str() {
         match str {
             "disabled" => Ok(None),
@@ -629,8 +622,7 @@ fn read_blend(toml: &TomlValue) -> anyhow::Result<Option<ColorBlendEquation>> {
             _ => Err(anyhow!("unknown predefined blend mode").context("in blend")),
         }
     } else {
-        validate_keys(toml, &[],
-                      &["src_color", "dst_color", "color_op", "src_alpha", "dst_alpha", "alpha_op"])
+        validate_keys(toml, &[], &["src_color", "dst_color", "color_op", "src_alpha", "dst_alpha", "alpha_op"])
             .context("in blend")?;
 
         let mut blend = ColorBlendEquation::default();

@@ -16,7 +16,7 @@ struct VertexOutput {
 }
 
 [shader("vertex")]
-VertexOutput eguiVertexMain(Vertex v, uniform RootParams* u) {
+VertexOutput egui_vertex(Vertex v, uniform RootParams* u) {
     VertexOutput o;
     o.pos = float4(
         2.0 * v.pos.x / u.screenSize.x - 1.0,
@@ -38,7 +38,7 @@ struct FragmentOutput
 [[vk::binding(1,0)]] SamplerState sampler;
 
 [shader("fragment")]
-FragmentOutput eguiFragMain(VertexOutput v) {
+FragmentOutput egui_fragment(VertexOutput v) {
     FragmentOutput o;
     o.color = v.color * tex.Sample(sampler, v.uv);
     return o;

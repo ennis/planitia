@@ -1,125 +1,146 @@
 //! Preparation of Scenes for rendering by the GPU.
-use crate::paint::PathSlice;
 use crate::paint::fill::Fill;
 use crate::paint::flatten::flatten_path;
 use crate::paint::renderer::{
-    DrawCommand, FillData, LinearGradientFill, PreparedSceneData, RASTER_TILE_SIZE, Scene, SolidFill, TextureFill,
-    TileCover, TileCoverList, pack_tile_cover_id,
+    Command, DrawCommand, FillData, LinearGradientFill, PreparedSceneData, Scene, SolidFill, TILE_SIZE, TextureFill,
+    TileCover, TileDrawData, pack_tile_cover_id,
 };
+use crate::paint::{PathSlice, PathVerb};
 use color::Srgba8;
-use math::{Mat3, Rect, U8Vec2, U8Vec4, UVec2, Vec2, ivec2, u8vec2, u8vec4, vec2, uvec2};
+use math::{IVec2, Mat3, Rect, U8Vec2, U8Vec4, UVec2, Vec2, ivec2, u8vec2, u8vec4, uvec2, vec2};
 use std::ops::Range;
 
 /// Shorter alias
-const TILE: i32 = RASTER_TILE_SIZE as i32;
+const TILE: i32 = TILE_SIZE as i32;
 
-/// Prepares the given scene for rendering.
-///
-/// This does multiple things:
-/// - flattens the paths in the scene to line segments
-/// - builds a list of tiles for each path, and for each tile, builds a list of clipped line segments
-///   that intersect the tile
-/// - computes tile-level winding numbers
-/// - builds `TileCoverLists` for each tile which can be interpreted by the
-///   rasterization shader
-pub(super) fn prepare_scene(scene: &Scene, viewport: UVec2) -> PreparedSceneData {
-    let _span = tracy_client::span!("prepare_scene");
+/// State for the tile cover generation pass.
+struct SceneBuilder<'a> {
+    scene: &'a Scene,          // input
+    viewport_tile_size: IVec2, // input
+    covers: Vec<TileCover>,    // output
+    cur_transform: Mat3,
+    clip_segs: Vec<U8Vec4>,                     // temporary
+    flattened_vertices: Vec<Vec2>,              // temporary
+    contours: Vec<Range<usize>>,                // temporary
+    coarse_raster_tiles: Vec<CoarseRasterTile>, // temporary
+    path_index: usize,
+    commands: Vec<Command>,   // output
+    tiles: Vec<TileDrawData>, // output
+    start_cover: usize,       // index of the first cover of the current batch of tiles to render
+    culled_viewport_tiles: u32,      // stats
+    culled_fully_covered_tiles: u32, // stats
+}
 
+impl<'a> SceneBuilder<'a> {
+    fn new(scene: &'a Scene, viewport_tile_size: IVec2) -> Self {
+        Self {
+            scene,
+            viewport_tile_size,
+            covers: vec![],
+            cur_transform: Mat3::IDENTITY,
+            clip_segs: vec![],
+            flattened_vertices: vec![],
+            contours: vec![],
+            coarse_raster_tiles: vec![],
+            path_index: 0,
+            commands: vec![],
+            tiles: vec![],
+            start_cover: 0,
+            culled_viewport_tiles: 0,
+            culled_fully_covered_tiles: 0,
+        }
+    }
 
-    let viewport_tile_size = ivec2(viewport.x.div_ceil(TILE as u32) as i32, viewport.y.div_ceil(TILE as u32) as i32);
-
-    // stats
-    let mut culled_viewport_tiles = 0;
-    let mut culled_fully_covered_tiles = 0;
-
-    let mut covers: Vec<TileCover> = vec![];
-    let mut clip_segs: Vec<U8Vec4> = vec![];
-
-    let mut cur_transform = Mat3::IDENTITY;
-    // temp buffers for holding flattening results for each path
-    let mut flattened_vertices: Vec<Vec2> = vec![];
-    let mut contours: Vec<Range<usize>> = vec![];
-    let mut path_index = 0;
-
-    let mut tiles: Vec<TileFragment> = vec![];
-    let mut path_group: Vec<u32> = vec![]; // group id for each path
-
-    for cmd in scene.draw_commands.iter() {
-        let (verb_range, base_vertex, fill) = match cmd {
-            DrawCommand::FillPath { verb_range, base_vertex, fill } => (verb_range.clone(), *base_vertex, *fill as u32),
+    fn process_command(&mut self, cmd: &DrawCommand) {
+        match cmd {
+            DrawCommand::FillPath { verb_range, base_vertex, fill } => {
+                self.generate_tiles(
+                    &self.scene.path_verbs[verb_range.clone()],
+                    &self.scene.path_points[*base_vertex..],
+                    *fill as u32,
+                );
+            }
             DrawCommand::SetTransform(transform) => {
-                cur_transform = *transform;
-                continue;
+                self.cur_transform = *transform;
             }
             DrawCommand::BeginGroup(group_options) => {
-                continue;
+                //continue;
             }
             DrawCommand::EndGroup => {
-                continue;
-
+                //continue;
+            }
+            DrawCommand::Clear(color) => {
+                self.flush_tiles();
+                self.commands.push(Command::Clear(*color));
             }
         };
+    }
 
+    fn generate_tiles(&mut self, verbs: &[PathVerb], points: &[Vec2], fill: u32) {
         // flatten path to segments
         {
             let _span = tracy_client::span!("flattening");
             flatten_path(
-                PathSlice { verbs: &scene.path_verbs[verb_range], points: &scene.path_points[base_vertex..] },
-                &cur_transform,
+                PathSlice { verbs, points },
+                &self.cur_transform,
                 1.0,
-                &mut flattened_vertices,
-                &mut contours,
+                &mut self.flattened_vertices,
+                &mut self.contours,
             );
         }
 
         // coarse rasterization of the path to tiles
         {
             let _span = tracy_client::span!("coarse_rasterization");
-            for c in contours.iter() {
-                coarse_rasterize_path(path_index, &flattened_vertices[c.clone()], &mut tiles);
+            for c in self.contours.iter() {
+                coarse_rasterize_path(
+                    self.path_index,
+                    &self.flattened_vertices[c.clone()],
+                    &mut self.coarse_raster_tiles,
+                );
             }
         }
 
-        if tiles.is_empty() {
-            continue;
+        if self.coarse_raster_tiles.is_empty() {
+            return;
         }
 
         {
             let _span = tracy_client::span!("scanline_sort");
             // sort newly created tiles of the current contour in scanline order
-            tiles.sort_by(|a, b| a.y.cmp(&b.y).then(a.x.cmp(&b.x)));
+            self.coarse_raster_tiles.sort_by(|a, b| a.y.cmp(&b.y).then(a.x.cmp(&b.x)));
         }
 
         {
             let _span = tracy_client::span!("merge_into_covers");
-            let mut x = tiles[0].x;
-            let mut y = tiles[0].y;
+            let mut x = self.coarse_raster_tiles[0].x;
+            let mut y = self.coarse_raster_tiles[0].y;
             let mut i = 0;
             let mut winding = 0; // winding for the tile to the right
             let mut cover = TileCover {
-                id: pack_tile_cover_id(x, y, tiles[0].path),
+                id: pack_tile_cover_id(x, y, self.coarse_raster_tiles[0].path),
                 winding: 0,
                 fill,
-                seg_offset: clip_segs.len() as u32,
+                seg_offset: self.clip_segs.len() as u32,
                 seg_count: 0,
             };
 
             let mut cull_and_push_cover = |cover: TileCover| {
                 let tile_coords = cover.tile_coords();
                 if tile_coords.x < 0
-                    || tile_coords.x >= viewport_tile_size.x
+                    || tile_coords.x >= self.viewport_tile_size.x
                     || tile_coords.y < 0
-                    || tile_coords.y >= viewport_tile_size.y
+                    || tile_coords.y >= self.viewport_tile_size.y
                 {
                     // skip tiles outside the viewport
-                    culled_viewport_tiles += 1;
+                    self.culled_viewport_tiles += 1;
                     return;
                 }
-                covers.push(cover);
+                self.covers.push(cover);
             };
 
-            while i < tiles.len() {
-                let tile = tiles[i];
+            while i < self.coarse_raster_tiles.len() {
+                let tile = self.coarse_raster_tiles[i];
 
                 if tile.y == y && tile.x != x {
                     // end current bin
@@ -134,18 +155,18 @@ pub(super) fn prepare_scene(scene: &Scene, viewport: UVec2) -> PreparedSceneData
                         }
                     }
                     cover.id = pack_tile_cover_id(tile.x, tile.y, tile.path);
-                    cover.seg_offset = clip_segs.len() as u32;
+                    cover.seg_offset = self.clip_segs.len() as u32;
                 } else if tile.y != y {
                     // new row
                     // end current bin
                     cull_and_push_cover(cover);
                     cover.id = pack_tile_cover_id(tile.x, tile.y, tile.path);
                     cover.winding = 0;
-                    cover.seg_offset = clip_segs.len() as u32;
+                    cover.seg_offset = self.clip_segs.len() as u32;
                     cover.seg_count = 0;
                 }
 
-                clip_segs.push(u8vec4(tile.a.x, tile.a.y, tile.b.x, tile.b.y));
+                self.clip_segs.push(u8vec4(tile.a.x, tile.a.y, tile.b.x, tile.b.y));
                 x = tile.x;
                 y = tile.y;
                 i += 1;
@@ -158,76 +179,107 @@ pub(super) fn prepare_scene(scene: &Scene, viewport: UVec2) -> PreparedSceneData
             }
         }
 
-        flattened_vertices.clear();
-        contours.clear();
-        tiles.clear();
-        path_index += 1;
+        // clear temp buffers for the next path
+        self.flattened_vertices.clear();
+        self.contours.clear();
+        self.coarse_raster_tiles.clear();
+        self.path_index += 1;
     }
 
-    if covers.is_empty() {
-        // possibly all cover tiles have been culled
-        return PreparedSceneData { clip_segs, tile_covers: covers, tile_cover_lists: vec![] };
-    }
+    fn flush_tiles(&mut self) {
+        let mut covers = &mut self.covers[self.start_cover..];
+        if covers.is_empty() {
+            return;
+        }
 
-    // sort covers by row, column, group, path
-    {
-        let _span = tracy_client::span!("cover_sort");
-        covers.sort_unstable_by(|a, b| a.id.cmp(&b.id));
-    }
+        // sort covers by row, column, group, path
+        {
+            let _span = tracy_client::span!("cover_sort");
+            covers.sort_unstable_by(|a, b| a.id.cmp(&b.id));
+        }
 
-    // e.g. for tile at (i,j)
-    //
-    // T0-T2: group 0
-    // T3-T5: group 2
-    //
-    // group 0 = root
-    //     group 1 = group with opacity = 0.5
-    //         group 2 = group with opacity = 0.5, blend mode = multiply
-    //
-    // When traversing the cover list:
-    // transition from group 0 to group 2:
-    //   - emit push (for group 1)
-    //   - emit push (for group 2)
-    //   - emit group 2 commands
-    //   - emit pop (for group 2)
-    //   - emit pop (for group 1)
-
-    let mut cover_lists: Vec<TileCoverList> = vec![];
-
-    {
-        let _span = tracy_client::span!("cover_commands");
-        let mut cur_coords = covers[0].tile_coords();
-        let mut offset = 0;
-        for (i, b) in covers.iter().enumerate() {
-            let coords = b.tile_coords();
-            if cur_coords != coords {
-                cover_lists.push(TileCoverList { offset, count: i as u32 - offset });
-                offset = i as u32;
-            } else {
-                // if the cover is fully opaque and has a non-zero winding, and doesn't have any segment,
-                // then it fully covers the previous cover tiles, and we can trim the previous covers
-                if b.winding != 0 && b.seg_count == 0 && scene.fills[b.fill as usize].is_opaque() {
-                    culled_fully_covered_tiles += i as u32 - offset;
+        let start_tile = self.tiles.len() as u32;
+        {
+            let _span = tracy_client::span!("cover_commands");
+            let mut cur_coords = covers[0].tile_coords();
+            let mut offset = 0;
+            for (i, b) in covers.iter().enumerate() {
+                let coords = b.tile_coords();
+                if cur_coords != coords {
+                    self.tiles.push(TileDrawData { cover_offset: offset, cover_count: i as u32 - offset });
                     offset = i as u32;
+                } else {
+                    // if the cover is fully opaque and has a non-zero winding, and doesn't have any segment,
+                    // then it fully covers the previous cover tiles, and we can trim the previous covers
+                    if b.winding != 0 && b.seg_count == 0 && self.scene.fills[b.fill as usize].is_opaque() {
+                        self.culled_fully_covered_tiles += i as u32 - offset;
+                        offset = i as u32;
+                    }
                 }
+                cur_coords = coords;
             }
-            cur_coords = coords;
+            if offset < covers.len() as u32 {
+                self.tiles.push(TileDrawData { cover_offset: offset, cover_count: covers.len() as u32 - offset });
+            }
         }
-        if offset < covers.len() as u32 {
-            cover_lists.push(TileCoverList { offset, count: covers.len() as u32 - offset });
-        }
+
+        self.commands.push(Command::RasterizeTiles { start: start_tile, count: self.tiles.len() as u32 - start_tile });
+    }
+
+    fn finish(mut self) -> PreparedSceneData {
+        self.flush_tiles();
+        PreparedSceneData { clip_segs: self.clip_segs, covers: self.covers, tiles: self.tiles, commands: self.commands }
+    }
+}
+
+/// Prepares the given scene for rendering.
+///
+/// This does multiple things:
+/// - flattens the paths in the scene to line segments
+/// - builds a list of tiles for each path, and for each tile, builds a list of clipped line segments
+///   that intersect the tile
+/// - computes tile-level winding numbers
+/// - builds `TileDrawData` for each spatial tile, which are drawn on the GPU by the rasterization compute shader
+pub(super) fn prepare_scene(scene: &Scene, viewport: UVec2) -> PreparedSceneData {
+    let _span = tracy_client::span!("prepare_scene");
+
+    let viewport_tile_size = ivec2(viewport.x.div_ceil(TILE as u32) as i32, viewport.y.div_ceil(TILE as u32) as i32);
+    let mut builder = SceneBuilder::new(scene, viewport_tile_size);
+
+    for cmd in scene.draw_commands.iter() {
+        match cmd {
+            DrawCommand::FillPath { verb_range, base_vertex, fill } => {
+                builder.generate_tiles(
+                    &scene.path_verbs[verb_range.clone()],
+                    &scene.path_points[*base_vertex..],
+                    *fill as u32,
+                );
+            }
+            DrawCommand::SetTransform(transform) => {
+                builder.cur_transform = *transform;
+            }
+            DrawCommand::BeginGroup(_group_options) => {
+                //continue;
+            }
+            DrawCommand::EndGroup => {
+                //continue;
+            }
+            DrawCommand::Clear(color) => {
+                builder.flush_tiles();
+                builder.commands.push(Command::Clear(*color));
+            }
+        };
     }
 
     //let total_tiles_to_render = covers.len() as u32 - culled_fully_covered_tiles;
     //info!("{} cover tiles to render", total_tiles_to_render);
     //info!("culled {} fully covered tiles", culled_fully_covered_tiles);
     //info!("culled {} tiles outside viewport", culled_viewport_tiles);
-
-    PreparedSceneData { clip_segs, tile_covers: covers, tile_cover_lists: cover_lists }
+    builder.finish()
 }
 
 #[derive(Copy, Clone, Debug)]
-struct TileFragment {
+struct CoarseRasterTile {
     x: i32,
     y: i32,
     a: U8Vec2,
@@ -237,8 +289,7 @@ struct TileFragment {
 }
 
 /// Coarse path rasterization
-fn coarse_rasterize_path(path_index: usize, polyline: &[Vec2], tiles: &mut Vec<TileFragment>) {
-
+fn coarse_rasterize_path(path_index: usize, polyline: &[Vec2], tiles: &mut Vec<CoarseRasterTile>) {
     for [p, q] in polyline.array_windows() {
         // quantize coordinates to 1/128th of a tile
         //let quant = TILE as f32 / 128.0;
@@ -347,7 +398,7 @@ fn coarse_rasterize_path(path_index: usize, polyline: &[Vec2], tiles: &mut Vec<T
                 let q_clip_x_q = quantize(q_clip_x);
                 let q_clip_y_q = quantize(q_clip_y);
 
-                tiles.push(TileFragment {
+                tiles.push(CoarseRasterTile {
                     x: t_x,
                     y: t_y,
                     a: u8vec2(p_clip_x_q, p_clip_y_q),

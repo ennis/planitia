@@ -3,13 +3,12 @@
 
 use gamelib::asset::{AssetCache, FileSystemEvent, Handle};
 use gamelib::camera_control::{CameraControl, CameraControlInput};
-use gamelib::{App, AppHandler, UserEvent};
 use gamelib::egui::{Color32, Scene};
 use gamelib::input::{InputEvent, PointerButton};
 use gamelib::paint::{DrawGlyphRunOptions, PaintRenderParams, PaintScene, Painter, TextFormat, TextLayout};
-use gamelib::platform::{RenderTargetImage};
+use gamelib::platform::RenderTargetImage;
 use gamelib::render::pipeline_cache::get_graphics_pipeline;
-use gamelib::{WindowCreateInfo, WindowHandle, egui};
+use gamelib::{App, AppHandler, UserEvent, WindowCreateInfo, WindowHandle, egui};
 use std::ops::Deref;
 
 use color::{Srgba8, srgba8};
@@ -183,7 +182,7 @@ impl Game {
     }
 
     fn render_overlay(&mut self, cmd: &mut gpu::CommandBuffer, target: &gpu::Image) {
-        let mut scene = self.painter.build_scene();
+        let mut scene = self.painter.build_scene(Srgba8::TRANSPARENT);
 
         let mut text = TextLayout::new(
             &TextFormat { size: 20.0, ..Default::default() },

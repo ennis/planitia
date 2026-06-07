@@ -10,7 +10,7 @@ use slang::{ParameterCategory, TypeKind};
 
 pub(crate) struct CollectedReflectionData<'a> {
     archive: &'a mut ArchiveWriter<ShaderArchiveRoot>,
-    options: &'a BuildOptions,
+    _options: &'a BuildOptions,
     pub(crate) params: Vec<reflection::Param>,
 }
 
@@ -18,7 +18,7 @@ type ParamIndex = u32;
 
 impl<'a> CollectedReflectionData<'a> {
     pub(crate) fn new(archive: &'a mut ArchiveWriter<ShaderArchiveRoot>, options: &'a BuildOptions) -> Self {
-        CollectedReflectionData { archive, options, params: vec![] }
+        CollectedReflectionData { archive, _options: options, params: vec![] }
     }
 
     fn add_param(
@@ -106,7 +106,7 @@ impl<'a> CollectedReflectionData<'a> {
                     };
 
                     let field_full_name = format!("{}.{}", full_name, field_name);
-                    eprintln!("field {field_full_name} @ {:?} kind={:?}", field_location, field_type.kind());
+                    //eprintln!("field {field_full_name} @ {:?} kind={:?}", field_location, field_type.kind());
 
                     let index = self.add_param(&field_full_name, field_location, 0, Some(param_index));
                     type_path.push(ty_layout);
@@ -118,7 +118,7 @@ impl<'a> CollectedReflectionData<'a> {
                 let deref_location = ParamLocation::Indirect { rel: param_index, offset: 0 };
                 let deref_name = format!("{}.$", full_name);
                 let index = self.add_param(&deref_name, deref_location, 0, Some(param_index));
-                eprintln!("deref {}.$ @ {:?} kind={:?}", full_name, deref_location, ty_layout.kind());
+                //eprintln!("deref {}.$ @ {:?} kind={:?}", full_name, deref_location, ty_layout.kind());
                 type_path.push(ty_layout);
                 self.reflect_variable_type_layout(
                     index,
@@ -183,7 +183,9 @@ impl<'a> CollectedReflectionData<'a> {
                 //);
                 return;
             }
-            _ => panic!("unsupported parameter category: {:?}", category),
+            _ => {
+                ceprintln!("<r>error</>: unsupported parameter category {category:?} for {name}");
+            },
         };
     }
 

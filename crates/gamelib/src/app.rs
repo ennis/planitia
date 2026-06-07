@@ -13,9 +13,7 @@ use futures::future::AbortHandle;
 use gpu::vk::Handle;
 use keyboard_types::{Key, KeyState, Modifiers, NamedKey};
 use log::{debug, error, info, warn};
-use mlua::Lua;
 use renderdoc::{RenderDoc, V141};
-use scoped_tls::scoped_thread_local;
 use std::cell::{Cell, OnceCell, RefCell};
 use std::ffi::c_void;
 use std::marker::PhantomData;
@@ -96,7 +94,7 @@ pub trait AppHandler {
     fn input(&mut self, window: WindowHandle, input_event: InputEvent);
 
     /// Called when the event loop receives a custom event.
-    fn event(&mut self, event: UserEvent);
+    fn event(&mut self, event: UserEvent) {}
 
     /// Called when the window is resized.
     fn resized(&mut self, window: WindowHandle, width: u32, height: u32);
@@ -228,9 +226,13 @@ pub(crate) struct MainThreadContext {
     /// Manages graphics devices, windows, and the event loop.
     pub(crate) platform: Platform,
     /// Lua VM instance.
+    #[cfg(feature = "lua")]
     pub(crate) lua: Lua,
+    /// ImGui context.
     pub(crate) imgui: RefCell<ImguiContext>,
+    /// Executor for async tasks.
     pub(crate) executor: LocalExecutor,
+    /// RenderDoc connection.
     rdoc: Option<RefCell<RenderDoc<V141>>>,
     rdoc_capture_requested: Cell<bool>,
     rdoc_launch_replay_ui: Cell<bool>,
@@ -242,7 +244,6 @@ impl MainThreadContext {
     /// Creates a new application instance and initializes the global systems.
     fn new(handler: Box<RefCell<dyn AppHandler + 'static>>, options: &AppOptions) -> Self {
         let platform = Platform::new(options);
-        let lua = Lua::new();
         let executor = LocalExecutor::new();
         let imgui = RefCell::new(ImguiContext::new());
 
@@ -255,7 +256,6 @@ impl MainThreadContext {
 
         Self {
             platform,
-            lua,
             imgui,
             executor,
             rdoc: rdoc.map(RefCell::new),
@@ -263,6 +263,8 @@ impl MainThreadContext {
             rdoc_launch_replay_ui: Cell::new(false),
             debug_mark_counter: Cell::new(0),
             handler,
+            #[cfg(feature = "lua")]
+            lua: Lua::new(),
         }
     }
 
@@ -308,7 +310,8 @@ impl MainThreadContext {
 
         // Run the event loop.
         // This doesn't return until the application exits.
-        self.platform.run_event_loop(Box::new(self));
+        let mut this = self;
+        self.platform.run_event_loop(&mut this);
 
         self.platform.teardown();
     }
@@ -373,6 +376,7 @@ impl LoopHandler for &'static MainThreadContext {
             self.start_renderdoc_capture();
         }
 
+
         // render the frame (the application is expected to render the GUI as part of its rendering)
         self.platform.render_all(&mut |window, render_target| {
             self.handler.borrow_mut().render(window, render_target);
@@ -383,6 +387,8 @@ impl LoopHandler for &'static MainThreadContext {
             self.rdoc_capture_requested.set(false);
             self.end_renderdoc_capture(self.rdoc_launch_replay_ui.replace(false));
         }
+
+
 
         // mark the end of the frame for tracy
         tracy_client::frame_mark();
@@ -422,7 +428,7 @@ where
 {
     CURRENT_CTX.with(|ctx| {
         let ctx = ctx.borrow();
-        let ctx = ctx.as_ref().expect("app context is not available, either the app is not running, or this function was called from a different thread");
+        let ctx = ctx.as_ref().expect("app context is not available; either the app is not running, or this function was called from a different thread");
         f(ctx)
     })
 }

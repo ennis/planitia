@@ -17,6 +17,8 @@ pub type Platform = win32::Win32Platform;
 pub type PlatformWindowCreateInfo = win32::Win32WindowCreateInfo;
 #[cfg(windows)]
 pub type WindowHandle = win32::Win32WindowHandle;
+#[cfg(windows)]
+pub type InputDeviceId = win32::Win32InputDeviceId;
 
 //----------------------------------------------------------------------------------
 
@@ -25,7 +27,6 @@ pub type WindowHandle = win32::Win32WindowHandle;
 pub struct RenderTargetImage<'a> {
     pub image: &'a gpu::Image,
 }
-
 
 /// Defines methods that are called when the event loop resumes.
 #[allow(unused_variables)]

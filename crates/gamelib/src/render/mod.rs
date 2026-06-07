@@ -98,7 +98,7 @@ pub(crate) fn load_shader_archive(path: impl AsRef<VfsPath>) -> Handle<ShaderArc
                 // the reload: with that we could trigger an archive rebuild when the manifest
                 // or shader sources change, without needing to load the archive first
                 // and check the modification times ourselves.
-                shadertool::build_pipeline(
+                shadertool::build(
                     &a[a.manifest_file().path],
                     &shadertool::BuildOptions {
                         quiet: false,

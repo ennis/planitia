@@ -4,7 +4,7 @@ fn main() {
     //let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 
     // build shaders
-    if let Err(err) = shadertool::build_pipeline(
+    if let Err(err) = shadertool::build(
         "assets/shaders/shaders.toml",
         &shadertool::BuildOptions {
             quiet: true,

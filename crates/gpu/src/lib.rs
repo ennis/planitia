@@ -468,6 +468,7 @@ pub type BufferRangeUntyped<'a> = BufferRange<'a, u8>;
 #[derive(Clone)]
 pub struct ColorAttachment<'a> {
     pub image: &'a Image,
+    // f64 because it can represent all i32 and u32 values exactly.
     pub clear: Option<[f64; 4]> = None,
 }
 

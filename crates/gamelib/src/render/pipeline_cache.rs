@@ -213,7 +213,9 @@ fn find_pass_by_name<'a>(
                         warn!("multiple pipelines named `{name}` found in archive");
                         return Err(PipelineCreateError::PipelineNotFound(name.to_string()).into());
                     } else {
-                        warn!("multiple pipelines found in archive but no pipeline name specified. Specify a pipeline name in the path (e.g. `{path}#my_pipeline`).");
+                        warn!(
+                            "multiple pipelines found in archive but no pipeline name specified. Specify a pipeline name in the path (e.g. `{path}#my_pipeline`)."
+                        );
                         return Err(PipelineCreateError::PipelineNotFound("<default>".to_string()).into());
                     }
                 }
@@ -221,7 +223,6 @@ fn find_pass_by_name<'a>(
             }
         }
     }
-
 
     found.ok_or_else(|| PipelineCreateError::PipelineNotFound(name.unwrap_or("<default>").to_string()))
 }

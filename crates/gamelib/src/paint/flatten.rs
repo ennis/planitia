@@ -1,8 +1,7 @@
 //! Flatten paths into a list of line segments.
 
 use crate::paint::{PathSegment, PathSlice};
-use math::CubicBezier2;
-use math::{Mat3, Vec2};
+use math::{CubicBezier2, Mat3, Vec2};
 use std::ops::Range;
 
 /// Returns whether two points are approximately equal, within a small epsilon.

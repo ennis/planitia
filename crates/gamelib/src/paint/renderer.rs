@@ -5,40 +5,37 @@ mod prepare;
 use crate::asset::AssetLoadError;
 use crate::paint::fill::Fill;
 use crate::paint::renderer::prepare::prepare_scene;
+use crate::paint::scene::GroupOptions;
 use crate::paint::{
     GradientExtendMode, GradientIntegralSegment, GradientRampData, PaintRenderParams, Painter, PathVerb,
 };
 use crate::static_assets;
+use crate::util::env_flag;
 use color::Srgba8;
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::{ClearColorValue, CommandBuffer, InvalidateFlags, Ptr, root_params};
 use math::{IVec2, Mat3, Rect, U8Vec4, UVec2, Vec2, Vec4, ivec2, uvec2};
 use std::ops::Range;
 use std::sync::Once;
-use crate::paint::scene::GroupOptions;
-//--------------------------------------------------------------------------------------------------
 
 /// Size of a raster tile in pixels. The rasterization compute shader processes the scene in tiles of this size.
 ///
 /// NOTE: This should be kept in sync with `paint.slang`
-const RASTER_TILE_SIZE: u32 = 16;
+const TILE_SIZE: u32 = 16;
 
 // At the moment the shader uses wave ops to compute a prefix sum along the tile rows, which assumes that the tile size doesn't
 // exceed the wave size.
-const _: () = assert!(RASTER_TILE_SIZE <= 32, "RASTER_TILE_SIZE must not exceed the minimum shader subgroup size (32)");
+const _: () = assert!(TILE_SIZE <= 32, "TILE_SIZE must not exceed the minimum shader subgroup size (32)");
 
 static_assets! {
-    static RASTER_LINES: gpu::ComputePipeline = "/gamelib/shaders/paint.sharc#raster_lines";
-    static RASTER_TILES: gpu::ComputePipeline = "/gamelib/shaders/paint.sharc#raster_tiles";
+    static RASTERIZE_TILES: gpu::ComputePipeline = "/gamelib/shaders/paint.sharc#rasterize_tiles";
     static COPY_TO_SCREEN: gpu::GraphicsPipeline = "/gamelib/shaders/paint.sharc#copy_to_screen";
 }
-
-//--------------------------------------------------------------------------------
-// Scene
 
 #[derive(Clone)]
 pub(super) enum DrawCommand {
     SetTransform(Mat3),
+    Clear(Srgba8),
     BeginGroup(GroupOptions),
     FillPath { verb_range: Range<usize>, base_vertex: usize, fill: usize },
     EndGroup,
@@ -49,6 +46,7 @@ pub(super) struct Scene {
     pub(super) path_verbs: Vec<PathVerb>,
     pub(super) path_points: Vec<Vec2>,
     fills: Vec<FillData>,
+    pub(super) clear_color: Srgba8,
     pub(super) draw_commands: Vec<DrawCommand>,
     pub(super) gradient_integral_segments: Vec<GradientIntegralSegment>,
     pub(super) gradient_ramps: Vec<GradientRampData>,
@@ -56,6 +54,10 @@ pub(super) struct Scene {
 }
 
 impl Scene {
+    pub(super) fn new(clear_color: Srgba8) -> Self {
+        Self { clear_color, ..Default::default() }
+    }
+
     pub(super) fn register_fill(&mut self, fill: &Fill, local_to_device_transform: &Mat3) -> usize {
         let index = self.fills.len();
         let fill_data: FillData = match fill {
@@ -141,14 +143,14 @@ fn pack_tile_cover_id(x: i32, y: i32, path: u32) -> u64 {
     ((y as u64) << 48) | ((x as u64) << 32) | (path as u64)
 }
 
-
+/// Per-tile draw data.
 #[derive(Copy, Clone, Debug)]
 #[repr(C)]
-struct TileCoverList {
+struct TileDrawData {
     /// Offset into the `TileCover` array (`RasterTilesParams::covers`).
-    offset: u32,
+    cover_offset: u32,
     /// Number of `TileCover`s.
-    count: u32,
+    cover_count: u32,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -246,31 +248,41 @@ impl From<LinearGradientFill> for FillData {
 
 const _: () = assert!(size_of::<FillData>() == 64, "FillData must be exactly 64 bytes");
 
-/// Shader parameters for the `raster_tiles` pass.
 #[derive(Copy, Clone)]
 #[repr(C)]
-struct RasterTilesParams {
+struct SceneData {
     segments: Ptr<U8Vec4>,
     covers: Ptr<TileCover>,
     cover_count: u32,
-    cover_lists: Ptr<TileCoverList>,
-    cover_list_count: u32,
+    tiles: Ptr<TileDrawData>,
     fills: Ptr<FillData>,
     gradient_integral_segments: Ptr<GradientIntegralSegment>,
+}
+
+/// Shader parameters for the `raster_tiles` pass.
+#[derive(Copy, Clone)]
+#[repr(C)]
+struct RasterizeTilesParams {
+    scene_data: SceneData,
     output: gpu::StorageImageHandle,
+    start_cover_list: u32,
 }
 
 //--------------------------------------------------------------------------------
+
+enum Command {
+    Clear(Srgba8),
+    RasterizeTiles { start: u32, count: u32 },
+}
 
 /// Prepared scene data to be uploaded to the GPU.
 struct PreparedSceneData {
     /// Path segments clipped to tiles.
     clip_segs: Vec<U8Vec4>,
-    tile_covers: Vec<TileCover>,
-    tile_cover_lists: Vec<TileCoverList>,
+    covers: Vec<TileCover>,
+    tiles: Vec<TileDrawData>,
+    commands: Vec<Command>,
 }
-
-static DEBUG_DUMP_SCENE: Once = Once::new();
 
 pub(super) fn render_scene(
     cb: &mut CommandBuffer,
@@ -278,62 +290,79 @@ pub(super) fn render_scene(
     params: &PaintRenderParams,
     scene: &Scene,
 ) -> Result<(), AssetLoadError> {
-    if scene.draw_commands.is_empty() {
-        return Ok(());
-    }
 
-    let viewport_size = uvec2(params.color_target.width(), params.color_target.height());
-    let prep_scene = prepare_scene(scene, viewport_size);
+    // load shaders
+    let rasterize_tiles = RASTERIZE_TILES.read()?;
+    let copy_to_screen = COPY_TO_SCREEN.read()?;
 
-    DEBUG_DUMP_SCENE.call_once(|| {
-        //prep_scene.dump();
-        if let Err(e) = prep_scene.write_svg("debug_scene.svg") {
-            eprintln!("Failed to write debug SVG: {e}");
-        }
-    });
-
-    if prep_scene.tile_cover_lists.is_empty() {
-        // nothing to draw (everything was culled)
-        return Ok(());
-    }
-
-    //prep_scene.dump();
-    //eprintln!("tiles={:?}", prep_scene.tile_segs);
-
+    // clear coverage target
     let width = params.color_target.width();
     let height = params.color_target.height();
     painter.coverage_target.setup(width, height);
+    cb.clear_image(painter.coverage_target.image(), ClearColorValue::Float([0.0; 4]));
 
-    let raster_tiles_params = RasterTilesParams {
-        segments: cb.upload_slice(&prep_scene.clip_segs[..]),
-        covers: cb.upload_slice(&prep_scene.tile_covers[..]),
-        cover_count: prep_scene.tile_covers.len() as u32,
-        cover_lists: cb.upload_slice(&prep_scene.tile_cover_lists[..]),
-        cover_list_count: prep_scene.tile_cover_lists.len() as u32,
-        fills: cb.upload_slice(&scene.fills[..]),
-        gradient_integral_segments: cb.upload_slice(&scene.gradient_integral_segments),
-        output: painter.coverage_target.storage_handle(),
-    };
+    if !scene.draw_commands.is_empty() {
 
-    // Clear render target
-    cb.clear_image(painter.coverage_target.image(), ClearColorValue::Float([0.0, 0.0, 0.0, 0.0]));
+        // prepare the scene for rendering
+        let prep_scene = prepare_scene(scene, uvec2(params.color_target.width(), params.color_target.height()));
 
-    // Draw tiles
-    cb.bind_compute_pipeline(&*RASTER_TILES.read()?);
-    cb.dispatch(prep_scene.tile_cover_lists.len() as u32, 1, 1, &raster_tiles_params);
+        if env_flag("PAINTER_DUMP_SCENE") {
+            // dump prepared scene to SVG for debugging
+            static DEBUG_DUMP_SCENE: Once = Once::new();
+            DEBUG_DUMP_SCENE.call_once(|| {
+                if let Err(e) = prep_scene.write_svg("debug_scene.svg") {
+                    eprintln!("Failed to write debug SVG: {e}");
+                }
+            });
+        }
 
-    cb.barrier(InvalidateFlags::TEXTURE);
+        if prep_scene.tiles.is_empty() {
+            // nothing to draw (everything was culled)
+            return Ok(());
+        }
+
+        // upload scene data to GPU
+        let scene_data = {
+            let segments = cb.upload_slice(&prep_scene.clip_segs[..]);
+            let covers = cb.upload_slice(&prep_scene.covers[..]);
+            let cover_count = prep_scene.covers.len() as u32;
+            let cover_lists = cb.upload_slice(&prep_scene.tiles[..]);
+            let fills = cb.upload_slice(&scene.fills[..]);
+            let gradient_integral_segments = cb.upload_slice(&scene.gradient_integral_segments);
+            SceneData { segments, covers, cover_count, tiles: cover_lists, gradient_integral_segments, fills }
+        };
+
+        // execute draw commands
+        for cmd in prep_scene.commands.iter() {
+            match cmd {
+                Command::Clear(color) => {
+                    cb.clear_image(painter.coverage_target.image(), ClearColorValue::Float(color.to_linear_array()));
+                }
+                Command::RasterizeTiles { start, count } => {
+                    let output = painter.coverage_target.storage_handle();
+                    let raster_tiles_params = RasterizeTilesParams { scene_data, output, start_cover_list: *start };
+                    cb.barrier(InvalidateFlags::STORAGE);
+                    cb.bind_compute_pipeline(&*rasterize_tiles);
+                    cb.dispatch(*count, 1, 1, &raster_tiles_params);
+                }
+            }
+        }
+    }
 
     // Copy render target to screen
+    cb.barrier(InvalidateFlags::TEXTURE);
+
+    let clear_color = scene.clear_color.to_linear_array();
+    let clear_color = [clear_color[0] as f64, clear_color[1] as f64, clear_color[2] as f64, clear_color[3] as f64];
     let mut encoder = cb.begin_rendering(
-        &[gpu::ColorAttachment { image: &params.color_target, clear: None }],
+        &[gpu::ColorAttachment { image: &params.color_target, clear: Some(clear_color) }],
         params.depth_target.as_ref().map(|d| gpu::DepthStencilAttachment {
             image: d,
             depth_clear: None,
             stencil_clear: None,
         }),
     );
-    encoder.bind_graphics_pipeline(&*COPY_TO_SCREEN.read()?);
+    encoder.bind_graphics_pipeline(&*copy_to_screen);
     encoder.draw(
         TriangleList,
         None,

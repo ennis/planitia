@@ -767,6 +767,11 @@ impl_vertex_attr!(Norm<math::U16Vec2>, R16G16_UNORM);
 impl_vertex_attr!(Norm<math::U16Vec3>, R16G16B16_UNORM);
 impl_vertex_attr!(Norm<math::U16Vec4>, R16G16B16A16_UNORM);
 
+#[cfg(feature = "color")]
+unsafe impl VertexAttribute for color::Srgba8 {
+    const FORMAT: Format = Format::R8G8B8A8_UNORM;
+}
+
 // Index data types --------------------------------------------------------------------------------
 macro_rules! impl_index_data {
     ($t:ty, $fmt:ident) => {

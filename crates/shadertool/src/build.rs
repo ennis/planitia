@@ -176,8 +176,7 @@ impl BuildManifest {
         // Debug information can be requested either in the manifest or via build options.
         let emit_debug_information = self.compiler.debug | options.emit_debug_information;
 
-        let search_paths_cstr: Vec<CString> =
-            include_paths.iter().map(|p| CString::new(p.as_str()).unwrap()).collect();
+        let search_paths_cstr: Vec<CString> = include_paths.iter().map(|p| CString::new(p.as_str()).unwrap()).collect();
         let search_path_ptrs: Vec<_> = search_paths_cstr.iter().map(|p| p.as_ptr()).collect();
 
         let profile = global_session.find_profile(&self.compiler.profile);
@@ -258,7 +257,7 @@ impl BuildManifest {
             collector.reflect_shader(program.layout(0).map_err(SlangError::from)?);
             collector.params
         };
-
+        
         // retrieve SPIR-V blob of all entry points
         let spirv = {
             let blob = program.target_code(0).map_err(SlangError::from)?;
@@ -290,10 +289,8 @@ impl BuildManifest {
             // if there's no pass attribute, set name to entry point name stripped of
             // standard stage suffixes
             if pass.is_none() {
-                const STAGE_SUFFIXES: &[&str] = &[
-                    "_vertex", "_fragment", "_compute", "_mesh",
-                    "_amplification", "_hull", "_domain", "_geometry",
-                ];
+                const STAGE_SUFFIXES: &[&str] =
+                    &["_vertex", "_fragment", "_compute", "_mesh", "_amplification", "_hull", "_domain", "_geometry"];
                 let mut name = ep.name().unwrap();
                 for suffix in STAGE_SUFFIXES {
                     if let Some(stripped) = name.strip_suffix(suffix) {

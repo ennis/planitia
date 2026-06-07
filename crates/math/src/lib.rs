@@ -6,8 +6,8 @@ mod camera;
 mod rect;
 mod util;
 
-pub use glam::*;
 pub use bezier::*;
 pub use camera::*;
+pub use glam::*;
 pub use rect::*;
 pub use util::*;

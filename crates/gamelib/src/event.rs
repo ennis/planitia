@@ -4,7 +4,6 @@ use std::fmt;
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct EventToken(pub u64);
 
-
 pub enum UserEvent {
     Timeout(EventToken),
     Callback(Box<dyn FnOnce() + Send>),

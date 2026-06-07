@@ -105,6 +105,25 @@ impl Srgba8 {
             a: self.a as f32 / 255.0,
         }
     }
+    
+    /// Decodes this color into linear-light `f32` array.
+    pub fn to_linear_array(self) -> [f32; 4] {
+        [
+            srgb_encoded_to_linear(self.r),
+            srgb_encoded_to_linear(self.g),
+            srgb_encoded_to_linear(self.b),
+            self.a as f32 / 255.0,
+        ]
+    }
+    
+    pub fn to_float_array(self) -> [f32; 4] {
+        [
+            self.r as f32 / 255.0,
+            self.g as f32 / 255.0,
+            self.b as f32 / 255.0,
+            self.a as f32 / 255.0,
+        ]
+    }
 
     /// Constructs an `Srgba8` from *linear*-light sRGB `f32` components.
     ///
@@ -185,9 +204,4 @@ impl From<[u8; 4]> for Srgba8 {
 /// Shorthand for `Srgba8::new(r, g, b, a)`.
 pub const fn srgba8(r: u8, g: u8, b: u8, a: u8) -> Srgba8 {
     Srgba8 { r, g, b, a }
-}
-
-#[cfg(feature = "gpu-support")]
-unsafe impl gpu::VertexAttribute for Srgba8 {
-    const FORMAT: gpu::Format = gpu::Format::R8G8B8A8_UNORM;
 }

@@ -1,6 +1,5 @@
 #![recursion_limit = "256"]
 //#![feature(proc_macro_diagnostic)]
-extern crate darling;
 extern crate proc_macro;
 extern crate quote;
 extern crate syn;

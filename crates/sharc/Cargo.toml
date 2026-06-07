@@ -6,5 +6,4 @@ edition = "2024"
 [dependencies]
 utils = { workspace = true }
 gpu = { workspace = true }
-warn = "0.2.2"
 log = "0.4.28"

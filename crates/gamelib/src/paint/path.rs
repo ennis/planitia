@@ -3,7 +3,7 @@
 //! A [`Path`] (or its borrowed counterpart [`PathSlice`]) describes a sequence of contours made up
 //! of straight lines and Bézier curves. Paths are built incrementally with [`PathBuilder`].
 
-use math::{vec2, Mat3, Rect, Vec2};
+use math::{Mat3, Rect, Vec2, vec2};
 use std::f32::consts::FRAC_2_PI;
 
 /// A single segment of a path, with its points already extracted.
@@ -179,7 +179,7 @@ fn arc_to_beziers(angle_start: f32, angle_extent: f32, out: &mut Vec<Vec2>) -> u
         let (sin2, cos2) = theta2.sin_cos();
         out.push(Vec2::new(cos1 - k * sin1, sin1 + k * cos1)); // ctrl1
         out.push(Vec2::new(cos2 + k * sin2, sin2 - k * cos2)); // ctrl2
-        out.push(Vec2::new(cos2,             sin2));           // endpoint
+        out.push(Vec2::new(cos2, sin2)); // endpoint
     }
     segment_count as u32
 }
@@ -265,7 +265,7 @@ impl PathBuilder {
         // Step 1: Compute (x1′, y1′)
         // (F.6.5.1)
         let mid = (from - to) * 0.5;
-        let x1p =  cos_phi * mid.x + sin_phi * mid.y;
+        let x1p = cos_phi * mid.x + sin_phi * mid.y;
         let y1p = -sin_phi * mid.x + cos_phi * mid.y;
 
         // F.6.6 Correction of out-of-range radii.
@@ -293,7 +293,7 @@ impl PathBuilder {
             (num / den).max(0.0).sqrt()
         };
         let sign = if large_arc == sweep { -1.0_f32 } else { 1.0_f32 };
-        let cxp =  sign * sq * rx * y1p / ry;
+        let cxp = sign * sq * rx * y1p / ry;
         let cyp = -sign * sq * ry * x1p / rx;
 
         // Step 3: Compute (cx, cy) from (cx′, cy′)
@@ -329,10 +329,12 @@ impl PathBuilder {
 
         // arc_to_beziers produces points on a unit circle; transform them into the
         // target ellipse by scaling by (rx, ry) and rotating by phi
-        let transform = |p: Vec2| Vec2::new(
-            cos_phi * p.x * rx - sin_phi * p.y * ry + center.x,
-            sin_phi * p.x * rx + cos_phi * p.y * ry + center.y,
-        );
+        let transform = |p: Vec2| {
+            Vec2::new(
+                cos_phi * p.x * rx - sin_phi * p.y * ry + center.x,
+                sin_phi * p.x * rx + cos_phi * p.y * ry + center.y,
+            )
+        };
 
         let pt_start = self.points.len();
         let bezier_count = arc_to_beziers(theta, extent, &mut self.points);
@@ -348,10 +350,10 @@ impl PathBuilder {
     /// Appends a closed circle contour centred at `center` with the given `radius`.
     pub fn circle(&mut self, center: Vec2, radius: f32) -> &mut Self {
         let right = center + Vec2::new(radius, 0.0);
-        let left  = center - Vec2::new(radius, 0.0);
+        let left = center - Vec2::new(radius, 0.0);
         let r = Vec2::splat(radius);
         self.move_to(right);
-        self.arc_to_endpoint(left,  r, 0.0, false, true);
+        self.arc_to_endpoint(left, r, 0.0, false, true);
         self.arc_to_endpoint(right, r, 0.0, false, true);
         self.close();
         self
@@ -362,9 +364,9 @@ impl PathBuilder {
     pub fn ellipse(&mut self, center: Vec2, radii: Vec2, phi: f32) -> &mut Self {
         let (sin_phi, cos_phi) = phi.sin_cos();
         let start = center + Vec2::new(radii.x * cos_phi, radii.x * sin_phi);
-        let end   = center - Vec2::new(radii.x * cos_phi, radii.x * sin_phi);
+        let end = center - Vec2::new(radii.x * cos_phi, radii.x * sin_phi);
         self.move_to(start);
-        self.arc_to_endpoint(end,   radii, phi, false, true);
+        self.arc_to_endpoint(end, radii, phi, false, true);
         self.arc_to_endpoint(start, radii, phi, false, true);
         self.close();
         self

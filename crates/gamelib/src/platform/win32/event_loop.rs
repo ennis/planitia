@@ -24,7 +24,11 @@ scoped_thread_local! {
     pub(super) static ACTIVE_EVENT_LOOP: ActiveEventLoop
 }
 
-fn update_keyboard_modifiers(modifiers: &mut keyboard_types::Modifiers, key: &keyboard_types::Key, state: keyboard_types::KeyState) {
+fn update_keyboard_modifiers(
+    modifiers: &mut keyboard_types::Modifiers,
+    key: &keyboard_types::Key,
+    state: keyboard_types::KeyState,
+) {
     if let keyboard_types::Key::Named(nk) = key {
         match (nk, state) {
             (keyboard_types::NamedKey::Shift, keyboard_types::KeyState::Down) => {
@@ -59,65 +63,11 @@ fn update_keyboard_modifiers(modifiers: &mut keyboard_types::Modifiers, key: &ke
 //------------------------
 struct WinitAppHandler<'a> {
     this: &'static Win32Platform,
-    inner: Box<dyn LoopHandler + 'a>,
-    cursor_x: u32,
-    cursor_y: u32,
+    inner: &'a mut dyn LoopHandler,
     modifiers: keyboard_types::Modifiers,
 }
 
 impl<'a> WinitAppHandler<'a> {
-    /// Initializes the window if it hasn't been created yet.
-    fn init_window(&self, event_loop: &ActiveEventLoop) -> Result<(), Error> {
-        /*if self.this.window.borrow().is_some() {
-            // window already created
-            return Ok(());
-        }
-
-        self.this.window.replace(Some(Window::new(
-            event_loop,
-            self.this.options.window_title,
-            self.this.options.width,
-            self.this.options.height,
-        )?));*/
-
-
-
-
-        Ok(())
-    }
-
-    /*/// Updates the state of the modifier keys from a key event.
-    fn update_modifiers(&mut self, key: &keyboard_types::Key, state: keyboard_types::KeyState) {
-        if let keyboard_types::Key::Named(nk) = key {
-            match (nk, state) {
-                (keyboard_types::NamedKey::Shift, keyboard_types::KeyState::Down) => {
-                    self.modifiers.insert(keyboard_types::Modifiers::SHIFT)
-                }
-                (keyboard_types::NamedKey::Shift, keyboard_types::KeyState::Up) => {
-                    self.modifiers.remove(keyboard_types::Modifiers::SHIFT)
-                }
-                (keyboard_types::NamedKey::Control, keyboard_types::KeyState::Down) => {
-                    self.modifiers.insert(keyboard_types::Modifiers::CONTROL)
-                }
-                (keyboard_types::NamedKey::Control, keyboard_types::KeyState::Up) => {
-                    self.modifiers.remove(keyboard_types::Modifiers::CONTROL)
-                }
-                (keyboard_types::NamedKey::Alt, keyboard_types::KeyState::Down) => {
-                    self.modifiers.insert(keyboard_types::Modifiers::ALT)
-                }
-                (keyboard_types::NamedKey::Alt, keyboard_types::KeyState::Up) => {
-                    self.modifiers.remove(keyboard_types::Modifiers::ALT)
-                }
-                (keyboard_types::NamedKey::Meta, keyboard_types::KeyState::Down) => {
-                    self.modifiers.insert(keyboard_types::Modifiers::META)
-                }
-                (keyboard_types::NamedKey::Meta, keyboard_types::KeyState::Up) => {
-                    self.modifiers.remove(keyboard_types::Modifiers::META)
-                }
-                _ => {}
-            }
-        }
-    }*/
 
     /// Maintains the list of active timers, firing events for all expired timers.
     ///
@@ -195,11 +145,11 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, window_event: WindowEvent) {
-
         let window_handle = self.this.find_window_by_id(window_id).expect("received event for unknown window");
 
         // translate winit window event to input event
         let mut event = None;
+
         match window_event {
             WindowEvent::Resized(size) => {
                 // if resizing to zero, ignore; it's invalid to resize a swap chain to zero size
@@ -207,16 +157,20 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
                     return;
                 }
                 // resize swapchain
-                self.this.windows.borrow_mut().get_mut(window_handle.key).unwrap().resize(size.width, size.height);
+                let mut windows = self.this.windows.borrow_mut();
+                let mut window = windows.get_mut(window_handle.key).unwrap();
+                window.resize(size.width, size.height);
                 self.inner.resized(window_handle, size.width, size.height);
             }
             WindowEvent::CloseRequested => {
                 self.inner.close_requested(window_handle);
             }
             WindowEvent::CursorMoved { position, device_id } => {
-                self.cursor_x = position.x as u32;
-                self.cursor_y = position.y as u32;
-                event = Some(InputEvent::CursorMoved { x: self.cursor_x, y: self.cursor_y });
+                let mut windows = self.this.windows.borrow_mut();
+                let mut window = windows.get_mut(window_handle.key).unwrap();
+                window.input_state.cursor_position.x = position.x as i32;
+                window.input_state.cursor_position.y = position.y as i32;
+                event = Some(InputEvent::CursorMoved { x: position.x as i32, y: position.y as i32 });
             }
             WindowEvent::MouseInput { state, button, device_id, .. } => {
                 let button = match button {
@@ -228,8 +182,10 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
                     winit::event::MouseButton::Forward => PointerButton::X2,
                 };
 
-                let x = self.cursor_x;
-                let y = self.cursor_y;
+                let mut windows = self.this.windows.borrow_mut();
+                let mut window = windows.get_mut(window_handle.key).unwrap();
+                let x = window.input_state.cursor_position.x;
+                let y = window.input_state.cursor_position.y;
 
                 match state {
                     winit::event::ElementState::Pressed => {
@@ -271,7 +227,10 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
                 event = Some(InputEvent::MouseWheel(delta));
             }
             WindowEvent::RedrawRequested => {
-                self.inner.vsync();
+                ACTIVE_EVENT_LOOP.set(event_loop, || {
+                    self.inner.vsync();
+                });
+                return;
             }
             _ => {}
         }
@@ -291,8 +250,10 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
         }
     }
 
-    fn exiting(&mut self, event_loop: &ActiveEventLoop) {
-        self.inner.exiting();
+    fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
+        ACTIVE_EVENT_LOOP.set(_event_loop, || {
+            self.inner.exiting();
+        });
     }
 }
 
@@ -315,15 +276,13 @@ fn main_loop_waker() -> Waker {
 }
 
 impl Win32Platform {
-    pub(crate) fn run_event_loop(&'static self, mut handler: Box<dyn LoopHandler + '_>) {
+    pub(crate) fn run_event_loop(&'static self, mut handler: &mut dyn LoopHandler) {
         let event_loop = winit::event_loop::EventLoop::<WakeReason>::with_user_event().build().unwrap();
         EVENT_LOOP_PROXY.set(event_loop.create_proxy()).expect("main loop already initialized");
         event_loop
             .run_app(&mut WinitAppHandler {
                 this: self,
                 inner: handler,
-                cursor_x: 0,
-                cursor_y: 0,
                 modifiers: Default::default(),
             })
             .unwrap();

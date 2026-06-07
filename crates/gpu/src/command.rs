@@ -37,13 +37,13 @@ pub struct CommandBuffer {
 bitflags! {
     /// Describes the memory types to invalidate during a barrier operation.
     pub struct InvalidateFlags: u32 {
-        /// Invalidate any cache related to shader storage memory.
+        /// Invalidate any cache related to shader storage memory, in preparation for storage reads or writes.
         const STORAGE = 1 << 0;
-        /// Invalidate any cache related to texture memory.
+        /// Invalidate any cache related to texture memory, in preparation for texture reads.
         const TEXTURE = 1 << 1;
-        /// Invalidate any cache related to indirect command data.
+        /// Invalidate any cache related to indirect command data, in preparation for indirect draws or dispatches.
         const INDIRECT = 1 << 2;
-        /// Invalidate any cache related to uniform buffer memory.
+        /// Invalidate any cache related to uniform buffer memory, in preparation for uniform buffer reads.
         const UNIFORM = 1 << 3;
     }
 }
@@ -389,7 +389,8 @@ impl CommandBuffer {
         let src_stage_mask = vk::PipelineStageFlags2::ALL_COMMANDS;
         let src_access_mask = vk::AccessFlags2::MEMORY_WRITE;
         let dst_stage_mask = vk::PipelineStageFlags2::ALL_COMMANDS;
-        let dst_access_mask = flags.to_access_flags();
+        // TODO: add COLOR_ATTACHMENT & DEPTH_ATTACHMENT to InvalidateFlags
+        let dst_access_mask = flags.to_access_flags() | vk::AccessFlags2::COLOR_ATTACHMENT_READ | vk::AccessFlags2::DEPTH_STENCIL_ATTACHMENT_READ;
 
         let global_memory_barrier = vk::MemoryBarrier2 {
             src_access_mask,

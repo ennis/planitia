@@ -40,7 +40,7 @@ impl Ord for OrdF32 {
 
 #[derive(Default)]
 struct FaceData {
-    heap_index: usize,
+    //heap_index: usize,
 }
 
 // cached point errors
@@ -128,7 +128,7 @@ fn scan_triangle(face: InnerFaceHandle, heightmap: &HeightmapImage, error_thresh
         }
     }
 
-    if let Some((x, y, h)) = max_error_point {
+    if let Some((x, y, _h)) = max_error_point {
         if max_error < error_threshold {
             return;
         }

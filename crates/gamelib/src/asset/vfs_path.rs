@@ -216,7 +216,6 @@ impl Display for VfsPathBuf {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::VfsPath;

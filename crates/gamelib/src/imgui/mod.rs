@@ -1,7 +1,6 @@
-mod curve;
 pub(crate) mod egui_backend;
-mod icon_button;
 pub(crate) mod input_state;
+mod shaders;
 
 use crate::asset::{AssetCache, VfsPath, load_asset};
 use crate::imgui;

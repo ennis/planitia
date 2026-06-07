@@ -1,32 +1,28 @@
 mod atlas;
 mod fill;
 mod flatten;
+mod gradient;
 mod path;
-mod pipelines;
 mod renderer;
 mod scene;
 mod shape;
+mod stroke;
 mod tessellation;
 mod text;
-mod stroke;
-mod gradient;
 
+pub use fill::*;
+pub use gradient::*;
 pub use path::*;
 pub use scene::{DrawGlyphRunOptions, PaintScene};
 pub use shape::*;
-pub use gradient::*;
-pub use fill::*;
 pub use text::{GlyphRun, TextFormat, TextLayout};
 
 use crate::paint::atlas::Atlas;
-use crate::paint::pipelines::Pipelines;
 use crate::paint::text::GlyphCache;
 use crate::render::RenderTarget;
 use color::Srgba8;
-use gpu::{vk, ImageUsage, Sampler, Vertex as GpuVertex};
-use math::Camera;
-use math::{u16vec2, uvec2, vec2, U16Vec2, UVec2, Vec2};
-
+use gpu::{ImageUsage, Sampler, Vertex as GpuVertex, vk};
+use math::{Camera, U16Vec2, UVec2, Vec2, u16vec2, uvec2, vec2};
 
 /// Vertex used in the painting shaders.
 #[repr(C)]
@@ -61,7 +57,6 @@ pub struct PaintRenderParams<'a> {
 
 /// Holds resources for painting.
 pub struct Painter {
-    pipelines: Pipelines,
     texture_atlas: Atlas,
     white_pixel_uv: U16Vec2,
     white_pixel_uv_f: Vec2,
@@ -85,7 +80,6 @@ impl Painter {
             vec2(white_pixel_uv.x as f32 / (u16::MAX as f32), white_pixel_uv.y as f32 / (u16::MAX as f32));
 
         Painter {
-            pipelines: Pipelines::create(target_color_format, target_depth_format),
             color_format: target_color_format,
             depth_format: target_depth_format,
             glyph_cache: Default::default(),
@@ -101,8 +95,8 @@ impl Painter {
     }
 
     /// Returns a scene builder.
-    pub fn build_scene(&mut self) -> PaintScene<'_> {
-        PaintScene::new(self)
+    pub fn build_scene(&mut self, clear_color: impl Into<Srgba8>) -> PaintScene<'_> {
+        PaintScene::new(self, clear_color.into())
     }
 }
 

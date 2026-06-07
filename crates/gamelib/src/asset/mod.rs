@@ -35,7 +35,7 @@ mod vfs_path;
 use std::any::{Any, TypeId};
 pub use vfs_path::*;
 
-use crate::platform::{wake_event_loop};
+use crate::platform::wake_event_loop;
 use log::{debug, error, info, trace};
 use notify_debouncer_mini::notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use notify_debouncer_mini::{DebounceEventHandler, DebounceEventResult, Debouncer, new_debouncer};

@@ -19,6 +19,7 @@ use winit::event_loop::ActiveEventLoop;
 use winit::platform::windows::WindowAttributesExtWindows;
 use winit::raw_window_handle::HasWindowHandle;
 use winit::window::WindowAttributes;
+use crate::WindowInputState;
 
 struct DCompState {
     composition_target: IDCompositionTarget,
@@ -40,8 +41,6 @@ pub(super) enum SwapChainImpl {
     Vulkan(gpu::SwapChain),
 }
 
-/// 
-
 
 /// Win32 window with associated swap chain.
 pub(super) struct Window {
@@ -55,6 +54,8 @@ pub(super) struct Window {
     swap_chain_image_index: Cell<usize>,
     /// `true` before the first present, `false` afterwards.
     first_present: bool,
+    /// Input state for this window.
+    pub(super) input_state: WindowInputState,
 }
 
 impl Window {
@@ -124,6 +125,7 @@ impl Window {
                 first_present: true,
                 swap_chain_impl: swap_chain_mode,
                 swap_chain_image_index: Default::default(),
+                input_state: Default::default(),
             })
         }
     }
@@ -134,15 +136,14 @@ impl Window {
             SwapChainImpl::Vulkan(swap_chain) => {
                 let device = gpu::Device::global();
                 unsafe {
-                    let (index, image) = match device
-                        .acquire_next_swapchain_image(swap_chain, Duration::from_millis(1000))
-                    {
-                        Ok(result) => result,
-                        Err(err) => {
-                            error!("failed to acquire next swap chain image: {err}");
-                            return None;
-                        }
-                    };
+                    let (index, image) =
+                        match device.acquire_next_swapchain_image(swap_chain, Duration::from_millis(1000)) {
+                            Ok(result) => result,
+                            Err(err) => {
+                                error!("failed to acquire next swap chain image: {err}");
+                                return None;
+                            }
+                        };
                     self.swap_chain_image_index.set(index);
                     Some(image)
                 }

@@ -3,8 +3,7 @@ use crate::paint::texel_to_normalized_texcoord;
 use crate::paint::text::{Font, FontId, GlyphId};
 use ab_glyph::{Font as FontTrait, ScaleFont};
 use color::srgba8;
-use math::IRect;
-use math::{ivec2, uvec2, vec2, IVec2, Vec2};
+use math::{IRect, IVec2, Vec2, ivec2, uvec2, vec2};
 use std::collections::HashMap;
 
 const SUBPIXEL_X_GRID_SIZE: u32 = 8;
