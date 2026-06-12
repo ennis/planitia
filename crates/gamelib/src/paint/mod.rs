@@ -7,18 +7,17 @@ mod renderer;
 mod scene;
 mod shape;
 mod stroke;
-mod tessellation;
 mod text;
 
 pub use fill::*;
 pub use gradient::*;
 pub use path::*;
-pub use scene::{DrawGlyphRunOptions, PaintScene};
+pub use scene::{DrawGlyphRunOptions, PaintScene, render_scene};
 pub use shape::*;
 pub use text::{GlyphRun, TextFormat, TextLayout};
 
 use crate::paint::atlas::Atlas;
-use crate::paint::text::GlyphCache;
+use crate::paint::text::{Font, GlyphCache, GlyphEntry, GlyphId};
 use crate::render::RenderTarget;
 use color::Srgba8;
 use gpu::{ImageUsage, Sampler, Vertex as GpuVertex, vk};
@@ -49,30 +48,22 @@ pub fn texel_to_normalized_texcoord(pos: Vec2, texture_size: UVec2) -> U16Vec2 {
     u16vec2(((pos.x / texture_size.x as f32) * 65535.0) as u16, ((pos.y / texture_size.y as f32) * 65535.0) as u16)
 }
 
-pub struct PaintRenderParams<'a> {
-    pub camera: Camera,
-    pub color_target: &'a gpu::Image,
-    pub depth_target: Option<&'a gpu::Image>,
-}
-
-/// Holds resources for painting.
+/// Graphics context for 2D painting.
 pub struct Painter {
     texture_atlas: Atlas,
     white_pixel_uv: U16Vec2,
     white_pixel_uv_f: Vec2,
     glyph_cache: GlyphCache,
+    /// Default texture sampler.
     sampler: gpu::Sampler,
-    color_format: vk::Format,
-    depth_format: Option<vk::Format>,
-    // V2 renderer
-    coverage_target: RenderTarget,
+    /// FIXME this has nothing to do with the painter "frontend", it's something specific to the renderer.
+    ///       Either we move it to a "RendererPainter" type, or we remove the split between "frontend" and "renderer" entirely.
+    render_target: RenderTarget,
 }
 
 impl Painter {
-    /// Creates a new painter.
-    ///
-    /// `target_color_format` and `target_depth_format` specify the formats of the render targets that will be used during rendering.
-    pub fn new(target_color_format: gpu::Format, target_depth_format: Option<gpu::Format>) -> Painter {
+    /// Creates a new painting context.
+    pub fn new() -> Painter {
         let (atlas, white_pixel_uv) = init_atlas();
         let sampler =
             Sampler::new(gpu::SamplerCreateInfo { mag_filter: vk::Filter::LINEAR, min_filter: vk::Filter::LINEAR, .. });
@@ -80,23 +71,40 @@ impl Painter {
             vec2(white_pixel_uv.x as f32 / (u16::MAX as f32), white_pixel_uv.y as f32 / (u16::MAX as f32));
 
         Painter {
-            color_format: target_color_format,
-            depth_format: target_depth_format,
             glyph_cache: Default::default(),
             texture_atlas: atlas,
             white_pixel_uv,
             white_pixel_uv_f,
             sampler,
-            coverage_target: RenderTarget::new(
-                vk::Format::R32G32B32A32_SFLOAT,
+            render_target: RenderTarget::new(
+                vk::Format::R8G8B8A8_UNORM,
                 ImageUsage::COLOR_ATTACHMENT | ImageUsage::TRANSFER_DST | ImageUsage::STORAGE,
             ),
         }
     }
 
-    /// Returns a scene builder.
-    pub fn build_scene(&mut self, clear_color: impl Into<Srgba8>) -> PaintScene<'_> {
-        PaintScene::new(self, clear_color.into())
+    /// Rasterizes a glyph and adds it to the texture atlas if it's not already cached.
+    pub(crate) fn rasterize_glyph(
+        &mut self,
+        font: &Font,
+        id: GlyphId,
+        size: u32,
+        position: Vec2,
+    ) -> (GlyphEntry, Vec2)
+    {
+        let (entry, quantized_pos) = self.glyph_cache.rasterize_glyph(
+            &mut self.texture_atlas,
+            &font,
+            id,
+            size,
+            position,
+        );
+        (entry, quantized_pos)
+    }
+
+    /// Flushes pending changes to the glyph texture atlas.
+    pub(crate) fn update_texture_atlas(&mut self, cmd: &mut gpu::CommandBuffer) {
+        let _ = self.texture_atlas.prepare_texture(cmd);
     }
 }
 

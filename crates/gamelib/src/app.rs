@@ -22,6 +22,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, OnceLock};
 use std::{mem, ptr};
 use threadbound::ThreadBound;
+use crate::paint::Painter;
 
 /// Tries to load the RenderDoc DLL.
 fn load_renderdoc_dll() {
@@ -225,6 +226,8 @@ pub(crate) struct MainThreadContext {
     ///
     /// Manages graphics devices, windows, and the event loop.
     pub(crate) platform: Platform,
+    /// Vector graphics context
+    pub(crate) painter: RefCell<Painter>,
     /// Lua VM instance.
     #[cfg(feature = "lua")]
     pub(crate) lua: Lua,
@@ -258,6 +261,7 @@ impl MainThreadContext {
             platform,
             imgui,
             executor,
+            painter: RefCell::new(Painter::new()),
             rdoc: rdoc.map(RefCell::new),
             rdoc_capture_requested: Cell::new(false),
             rdoc_launch_replay_ui: Cell::new(false),
@@ -432,6 +436,12 @@ where
         f(ctx)
     })
 }
+
+/// Returns the current application context, if the application is running and the current thread is the main thread.
+pub(crate) fn get_context() -> &'static MainThreadContext {
+    with_app_ctx(|ctx| ctx)
+}
+
 
 /// Quits the application.
 ///

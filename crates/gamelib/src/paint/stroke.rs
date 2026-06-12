@@ -21,7 +21,7 @@ pub(crate) fn expand_stroke(
     // flatten path to polyline
     let mut points = Vec::new();
     let mut contours = Vec::new();
-    flatten_path(path, &Mat3::IDENTITY, 0.5, &mut points, &mut contours);
+    flatten_path(path, &transform, 0.5, &mut points, &mut contours);
 
     // expand each contour
     for contour in contours {

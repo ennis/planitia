@@ -189,8 +189,6 @@ void rasterize_tiles(uint3 workgroup_id: SV_GroupID, uint3 group_thread_id : SV_
         //     crosses the left edge of the tile
         //
         // parallel over all segments of the cover
-        //
-        // FIXME: this misses segments if there are more than TILE_SIZE^2
         for (uint i_seg = 0; i_seg < tile_cover.seg_count; i_seg += TILE_SIZE*TILE_SIZE) {
             if (i_seg + local_index < tile_cover.seg_count) {
                 float4 seg;

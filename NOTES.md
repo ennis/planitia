@@ -811,8 +811,33 @@ not supported: the functions must be called on the main thread (the thread on wh
 
 
 
-# New concepts
+# Drawing paint strokes, June 2026
 
-## Projects
+## Blending should be order-independent OR the strokes should be already sorted
 
-## Views
+Sorting in general is costly. Can't do that every frame.
+If strokes are sorted, then it follows that they are *not* drawn in depth order.
+
+## How to render paint strokes
+
+Or, can we do better than just feeding the rasterizer with tessellated strokes?
+Assume that the strokes are already sorted (at least within a batch, aka a "coat").
+
+Two implementations:
+* HW rasterizer based: tessellate strokes (possibly with mesh shaders), feed them to the rasterizer
+  * Advantages
+    * AA possible
+    * no need for a separate coarse rasterization step
+  * Disadvantages
+    * Tessellation of fine details / noise can be impractical
+    * In practice, tessellation always combined with finer repr (texture, DFs, procedurals)
+* Tiling: compute-based coarse rasterize strokes to tiles, then evaluate tiles
+  * Advantages:
+    * tessellation not necessary, can use distance fields (or other things) in tiles
+      * combinations of distance fields / mini-CSG programs?
+    * culling possible during coarse raster if stroke is opaque (not sure if this gives an edge over the rasterizer)
+    * more/different opportunities for AA?
+
+
+## Kinds of strokes
+- Simple texture splats

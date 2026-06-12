@@ -1,7 +1,7 @@
 use color::Srgba8;
 use gamelib::input::{InputEvent, MouseScrollDelta, PointerButton};
 use gamelib::paint::{
-    ColorStop, GradientExtendMode, LinearGradientFill, PaintRenderParams, PaintScene, Painter, PathBuilder, TextFormat,
+    ColorStop, GradientExtendMode, LinearGradientFill, PaintScene, Painter, PathBuilder, TextFormat,
     TextLayout,
 };
 use gamelib::tracy_client;
@@ -152,8 +152,8 @@ impl SvgExperiment {
         }
     }
 
-    pub fn render(&mut self, painter: &mut Painter, cmd: &mut gpu::CommandBuffer, target: &gpu::Image) {
-        let mut scene = painter.build_scene(Srgba8::TRANSPARENT);
+    pub fn render(&mut self, cmd: &mut gpu::CommandBuffer, target: &gpu::Image) {
+        let mut scene = PaintScene::new(Srgba8::TRANSPARENT);
 
         {
             let _span = tracy_client::span!("svg_build_scene");
@@ -171,10 +171,7 @@ impl SvgExperiment {
 
         {
             let _span = tracy_client::span!("svg_render_scene");
-            scene.finish(
-                cmd,
-                &PaintRenderParams { camera: Default::default(), color_target: target, depth_target: None },
-            );
+            scene.render(cmd, target);
         }
     }
 }

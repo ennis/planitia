@@ -1,8 +1,8 @@
-use crate::paint::renderer::{PreparedSceneData, TILE_SIZE};
+use crate::paint::renderer::{GpuSceneData, TILE_SIZE};
 use color::Srgba8;
 use math::{Rect, vec2};
 
-impl PreparedSceneData {
+impl GpuSceneData {
     /// Writes the prepared scene to a SVG file for debugging purposes.
     pub(super) fn write_svg<P: AsRef<std::path::Path>>(&self, path: P) -> std::io::Result<()> {
         use std::fs::File;

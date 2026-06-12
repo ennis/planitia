@@ -5,7 +5,7 @@ use gamelib::asset::{AssetCache, FileSystemEvent, Handle};
 use gamelib::camera_control::{CameraControl, CameraControlInput};
 use gamelib::egui::{Color32, Scene};
 use gamelib::input::{InputEvent, PointerButton};
-use gamelib::paint::{DrawGlyphRunOptions, PaintRenderParams, PaintScene, Painter, TextFormat, TextLayout};
+use gamelib::paint::{DrawGlyphRunOptions, PaintScene, Painter, TextFormat, TextLayout};
 use gamelib::platform::RenderTargetImage;
 use gamelib::render::pipeline_cache::get_graphics_pipeline;
 use gamelib::{App, AppHandler, UserEvent, WindowCreateInfo, WindowHandle, egui};
@@ -86,11 +86,9 @@ impl Config {
 struct Game {
     width: u32,
     height: u32,
-    //demo: WidgetGallery,
     color: Color32,
     bg_top_color: Color32,
     bg_bottom_color: Color32,
-    painter: Painter,
     camera_control: CameraControl,
     depth_stencil_buffer: gpu::Image,
     grid_shader: Handle<gpu::GraphicsPipeline>,
@@ -121,7 +119,6 @@ impl Default for Game {
             color: Default::default(),
             bg_top_color: Color32::from_rgb(100, 149, 237),
             bg_bottom_color: Color32::from_rgb(25, 25, 112),
-            painter: Painter::new(gpu::Format::R8G8B8A8_UNORM, None),
             depth_stencil_buffer: create_depth_buffer(WIDTH, HEIGHT),
             camera_control: CameraControl::default(),
             grid_shader: get_graphics_pipeline("/shaders/grid.sharc"),
@@ -182,19 +179,19 @@ impl Game {
     }
 
     fn render_overlay(&mut self, cmd: &mut gpu::CommandBuffer, target: &gpu::Image) {
-        let mut scene = self.painter.build_scene(Srgba8::TRANSPARENT);
-
-        let mut text = TextLayout::new(
-            &TextFormat { size: 20.0, ..Default::default() },
-            concat!(
-                "[Home] Home camera\n",
-                "[G] Toggle grid\n",
-                "[H] Toggle background\n",
-                "[P] Toggle painting demo\n",
-                "[I] Toggle imgui\n"
-            ),
-        );
-        text.layout(1000.0);
+        //let mut scene = PaintScene::new(Srgba8::TRANSPARENT);
+        //
+        //let mut text = TextLayout::new(
+        //    &TextFormat { size: 20.0, ..Default::default() },
+        //    concat!(
+        //        "[Home] Home camera\n",
+        //        "[G] Toggle grid\n",
+        //        "[H] Toggle background\n",
+        //        "[P] Toggle painting demo\n",
+        //        "[I] Toggle imgui\n"
+        //    ),
+        //);
+        //text.layout(1000.0);
 
         //for glyph_run in text.glyph_runs() {
         //    scene.draw_glyph_run(vec2(0.0, 0.0), &glyph_run, &DrawGlyphRunOptions::default());
@@ -203,13 +200,8 @@ impl Game {
         //scene.finish(cmd, &PaintRenderParams { camera: Default::default(), color_target: target, depth_target: None });
 
         if self.cfg.show_painting_demo {
-            self.svg_experiment.render(&mut self.painter, cmd, target);
-            experiments::painting_test(
-                &mut self.painter,
-                cmd,
-                target,
-                Srgba8::from(self.color.to_srgba_unmultiplied()),
-            );
+            self.svg_experiment.render(cmd, target);
+            experiments::painting_test(cmd, target, Srgba8::from(self.color.to_srgba_unmultiplied()));
         }
     }
 }

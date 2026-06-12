@@ -2,7 +2,7 @@
 use crate::paint::fill::Fill;
 use crate::paint::flatten::flatten_path;
 use crate::paint::renderer::{
-    Command, DrawCommand, FillData, LinearGradientFill, PreparedSceneData, Scene, SolidFill, TILE_SIZE, TextureFill,
+    Command, DrawCommand, FillData, LinearGradientFill, GpuSceneData, Scene, SolidFill, TILE_SIZE, TextureFill,
     TileCover, TileDrawData, pack_tile_cover_id,
 };
 use crate::paint::{PathSlice, PathVerb};
@@ -226,13 +226,13 @@ impl<'a> SceneBuilder<'a> {
         self.commands.push(Command::RasterizeTiles { start: start_tile, count: self.tiles.len() as u32 - start_tile });
     }
 
-    fn finish(mut self) -> PreparedSceneData {
+    fn finish(mut self) -> GpuSceneData {
         self.flush_tiles();
-        PreparedSceneData { clip_segs: self.clip_segs, covers: self.covers, tiles: self.tiles, commands: self.commands }
+        GpuSceneData { clip_segs: self.clip_segs, covers: self.covers, tiles: self.tiles, commands: self.commands }
     }
 }
 
-/// Prepares the given scene for rendering.
+/// Builds the scene data for rendering.
 ///
 /// This does multiple things:
 /// - flattens the paths in the scene to line segments
@@ -240,10 +240,10 @@ impl<'a> SceneBuilder<'a> {
 ///   that intersect the tile
 /// - computes tile-level winding numbers
 /// - builds `TileDrawData` for each spatial tile, which are drawn on the GPU by the rasterization compute shader
-pub(super) fn prepare_scene(scene: &Scene, viewport: UVec2) -> PreparedSceneData {
+pub(super) fn build_gpu_scene(scene: &Scene, viewport_width: u32, viewport_height: u32) -> GpuSceneData {
     let _span = tracy_client::span!("prepare_scene");
 
-    let viewport_tile_size = ivec2(viewport.x.div_ceil(TILE as u32) as i32, viewport.y.div_ceil(TILE as u32) as i32);
+    let viewport_tile_size = ivec2(viewport_width.div_ceil(TILE as u32) as i32, viewport_height.div_ceil(TILE as u32) as i32);
     let mut builder = SceneBuilder::new(scene, viewport_tile_size);
 
     for cmd in scene.draw_commands.iter() {

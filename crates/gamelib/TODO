@@ -21,7 +21,7 @@
  ✔ Load mesh @done (26-01-10 13:36)
  ✔ Import shader-bridge @done (25-10-06 22:26)
  ✔ move to a separate repo @done (25-10-06 22:26)
- ☐ Shadertool should emit one file per slang module
+ ✔ Shadertool should emit one file per slang module @done (26-06-07 22:50)
  ✔ move common.slang to gamelib @done (26-05-17 22:50)
  ☐ get rid of winit
  ☐ get rid of arboard
@@ -33,12 +33,12 @@
  ☐ Move assets, painting, platform etc. to another crate for potential reuse
  ☐ async asset reloading
  ☐ move egui shaders to shader-archive
- ☐ gamelib::platform should be made multi-window
+ ✔ gamelib::platform should be made multi-window @done (26-06-07 22:50)
  ☐ better error reporting in shadertool (notably, more validation of the manifest)
  ✔ shadertool: make the `[pass]` attribute optional on compute shaders @done (26-05-03 22:06)
  ✔ shadertool: the `[pass]` attribute shouldn't need a module import (it should be builtin) @done (26-05-03 22:06)
  ☐ Deprecate shader-bridge? Move functionality to shadertool
- ☐ crate color should not depend on gpu @high @easy
+ ✔ crate color should not depend on gpu @high @easy @done (26-06-07 22:50)
     should be the opposite, optional dependency of gpu on color to implement vertex data types
  ✔ buffer pool for uploading stuff to the GPU on each frame (use case: immediate / line rendering) @done (26-01-08 16:12)
  ☐ find a better API than indexing with `Offset<>` to read archives @low
