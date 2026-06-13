@@ -1,5 +1,5 @@
 use crate::{SceneInfo, SceneInfoUniforms};
-use gamelib::asset::AssetLoadError;
+use gamelib::asset::{AssetError, AssetNotLoadedError};
 use gamelib::egui::DragValue;
 use gamelib::input::InputEvent;
 use gamelib::render::RenderTarget;
@@ -7,6 +7,7 @@ use gamelib::{egui, static_assets, tweak};
 use gpu::{Buffer, BufferCreateInfo, Image, ImageUsage, InvalidateFlags, PrimitiveTopology};
 use math::{IVec2, Vec3};
 use std::path::Path;
+use gamelib::error::ExcResult;
 
 static_assets! {
     static BASE_RENDER: gpu::GraphicsPipeline = "/shaders/game_shaders.sharc#automaton_base_render";
@@ -225,7 +226,7 @@ impl AutomatonExperiment {
         color_target: &Image,
         depth_target: &Image,
         scene_info: &SceneInfo,
-    ) -> Result<(), AssetLoadError> {
+    ) -> ExcResult<(), AssetNotLoadedError> {
         let width = color_target.width();
         let height = color_target.height();
 

@@ -80,10 +80,10 @@ pub(crate) fn load_shader_archive(path: impl AsRef<VfsPath>) -> Handle<ShaderArc
 
             // we should hot-reload when a shader source file changes, so add a dependency on them
             for source in a.shader_sources() {
-                deps.add_local_file(&a[source.path]);
+                deps.watch_local_file(&a[source.path]);
             }
             // also hot-reload if manifest used to build the archive has changed
-            deps.add_local_file(&a[a.manifest_file().path]);
+            deps.watch_local_file(&a[a.manifest_file().path]);
 
             if should_rebuild_archive(&a) {
                 // Either the manifest or shader sources have changed, rebuild the archive.

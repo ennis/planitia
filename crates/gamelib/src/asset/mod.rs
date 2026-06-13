@@ -8,7 +8,7 @@
 //      may involve decompressing, parsing, etc.
 
 /*
-
+NOTE
 A single asset file can be associated to produce multiple assets in memory. For example,
 a PNG file can be associated to both the CPU-side image data structure and the GPU-side texture.
 One asset can have multiple representations.
@@ -25,16 +25,14 @@ The graphics pipeline is made from data from the pipeline archive, so there's a 
 between the graphics pipeline asset and the pipeline archive asset.
 
 The graphics pipeline object is a "derived" asset, that depends on the archive. Ideally it should
-also be stored in the cache and hot-reloaded.
-
- */
-
+also be stored in the cache and hot-reloaded.*/
 mod local_provider;
 mod vfs_path;
 
 use std::any::{Any, TypeId};
 pub use vfs_path::*;
 
+use crate::error::{Exc, ExcResult, ResultExt};
 use crate::platform::wake_event_loop;
 use log::{debug, error, info, trace};
 use notify_debouncer_mini::notify::{RecommendedWatcher, RecursiveMode, Watcher};
@@ -43,6 +41,7 @@ use slotmap::SlotMap;
 use std::cell::UnsafeCell;
 use std::cmp::PartialEq;
 use std::collections::{HashMap, HashSet};
+use std::error::Error;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -53,68 +52,19 @@ use std::time::{Duration, SystemTime};
 use std::{io, mem};
 use utils::aligned_vec::AVec;
 
-pub type LoadResult<T> = Result<T, anyhow::Error>;
+pub type LoadResult<T> = Result<T, Box<dyn Error + Send + Sync + 'static>>;
 
-#[derive(thiserror::Error, Debug)]
-pub enum AssetLoadError {
-    #[error("no provider found for path")]
-    NoProviderFound,
-    #[error("I/O error while loading asset: {0}")]
-    IoError(#[from] io::Error),
-    /// Error from loader.
-    #[error("asset not loaded")]
-    NotLoaded,
-}
+#[derive(thiserror::Error, Debug, Clone)]
+#[error("asset error")]
+pub struct AssetError;
 
-////////////////////////////////////////////////////////////////////
+#[derive(thiserror::Error, Debug, Clone)]
+#[error("failed to watch asset file for changes")]
+pub struct WatchLocalFileError;
 
-type LocalFileWatcher = Debouncer<RecommendedWatcher>;
-
-/// Events emitted to the event loop by `FileWatcher`.
-pub struct FileSystemEvent {
-    pub paths: Vec<PathBuf>,
-}
-
-/// Generic file watcher.
-///
-/// This will emit `file_changed` events to the main event loop when a file changes.
-pub struct FileWatcher {
-    watcher: LocalFileWatcher,
-}
-
-impl FileWatcher {
-    pub fn new(callback: fn()) -> Result<Self, io::Error> {
-        #[derive(Clone)]
-        struct Handler(fn());
-
-        impl DebounceEventHandler for Handler {
-            fn handle_event(&mut self, event_result: DebounceEventResult) {
-                match event_result {
-                    Ok(ref events) => {
-                        let paths = events.iter().map(|event| event.path.to_path_buf()).collect::<Vec<_>>();
-                        if !paths.is_empty() {
-                            debug!("FileWatcher: files changed: {paths:?}");
-                            let callback = self.0;
-                            wake_event_loop(move || callback());
-                        }
-                    }
-                    Err(err) => {
-                        error!("FileWatcher error: {err}");
-                    }
-                }
-            }
-        }
-
-        const DEBOUNCE_TIMEOUT_MS: u64 = 500;
-
-        let watcher = new_debouncer(Duration::from_millis(DEBOUNCE_TIMEOUT_MS), Handler(callback)).unwrap();
-        Ok(Self { watcher })
-    }
-
-    pub fn watch_file<P: AsRef<Path>>(&mut self, path: P) {
-        self.watcher.watcher().watch(path.as_ref(), RecursiveMode::NonRecursive).unwrap();
-    }
-}
+#[derive(thiserror::Error, Debug, Clone)]
+#[error("asset not loaded")]
+pub struct AssetNotLoadedError;
 
 ////////////////////////////////////////////////////////////////////
 
@@ -218,20 +168,6 @@ impl Providers {
         Err(io::Error::new(io::ErrorKind::NotFound, format!("no provider found for path: {}", path.as_str())))
     }
 
-    /*/// Loads an asset file from the given VFS path.
-    ///
-    /// This will select the appropriate provider based on the source prefix of the path.
-    pub(crate) fn load(&self, path: &VfsPath) -> Result<AVec<u8>, io::Error> {
-        let provider = self.find_provider(path)?;
-        provider.load(path)
-    }
-
-    /// Loads an asset file as a static byte slice from the given VFS path.
-    pub(crate) fn load_static(&self, path: &VfsPath) -> Result<&'static [u8], io::Error> {
-        let provider = self.find_provider(path)?;
-        provider.load_static(path)
-    }*/
-
     /// Returns the global instance of this registry.
     pub(crate) fn get() -> &'static RwLock<Providers> {
         static PROVIDERS: OnceLock<RwLock<Providers>> = OnceLock::new();
@@ -243,6 +179,7 @@ impl Providers {
 pub trait Asset: 'static + Any + Send + Sync {}
 impl<T: 'static + Send + Sync> Asset for T {}
 
+/// Asset read guard.
 pub struct AssetReadGuard<'a, T: Asset> {
     guard: RwLockReadGuard<'a, LoadResult<T>>,
 }
@@ -257,16 +194,6 @@ impl<'a, T: Asset> Deref for AssetReadGuard<'a, T> {
         }
     }
 }
-
-/*
-impl<'a, T: Asset> AssetReadGuard<'a, T> {
-    pub fn try_get(&self) -> Result<&T, AssetLoadError> {
-        match self.guard.as_ref() {
-            Ok(asset) => Ok(asset),
-            Err(_err) => Err(AssetLoadError::NotLoaded),
-        }
-    }
-}*/
 
 /// Assets that have default loader functions.
 pub trait DefaultLoader: Asset + Sized {
@@ -314,11 +241,11 @@ impl<T: Asset> Handle<T> {
         Self(entry)
     }
 
-    pub fn read(&self) -> Result<AssetReadGuard<'_, T>, AssetLoadError> {
+    pub fn read(&self) -> ExcResult<AssetReadGuard<'_, T>, AssetNotLoadedError> {
         let guard = self.0.asset.read().unwrap();
         match guard.as_ref() {
             Ok(_asset) => Ok(AssetReadGuard { guard }),
-            Err(_err) => Err(AssetLoadError::NotLoaded),
+            Err(_err) => Err(Exc::new(AssetNotLoadedError)),
         }
     }
 }
@@ -372,7 +299,7 @@ type LoadFn<T> = fn(&VfsPath, &FileMetadata, &dyn Provider, &mut Dependencies) -
 
 struct Loader {
     type_id: TypeId,
-    func: *const (),
+    load: *const (),
     reload: fn(&Entry),
 }
 
@@ -388,19 +315,29 @@ impl Loader {
     fn new<T: Asset>(load_fn: LoadFn<T>) -> Self {
         Self {
             type_id: TypeId::of::<T>(),
-            //kind: LoaderKind::FromPath,
-            func: load_fn as *const (),
+            load: load_fn as *const (),
             reload: reload_thunk::<T>,
         }
     }
 
     fn load<T: Asset>(&self, path: &VfsPath, providers: &Providers, deps: &mut Dependencies) -> LoadResult<T> {
-        let f: LoadFn<T> = unsafe { std::mem::transmute(self.func) };
+
+        // Check that the type id matches the expected type T.
+        assert_eq!(self.type_id, TypeId::of::<T>(), "Loader type_id does not match expected type T");
+
+        // SAFETY: we check the type id above.
+        let f: LoadFn<T> = unsafe { std::mem::transmute(self.load) };
+
         let (provider, metadata) = providers.find_provider(path)?;
-        // track local file dependencies for hot reloading
+
+        // Watch asset file if hot-reload enabled and the file is on this file system.
+        #[cfg(feature = "hot_reload")]
         if let Some(ref local_path) = metadata.local_path {
-            deps.add_local_file(local_path);
+            if let Err(err) = deps.watch_local_file(local_path) {
+                err.log_error();
+            }
         }
+
         let result = f(path, &metadata, provider, deps);
 
         match result {
@@ -442,33 +379,6 @@ impl<T: Asset> Entry<AssetStorage<T>> {
         *asset = result;
     }
 }
-
-/*
-// separate struct so that we can unsize Arc<Entry<WithLoader<T>>> to Arc<Entry<dyn Any + Send + Sync>>
-// (the function pointers block unsized coercion)
-struct WithLoader<T> {
-    loader: Loader<T>,
-    asset: T,
-}
-
-trait Reload {
-    fn reload(&mut self, path: &VfsPath) -> Dependencies;
-}
-
-impl<T: Asset> Reload for WithLoader<T> {
-    fn reload(&mut self, path: &VfsPath) -> Dependencies {
-        // Issue: the asset may be in use (locked for reading).
-        //
-        // We have several options:
-        // - on reload, remove the entry from the cache
-
-        let mut deps = Dependencies::new();
-        let providers = Providers::get().read().unwrap();
-        let new_asset = load_asset(&self.loader, path, &providers, &mut deps);
-        self.asset = new_asset;
-        deps
-    }
-}*/
 
 impl Entry {
     fn downcast_ref<T: Asset>(&self) -> Option<&Entry<AssetStorage<T>>> {
@@ -555,19 +465,16 @@ impl Dependencies {
 
     /// Adds a dependency on a file on the local file system.
     ///
-    /// If hot reloading is enabled, changes to the file will trigger asset reloads.
-    pub fn add_local_file<P: AsRef<Path>>(&mut self, path: P) {
-        #[cfg(feature = "hot_reload")]
-        {
-            let path = path.as_ref();
-            trace!("watching for changes: `{}`", path.display());
-            match self.local_files.watcher().watch(path, RecursiveMode::NonRecursive) {
-                Ok(()) => (),
-                Err(err) => {
-                    error!("failed to add watcher to path `{}`: {}", path.display(), err);
-                }
-            }
-        }
+    /// Changes to the file will mark the asset as requiring a reload,
+    /// which will be done in the next call to [`AssetCache::do_reload`].
+    #[cfg(feature = "hot_reload")]
+    pub fn watch_local_file<P: AsRef<Path>>(&mut self, path: P) -> ExcResult<(), WatchLocalFileError> {
+
+        let path = path.as_ref();
+        trace!("watching for changes: `{}`", path.display());
+        self.local_files.watcher().watch(path, RecursiveMode::NonRecursive).raise(WatchLocalFileError)?;
+        Ok(())
+
     }
 }
 
@@ -664,82 +571,86 @@ impl AssetCache {
         unsafe { self.insert_inner(path, Loader::new(loader)) }
     }
 
+    /// Reloads assets which have changed on the file system.
+    ///
+    /// Should be called at regular intervals (typically, once per frame).
+    /// Reloads all assets that have been marked as dirty due to changes to the asset files on disk,
+    /// as well as dependent assets.
+    #[cfg(feature = "hot_reload")]
     pub fn do_reload(&self) {
-        #[cfg(feature = "hot_reload")]
+        let dirty_paths = mem::take(&mut *self.dirty_paths.lock().unwrap());
+
+        if dirty_paths.is_empty() {
+            return;
+        }
+
+        debug!("--- AssetCache: reloading assets ---");
+
+        // Mark all affected entries as dirty and collect the keys of dirty entries.
+        let mut keys_to_reload = HashSet::new();
         {
-            let dirty_paths = mem::take(&mut *self.dirty_paths.lock().unwrap());
-
-            if dirty_paths.is_empty() {
-                return;
+            let inner = self.inner.read().unwrap();
+            for path in dirty_paths.iter() {
+                for (key, entry) in inner.by_path.iter() {
+                    if key.path.path_without_fragment() == &**path {
+                        entry.dirty.store(true, Relaxed);
+                        keys_to_reload.insert(key.clone());
+                    }
+                }
             }
+        }
 
-            debug!("--- AssetCache: reloading assets ---");
-
-            // mark all affected entries as dirty and collect the keys of dirty entries
-            let mut keys_to_reload = HashSet::new();
-            {
+        loop {
+            for k in mem::take(&mut keys_to_reload) {
                 let inner = self.inner.read().unwrap();
-                for path in dirty_paths.iter() {
-                    for (key, entry) in inner.by_path.iter() {
-                        if key.path.path_without_fragment() == &**path {
-                            entry.dirty.store(true, Relaxed);
-                            keys_to_reload.insert(key.clone());
-                        }
+                // Skip assets that no longer exist (removed from cache, or last handle dropped).
+                let Some(entry) = inner.get_entry(&k) else { continue };
+
+                // Check if the dependencies are up-to-date.
+                let mut any_dependency_dirty = false;
+                for dep_key in entry.dependencies.dependencies.iter() {
+                    let Some(dep_entry) = inner.get_entry(dep_key) else {
+                        continue;
+                    };
+                    if dep_entry.dirty.load(Relaxed) {
+                        any_dependency_dirty = true;
+                        break;
                     }
                 }
+
+                // If the asset is up-to-date there's nothing to do.
+                if !entry.dirty.load(Relaxed) {
+                    // If the asset is up-to-date but its dependencies are dirty, this is a bug.
+                    debug_assert!(
+                        !any_dependency_dirty,
+                        "asset `{}` is marked clean but has dirty dependencies; this should not happen",
+                        k.path.as_str()
+                    );
+                    continue;
+                }
+
+                if any_dependency_dirty {
+                    // If the asset has dirty dependencies, they should be reloaded first,
+                    // in which case the asset is not ready to be reloaded, so put it back in the queue.
+                    keys_to_reload.insert(k);
+                    continue;
+                }
+
+                // Queue dependents of this asset for reload.
+                for dep in inner.dependency_graph.get(&k).into_iter().flatten() {
+                    keys_to_reload.insert(dep.clone());
+                }
+
+                // Unlock before reloading since it may create new entries in the cache.
+                drop(inner);
+
+                // Reload the asset.
+                entry.reload_dyn();
             }
 
-            loop {
-                for k in mem::take(&mut keys_to_reload) {
-                    let inner = self.inner.read().unwrap();
-                    // skip entries that no longer exist (removed from cache, or last handle dropped)
-                    let Some(entry) = inner.get_entry(&k) else { continue };
-
-                    // skip if the entry is not ready to be reloaded: i.e. if any of its dependencies are dirty
-                    let mut any_dependency_dirty = false;
-                    for dep_key in entry.dependencies.dependencies.iter() {
-                        let Some(dep_entry) = inner.get_entry(dep_key) else {
-                            continue;
-                        };
-                        if dep_entry.dirty.load(Relaxed) {
-                            any_dependency_dirty = true;
-                            break;
-                        }
-                    }
-
-                    // also skip if the entry itself is not dirty (a loader function may have
-                    // reloaded it manually already)
-                    if !entry.dirty.load(Relaxed) {
-                        // the entry itself is clean, but its dependencies are dirty; this probably
-                        // should not happen.
-                        if any_dependency_dirty {
-                            error!(
-                                "asset `{}` is marked clean but has dirty dependencies; this should not happen",
-                                k.path.as_str()
-                            );
-                        }
-                        continue;
-                    }
-
-                    if any_dependency_dirty {
-                        // put back in the queue
-                        keys_to_reload.insert(k);
-                        continue;
-                    }
-
-                    // add dependents to the set of keys to reload
-                    for dep in inner.dependency_graph.get(&k).into_iter().flatten() {
-                        keys_to_reload.insert(dep.clone());
-                    }
-
-                    // unlock before reloading since reloading may create new entries in the cache
-                    drop(inner);
-                    entry.reload_dyn();
-                }
-
-                if keys_to_reload.is_empty() {
-                    break;
-                }
+            // Loop until there are no more dirty assets to reload.
+            if keys_to_reload.is_empty() {
+                break;
             }
         }
 
@@ -767,17 +678,17 @@ impl AssetCache {
 }
 
 /// Opens an asset file.
-pub fn open_asset(path: impl AsRef<VfsPath>) -> Result<Box<dyn ReadSeek>, AssetLoadError> {
+pub fn open_asset(path: impl AsRef<VfsPath>) -> ExcResult<Box<dyn ReadSeek>, AssetError> {
     let path = path.as_ref();
     let providers = Providers::get().read().unwrap();
-    let (provider, _metadata) = providers.find_provider(path)?;
-    provider.open(path).map_err(AssetLoadError::IoError)
+    let (provider, _metadata) = providers.find_provider(path).raise(AssetError)?;
+    provider.open(path).raise(AssetError)
 }
 
 /// Loads an asset file into a byte vector.
-pub fn load_asset(path: impl AsRef<VfsPath>) -> Result<AVec<u8>, AssetLoadError> {
+pub fn load_asset(path: impl AsRef<VfsPath>) -> ExcResult<AVec<u8>, AssetError> {
     let path = path.as_ref();
     let providers = Providers::get().read().unwrap();
-    let (provider, _metadata) = providers.find_provider(path)?;
-    provider.load(path).map_err(AssetLoadError::IoError)
+    let (provider, _metadata) = providers.find_provider(path).raise(AssetError)?;
+    provider.load(path).raise(AssetError)
 }

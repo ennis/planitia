@@ -19,7 +19,7 @@ pub mod util;
 mod window;
 pub mod worksheet;
 mod world;
-mod error;
+pub mod error;
 
 pub use app::{App, AppHandler, quit, render_imgui};
 pub use event::UserEvent;

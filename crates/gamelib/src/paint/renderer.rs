@@ -2,7 +2,7 @@
 mod build;
 mod dump_svg;
 
-use crate::asset::AssetLoadError;
+use crate::asset::AssetError;
 use crate::paint::fill::Fill;
 use crate::paint::renderer::build::build_gpu_scene;
 use crate::paint::scene::GroupOptions;
@@ -15,6 +15,7 @@ use gpu::{ClearColorValue, CommandBuffer, InvalidateFlags, Ptr, root_params};
 use math::{IVec2, Mat3, Rect, U8Vec4, UVec2, Vec2, Vec4, ivec2, uvec2};
 use std::ops::Range;
 use std::sync::Once;
+use crate::error::{Exc, ExcResult, ResultExt};
 
 /// Size of a raster tile in pixels. The rasterization compute shader processes the scene in tiles of this size.
 ///
@@ -29,6 +30,10 @@ static_assets! {
     static RASTERIZE_TILES: gpu::ComputePipeline = "/gamelib/shaders/paint.sharc#rasterize_tiles";
     static COPY_TO_SCREEN: gpu::GraphicsPipeline = "/gamelib/shaders/paint.sharc#copy_to_screen";
 }
+
+#[derive(thiserror::Error, Debug, Copy, Clone)]
+#[error("Scene render error")]
+pub struct RenderSceneError;
 
 #[derive(Clone)]
 pub(super) enum DrawCommand {
@@ -280,17 +285,18 @@ struct GpuSceneData {
     commands: Vec<Command>,
 }
 
+
 pub(super) fn render_scene(
     cmd: &mut CommandBuffer,
     painter: &mut Painter,
     render_target: &gpu::Image,
     scene: &Scene,
-) -> Result<(), AssetLoadError> {
+) -> ExcResult<(), RenderSceneError> {
     let width = render_target.width();
     let height = render_target.height();
     // Ensure shaders are loaded.
-    let rasterize_tiles = RASTERIZE_TILES.read()?;
-    let copy_to_screen = COPY_TO_SCREEN.read()?;
+    let rasterize_tiles = RASTERIZE_TILES.read().raise(RenderSceneError)?;
+    let copy_to_screen = COPY_TO_SCREEN.read().raise(RenderSceneError)?;
 
     // Resize and clear internal render target.
     painter.render_target.setup(width, height);

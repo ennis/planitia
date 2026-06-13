@@ -1,8 +1,8 @@
-use crate::asset::{AssetLoadError, Handle, VfsPath};
+use crate::asset::{AssetError, Handle, VfsPath};
+use crate::error::{ExcResult, OptionExt, ResultExt};
 use crate::render::load_shader_archive;
-use std::io;
-
 pub use crate::worksheet::*;
+use std::io;
 
 pub struct Workbench {
     /// Shader archive containing the workbench manifest.
@@ -10,26 +10,32 @@ pub struct Workbench {
     module_name: String,
 }
 
+#[derive(thiserror::Error, Debug)]
+#[error("failed to load workbench: {0}")]
+pub struct WorkbenchLoadError(String);
+
 impl Workbench {
     /// Loads a workbench manifest from a shader archive.
-    pub fn load(shader_module_path: impl AsRef<VfsPath>) -> Result<Workbench, AssetLoadError> {
+    pub fn load(shader_module_path: impl AsRef<VfsPath>) -> ExcResult<Workbench, WorkbenchLoadError> {
         let shader_module_path = shader_module_path.as_ref();
-        let module_name = shader_module_path
-            .fragment()
-            .expect("shader module path must contain a fragment specifying the module name");
+        let module_name = shader_module_path.fragment().ok_or_raise(|| {
+            WorkbenchLoadError(format!(
+                "shader module path `{}` must contain a fragment specifying the module name",
+                shader_module_path.as_str()
+            ))
+        })?;
         let archive = load_shader_archive(shader_module_path.path_without_fragment());
 
         {
-            let archive_ref = &*archive.read()?;
-            let (_, module) =
-                archive_ref.find_module_with_index(module_name).ok_or(AssetLoadError::IoError(io::Error::new(
-                    io::ErrorKind::NotFound,
-                    format!(
-                        "module `{}` not found in shader archive `{}`",
-                        module_name,
-                        shader_module_path.path_without_fragment().as_str()
-                    ),
-                )))?;
+            let archive_ref =
+                &*archive.read().or_raise(|| WorkbenchLoadError("failed to read shader archive".into()))?;
+            let (_, module) = archive_ref.find_module_with_index(module_name).ok_or_raise(|| {
+                WorkbenchLoadError(format!(
+                    "module `{}` not found in shader archive `{}`",
+                    module_name,
+                    shader_module_path.path_without_fragment().as_str()
+                ))
+            })?;
             Self::load_module(archive_ref, module);
         }
 

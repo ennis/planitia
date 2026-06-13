@@ -1,7 +1,7 @@
 #![expect(unused, reason = "noisy")]
 #![feature(default_field_values)]
 
-use gamelib::asset::{AssetCache, FileSystemEvent, Handle};
+use gamelib::asset::{AssetCache, Handle};
 use gamelib::camera_control::{CameraControl, CameraControlInput};
 use gamelib::egui::{Color32, Scene};
 use gamelib::input::{InputEvent, PointerButton};

@@ -3,7 +3,7 @@ use crate::experiments::winged_edge_mesh::{WEMeshDataGPU, WingedEdgeMesh};
 use crate::{SceneInfo, SceneInfoUniforms};
 use bytesize::ByteSize;
 use color::{Srgba8, srgba8};
-use gamelib::asset::{AssetLoadError, AssetReadGuard, Handle, VfsPath, VfsPathBuf};
+use gamelib::asset::{AssetError, AssetNotLoadedError, AssetReadGuard, Handle, VfsPath, VfsPathBuf};
 use gamelib::input::InputEvent;
 use gamelib::render::RenderTarget;
 use gamelib::render::pipeline_cache::{get_compute_pipeline, get_graphics_pipeline};
@@ -22,6 +22,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 use std::path::Path;
 use std::{fmt, ptr};
+use gamelib::error::ExcResult;
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -358,7 +359,7 @@ impl OutlineExperiment {
         color_target: &gpu::Image,
         depth_target: &gpu::Image,
         scene_info: &SceneInfo,
-    ) -> Result<(), AssetLoadError> {
+    ) -> ExcResult<(), AssetNotLoadedError> {
         if self.mesh.points.is_empty() {
             // nothing to render
             return Ok(());
