@@ -222,7 +222,7 @@ fn load_graphics_pipeline(
     path: &VfsPath,
     _metadata: &FileMetadata,
     _provider: &dyn Provider,
-    _dependencies: &mut Dependencies,
+    dependencies: &mut Dependencies,
 ) -> LoadResult<gpu::GraphicsPipeline> {
     let archive_file = path.path_without_fragment();
     let pipeline_name = path.fragment();
@@ -234,6 +234,8 @@ fn load_graphics_pipeline(
     }
 
     let archive_handle = load_shader_archive(archive_file);
+    dependencies.add(&archive_handle);
+
     let archive = archive_handle.read().raise(PipelineCreateError::Other)?;
     let (module, pass) = find_pass_by_name(path, pipeline_name, &*archive, PassType::Graphics)?;
     let pipeline = pass.kind.as_graphics().unwrap();
@@ -245,7 +247,7 @@ fn load_compute_pipeline(
     path: &VfsPath,
     _metadata: &FileMetadata,
     _provider: &dyn Provider,
-    _dependencies: &mut Dependencies,
+    dependencies: &mut Dependencies,
 ) -> LoadResult<gpu::ComputePipeline> {
     let archive_file = path.path_without_fragment();
     let pipeline_name = path.fragment();
@@ -257,6 +259,8 @@ fn load_compute_pipeline(
     }
 
     let archive_handle = load_shader_archive(archive_file);
+    dependencies.add(&archive_handle);
+
     let archive = archive_handle.read()?;
     let (module, pass) = find_pass_by_name(path, pipeline_name, &*archive, PassType::Compute)?;
     let pipeline = pass.kind.as_compute().unwrap();

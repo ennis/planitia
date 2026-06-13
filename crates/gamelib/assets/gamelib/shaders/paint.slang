@@ -219,6 +219,7 @@ void rasterize_tiles(uint3 workgroup_id: SV_GroupID, uint3 group_thread_id : SV_
         if (local_index < TILE_SIZE) {
              int winding = s_winding_v[local_index];
              winding = WavePrefixSum(winding);
+
              s_winding_v[local_index] = winding;
         }
 

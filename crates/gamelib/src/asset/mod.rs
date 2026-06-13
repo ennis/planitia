@@ -297,92 +297,97 @@ impl<T: Asset> Deref for Handle<T> {
 
 type LoadFn<T> = fn(&VfsPath, &FileMetadata, &dyn Provider, &mut Dependencies) -> LoadResult<T>;
 
-struct Loader {
-    type_id: TypeId,
-    load: *const (),
-    reload: fn(&Entry),
-}
-
-// SAFETY: Loader only contains function pointers, so it's safe to send/sync it
-unsafe impl Send for Loader {}
-unsafe impl Sync for Loader {}
-
-fn reload_thunk<T: Asset>(entry: &Entry) {
-    entry.downcast_ref::<T>().unwrap().reload()
-}
-
-impl Loader {
-    fn new<T: Asset>(load_fn: LoadFn<T>) -> Self {
-        Self {
-            type_id: TypeId::of::<T>(),
-            load: load_fn as *const (),
-            reload: reload_thunk::<T>,
-        }
-    }
-
-    fn load<T: Asset>(&self, path: &VfsPath, providers: &Providers, deps: &mut Dependencies) -> LoadResult<T> {
-
-        // Check that the type id matches the expected type T.
-        assert_eq!(self.type_id, TypeId::of::<T>(), "Loader type_id does not match expected type T");
-
-        // SAFETY: we check the type id above.
-        let f: LoadFn<T> = unsafe { std::mem::transmute(self.load) };
-
-        let (provider, metadata) = providers.find_provider(path)?;
-
-        // Watch asset file if hot-reload enabled and the file is on this file system.
-        #[cfg(feature = "hot_reload")]
-        if let Some(ref local_path) = metadata.local_path {
-            if let Err(err) = deps.watch_local_file(local_path) {
-                err.log_error();
-            }
-        }
-
-        let result = f(path, &metadata, provider, deps);
-
-        match result {
-            Err(err) => {
-                error!("failed to load asset `{}`: {}", path.as_str(), err);
-                Err(err)
-            }
-            Ok(asset) => Ok(asset),
-        }
-    }
-}
-
 type AssetStorage<T> = RwLock<LoadResult<T>>;
 
+/// An entry in the asset cache.
+///
+/// `T` should always be `AssetStorage<U>` (a.k.a. `RwLock<LoadResult<U>>`) for some concrete `U: Asset`.
+/// The `asset` field is typed as `T` rather than `RwLock<LoadResult<U>>` directly to support type erasure to `Entry<dyn Any>`:
+/// since `Result<T>` requires `T: Sized`, storing `asset: RwLock<LoadResult<T>>` directly would prevent
+/// unsized coercion from `Entry<T>` to `Entry<dyn Any>`.
 struct Entry<T: ?Sized = dyn Any + Send + Sync> {
     path: VfsPathBuf,
     dirty: AtomicBool,
-    loader: Loader,
+    type_id: TypeId,
+    load: *const (),
+    reload: fn(&Entry),
     #[cfg(feature = "hot_reload")]
-    dependencies: Dependencies,
+    dependencies: Mutex<Dependencies>,
     asset: T,
 }
 
+// SAFETY: Entry only contains function pointers, so it's safe to send/sync it
+unsafe impl<T: ?Sized + Send + Sync> Send for Entry<T> {}
+unsafe impl<T: ?Sized + Send + Sync> Sync for Entry<T> {}
+
 impl<T: Asset> Entry<AssetStorage<T>> {
+
+    /// Loads or reloads the asset.
     fn reload(&self) {
-        let mut deps = Dependencies::new(&self.path);
-        let providers = Providers::get().read().unwrap();
         // Mark as clean before reloading, because some loaders may immediately modify/rebuild
         // the underlying asset file, triggering another reload. This is the case, for example,
         // with shader archives in hot-reload mode, which are automatically rebuilt if their
         // source files have a later modification time.
         self.dirty.store(false, Relaxed);
-        let result = self.loader.load(&self.path, &providers, &mut deps);
 
-        // swap the asset
-        // FIXME: we only update the asset;
-        //        we assume that the dependencies don't change but that may not be true
+        let mut deps = Dependencies::new(&self.path);
+
+        // SAFETY: it is impossible to build a `Entry<AssetStorage<T>>` with `self.load` not of type `LoadFn<T>`.
+        //         This is enforced when creating the Entry.
+        let load: LoadFn<T> = unsafe { std::mem::transmute(self.load) };
+
+        // Resolve the VFS path and call the load function.
+        let providers = Providers::get().read().unwrap();
+        let result = match providers.find_provider(&self.path) {
+            Ok((provider, metadata)) => {
+                // Watch asset file if hot-reload enabled and the file is on this file system.
+                #[cfg(feature = "hot_reload")]
+                if let Some(ref local_path) = metadata.local_path {
+                    if let Err(err) = deps.watch_local_file(local_path) {
+                        err.log_error();
+                    }
+                }
+
+                // Invoke the load function.
+                load(&self.path, &metadata, provider, &mut deps)
+            }
+            Err(err) => {
+                // No valid provider for this path.
+                Err(Box::new(err) as Box<dyn Error + Send + Sync + 'static>)
+            }
+        };
+
+        // Log load result to stderr.
+        match result {
+            Ok(_) => debug!("loaded asset `{}`", self.path.as_str()),
+            Err(ref err) => {
+                error!("failed to load asset `{}`: {}", self.path.as_str(), err)
+            },
+        }
+
+        let load_successful = result.is_ok();
+
+        // Update the asset object.
         let mut asset = self.asset.write().unwrap();
         *asset = result;
+
+        // Update the dependencies, but only if the reload was successful.
+        // When unsuccessful, the computed dependencies may be incomplete or invalid, and it might
+        // leave the asset in a state where it will never be reloaded again,
+        // even if the source file is repaired.
+        #[cfg(feature = "hot_reload")]
+        {
+            if load_successful {
+                debug!("asset `{}` depends on {:?}", self.path.as_str(), deps.assets);
+                *self.dependencies.lock().unwrap() = deps;
+            }
+        }
     }
 }
 
 impl Entry {
     fn downcast_ref<T: Asset>(&self) -> Option<&Entry<AssetStorage<T>>> {
-        if self.loader.type_id == TypeId::of::<T>() {
+        if self.type_id == TypeId::of::<T>() {
             // SAFETY: we checked the type id
             Some(unsafe { &*(self as *const _ as *const Entry<AssetStorage<T>>) })
         } else {
@@ -391,7 +396,7 @@ impl Entry {
     }
 
     fn downcast<T: Asset>(self: Arc<Self>) -> Option<Arc<Entry<AssetStorage<T>>>> {
-        if self.loader.type_id == TypeId::of::<T>() {
+        if self.type_id == TypeId::of::<T>() {
             // SAFETY: we checked the type id
             Some(unsafe { Arc::from_raw(Arc::into_raw(self) as *const Entry<AssetStorage<T>>) })
         } else {
@@ -400,7 +405,7 @@ impl Entry {
     }
 
     fn reload_dyn(&self) {
-        (self.loader.reload)(self);
+        (self.reload)(self);
     }
 }
 
@@ -415,9 +420,9 @@ struct CacheKey {
 /// This is a no-op if hot reloading is disabled.
 pub struct Dependencies {
     #[cfg(feature = "hot_reload")]
-    dependencies: HashSet<CacheKey>,
+    assets: HashSet<CacheKey>,
     #[cfg(feature = "hot_reload")]
-    local_files: Debouncer<RecommendedWatcher>,
+    watcher: Debouncer<RecommendedWatcher>,
 }
 
 impl Dependencies {
@@ -425,8 +430,8 @@ impl Dependencies {
         #[cfg(feature = "hot_reload")]
         {
             Self {
-                dependencies: HashSet::new(),
-                local_files: new_debouncer(std::time::Duration::from_millis(500), {
+                assets: HashSet::new(),
+                watcher: new_debouncer(std::time::Duration::from_millis(500), {
                     let path = path.to_path_buf();
                     move |event: DebounceEventResult| {
                         match event {
@@ -455,10 +460,11 @@ impl Dependencies {
         #[cfg(feature = "hot_reload")]
         {
             let key = CacheKey { path: path.to_path_buf(), type_id: TypeId::of::<T>() };
-            self.dependencies.insert(key);
+            self.assets.insert(key);
         }
     }
 
+    /// Adds a dependency on another asset.
     pub fn add<T: Asset>(&mut self, handle: &Handle<T>) {
         self.add_path::<T>(&handle.0.path);
     }
@@ -469,12 +475,10 @@ impl Dependencies {
     /// which will be done in the next call to [`AssetCache::do_reload`].
     #[cfg(feature = "hot_reload")]
     pub fn watch_local_file<P: AsRef<Path>>(&mut self, path: P) -> ExcResult<(), WatchLocalFileError> {
-
         let path = path.as_ref();
-        trace!("watching for changes: `{}`", path.display());
-        self.local_files.watcher().watch(path, RecursiveMode::NonRecursive).raise(WatchLocalFileError)?;
+        debug!("watch_local_file: `{}`", path.display());
+        self.watcher.watcher().watch(path, RecursiveMode::NonRecursive).raise(WatchLocalFileError)?;
         Ok(())
-
     }
 }
 
@@ -505,7 +509,8 @@ impl AssetCache {
         }
     }
 
-    unsafe fn insert_inner<T: Asset>(&self, path: &VfsPath, loader: Loader) -> Handle<T> {
+    unsafe fn insert_inner<T: Asset>(&self, path: &VfsPath, loader: LoadFn<T>) -> Handle<T>
+    {
         let key = CacheKey { path: path.to_path_buf(), type_id: TypeId::of::<T>() };
 
         // Check if an entry already exists and is clean.
@@ -516,35 +521,24 @@ impl AssetCache {
             return Handle::new(existing.clone().downcast().expect("invalid asset type stored in cache"));
         }
 
-        // Cache unlocked here.
+        fn reload_thunk<T: Asset>(entry: &Entry) {
+            entry.downcast_ref::<T>().unwrap().reload()
+        }
 
-        // Read the asset file, and load the asset.
-        #[cfg(feature = "hot_reload")]
-        let dependencies;
-
-        let entry = {
-            let mut deps = Dependencies::new(path);
-            let providers = Providers::get().read().unwrap();
-            let asset = loader.load(path, &providers, &mut deps);
-
-            if let Err(ref err) = asset {
-                error!("failed to load asset `{}`: {}", path.as_str(), err);
-            }
-
+        // Create entry.
+        let entry = Arc::new(Entry {
+            path: path.to_path_buf(),
             #[cfg(feature = "hot_reload")]
-            {
-                dependencies = deps.dependencies.clone();
-            }
+            dependencies: Mutex::new(Dependencies::new(path)),
+            dirty: Default::default(),
+            type_id: TypeId::of::<T>(),
+            load: loader as *const (),
+            reload: reload_thunk::<T>,
+            asset: RwLock::new(Err(Box::new(AssetNotLoadedError) as Box<dyn Error + Send + Sync + 'static>)),
+        });
 
-            Arc::new(Entry {
-                path: path.to_path_buf(),
-                #[cfg(feature = "hot_reload")]
-                dependencies: deps,
-                dirty: Default::default(),
-                loader,
-                asset: RwLock::new(asset),
-            })
-        };
+        // Initial load.
+        entry.reload();
 
         // Insert the entry into the cache.
         // Note that another thread may have inserted the same entry in the meantime, but
@@ -553,7 +547,8 @@ impl AssetCache {
 
         #[cfg(feature = "hot_reload")]
         {
-            // update dependencies for hot reload
+            // Update dependencies for hot reload.
+            let dependencies = entry.dependencies.lock().unwrap().assets.clone();
             for dep in dependencies.iter() {
                 debug!("asset `{}` depends on `{}`", path.as_str(), dep.path.as_str());
                 // TODO we track only one level of dependencies for now
@@ -567,8 +562,8 @@ impl AssetCache {
 
     /// Loads the asset file at the given path and invokes the given loader function to create the asset,
     /// then inserts the asset into the cache and returns a handle to it.
-    pub fn load<T: Asset>(&self, path: &VfsPath, loader: LoadFn<T>) -> Handle<T> {
-        unsafe { self.insert_inner(path, Loader::new(loader)) }
+    pub fn load<T: Asset>(&self, path: &VfsPath, load: LoadFn<T>) -> Handle<T> {
+        unsafe { self.insert_inner(path, load) }
     }
 
     /// Reloads assets which have changed on the file system.
@@ -608,7 +603,7 @@ impl AssetCache {
 
                 // Check if the dependencies are up-to-date.
                 let mut any_dependency_dirty = false;
-                for dep_key in entry.dependencies.dependencies.iter() {
+                for dep_key in entry.dependencies.lock().unwrap().assets.iter() {
                     let Some(dep_entry) = inner.get_entry(dep_key) else {
                         continue;
                     };
@@ -659,7 +654,7 @@ impl AssetCache {
 
     /// Called by providers to notify that a file has changed.
     pub fn asset_changed(&self, path: &VfsPath) {
-        //debug!("asset file changed: {}", path.as_str());
+        debug!("asset file changed: {}", path.as_str());
         #[cfg(feature = "hot_reload")]
         self.dirty_paths.lock().unwrap().insert(path.path_without_fragment().to_path_buf());
     }

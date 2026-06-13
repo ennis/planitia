@@ -595,6 +595,8 @@ impl BuildManifest {
                         ceprintln!("<r,bold>error</>: {err}");
                     }
                     got_errors = true;
+                    // Don't write the archive if there were compile errors.
+                    continue;
                 }
             }
 
