@@ -1,7 +1,7 @@
+// Manifest: shaders.toml
 struct RootParams {
     float2 screenSize;
 };
-
 
 struct Vertex {
     [[vk::location(0)]] float2 pos;

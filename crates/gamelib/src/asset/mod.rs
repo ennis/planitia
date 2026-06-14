@@ -476,6 +476,9 @@ impl Dependencies {
     #[cfg(feature = "hot_reload")]
     pub fn watch_local_file<P: AsRef<Path>>(&mut self, path: P) -> ExcResult<(), WatchLocalFileError> {
         let path = path.as_ref();
+
+        assert!(!path.as_os_str().is_empty());
+
         debug!("watch_local_file: `{}`", path.display());
         self.watcher.watcher().watch(path, RecursiveMode::NonRecursive).raise(WatchLocalFileError)?;
         Ok(())

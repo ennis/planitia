@@ -15,6 +15,8 @@ color-print = "0.3.7"
 clap = { version = "4.5.50", features = ["derive"], optional = true }
 slang = { package = "shader-slang", git = "https://github.com/ennis/slang-rs.git", rev = "a7e6a2726c63482c77870e31caa06a47e6043585" }
 env_logger = "0.11"
+scoped-tls = "1.0.1"
+serde = { version = "1.0.228", features = ["derive"] }
 
 [features]
 binary = ["clap"]

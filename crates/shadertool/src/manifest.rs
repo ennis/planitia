@@ -1,7 +1,7 @@
 use crate::get_file_mtime;
 use crate::manifest::Error::{InvalidType, MissingField};
 use anyhow::{Context, anyhow};
-use log::error;
+use log::{debug, error};
 use sharc::gpu::vk;
 use sharc::gpu::vk::PolygonMode;
 use sharc::{ColorBlendEquation, gpu};
@@ -18,13 +18,19 @@ pub const DEFAULT_SHADER_PROFILE: &str = "glsl_460";
 pub enum Error {
     #[error("missing field: {0}")]
     MissingField(&'static str),
-    #[error("invalid type for field {0}")]
-    InvalidType(&'static str),
+    #[error("invalid type for field {0}, expected {1}")]
+    InvalidType(&'static str, &'static str),
     #[error("invalid field")]
     InvalidField,
     #[error("{0}")]
     Other(&'static str),
+    #[error("`{0}`: invalid enum value `{1}`, expected `{2}`")]
+    InvalidEnumValue(&'static str, String, &'static str),
 }
+
+#[derive(thiserror::Error, Debug)]
+#[error("invalid enum value")]
+pub struct InvalidEnumValue;
 
 fn validate_keys(toml_value: &TomlValue, mandatory: &[&str], optional: &[&str]) -> anyhow::Result<()> {
     let mut has_errors = false;
@@ -50,6 +56,7 @@ fn validate_keys(toml_value: &TomlValue, mandatory: &[&str], optional: &[&str]) 
     }
 }
 
+/*
 fn get_image_usage(usage_str: &str) -> Result<gpu::ImageUsage, Error> {
     match usage_str {
         "color_attachment" => Ok(gpu::ImageUsage::COLOR_ATTACHMENT),
@@ -79,8 +86,9 @@ fn get_image_usages(usages: &TomlValue) -> Result<gpu::ImageUsage, Error> {
     } else {
         Err(InvalidType("usage").into())
     }
-}
+}*/
 
+/*
 #[derive(Clone, Default)]
 pub struct Resource {
     pub format: vk::Format,
@@ -125,7 +133,7 @@ impl Resource {
 
         Ok(resource)
     }
-}
+}*/
 
 #[derive(Clone)]
 pub struct ColorAttachment {
@@ -135,14 +143,13 @@ pub struct ColorAttachment {
 
 impl ColorAttachment {
     pub fn from_toml(toml: &TomlValue) -> anyhow::Result<Self> {
-        let clear_color = if let Some(array) = toml.get("clear_color") {
-            let arr = array.as_array().ok_or(InvalidType("clear_color"))?;
+        let clear_color = if let Some(arr) = toml.get_optional_array("clear_color")? {
             if arr.len() != 4 {
-                return Err(InvalidType("clear_color").into());
+                return Err(InvalidType("clear_color", "array of 4 floats").into());
             }
             let mut color = [0.0f32; 4];
             for (i, v) in arr.iter().enumerate() {
-                color[i] = v.as_float().ok_or(InvalidType("clear_color array element"))? as f32;
+                color[i] = v.as_float().ok_or(InvalidType("clear_color", "array of 4 floats"))? as f32;
             }
             Some(color)
         } else {
@@ -201,35 +208,65 @@ impl Pass {
 
 #[derive(Clone)]
 pub struct BuildManifest {
-    pub input_files: Vec<String>,
+    //pub input_files: Vec<String>,
     pub manifest_path: PathBuf,
     pub canonical_manifest_path: PathBuf,
     pub mtime: u64,
     pub include_paths: Vec<String>,
-    pub output_directory: Option<String>,
     pub default: GraphicsState,
     pub shader_profile: String,
     pub compiler: CompilerOptions,
-    // module_name -> pass_name -> pass overrides
-    pub pass: BTreeMap<String, BTreeMap<String, Pass>>,
-    //pub override_: toml::Table,
-    pub resources: BTreeMap<String, Resource>,
+    // pass_name -> pass overrides
+    pub pass: BTreeMap<String, Pass>,
+}
+
+impl Default for BuildManifest  {
+    fn default() -> Self {
+        Self {
+            manifest_path: Default::default(),
+            canonical_manifest_path: Default::default(),
+            mtime: 0,
+            include_paths: vec![],
+            //output_directory: None,
+            default: GraphicsState::default(),
+            shader_profile: DEFAULT_SHADER_PROFILE.to_string(),
+            compiler: CompilerOptions::default(),
+            pass: BTreeMap::new(),
+        }
+    }
 }
 
 impl BuildManifest {
-    pub(crate) fn load(path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        fn load_inner(path: &Path) -> anyhow::Result<BuildManifest> {
-            let manifest_str = std::fs::read_to_string(&path)?;
-            let manifest_toml: TomlValue = toml::from_str(&manifest_str).context("invalid TOML")?;
-            BuildManifest::from_toml(&manifest_toml, path.to_path_buf()).context("failed to parse manifest")
-        }
-        load_inner(path.as_ref())
+    pub(crate) fn load(&mut self, path: impl AsRef<Path>) -> anyhow::Result<()> {
+        let path = path.as_ref();
+        let manifest_str = std::fs::read_to_string(&path)?;
+        let manifest_toml: TomlValue = toml::from_str(&manifest_str).context("invalid TOML")?;
+        self.load_from_toml(&manifest_toml, path.to_path_buf()).context("failed to parse manifest")?;
+        Ok(())
     }
 
-    pub fn from_toml(toml: &TomlValue, manifest_path: PathBuf) -> anyhow::Result<Self> {
+    pub fn load_from_toml(&mut self, toml: &TomlValue, manifest_path: PathBuf) -> anyhow::Result<()> {
         let (canonical_manifest_path, mtime) = get_file_mtime(&manifest_path)?;
 
-        // input_files = ["file1.slang", "file2.slang", "../*.slang", ...]
+        self.manifest_path = manifest_path.clone();
+        self.canonical_manifest_path = canonical_manifest_path;
+        self.mtime = mtime;
+
+        // Load inherited manifests.
+        // inherit = ["other_manifest.toml", ...] (optional)
+        if let Some(inherits) = toml.get_optional_str_or_array("inherit")? {
+            for inherit in inherits {
+                let inherit_path = manifest_path.parent().unwrap_or(Path::new(".")).join(inherit);
+                //debug!("loading inherited manifest: {}", inherit_path.display());
+                let manifest_str = std::fs::read_to_string(&inherit_path)?;
+                let manifest_toml: TomlValue = toml::from_str(&manifest_str).context("invalid TOML")?;
+                self.load_from_toml(&manifest_toml, inherit_path.clone())
+                    .with_context(|| format!("failed to load inherited manifest `{}`", inherit_path.display()))?;
+            }
+        }
+
+        /*
+        // input_files = ["file1.slang", "file2.slang", "..slang", ...]
         let input_files = {
             let input_files_toml = toml.get("input_files").ok_or(MissingField("input_files"))?;
             if let Some(array) = input_files_toml.as_array() {
@@ -243,71 +280,50 @@ impl BuildManifest {
                 return Err(InvalidType("input_files").into());
             }
         };
+        */
 
+        // Slang include paths.
         // include_paths = ["path1", "path2", ...] (optional)
-        let include_paths = toml
-            .get_optional_array("include_paths")?
-            .unwrap_or(&vec![])
-            .iter()
-            .map(|v| v.as_str().ok_or(InvalidType("include_paths array element")).map(|s| s.to_string()))
-            .collect::<Result<Vec<String>, Error>>()?;
-
-        // output directory
-        let output_directory = toml.get_optional_str("output_directory")?.map(|s| s.to_string());
-
+        self.include_paths.extend(
+            toml.get_optional_array("include_paths")?
+                .unwrap_or(&vec![])
+                .iter()
+                .map(|v| v.as_str().ok_or(InvalidType("include_paths", "array of strings")).map(|s| s.to_string()))
+                .collect::<Result<Vec<String>, Error>>()?,
+        );
+        
         // default graphics state
-        let mut default = GraphicsState::default();
-        default.read(toml.get("default").ok_or(MissingField("default"))?)?;
+        self.default.read(toml.get("default").ok_or(MissingField("default"))?)?;
 
         // shader profile
-        let shader_profile = toml.get_optional_str("shader_profile")?.unwrap_or(DEFAULT_SHADER_PROFILE).to_string();
+        self.shader_profile = toml.get_optional_str("shader_profile")?.unwrap_or(DEFAULT_SHADER_PROFILE).to_string();
 
         // passes
-        let mut overrides = BTreeMap::new();
         if let Some(toml) = toml.get_optional_table("pass")? {
-            for (module_name, toml) in toml.as_table().unwrap().iter() {
-                let mut overrides_for_module = BTreeMap::new();
-                for (name, toml) in toml.as_table().unwrap().iter() {
-                    overrides_for_module.insert(name.clone(), Pass::from_toml(toml)?);
-                }
-                overrides.insert(module_name.clone(), overrides_for_module);
+            for (name, toml) in toml.as_table().unwrap().iter() {
+                self.pass.insert(name.clone(), Pass::from_toml(toml)?);
             }
         }
 
-        let compiler = {
-            let mut compiler = CompilerOptions::default();
-            if let Some(compiler_toml) = toml.get_optional_table("compiler")? {
-                compiler = CompilerOptions::from_toml(compiler_toml)?;
-            }
-            compiler
-        };
+        // compiler options
+        if let Some(compiler_toml) = toml.get_optional_table("compiler")? {
+            self.compiler.load_from_toml(compiler_toml)?;
+        }
 
         // resource table
-        let mut resources = BTreeMap::new();
-        if let Some(resources_toml) = toml.get_optional_table("resources")? {
-            for (name, res_toml) in resources_toml.as_table().unwrap().iter() {
-                resources.insert(name.clone(), Resource::from_toml(res_toml)?);
-            }
-        }
+        //let mut resources = BTreeMap::new();
+        //if let Some(resources_toml) = toml.get_optional_table("resources")? {
+        //    for (name, res_toml) in resources_toml.as_table().unwrap().iter() {
+        //        resources.insert(name.clone(), Resource::from_toml(res_toml)?);
+        //    }
+        //}
 
-        Ok(BuildManifest {
-            input_files,
-            shader_profile,
-            manifest_path,
-            canonical_manifest_path,
-            mtime,
-            include_paths,
-            output_directory,
-            default,
-            pass: overrides,
-            compiler,
-            resources,
-        })
+        Ok(())
     }
 }
 
 /// Shader compilation options.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct CompilerOptions {
     /// Preprocessor definitions
     pub defines: BTreeMap<String, String>,
@@ -319,42 +335,41 @@ pub struct CompilerOptions {
     pub debug: bool,
 }
 
-impl CompilerOptions {
-    fn from_toml(toml: &TomlValue) -> Result<Self, Error> {
-        let mut options = CompilerOptions {
-            defines: BTreeMap::new(),
-            profile: DEFAULT_SHADER_PROFILE.to_string(),
-            optimize: false,
-            debug: false,
-        };
+impl Default for CompilerOptions {
+    fn default() -> Self {
+        Self { defines: BTreeMap::new(), profile: DEFAULT_SHADER_PROFILE.to_string(), optimize: false, debug: false }
+    }
+}
 
+impl CompilerOptions {
+    fn load_from_toml(&mut self, toml: &TomlValue) -> Result<(), Error> {
         if let Some(defines_array) = toml.get_optional_array("defines")? {
             for define_value in defines_array {
-                let define_str = define_value.as_str().ok_or(InvalidType("defines array element"))?;
+                let define_str = define_value.as_str().ok_or(InvalidType("defines", "array of strings"))?;
                 let parts: Vec<&str> = define_str.splitn(2, '=').collect();
                 if parts.len() == 2 {
                     // DEFINE=VALUE
-                    options.defines.insert(parts[0].to_string(), parts[1].to_string());
+                    self.defines.insert(parts[0].to_string(), parts[1].to_string());
                 } else {
                     // DEFINE
-                    options.defines.insert(parts[0].to_string(), String::new());
+                    self.defines.insert(parts[0].to_string(), String::new());
                 }
             }
         }
 
         if let Some(profile_str) = toml.get_optional_str("profile")? {
-            options.profile = profile_str.to_string();
+            self.profile = profile_str.to_string();
         }
 
         if let Some(optimize) = toml.get_optional_bool("optimize")? {
-            options.optimize = optimize;
+            self.optimize = optimize;
         }
 
         if let Some(debug) = toml.get_optional_bool("debug")? {
-            options.debug = debug;
+            self.debug = debug;
         }
 
-        Ok(options)
+        Ok(())
     }
 }
 
@@ -416,6 +431,24 @@ trait TomlExt {
     /// Returns `Ok(None)` if the field is not present.
     /// Returns `Err(Error::InvalidType)` if the field is present but not a string.
     fn get_optional_str(&self, field: &'static str) -> Result<Option<&str>, Error>;
+
+    /// Retrieves an optional string field from a TOML value as an owned string.
+    ///
+    /// Returns `Ok(None)` if the field is not present.
+    /// Returns `Err(Error::InvalidType)` if the field is present but not a string.
+    fn get_optional_string(&self, field: &'static str) -> Result<Option<String>, Error> {
+        match self.get_optional_str(field)? {
+            Some(s) => Ok(Some(s.to_string())),
+            None => Ok(None),
+        }
+    }
+
+    /// Retrieves an optional field that is either a string or an array of strings from a TOML value.
+    ///
+    /// Returns `Ok(None)` if the field is not present.
+    /// Returns `Err(Error::InvalidType)` if the field is present but neither a string nor an array of strings.
+    fn get_optional_str_or_array(&self, field: &'static str) -> Result<Option<Vec<&str>>, Error>;
+
     /// Retrieves an optional boolean field from a TOML value.
     ///
     /// Returns `Ok(None)` if the field is not present.
@@ -438,48 +471,134 @@ trait TomlExt {
     /// Returns `Ok(None)` if the field is not present.
     /// Returns `Err(Error::InvalidType)` if the field is present but neither a table nor an array.
     fn get_optional_table_or_array(&self, field: &'static str) -> Result<Option<&TomlValue>, Error>;
+
+    /// Retrieves a field array value.
+    fn get_array(&self, field: &'static str) -> Result<&Vec<TomlValue>, Error>;
+
+    /// Retrieves an optional enum value.
+    fn get_optional_enum<T: Copy>(
+        &self,
+        field: &'static str,
+        values: &[(&str, T)],
+        expected: &'static str,
+    ) -> Result<Option<T>, Error> {
+        match self.get_optional_str(field)? {
+            Some(s) => values
+                .iter()
+                .find(|(name, _)| *name == s)
+                .map(|(_, value)| *value)
+                .ok_or(Error::InvalidEnumValue(field, s.to_string(), expected))
+                .map(Some),
+            None => Ok(None),
+        }
+    }
 }
 
+static POLYGON_MODES: &[(&str, PolygonMode)] =
+    &[("fill", PolygonMode::FILL), ("line", PolygonMode::LINE), ("point", PolygonMode::POINT)];
+
+static CULL_MODES: &[(&str, vk::CullModeFlags)] = &[
+    ("none", vk::CullModeFlags::NONE),
+    ("front", vk::CullModeFlags::FRONT),
+    ("back", vk::CullModeFlags::BACK),
+    ("front_and_back", vk::CullModeFlags::FRONT_AND_BACK),
+];
+
+static FORMATS: &[(&str, vk::Format)] = &[
+    ("RGBA8", vk::Format::R8G8B8A8_UNORM),
+    ("RGBA8UI", vk::Format::R8G8B8A8_UINT),
+    ("RGBA16UI", vk::Format::R16G16B16A16_UINT),
+    ("RGB10_A2", vk::Format::A2B10G10R10_UNORM_PACK32),
+    ("R32F", vk::Format::R32_SFLOAT),
+    ("RG32F", vk::Format::R32G32_SFLOAT),
+    ("RGBA32F", vk::Format::R32G32B32A32_SFLOAT),
+    ("D32F", vk::Format::D32_SFLOAT),
+    ("D32F_S8UI", vk::Format::D32_SFLOAT_S8_UINT),
+];
+
+static COMPARE_OPS: &[(&str, vk::CompareOp)] =
+    &[("always", vk::CompareOp::ALWAYS), ("less", vk::CompareOp::LESS), ("lequal", vk::CompareOp::LESS_OR_EQUAL)];
+
+static BLEND_FACTORS: &[(&str, vk::BlendFactor)] = &[
+    ("zero", vk::BlendFactor::ZERO),
+    ("one", vk::BlendFactor::ONE),
+    ("src_alpha", vk::BlendFactor::SRC_ALPHA),
+    ("one_minus_src_alpha", vk::BlendFactor::ONE_MINUS_SRC_ALPHA),
+];
+
+static BLEND_OPS: &[(&str, vk::BlendOp)] = &[
+    ("add", vk::BlendOp::ADD),
+    ("subtract", vk::BlendOp::SUBTRACT),
+    ("reverse_subtract", vk::BlendOp::REVERSE_SUBTRACT),
+];
+
 impl TomlExt for toml::Value {
+    fn get_array(&self, field: &'static str) -> Result<&Vec<TomlValue>, Error> {
+        self.as_array().ok_or(InvalidType(field, "array"))
+    }
+
     fn get_optional_str(&self, field: &'static str) -> Result<Option<&str>, Error> {
         match self.get(field) {
             None => Ok(None),
-            Some(value) => value.as_str().ok_or(InvalidType(field)).map(Some),
+            Some(value) => value.as_str().ok_or(InvalidType(field, "string")).map(Some),
+        }
+    }
+
+    fn get_optional_str_or_array(&self, field: &'static str) -> Result<Option<Vec<&str>>, Error> {
+        match self.get(field) {
+            None => Ok(None),
+            Some(value) => {
+                if let Some(s) = value.as_str() {
+                    Ok(Some(vec![s]))
+                } else if let Some(array) = value.as_array() {
+                    let mut result = Vec::new();
+                    for item in array {
+                        if let Some(s) = item.as_str() {
+                            result.push(s);
+                        } else {
+                            return Err(InvalidType(field, "string or array of strings"));
+                        }
+                    }
+                    Ok(Some(result))
+                } else {
+                    Err(InvalidType(field, "string or array of strings"))
+                }
+            }
         }
     }
 
     fn get_optional_bool(&self, field: &'static str) -> Result<Option<bool>, Error> {
         match self.get(field) {
             None => Ok(None),
-            Some(value) => value.as_bool().ok_or(InvalidType(field)).map(Some),
+            Some(value) => value.as_bool().ok_or(InvalidType(field, "boolean")).map(Some),
         }
     }
 
     fn get_optional_integer(&self, field: &'static str) -> Result<Option<i64>, Error> {
         match self.get(field) {
             None => Ok(None),
-            Some(value) => value.as_integer().ok_or(InvalidType(field)).map(Some),
+            Some(value) => value.as_integer().ok_or(InvalidType(field, "integer")).map(Some),
         }
     }
 
     fn get_optional_float(&self, field: &'static str) -> Result<Option<f64>, Error> {
         match self.get(field) {
             None => Ok(None),
-            Some(value) => value.as_float().ok_or(InvalidType(field)).map(Some),
+            Some(value) => value.as_float().ok_or(InvalidType(field, "float")).map(Some),
         }
     }
 
     fn get_optional_table(&self, field: &'static str) -> Result<Option<&TomlValue>, Error> {
         match self.get(field) {
             None => Ok(None),
-            Some(value) => value.as_table().ok_or(InvalidType(field)).map(|_| Some(value)),
+            Some(value) => value.as_table().ok_or(InvalidType(field, "table")).map(|_| Some(value)),
         }
     }
 
     fn get_optional_array(&self, field: &'static str) -> Result<Option<&Vec<TomlValue>>, Error> {
         match self.get(field) {
             None => Ok(None),
-            Some(value) => value.as_array().ok_or(InvalidType(field)).map(|arr| Some(arr)),
+            Some(value) => value.as_array().ok_or(InvalidType(field, "array")).map(|arr| Some(arr)),
         }
     }
 
@@ -490,7 +609,7 @@ impl TomlExt for toml::Value {
                 if value.is_table() || value.is_array() {
                     Ok(Some(value))
                 } else {
-                    Err(InvalidType(field))
+                    Err(InvalidType(field, "table or array"))
                 }
             }
         }
@@ -499,93 +618,68 @@ impl TomlExt for toml::Value {
 
 fn read_rasterizer_state(toml: &TomlValue, out: &mut sharc::RasterizationState) -> Result<(), Error> {
     //let cull_mode = read_str(json, "cull_mode", Some("back"))?;
-    if let Some(polygon_mode) = toml.get_optional_str("polygon_mode")? {
-        out.polygon_mode = match polygon_mode {
-            "fill" => PolygonMode::FILL,
-            "line" => PolygonMode::LINE,
-            "point" => PolygonMode::POINT,
-            _ => {
-                error!("Unknown polygon mode: {}", polygon_mode);
-                PolygonMode::FILL
-            }
-        };
-    }
 
-    if let Some(cull_mode) = toml.get_optional_str("cull_mode")? {
-        out.cull_mode = match cull_mode {
-            "none" => vk::CullModeFlags::NONE,
-            "front" => vk::CullModeFlags::FRONT,
-            "back" => vk::CullModeFlags::BACK,
-            "front_and_back" => vk::CullModeFlags::FRONT_AND_BACK,
-            _ => {
-                error!("Unknown cull mode: {}", cull_mode);
-                vk::CullModeFlags::BACK
-            }
-        };
+    let polygon_mode = toml.get_optional_enum("polygon_mode", POLYGON_MODES, "<polygon mode>")?;
+    let cull_mode = toml.get_optional_enum("cull_mode", CULL_MODES, "<cull mode>")?;
+
+    if let Some(polygon_mode) = polygon_mode {
+        out.polygon_mode = polygon_mode;
+    }
+    if let Some(cull_mode) = cull_mode {
+        out.cull_mode = cull_mode;
     }
 
     Ok(())
 }
-
-fn get_format(fmtstr: &str) -> Result<vk::Format, Error> {
+/*
+fn get_format(fmtstr: &str) -> Option<vk::Format> {
     match fmtstr {
-        "RGBA8" => Ok(vk::Format::R8G8B8A8_UNORM),
-        "RGBA8UI" => Ok(vk::Format::R8G8B8A8_UINT),
-        "RGBA16UI" => Ok(vk::Format::R16G16B16A16_UINT),
-        "RGB10_A2" => Ok(vk::Format::A2B10G10R10_UNORM_PACK32),
-        "R32F" => Ok(vk::Format::R32_SFLOAT),
-        "RG32F" => Ok(vk::Format::R32G32_SFLOAT),
-        "RGBA32F" => Ok(vk::Format::R32G32B32A32_SFLOAT),
-        "D32F" => Ok(vk::Format::D32_SFLOAT),
-        "D32F_S8UI" => Ok(vk::Format::D32_SFLOAT_S8_UINT),
+        "RGBA8" => Some(vk::Format::R8G8B8A8_UNORM),
+        "RGBA8UI" => Some(vk::Format::R8G8B8A8_UINT),
+        "RGBA16UI" => Some(vk::Format::R16G16B16A16_UINT),
+        "RGB10_A2" => Some(vk::Format::A2B10G10R10_UNORM_PACK32),
+        "R32F" => Some(vk::Format::R32_SFLOAT),
+        "RG32F" => Some(vk::Format::R32G32_SFLOAT),
+        "RGBA32F" => Some(vk::Format::R32G32B32A32_SFLOAT),
+        "D32F" => Some(vk::Format::D32_SFLOAT),
+        "D32F_S8UI" => Some(vk::Format::D32_SFLOAT_S8_UINT),
         _ => {
-            error!("Unknown format: {}", fmtstr);
-            Err(Error::InvalidType("format"))
+            None
         }
     }
 }
 
-fn get_blend_factor(factor_str: &str) -> Result<vk::BlendFactor, Error> {
+fn get_blend_factor(factor_str: &str) -> Option<vk::BlendFactor> {
     match factor_str {
-        "zero" => Ok(vk::BlendFactor::ZERO),
-        "one" => Ok(vk::BlendFactor::ONE),
-        "src_alpha" => Ok(vk::BlendFactor::SRC_ALPHA),
-        "one_minus_src_alpha" => Ok(vk::BlendFactor::ONE_MINUS_SRC_ALPHA),
+        "zero" => Some(vk::BlendFactor::ZERO),
+        "one" => Some(vk::BlendFactor::ONE),
+        "src_alpha" => Some(vk::BlendFactor::SRC_ALPHA),
+        "one_minus_src_alpha" => Some(vk::BlendFactor::ONE_MINUS_SRC_ALPHA),
         _ => {
-            error!("Unknown blend factor: {}", factor_str);
-            Err(Error::InvalidType("blend_factor"))
+            None
         }
     }
 }
 
-fn get_blend_op(op_str: &str) -> Result<vk::BlendOp, Error> {
+fn get_blend_op(op_str: &str) -> Option<vk::BlendOp> {
     match op_str {
-        "add" => Ok(vk::BlendOp::ADD),
-        "subtract" => Ok(vk::BlendOp::SUBTRACT),
-        "reverse_subtract" => Ok(vk::BlendOp::REVERSE_SUBTRACT),
+        "add" => Some(vk::BlendOp::ADD),
+        "subtract" => Some(vk::BlendOp::SUBTRACT),
+        "reverse_subtract" => Some(vk::BlendOp::REVERSE_SUBTRACT),
         _ => {
-            error!("Unknown blend op: {}", op_str);
-            Err(Error::InvalidType("blend_op"))
+            None
         }
     }
-}
+}*/
 
 fn read_depth_stencil_state(toml: &TomlValue, out: &mut sharc::DepthStencilState) -> anyhow::Result<()> {
     // any depth-stencil field automatically enables depth testing
-    if let Some(format_str) = toml.get_optional_str("format")? {
-        out.format = get_format(format_str).context("in depth_stencil")?;
+    if let Some(format) = toml.get_optional_enum("format", FORMATS, "<image format>")? {
+        out.format = format;
         out.enable = true;
     }
-    if let Some(depth_compare_op) = toml.get_optional_str("compare_op")? {
-        out.depth_compare_op = match depth_compare_op {
-            "always" => vk::CompareOp::ALWAYS,
-            "less" => vk::CompareOp::LESS,
-            "lequal" => vk::CompareOp::LESS_OR_EQUAL,
-            _ => {
-                error!("Unknown depth compare op: {}", depth_compare_op);
-                vk::CompareOp::ALWAYS
-            }
-        };
+    if let Some(depth_compare_op) = toml.get_optional_enum("compare_op", COMPARE_OPS, "<compare op>")? {
+        out.depth_compare_op = depth_compare_op;
         out.enable = true;
     }
     if let Some(depth_write_enable) = toml.get_optional_bool("write_enable")? {
@@ -626,23 +720,23 @@ fn read_blend(toml: &TomlValue) -> anyhow::Result<Option<ColorBlendEquation>> {
             .context("in blend")?;
 
         let mut blend = ColorBlendEquation::default();
-        if let Some(src_color_blend_factor) = toml.get_optional_str("src_color")? {
-            blend.src_color_blend_factor = get_blend_factor(src_color_blend_factor)?;
+        if let Some(src_color_blend_factor) = toml.get_optional_enum("src_color", BLEND_FACTORS, "<blend factor>")? {
+            blend.src_color_blend_factor = src_color_blend_factor;
         }
-        if let Some(dst_color_blend_factor) = toml.get_optional_str("dst_color")? {
-            blend.dst_color_blend_factor = get_blend_factor(dst_color_blend_factor)?;
+        if let Some(dst_color_blend_factor) = toml.get_optional_enum("dst_color", BLEND_FACTORS, "<blend factor>")? {
+            blend.dst_color_blend_factor = dst_color_blend_factor;
         }
-        if let Some(color_blend_op) = toml.get_optional_str("color_op")? {
-            blend.color_blend_op = get_blend_op(color_blend_op)?;
+        if let Some(color_blend_op) = toml.get_optional_enum("color_op", BLEND_OPS, "<blend op>")? {
+            blend.color_blend_op = color_blend_op;
         }
-        if let Some(src_alpha_blend_factor) = toml.get_optional_str("src_alpha")? {
-            blend.src_alpha_blend_factor = get_blend_factor(src_alpha_blend_factor)?;
+        if let Some(src_alpha_blend_factor) = toml.get_optional_enum("src_alpha", BLEND_FACTORS, "<blend factor>")? {
+            blend.src_alpha_blend_factor = src_alpha_blend_factor;
         }
-        if let Some(dst_alpha_blend_factor) = toml.get_optional_str("dst_alpha")? {
-            blend.dst_alpha_blend_factor = get_blend_factor(dst_alpha_blend_factor)?;
+        if let Some(dst_alpha_blend_factor) = toml.get_optional_enum("dst_alpha", BLEND_FACTORS, "<blend factor>")? {
+            blend.dst_alpha_blend_factor = dst_alpha_blend_factor;
         }
-        if let Some(alpha_blend_op) = toml.get_optional_str("alpha_op")? {
-            blend.alpha_blend_op = get_blend_op(alpha_blend_op)?;
+        if let Some(alpha_blend_op) = toml.get_optional_enum("alpha_op", BLEND_OPS, "<blend op>")? {
+            blend.alpha_blend_op = alpha_blend_op;
         }
         Ok(Some(blend))
     }
@@ -650,8 +744,8 @@ fn read_blend(toml: &TomlValue) -> anyhow::Result<Option<ColorBlendEquation>> {
 
 fn read_color_target(toml: &TomlValue, out: &mut sharc::ColorTarget) -> anyhow::Result<()> {
     validate_keys(toml, &[], &["format", "blend"]).context("in color target")?;
-    if let Some(format_str) = toml.get_optional_str("format")? {
-        out.format = get_format(format_str)?;
+    if let Some(format) = toml.get_optional_enum("format", FORMATS, "<image format>")? {
+        out.format = format;
     }
     if let Some(blend_toml) = toml.get("blend") {
         out.blend = read_blend(blend_toml)?;
@@ -689,6 +783,6 @@ fn read_color_targets(toml: &TomlValue, out: &mut Vec<sharc::ColorTarget>) -> an
         }
         Ok(())
     } else {
-        return Err(InvalidType("color_targets").into());
+        return Err(InvalidType("color_targets", "array of color target descriptions").into());
     }
 }

@@ -262,6 +262,6 @@ pub fn render_scene(cmd: &mut CommandBuffer, render_target: &gpu::Image, scene: 
 
     // Render the scene.
     if let Err(err) = renderer::render_scene(cmd, &mut painter, render_target, &scene.rscene) {
-        //error!("failed to render scene: {err}");
+        error!("failed to render scene: {err}");
     }
 }

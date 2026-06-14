@@ -1,5 +1,5 @@
 use crate::reflection::CollectedReflectionData;
-use crate::{BuildManifest, BuildOptions, GraphicsState, Pass, get_file_mtime};
+use crate::{BuildManifest, BuildOptions, GraphicsState, Pass, get_file_mtime, get_log_options};
 use anyhow::{Context, anyhow, bail};
 use color_print::{ceprintln, cprintln};
 use log::warn;
@@ -118,65 +118,19 @@ struct Stats {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl BuildManifest {
-    /// Resolves a path relative to the manifest directory (no-op for absolute paths).
-    fn resolve_path(&self, path: &str) -> PathBuf {
-        self.manifest_path.parent().unwrap().join(path)
-    }
-
-    /// Expands a list of glob patterns into concrete file paths.
-    ///
-    /// Patterns are resolved relative to the manifest directory. The returned paths are relative
-    /// to the working directory at the time of the call.
-    fn resolve_glob_file_paths(&self, patterns: &[String]) -> anyhow::Result<Vec<PathBuf>> {
-        // relative paths in the manifest are relative to the manifest directory, so set
-        // the current directory to that for glob resolution
-        let prev_current_dir = env::current_dir()?;
-        let prev_current_dir_canonical = prev_current_dir.canonicalize()?;
-        if let Some(manifest_dir) = self.manifest_path.parent() {
-            if !manifest_dir.as_os_str().is_empty() {
-                env::set_current_dir(manifest_dir).with_context(|| {
-                    format!("failed to set current directory `{}` for glob resolution", manifest_dir.display())
-                })?;
-            }
-        }
-
-        let mut paths = Vec::new();
-        for pattern in patterns {
-            let entries = glob::glob(pattern)
-                .map_err(|err| anyhow!("failed to parse glob pattern '{}': {}", pattern, err.to_string()))?;
-            for entry in entries {
-                match entry {
-                    Ok(path) => {
-                        // Return paths relative to the original working directory.
-                        let canonical_path = path.canonicalize()?;
-                        let relative_path =
-                            canonical_path.strip_prefix(&prev_current_dir_canonical).unwrap().to_path_buf();
-                        paths.push(relative_path);
-                    }
-                    Err(err) => {
-                        warn!("failed to resolve glob entry: {}", err.to_string());
-                    }
-                }
-            }
-        }
-
-        // NOTE: be careful not to set canonicalized paths as current directories: on Windows they
-        //       start with the extended-length prefix ("\\?\") and this confuses tools down the line.
-        //       Previously we were setting canonicalized paths here, which caused issues with SPIR-V
-        //       debug information generation (extended-length paths ended up in the SPIR-V debug info
-        //       and some tools, like nvidia nsight, don't handle them properly).
-        env::set_current_dir(prev_current_dir)?;
-        Ok(paths)
-    }
+    // Resolves a path relative to the manifest directory (no-op for absolute paths).
+    //fn resolve_path(&self, path: &str) -> PathBuf {
+    //    self.manifest_path.parent().unwrap().join(path)
+    //}
 
     /// Creates a Slang compilation session configured according to the manifest and build options.
-    fn create_slang_session(&self, include_paths: &[String], options: &BuildOptions) -> slang::Session {
+    fn create_slang_session(&self, include_paths: &[PathBuf], options: &BuildOptions) -> anyhow::Result<slang::Session> {
         let global_session = get_slang_global_session();
 
         // Debug information can be requested either in the manifest or via build options.
         let emit_debug_information = self.compiler.debug | options.emit_debug_information;
 
-        let search_paths_cstr: Vec<CString> = include_paths.iter().map(|p| CString::new(p.as_str()).unwrap()).collect();
+        let search_paths_cstr: Vec<CString> = include_paths.iter().map(|p| CString::new(&*p.to_string_lossy()).unwrap()).collect();
         let search_path_ptrs: Vec<_> = search_paths_cstr.iter().map(|p| p.as_ptr()).collect();
 
         let profile = global_session.find_profile(&self.compiler.profile);
@@ -197,7 +151,10 @@ impl BuildManifest {
         let session_desc =
             slang::SessionDesc::default().targets(&targets).search_paths(&search_path_ptrs).options(&compiler_options);
 
-        global_session.create_session(&session_desc).expect("failed to create Slang session")
+        match global_session.create_session(&session_desc) {
+            Some(session) => Ok(session),
+            None => Err(anyhow!("failed to create Slang session")),
+        }
     }
 
     /// Loads a Slang source file, compiles all its shader entry points, and returns the resulting
@@ -207,15 +164,14 @@ impl BuildManifest {
         archive: &mut ShaderArchiveWriter,
         session: &slang::Session,
         file: &Path,
+        source: &str,
         options: &BuildOptions,
     ) -> anyhow::Result<Module> {
         let (canonical_path, file_mtime) = get_file_mtime(file)?;
 
-        if options.verbosity >= 2 {
+        if get_log_options().verbosity >= 2 {
             cprintln!("load_slang_module: {}", file.display());
         }
-
-        let module = session.load_module(&file.to_string_lossy()).map_err(SlangError::from)?;
 
         // FIXME: Slang modules are normally declared with `module module_name;`; for now we
         //        fall back to the file stem.
@@ -224,6 +180,9 @@ impl BuildManifest {
             .ok_or(anyhow!("invalid shader file name: {}", file.display()))?
             .to_string_lossy()
             .to_string();
+        let module = session
+            .load_module_from_source_string(&module_name, &file.to_string_lossy(), source)
+            .map_err(SlangError::from)?;
 
         let entry_point_count = module.entry_point_count();
         if entry_point_count == 0 {
@@ -257,7 +216,7 @@ impl BuildManifest {
             collector.reflect_shader(program.layout(0).map_err(SlangError::from)?);
             collector.params
         };
-        
+
         // retrieve SPIR-V blob of all entry points
         let spirv = {
             let blob = program.target_code(0).map_err(SlangError::from)?;
@@ -280,14 +239,23 @@ impl BuildManifest {
             let mut pass = None;
 
             // `[pass("...")]` attribute
+            //
+            // NOTE: Using an attribute for pass grouping isn't as practical as I'd like,
+            //       since the attribute must be defined in shader code before use.
+            //       This means that shaders must include a support module, which introduces an
+            //       annoying dependency on some external file, or define the `pass` attribute themselves,
+            //       which is useless boilerplate.
+            //       Ideally, there should be a way to force the inclusion of a module,
+            //       or add a custom prelude, or define an attribute on the command line, but AFAIK
+            //       no such mechanism exists in slang currently.
             for attr in module.entry_point_by_index(i).unwrap().function_reflection().user_attributes() {
                 if attr.name().unwrap() == "pass" {
                     pass = attr.argument_value_string(0).map(String::from);
                 }
             }
 
-            // if there's no pass attribute, set name to entry point name stripped of
-            // standard stage suffixes
+            // If there's no pass attribute, try to strip a stage suffix from the entry point name, and use that as the pass name.
+            // E.g.: `pass_name_vertex` and `pass_name_fragment` will be grouped into the same pass `pass_name`.
             if pass.is_none() {
                 const STAGE_SUFFIXES: &[&str] =
                     &["_vertex", "_fragment", "_compute", "_mesh", "_amplification", "_hull", "_domain", "_geometry"];
@@ -301,7 +269,7 @@ impl BuildManifest {
                 pass = Some(name.to_string());
             }
 
-            if options.verbosity >= 2 {
+            if get_log_options().verbosity >= 2 {
                 cprintln!("entry point: {}/{}", file.display(), ep.name().unwrap());
             }
 
@@ -420,7 +388,9 @@ impl BuildManifest {
 
     /// Writes the image resource descriptors declared in the manifest into the archive.
     fn write_image_resources(&self, archive: &mut ShaderArchiveWriter) -> Offset<[sharc::ImageResourceDesc]> {
-        let images: Vec<_> = self
+        // TODO Figure out what we want to do with resources.
+        //      I'm not sure if we should put this in shadertool.
+        /*let images: Vec<_> = self
             .resources
             .iter()
             .map(|(name, desc)| {
@@ -442,8 +412,8 @@ impl BuildManifest {
                 });
                 sharc::ImageResourceDesc { name: name.as_str().into(), format: desc.format, usage, size }
             })
-            .collect();
-        archive.write_slice(&images)
+            .collect();*/
+        archive.write_slice(&[])
     }
 
     /// Writes a compiled module into the archive.
@@ -467,26 +437,22 @@ impl BuildManifest {
             for (&pipeline_name, entry_points) in pipelines.iter() {
                 let mut state = self.default.clone();
 
-                // Per-pass overrides are specified as `[pass.module_name.pipeline_name]` in TOML.
-                let pass = if let Some(module_overrides) = self.pass.get(&module.name) {
-                    if let Some(pass) = module_overrides.get(pipeline_name) {
-                        state.apply_overrides(&pass.raw)?;
-                        Some(pass)
-                    } else {
-                        None
-                    }
+                // Per-pass overrides are specified as `[pass.pipeline_name]` in TOML.
+                let pass = if let Some(pass) = self.pass.get(pipeline_name) {
+                    state.apply_overrides(&pass.raw)?;
+                    Some(pass)
                 } else {
                     None
                 };
 
                 // record pass name for warning about unused overrides
-                stats.pass_names.insert(format!("{}.{}", module.name, pipeline_name));
+                stats.pass_names.insert(pipeline_name.to_string());
                 entries.push(self.write_pass(archive, pipeline_name, pass, &state, entry_points, options)?);
             }
             archive.write_slice(&entries)
         };
 
-        if !options.quiet {
+        if !get_log_options().quiet {
             let pipeline_list = pipelines.keys().cloned().collect::<Vec<_>>().join(", ");
             cprintln!(
                 "<g,bold>Compiled</> {} entry points, {} pipelines \n\t<dim>{}</>",
@@ -503,6 +469,16 @@ impl BuildManifest {
         let name = archive.write_str(&module.name);
         let params = archive.write_slice(&module.reflection);
         let path = archive.write_str(&module.file_path.to_string_lossy());
+        let include_paths = {
+            let mut include_paths = vec![];
+            for p in options.include_paths.iter() {
+                let Ok(canonical) = p.canonicalize() else {
+                    bail!("failed to canonicalize include path: {}", p.display());
+                };
+                include_paths.push(archive.write_str(&*canonical.to_string_lossy()));
+            }
+            archive.write_slice(&include_paths)
+        };
 
         Ok(sharc::Module {
             name,
@@ -510,60 +486,59 @@ impl BuildManifest {
             passes: pipelines_offset,
             file: FileDependency { path, mtime: module.file_mtime },
             params,
+            debug_info: options.emit_debug_information,
+            include_paths
         })
     }
 
     /// Compiles all shader source files listed in the manifest and writes one `.sharc` archive per
     /// input file.
-    pub(crate) fn build(&self, options: &BuildOptions) -> anyhow::Result<()> {
-        let files = self.resolve_glob_file_paths(&self.input_files).context("error resolving input files")?;
-
-        // resolve output directory
-        let output_directory = self.output_directory.as_ref().map(|dir| self.resolve_path(dir));
-        if options.verbosity >= 2 {
-            if let Some(dir) = &output_directory {
-                cprintln!("output directory: {}", dir.display());
-            }
-        }
-
-        let include_paths: Vec<String> =
-            self.include_paths.iter().map(|p| self.resolve_path(p).to_string_lossy().into_owned()).collect();
+    pub(crate) fn build(&self, file: &Path, source_text: &str, options: &BuildOptions) -> anyhow::Result<()> {
+        let quiet = get_log_options().quiet;
+        let verbosity = get_log_options().verbosity;
 
         if options.emit_cargo_deps {
-            println!("cargo:rerun-if-changed={}", self.manifest_path.display());
+            // Emit cargo dependency information.
+            let absolute_file_path = file.canonicalize()?;
+            println!("cargo:rerun-if-changed={}", absolute_file_path.display());
+            if !self.manifest_path.as_os_str().is_empty() {
+                println!("cargo:rerun-if-changed={}", self.manifest_path.display());
+            }
         }
 
-        let compiler_session = self.create_slang_session(&include_paths, options);
         let mut got_errors = false;
         let mut stats = Stats::default();
+        let mut archive = ArchiveWriter::new();
+        let mut modules = Vec::new();
 
-        // load all slang modules and compile all entry points
-        for file in files {
-            let mut archive = ArchiveWriter::new();
-            let mut modules = Vec::new();
+        // Determine output file paths.
+        let output_file = match options.output_directory {
+            Some(ref dir) => dir.join(file.file_name().unwrap()).with_extension("sharc"),
+            None => file.with_extension("sharc"),
+        };
+        let spirv_dump_path = output_file.parent().unwrap().join("spirv");
 
-            let output_file = match &output_directory {
-                Some(dir) => dir.join(file.file_name().unwrap()).with_extension("sharc"),
-                None => file.with_extension("sharc"),
-            };
-            let spirv_dump_path = output_file.parent().unwrap().join("spirv");
-
-            let absolute_file_path = file.canonicalize()?;
-
-            if !options.quiet {
-                cprintln!("<g,bold>Compiling</> {}", file.display());
+        if !quiet {
+            cprintln!("<g,bold>Compiling</> {}", file.display());
+        }
+        if verbosity >= 2 {
+            cprintln!("output file: {}", output_file.display());
+            if options.emit_spirv_binaries {
+                cprintln!("SPIR-V dump path: {}", spirv_dump_path.display());
             }
-            if options.emit_cargo_deps {
-                println!("cargo:rerun-if-changed={}", absolute_file_path.display());
-            }
+        }
 
-            match self.load_slang_module(&mut archive, &compiler_session, &file, options) {
+        // Create slang compiler session.
+        let compiler_session = self.create_slang_session(&options.include_paths, options)?;
+
+        'compile: {
+            match self.load_slang_module(&mut archive, &compiler_session, &file, source_text, options) {
                 Ok(module) => {
                     if module.entry_points.is_empty() {
-                        if options.verbosity >= 2 {
+                        if verbosity >= 2 {
                             cprintln!("<cyan>note</>: `{}` has no entry points, skipping", file.display());
                         }
-                        continue;
+                        break 'compile;
                     }
 
                     if options.emit_spirv_binaries {
@@ -571,7 +546,7 @@ impl BuildManifest {
                             fs::create_dir(&spirv_dump_path)?;
                         }
                         let spv_out_path = spirv_dump_path.join(format!("{}.spv", module.name));
-                        if !options.quiet {
+                        if !quiet {
                             cprintln!("<g,bold>Dumping</> {}", spv_out_path.display());
                         }
                         fs::write(&spv_out_path, unsafe {
@@ -596,11 +571,11 @@ impl BuildManifest {
                     }
                     got_errors = true;
                     // Don't write the archive if there were compile errors.
-                    continue;
+                    break 'compile;
                 }
             }
 
-            if !options.quiet {
+            if !quiet {
                 cprintln!("<g,bold>Writing</> {}", output_file.display());
             }
 
@@ -624,12 +599,9 @@ impl BuildManifest {
         }
 
         // Warn about manifest override entries that did not match any compiled pass.
-        for (module_name, passes) in &self.pass {
-            for (pass_name, _) in passes {
-                let name = format!("{module_name}.{pass_name}");
-                if !stats.pass_names.contains(&name) {
-                    cprintln!("<y,bold>warning</>: override `{}` did not match any pass", name);
-                }
+        for (pass_name, _) in self.pass.iter() {
+            if !stats.pass_names.contains(pass_name) {
+                cprintln!("<y,bold>warning</>: override `{}` did not match any pass", pass_name);
             }
         }
 

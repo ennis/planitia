@@ -1,6 +1,6 @@
 # INPUT FILES
 input_files = "*.slang"
-include_paths = ["../../../gamelib/assets/gamelib/shaders"]
+include_paths = []
 
 [compiler]
 profile = "glsl_460"

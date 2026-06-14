@@ -45,7 +45,12 @@ pub struct ShaderArchiveRoot {
 #[derive(Copy, Clone)]
 pub struct Module {
     pub name: Offset<str>,
+    /// The shader source file corresponding to this module.
     pub file: FileDependency,
+    /// Include paths used to compile this module.
+    pub include_paths: Offset<[Offset<str>]>,
+    /// Whether the module was compiled with debug information.
+    pub debug_info: bool,
     pub passes: Offset<[Pass]>,
     pub params: Offset<[reflection::Param]>,
     pub spirv: Offset<[u32]>,

@@ -3,7 +3,6 @@ import scene_info;
 import ridge_detection;
 import winged_edge;
 
-
 struct PointData {
     float3 position;
     float3 normal;
@@ -26,6 +25,7 @@ struct OutlineVertex {
     uint16_t group_id;
     float2 local_pos;
 }
+
 
 struct ContourSegment {
     float3 position_0;

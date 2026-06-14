@@ -1,3 +1,4 @@
+// Manifest: shaders.toml
 import path;
 import common;
 

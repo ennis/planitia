@@ -39,6 +39,7 @@ impl ExcFrame {
     }
 
     /// Logs the error tree to stderr.
+    #[cold]
     fn log_error(&self) {
         ceprintln!("<red>error:</red> {}", self);
     }
@@ -197,6 +198,8 @@ pub trait ResultExt<T, E> {
         Self: Sized,
         F: FnOnce() -> G,
         G: std::error::Error + Send + Sync + 'static;
+
+    fn log_error(self) -> Self;
 }
 
 impl<T, E> ResultExt<T, E> for Result<T, E>
@@ -234,6 +237,13 @@ where
             }
         }
     }
+
+    fn log_error(self) -> Self {
+        if let Err(err) = &self {
+            ceprintln!("<red>error:</red> {err}");
+        }
+        self
+    }
 }
 
 impl<T, E> ResultExt<T, E> for Result<T, Exc<E>>
@@ -262,6 +272,13 @@ where
             Ok(value) => Ok(value),
             Err(exc) => Err(exc.raise(outer())),
         }
+    }
+
+    fn log_error(self) -> Self {
+        if let Err(exc) = &self {
+            exc.log_error();
+        }
+        self
     }
 }
 
