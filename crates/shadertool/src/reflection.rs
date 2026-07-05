@@ -106,7 +106,7 @@ impl<'a> CollectedReflectionData<'a> {
                     };
 
                     let field_full_name = format!("{}.{}", full_name, field_name);
-                    //eprintln!("field {field_full_name} @ {:?} kind={:?}", field_location, field_type.kind());
+                    eprintln!("field {field_full_name} @ {:?} kind={:?}", field_location, field_type.kind());
 
                     let index = self.add_param(&field_full_name, field_location, 0, Some(param_index));
                     type_path.push(ty_layout);
@@ -118,7 +118,7 @@ impl<'a> CollectedReflectionData<'a> {
                 let deref_location = ParamLocation::Indirect { rel: param_index, offset: 0 };
                 let deref_name = format!("{}.$", full_name);
                 let index = self.add_param(&deref_name, deref_location, 0, Some(param_index));
-                //eprintln!("deref {}.$ @ {:?} kind={:?}", full_name, deref_location, ty_layout.kind());
+                eprintln!("deref {}.$ @ {:?} kind={:?}", full_name, deref_location, ty_layout.kind());
                 type_path.push(ty_layout);
                 self.reflect_variable_type_layout(
                     index,
@@ -154,10 +154,10 @@ impl<'a> CollectedReflectionData<'a> {
                 let type_layout = param.type_layout().unwrap();
                 let offset = param.offset(slang::ParameterCategory::Uniform);
                 let location = ParamLocation::PushData { offset: offset as u32 };
-                //eprintln!(
-                //    "push data {}: {:?} set {}, binding {}, offset {}",
-                //    name, category, set, binding, offset
-                //);
+                eprintln!(
+                    "push data {}: {:?} offset {}",
+                    name, category,  offset
+                );
                 let size = type_layout.size(ParameterCategory::Uniform) as u32;
                 let index = self.add_param(name, location, size, None);
                 self.reflect_variable_type_layout(index, name, location, type_layout, &mut vec![]);
@@ -177,10 +177,10 @@ impl<'a> CollectedReflectionData<'a> {
                 self.reflect_variable_type_layout(index, name, location, cbuffer_content_layout, &mut vec![]);
             }
             ParameterCategory::None => {
-                //eprintln!(
-                //    "resource {}: {:?} set {}, binding {}",
-                //    name, category, set, binding
-                //);
+                eprintln!(
+                    "resource {}: {:?}",
+                    name, category
+                );
                 return;
             }
             _ => {
@@ -189,12 +189,20 @@ impl<'a> CollectedReflectionData<'a> {
         };
     }
 
+    pub(crate) fn reflect_entry_point(&mut self, entry_point: &slang::reflection::EntryPoint) {
+        eprintln!("entry point: {}", entry_point.name().unwrap_or("unnamed"));
+        for param in entry_point.parameters() {
+            self.reflect_param(param);
+        }
+    }
+
     pub(crate) fn reflect_shader(&mut self, shader: &slang::reflection::Shader) {
         //let global_params_layout = shader.global_params_var_layout();
         let ty_layout = shader.global_params_type_layout().unwrap();
         if ty_layout.kind() != TypeKind::Struct {
             panic!("expected global params to be a struct");
         }
+        eprintln!("ty_layout: kind={:?} size={} bytes", ty_layout.kind(), ty_layout.size(ParameterCategory::Uniform));
         for field in ty_layout.fields() {
             self.reflect_param(field);
         }

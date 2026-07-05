@@ -187,7 +187,7 @@ pub struct Param {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum ShaderResourceKind {
     /// cbuffer, ConstantBuffer
     UniformBuffer,

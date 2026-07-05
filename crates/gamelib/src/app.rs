@@ -142,10 +142,22 @@ impl<H: AppHandler + Default + 'static> App<H> {
     }
 
     pub fn run(&'static self, init_options: &AppOptions) {
-        let main_thread_ctx = self.0.get_or_init(|| {
-            // Create handler
-            let handler = Box::new(RefCell::new(H::default()));
 
+        // Setup env_logger.
+        setup_env_logger();
+
+        // Load the renderdoc DLL asap
+        if env_flag("RENDERDOC") {
+            load_renderdoc_dll();
+        }
+
+        // Setup tracy thread name.
+        tracy_client::set_thread_name!("main thread");
+        info!("running with Tracy profiler enabled");
+
+        // Create the main thread context object.
+        let main_thread_ctx = self.0.get_or_init(|| {
+            let handler = Box::new(RefCell::new(H::default()));
             // This needs to be a leaked static because ThreadBound wouldn't be Send, and
             // OnceLock requires its contents to be Send + Sync in order to be Sync and usable
             // within a static.
@@ -156,7 +168,16 @@ impl<H: AppHandler + Default + 'static> App<H> {
 
         let ctx = *main_thread_ctx.get_ref().unwrap();
         CURRENT_CTX.set(Some(ctx));
+
+        // Schedule the first render on the next VSync.
+        // TODO: we probably should render immediately?
+        ctx.platform.wake_at_next_vsync();
+
+        // Enter the event loop. This doesn't return until the application exits.
         ctx.run_event_loop();
+
+        // The event loop has returned, the application is exiting. Do platform-specific cleanup.
+        ctx.platform.teardown();
     }
 }
 
@@ -297,27 +318,13 @@ impl MainThreadContext {
     }
 
     fn run_event_loop(&'static self) {
-        setup_env_logger();
 
-        // load the renderdoc DLL asap
-        if env_flag("RENDERDOC") {
-            load_renderdoc_dll();
-        }
-
-        //gpu::initialize_debug_messenger();
-        tracy_client::set_thread_name!("main thread");
-        info!("running with Tracy profiler enabled");
-
-        // Schedule the first render on the next VSync.
-        // TODO: we probably should render immediately?
-        self.platform.wake_at_next_vsync();
 
         // Run the event loop.
         // This doesn't return until the application exits.
         let mut this = self;
         self.platform.run_event_loop(&mut this);
 
-        self.platform.teardown();
     }
 }
 

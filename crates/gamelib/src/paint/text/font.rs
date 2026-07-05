@@ -27,18 +27,19 @@ pub struct Font {
 
 impl Font {
     pub fn ascent(&self, size: f32) -> f32 {
-        let scaled = self.data.as_scaled(size);
-        scaled.ascent()
+        self.data.as_scaled(size).ascent()
     }
 
     pub fn descent(&self, size: f32) -> f32 {
-        let scaled = self.data.as_scaled(size);
-        scaled.descent()
+        self.data.as_scaled(size).descent()
+    }
+
+    pub fn height(&self, size: f32) -> f32 {
+        self.data.as_scaled(size).height()
     }
 
     pub fn line_gap(&self, size: f32) -> f32 {
-        let scaled = self.data.as_scaled(size);
-        scaled.line_gap()
+        self.data.as_scaled(size).line_gap()
     }
 
     pub fn glyph_id(&self, c: char) -> GlyphId {
@@ -47,6 +48,10 @@ impl Font {
 
     pub fn h_advance(&self, id: GlyphId, size: f32) -> f32 {
         self.data.as_scaled(size).h_advance(id)
+    }
+
+    pub fn h_advance_char(&self, c: char, size: f32) -> f32 {
+        self.h_advance(self.glyph_id(c), size)
     }
 
     pub fn kern(&self, first: GlyphId, second: GlyphId, size: f32) -> f32 {

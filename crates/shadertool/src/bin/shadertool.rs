@@ -1,15 +1,29 @@
 use std::path::PathBuf;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use color_print::ceprintln;
 
 ///////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Parser, Debug)]
 struct Args {
-    /// Input files.
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand, Debug)]
+enum Command {
+    /// Compile shader source files into a .sharc archive.
+    Build(BuildArgs),
+    /// Dump information about a .sharc archive to stdout.
+    Dump(DumpArgs),
+}
+
+#[derive(clap::Args, Debug)]
+struct BuildArgs {
+    /// Input files (glob patterns supported, e.g. `shaders/**/*.slang`).
     input_files: Vec<String>,
     /// Include paths.
-    #[arg(long, short='I')]
+    #[arg(long, short = 'I')]
     include: Vec<PathBuf>,
     /// Don't print logs to stdout.
     #[arg(short, long)]
@@ -23,9 +37,6 @@ struct Args {
     /// Dump SPIR-V binaries to disk alongside the archive.
     #[arg(long)]
     dump_spirv: bool,
-    /// Open graphical editor.
-    #[arg(long)]
-    editor: bool,
     /// Verbosity level (0-3).
     #[arg(
         long,
@@ -36,11 +47,26 @@ struct Args {
     verbose: u8,
 }
 
+#[derive(clap::Args, Debug)]
+struct DumpArgs {
+    /// Path to the .sharc archive file to inspect.
+    archive: PathBuf,
+}
+
+///////////////////////////////////////////////////////////////////////////////////
+
 fn main() {
     env_logger::builder().parse_default_env().format_target(false).format_timestamp(None).init();
 
     let args = Args::parse();
 
+    match args.command {
+        Command::Build(build_args) => cmd_build(build_args),
+        Command::Dump(dump_args) => cmd_dump(dump_args),
+    }
+}
+
+fn cmd_build(args: BuildArgs) {
     if args.input_files.is_empty() {
         ceprintln!("<r,bold>error:</> No input files specified.");
         std::process::exit(1);
@@ -66,5 +92,14 @@ fn main() {
             std::process::exit(1);
         }
     }
+}
 
+fn cmd_dump(args: DumpArgs) {
+    match shadertool::dump_archive_file(&args.archive) {
+        Ok(()) => {}
+        Err(err) => {
+            ceprintln!("<r,bold>error:</> {err:#}");
+            std::process::exit(1);
+        }
+    }
 }

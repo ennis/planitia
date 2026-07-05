@@ -1,6 +1,11 @@
 #![expect(unused, reason = "noisy")]
 #![feature(default_field_values)]
 
+// debug! and error! macros are used frequently enough so that it's convenient to have them available
+// without having to import them in every file.
+#[macro_use]
+extern crate log;
+
 use gamelib::asset::{AssetCache, Handle};
 use gamelib::camera_control::{CameraControl, CameraControlInput};
 use gamelib::egui::{Color32, Scene};
@@ -274,6 +279,7 @@ impl AppHandler for Game {
         // TODO: that's not the right time to reload assets.
         //       Ideally this should be done asynchronously, on another thread, so as not
         //       to block the GUI and rendering.
+        #[cfg(feature = "hot_reload")]
         AssetCache::instance().do_reload();
 
         let mut cmd = gpu::CommandBuffer::new();

@@ -382,6 +382,16 @@ impl PathBuilder {
         self
     }
 
+    /// Appends a rectangle with top-left corner `origin` and size `size`, with negative (CCW) winding.
+    pub fn rect_ccw(&mut self, rect: &Rect) -> &mut Self {
+        self.move_to(rect.min);
+        self.line_to(vec2(rect.min.x, rect.max.y));
+        self.line_to(rect.max);
+        self.line_to(vec2(rect.max.x, rect.min.y));
+        self.close();
+        self
+    }
+
     /// Appends a rectangle with top-left corner `origin` and size `size`.
     pub fn rect_origin_size(&mut self, origin: Vec2, size: Vec2) -> &mut Self {
         self.rect(&Rect { min: origin, max: origin + size })

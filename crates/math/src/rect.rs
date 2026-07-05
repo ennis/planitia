@@ -83,6 +83,13 @@ impl Rect {
             max: vec2(self.max.x + offset.x, self.max.y + offset.y),
         }
     }
+
+    pub const fn expand(&self, amount: f32) -> Self {
+        Self {
+            min: vec2(self.min.x - amount, self.min.y - amount),
+            max: vec2(self.max.x + amount, self.max.y + amount),
+        }
+    }
 }
 
 pub const fn rect_xywh(x: f32, y: f32, w: f32, h: f32) -> Rect {
@@ -154,6 +161,13 @@ impl IRect {
         Rect {
             min: Vec2::new(self.min.x as f32, self.min.y as f32),
             max: Vec2::new(self.max.x as f32, self.max.y as f32),
+        }
+    }
+
+    pub const fn expand(&self, amount: i32) -> Self {
+        Self {
+            min: IVec2::new(self.min.x - amount, self.min.y - amount),
+            max: IVec2::new(self.max.x + amount, self.max.y + amount),
         }
     }
 }

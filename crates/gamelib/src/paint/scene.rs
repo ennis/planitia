@@ -3,10 +3,8 @@ use crate::paint::fill::Fill;
 use crate::paint::flatten::flatten_path;
 use crate::paint::gradient::ColorStop;
 use crate::paint::renderer::DrawCommand;
-use crate::paint::{
-    AsPathSlice, GlyphRun, GradientIntegralSegment, GradientRampData, PaintVertex, Painter, Path, PathBuilder,
-    PathSlice, RRect, TextFormat, TextLayout, TextureFill, compute_gradient_integral, renderer,
-};
+use crate::paint::text::Glyph;
+use crate::paint::{AsPathSlice, BlendMode, GlyphRun, GradientIntegralSegment, GradientRampData, PaintVertex, Painter, Path, PathBuilder, PathSlice, RRect, TextFormat, TextLayout, TextureFill, compute_gradient_integral, renderer, StrokeLocation};
 use color::{Srgba8, srgba8};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::{CommandBuffer, Format, Ptr, PushDataSource};
@@ -21,29 +19,19 @@ pub struct DrawGlyphRunOptions {
     pub color: Srgba8,
 }
 
-/// Blend mode.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
-#[repr(u8)]
-pub enum BlendMode {
-    Normal,
-    Multiply,
-    Screen,
-    Overlay,
-    Darken,
-    Lighten,
-    ColorDodge,
-    ColorBurn,
-    HardLight,
-    SoftLight,
-    Difference,
-    Exclusion,
-    Mask,
-}
-
 #[derive(Clone, Copy, Debug)]
 pub struct GroupOptions {
     pub blend_mode: BlendMode,
     pub opacity: f32,
+}
+
+/// Path stroking options.
+#[derive(Clone, Copy, Debug)]
+pub struct StrokeOptions {
+    /// Stroke width in pixels.
+    pub width: f32 = 1.0,
+    /// Stroke location relative to the path.
+    pub location: StrokeLocation = StrokeLocation::Center,
 }
 
 /// Represents a gradient ramp (a list of color stops).
@@ -98,6 +86,21 @@ impl PaintScene {
     /// Fills a rectangle.
     pub fn fill_rect(&mut self, rect: Rect, fill: impl Into<Fill>) {
         self.tmp_path.rect(&rect);
+        self.fill_tmp_path(fill);
+    }
+
+    /// Draws a rectangle outline with the specified width and fill.
+    pub fn stroke_rect(&mut self, rect: impl Into<Rect>, fill: impl Into<Fill>, stroke_options: &StrokeOptions) {
+        let rect = rect.into();
+        let (inner, outer) = match stroke_options.location {
+            StrokeLocation::Center => {
+                (rect.expand(-stroke_options.width * 0.5), rect.expand(stroke_options.width * 0.5))
+            }
+            StrokeLocation::Inside => (rect.expand(-stroke_options.width), rect),
+            StrokeLocation::Outside => (rect, rect.expand(stroke_options.width)),
+        };
+        self.tmp_path.rect(&inner);
+        self.tmp_path.rect_ccw(&outer);
         self.fill_tmp_path(fill);
     }
 
@@ -183,6 +186,12 @@ impl PaintScene {
     pub fn pop_group(&mut self) {}
 
     /// Draws text at the specified position with the given format and color.
+    ///
+    /// # Arguments
+    /// * `position` where the text will be drawn (top-left corner).
+    /// * `text` the text to draw.
+    /// * `format` the text format to use.
+    /// * `color` text color.
     pub fn draw_text(&mut self, position: Vec2, text: &str, format: &TextFormat, color: Srgba8) {
         let mut layout = TextLayout::new(format, text);
         layout.layout(1000.0);
@@ -190,16 +199,36 @@ impl PaintScene {
             self.draw_glyph_run(position, &glyph_run, &DrawGlyphRunOptions { color });
         }
     }
+    
+    /// Draws a TextLayout object.
+    pub fn draw_text_layout(&mut self, position: Vec2, layout: &TextLayout, color: Srgba8) {
+        for glyph_run in layout.glyph_runs() {
+            self.draw_glyph_run(position, &glyph_run, &DrawGlyphRunOptions { color });
+        }
+    }
 
     /// Draws a glyph run.
     pub fn draw_glyph_run(&mut self, position: Vec2, glyph_run: &GlyphRun<'_>, options: &DrawGlyphRunOptions) {
-        let mut painter = get_context().painter.borrow_mut();
-
         let format = glyph_run.format();
         let x = glyph_run.offset();
         let y = glyph_run.baseline();
+        self.draw_glyphs(position + vec2(x, y), glyph_run.glyphs(), format, options);
+    }
+
+    /// Draws a sequence of positioned glyphs.
+    ///
+    /// # Arguments
+    /// * baseline_position starting position of the glyphs. It positions *the baseline* of the first glyph.
+    pub fn draw_glyphs(
+        &mut self,
+        baseline_position: Vec2,
+        glyphs: impl IntoIterator<Item = Glyph>,
+        format: &TextFormat,
+        options: &DrawGlyphRunOptions,
+    ) {
+        let mut painter = get_context().painter.borrow_mut();
         let mut advance = 0.0;
-        for glyph in glyph_run.glyphs() {
+        for glyph in glyphs {
             //eprintln!(
             //    "   glyph id={} advance={} (x={})",
             //    glyph.id.0,
@@ -207,7 +236,7 @@ impl PaintScene {
             //    x + advance
             //);
 
-            let pos = position + vec2(x + advance, y) + glyph.offset;
+            let pos = baseline_position + vec2(advance, 0.0) + glyph.offset;
             //debug!("glyph_offset = {:?}", glyph.offset);
             advance += glyph.advance;
 

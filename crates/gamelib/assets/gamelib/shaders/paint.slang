@@ -61,7 +61,7 @@ struct TileCover {
     uint seg_offset;
     uint seg_count;
 
-    int2 tile_coords() {
+    int2 tile_coord() {
         return int2(int(id >> 32 & 0xFFFF), int(id >> 48 & 0xFFFF));
     }
 
@@ -153,18 +153,15 @@ void rasterize_tiles(uint3 workgroup_id: SV_GroupID, uint3 group_thread_id : SV_
     // and contribute to the coverage calculation.
 
     var tile = u.tiles[workgroup_id.x + u.start_cover_list];
-    let tile_coords = u.covers[tile.cover_offset].tile_coords();    // all covers for the tile should have the same tile coords
-    //if (tile_coords.x < 0 || tile_coords.y < 0) {
-    //    return;
-    //}
+    let tile_coord = u.covers[tile.cover_offset].tile_coord();    // all covers for the tile should have the same tile coords
 
     let tsize = int2(TILE_SIZE, TILE_SIZE);
     let local     = int2(group_thread_id.xy);               // coordinates within the tile
-    let tile_top_left = tile_coords * tsize;                      // tile top-left corner position in screen coordinates
+    let tile_top_left = tile_coord * tsize;                      // tile top-left corner position in screen coordinates
     let pixel_center  = float2(local) + 0.5;  // pixel center in tile-local coordinates
     let pixel_center_screen = tile_top_left + pixel_center; // pixel center in screen coordinates
 
-    var output_color = float4(0.0);
+    var color = float4(0.0);
 
     // for each tile cover
     for (uint i_cover = tile.cover_offset; i_cover < tile.cover_offset + tile.cover_count; i_cover++) {
@@ -266,7 +263,7 @@ void rasterize_tiles(uint3 workgroup_id: SV_GroupID, uint3 group_thread_id : SV_
             // General case: compute pixel coverage.
             // The derivation is a bit long to write down here without pictures.
             // Very roughly, this is the pixel area between the min/max y covered by a segment,
-            // adjusted by adding or subtracting the areas of some triangles formed by the intersection of the segment
+            // adjusted by adding or subtracting the areas of triangles formed by the intersection of the segment
             // and the pixel bounds.
 
             // FIXME: for near-vertical segments this might be unstable
@@ -281,13 +278,11 @@ void rasterize_tiles(uint3 workgroup_id: SV_GroupID, uint3 group_thread_id : SV_
             float a_3 = abs(y_min - y_1) * max(0.0, x_0 - 1.0);
             float a_4 = abs(y_max - y_1) * max(0.0, x_1 - 1.0);
             float area = (y_max - y_min) + 0.5 * (abs(a_3 - a_4) - abs(a_1 - a_2));
-            //area += 0.000000001 * b.x;  // work around driver bug?
             winding += area * sign(-d.y);
         }
 
         //----------------------------------------------------------------------------
         // 3. evaluate fill
-
 
         float4 fill_color;
         uint fill_index = tile_cover.fill;
@@ -299,9 +294,7 @@ void rasterize_tiles(uint3 workgroup_id: SV_GroupID, uint3 group_thread_id : SV_
             case FillType.Texture: {
                 TextureFill fill = reinterpret<TextureFill>(u.fills[fill_index]);
                 float2 uv = mul(fill.deviceToTexCoord, float3(pixel_center_screen, 1.0)).xy;
-                fill_color = fill.texture.Sample(fill.sampler, uv);
-                //fill_color = float4(uv, 0.0, 1.0); // debug
-                //fill_color.rgb = float3(fill_color.a);
+                fill_color = fill.texture.Sample(fill.sampler, uv) * srgba8_to_float4(fill.color);
                 break;
             }
             case FillType.LinearGradient: {
@@ -316,17 +309,31 @@ void rasterize_tiles(uint3 workgroup_id: SV_GroupID, uint3 group_thread_id : SV_
         //
         float coverage = abs(winding);
         fill_color.rgb *= fill_color.a;
-        float4 input_color = fill_color * coverage;
-        output_color = input_color + output_color * (1.0 - input_color.a);
+        float4 cover_color = fill_color * coverage;
+        color = cover_color + color * (1.0 - cover_color.a);
     }
+
+
+    //----------------------------------------------------------------------------
+    // 5. final blend with render target
+
+
+    // Load background color & premultiply.
+    let coord = tile_coord * tsize + local;
+    var cb = u.output.Load(coord);
+    cb.rgb *= cb.a;
+
+    // Blend with background color.
+    // TODO: make that configurable
+    var co = color + cb * (1.0 - color.a);
 
     // unpremultiply alpha
-    if (output_color.a > 0.0) {
-        output_color.rgb /= output_color.a;
+    if (co.a > 0.0) {
+        co.rgb /= co.a;
     }
 
-    u.output.Store(tile_coords * tsize + local, output_color);
-    //u.output.Store(tile_coords * tsize + local, float4(float2(local)/tsize, 0.0, 1.0));
+    // Write back final color.
+    u.output.Store(coord, co);
 }
 
 

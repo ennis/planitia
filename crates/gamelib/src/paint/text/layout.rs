@@ -75,6 +75,8 @@ pub struct LineMetrics {
     pub leading: f32,
     /// Total line height (ascent + descent + leading).
     pub height: f32,
+    /// Total advance (width) of the line.
+    pub advance: f32,
 }
 
 /// Line within a text layout.
@@ -102,6 +104,7 @@ pub struct TextFragment<'a> {
 
 //-------------------------------------------------------------------------------------------------
 
+/// Data for a single "extended grapheme cluster" (a collection of glyphs that the user sees as a single character on the screen).
 #[derive(Copy, Clone, Debug)]
 pub struct ClusterData {
     pub info: ClusterInfo,
@@ -152,8 +155,8 @@ impl<'a> Iterator for GlyphRunIter<'a> {
     type Item = GlyphRun<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // Glyph runs approximately correspond to fragments, except that
-        // glyph runs don't cross line boundaries. So we iterate over fragments, and split them in
+        // Glyph runs approximately correspond to fragments, except that glyph runs
+        // don't cross line boundaries. So we iterate over fragments, and split them in
         // multiple runs if they cross line boundaries.
 
         if self.cluster >= self.last_cluster {
@@ -275,16 +278,20 @@ impl<'a> GlyphRun<'a> {
 pub struct TextLayout {
     width: f32,
     height: f32,
+    /// Data for each fragment (cluster range with the same format).
+    ///
+    /// Fragments are independent of layout, and thus they may cross line boundaries.
     fragments: Vec<FragmentData>,
-    lines: Vec<LineData>,
+    /// Data for each glyph cluster
     clusters: Vec<ClusterData>,
     glyph_data: Vec<Glyph>,
+    /// Data for each line of text produced by line breaking.
+    lines: Vec<LineData>,
 }
 
 impl TextLayout {
     /// Constructs a new text layout from a default text style and attributed text runs.
     pub fn new(format: &TextFormat, text: &str) -> TextLayout {
-        
         let mut glyph_data = Vec::new();
         let mut clusters = Vec::new();
 
@@ -336,23 +343,22 @@ impl TextLayout {
         let fragment =
             FragmentData { format: format.clone(), text_range: 0..text.len(), cluster_range: 0..clusters.len() };
 
-        let layout =
-            TextLayout { width: 0.0, height: 0.0, fragments: vec![fragment], lines: Vec::new(), clusters, glyph_data };
-        //dbg!(&layout);
-        layout
+        TextLayout { width: 0.0, height: 0.0, fragments: vec![fragment], lines: Vec::new(), clusters, glyph_data }
     }
 
     /// Recomputes the layout of the text given the specified available width.
-    pub fn layout(&mut self, width: f32) {
+    pub fn layout(&mut self, available_width: f32) {
         let mut y = 0.0f32;
         let mut cursor = CursorData::default(); // beginning of text
-        while let Some(line) = self.layout_line(&mut cursor, width as f32) {
+        let mut max_width = 0.0f32;
+        while let Some(line) = self.layout_line(&mut cursor, available_width as f32) {
             // continue laying out lines until we run out of text
             line.position.x = 0.0;
             line.position.y = y;
             y += line.metrics.height;
+            max_width = max_width.max(line.metrics.leading)
         }
-        self.width = width;
+        self.width = available_width;
         self.height = y;
     }
 
@@ -363,11 +369,9 @@ impl TextLayout {
         self.height
     }
 
-    /// Returns the size of the text layout in pixels.
-    ///
-    /// Equivalent to `vec2(self.width(), self.height())`.
-    pub fn size(&self) -> Vec2 {
-        vec2(self.width, self.height)
+    /// Returns the maximum advance (line width incl. trailing whitespace) among all lines in the layout.
+    pub fn max_line_advance(&self) -> f32 {
+        self.lines.iter().map(|line| line.metrics.advance).fold(0.0, f32::max)
     }
 
     /// Returns the baseline of the first line of text.
@@ -381,7 +385,7 @@ impl TextLayout {
         cursor.cluster >= self.clusters.len()
     }
 
-    fn next_glyph_cluster(&self, cur: &mut CursorData) -> bool {
+    fn next_cluster(&self, cur: &mut CursorData) -> bool {
         if cur.cluster >= self.clusters.len() {
             return false;
         }
@@ -412,31 +416,29 @@ impl TextLayout {
         true
     }
 
-    pub fn layout_line(&mut self, pos: &mut CursorData, available_width: f32) -> Option<&mut LineData> {
-        // FIXME: should delete all lines after pos
-
-        if pos.cluster >= self.clusters.len() {
+    pub fn layout_line(&mut self, cursor: &mut CursorData, available_width: f32) -> Option<&mut LineData> {
+        if cursor.cluster >= self.clusters.len() {
             // no more text to layout
             return None;
         }
 
         let mut x = 0.0f32;
-        let start = *pos;
+        let start = *cursor;
         let mut break_opportunity = None;
 
-        // place glyph clusters in the line until we run out of space or text
+        // Place glyph clusters in the line until we run out of space or text.
         loop {
-            let c = &self.clusters[pos.cluster];
+            let c = &self.clusters[cursor.cluster];
 
             if c.info.is_line_break_before() {
-                // possible line break opportunity before this character
-                break_opportunity = Some(*pos);
+                // Record a possible line break opportunity before this character.
+                break_opportunity = Some(*cursor);
             }
 
-            // advance to next cluster
-            self.next_glyph_cluster(pos);
+            // Advance cursor to next cluster for the next iteration of the loop.
+            self.next_cluster(cursor);
 
-            // explicit new line
+            // If the cluster is an explicit new line, then this line is done.
             if c.info.is_mandatory_break() {
                 break;
             }
@@ -444,23 +446,24 @@ impl TextLayout {
             x += c.advance;
 
             if x <= available_width {
-                // we fit, continue
+                // Cursor still fits in the available width, continue.
                 if c.info.is_line_break_after() {
-                    // possible line break opportunity after this character
-                    break_opportunity = Some(*pos);
+                    // Record a possible line break opportunity after this character.
+                    break_opportunity = Some(*cursor);
                 }
             } else {
-                // line break, revert to last opportunity if any
+                // The cursor overflowed the available width,
+                // so break the line on the last recorded opportunity, if there was one.
                 if let Some(break_pos) = break_opportunity {
-                    *pos = break_pos;
+                    *cursor = break_pos;
 
                     // eat non-newline trailing whitespace
                     loop {
-                        let info = &self.clusters[pos.cluster].info;
+                        let info = &self.clusters[cursor.cluster].info;
                         if info.is_mandatory_break() || !info.is_whitespace() {
                             break;
                         }
-                        if !self.next_glyph_cluster(pos) {
+                        if !self.next_cluster(cursor) {
                             break;
                         }
                     }
@@ -468,22 +471,24 @@ impl TextLayout {
                 break;
             }
 
-            if pos.cluster >= self.clusters.len() {
+            if cursor.cluster >= self.clusters.len() {
                 // no more text to layout
                 break;
             }
         }
 
-        // we produced an empty line, because
+        // Position of the cursor at the end of the line.
+        let end = *cursor;
 
-        // calculate line metrics
+        // Calculate line metrics.
         let mut max_leading = 0.0f32;
         let mut max_ascent = 0.0f32;
         let mut max_descent = 0.0f32;
+        let mut advance = 0.0f32;
 
         {
             let mut p = start;
-            while p.cluster < pos.cluster {
+            while p.cluster < end.cluster {
                 //let c = &self.glyph_clusters[p.cluster];
                 let fragment = &self.fragments[p.fragment];
 
@@ -496,7 +501,9 @@ impl TextLayout {
                 max_ascent = max_ascent.max(ascent);
                 max_descent = max_descent.max(descent);
 
-                self.next_glyph_cluster(&mut p);
+                advance += self.clusters[p.cluster].advance;
+
+                self.next_cluster(&mut p);
             }
         }
 
@@ -510,9 +517,10 @@ impl TextLayout {
                 descent: max_descent,
                 leading: max_leading,
                 height: max_ascent + max_descent + max_leading,
+                advance,
             },
-            range: start.text_pos..pos.text_pos,
-            cluster_range: start.cluster..pos.cluster,
+            range: start.text_pos..cursor.text_pos,
+            cluster_range: start.cluster..cursor.cluster,
             position: Vec2::ZERO,
         });
         self.lines.last_mut()
@@ -576,19 +584,3 @@ mod tests {
         }
     }
 }
-
-/*
-
-Text Layout:
-
-It's often the case that the same text need to be broken into lines multiple times, because
-the available width has changed. So the TextLayout object is mutable.
-
-The line-breaking and layout process is interactive.
-The caller specifies the available width of a line, and alignment constraints,
-then as much text as will fit is placed on the line and aligned. The function returns information
-about the line such as the total line advance, and the line height.
-
-It's also possible to relayout part of the text, keeping previous lines intact.
-
- */

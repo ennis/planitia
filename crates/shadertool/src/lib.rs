@@ -1,18 +1,22 @@
 #![feature(default_field_values)]
 mod build;
+//mod dump;
+mod dump2;
 mod header;
 mod manifest;
 mod reflection;
 
-use anyhow::{Context, anyhow, bail};
+use anyhow::anyhow;
 use color_print::{ceprintln, cprintln};
 use log::warn;
 pub use manifest::*;
 use scoped_tls::scoped_thread_local;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
-use std::{env, fs};
 use thiserror::Error;
+
+pub use dump2::dump_archive_file;
 
 //--------------------------------------------------------------------------------------------------
 
@@ -71,9 +75,7 @@ impl Error {
     }
 }
 
-static KNOWN_METADATA: &[&str] = &[
-    "Manifest",
-];
+static KNOWN_METADATA: &[&str] = &["Manifest"];
 
 fn check_metadata(metadata: &std::collections::BTreeMap<String, String>) -> Result<(), anyhow::Error> {
     for key in metadata.keys() {
@@ -88,11 +90,7 @@ fn check_metadata(metadata: &std::collections::BTreeMap<String, String>) -> Resu
 ///
 /// The function first looks for a `Manifest` metadata header in the shader source. If found, it uses the specified path to load the manifest.
 /// Otherwise, it looks for a manifest file with the same name as the shader file but with a `.toml` extension in the same directory.
-fn load_manifest_for_source(
-    shader_file_path: &Path,
-    shader_source: &str,
-) -> Result<BuildManifest, Error> {
-
+fn load_manifest_for_source(shader_file_path: &Path, shader_source: &str) -> Result<BuildManifest, Error> {
     if get_log_options().verbosity >= 2 {
         ceprintln!("parsing metadata header: {}", shader_file_path.display());
     }
@@ -154,8 +152,6 @@ where
 }
 
 fn build_inner(glob_patterns: &[&str], options: &BuildOptions) -> Result<(), Error> {
-
-
     // resolve glob patterns
     let mut files = Vec::new();
     for pattern in glob_patterns {

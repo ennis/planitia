@@ -12,6 +12,7 @@ glob = "0.3.3"
 thiserror = "2.0.17"
 anyhow = "1.0.100"
 color-print = "0.3.7"
+chrono = "0.4"
 clap = { version = "4.5.50", features = ["derive"], optional = true }
 slang = { package = "shader-slang", git = "https://github.com/ennis/slang-rs.git", rev = "a7e6a2726c63482c77870e31caa06a47e6043585" }
 env_logger = "0.11"

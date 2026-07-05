@@ -25,30 +25,30 @@ color_targets = [
 # Pass overrides
 ######################################################################
 
-[pass.outline.depth_pass]
+[pass.depth_pass]
 color_targets = []
 depth_stencil_attachment = { bind = "depth_buffer", clear_depth = 1.0 }
 
-[pass.outline.render_outlines]
+[pass.render_outlines]
 depth_stencil.write_enable = false
 #color_targets = [
 #    { format = "RGBA8", blend = "disabled" }
 #]
 
-[pass.outline.corner_detection]
+[pass.corner_detection]
 depth_stencil.write_enable = false
 
-[pass.outline.draw_lines]
+[pass.draw_lines]
 depth_stencil.write_enable = false
 
-[pass.outline.base_render]
+[pass.base_render]
 color_targets = [
     { format = "RGBA8", blend = "over" },           # color
     { format = "RGB10_A2", blend = "disabled" },      # normal
     { format = "RGBA16UI", blend = "disabled" }      # auxiliary
 ]
 
-[pass.background.background]
+[pass.background]
 depth_stencil.compare_op = "always"
 depth_stencil.write_enable = false
 
@@ -56,23 +56,23 @@ depth_stencil.write_enable = false
 # Automaton
 ##
 
-[pass.automaton.automaton_base_render]
+[pass.automaton_base_render]
 color_targets = [
     { format = "RGBA8", blend = "over" },           # color
     { format = "RGB10_A2", blend = "disabled" },      # normal
     { format = "RGBA16UI", blend = "disabled" }      # auxiliary
 ]
 
-[pass.automaton.contour_detection]
+[pass.contour_detection]
 color_targets = [
     { format = "RGBA32F", blend = "disabled" }
 ]
 depth_stencil.write_enable = false
 
-[pass.automaton.sim_render]
+[pass.sim_render]
 depth_stencil.write_enable = false
 
-[pass.automaton.automaton_debug]
+[pass.automaton_debug]
 depth_stencil.write_enable = false
 
 ######################################################################

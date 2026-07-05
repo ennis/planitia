@@ -1,3 +1,4 @@
+// Manifest: shaders.toml
 import common;
 import scene_info;
 

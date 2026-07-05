@@ -1,0 +1,13 @@
+[package]
+name = "editor"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gamelib = { workspace = true }
+gpu = { workspace = true }
+log = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+ron = "0.12"
+rfd = "0.17.2"
+bumpalo = "3.20.3"

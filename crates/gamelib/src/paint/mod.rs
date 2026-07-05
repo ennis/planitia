@@ -12,16 +12,46 @@ mod text;
 pub use fill::*;
 pub use gradient::*;
 pub use path::*;
-pub use scene::{DrawGlyphRunOptions, PaintScene, render_scene};
+pub use scene::{DrawGlyphRunOptions, StrokeOptions, PaintScene, render_scene};
 pub use shape::*;
-pub use text::{GlyphRun, TextFormat, TextLayout};
+pub use text::{GlyphRun, TextFormat, TextLayout, Font};
 
 use crate::paint::atlas::Atlas;
-use crate::paint::text::{Font, GlyphCache, GlyphEntry, GlyphId};
+use crate::paint::text::{GlyphCache, GlyphEntry, GlyphId};
 use crate::render::RenderTarget;
 use color::Srgba8;
 use gpu::{ImageUsage, Sampler, Vertex as GpuVertex, vk};
 use math::{Camera, U16Vec2, UVec2, Vec2, u16vec2, uvec2, vec2};
+
+/// Blend mode.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[repr(u8)]
+pub enum BlendMode {
+    Normal,
+    Multiply,
+    Screen,
+    Overlay,
+    Darken,
+    Lighten,
+    ColorDodge,
+    ColorBurn,
+    HardLight,
+    SoftLight,
+    Difference,
+    Exclusion,
+    Mask,
+}
+
+/// Controls where a stroke is drawn relative to a guiding path.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum StrokeLocation {
+    /// Stroke is centered on the path.
+    Center,
+    /// Stroke is drawn inside the path.
+    Inside,
+    /// Stroke is drawn outside the path.
+    Outside,
+}
 
 /// Vertex used in the painting shaders.
 #[repr(C)]

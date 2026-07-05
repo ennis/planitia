@@ -95,6 +95,7 @@ struct Module {
 /// A single shader entry point extracted from a [`Module`].
 struct EntryPoint {
     name: String,
+    params: Vec<reflection::Param>,
     /// The pass this entry point belongs to, either from a `[pass("...")]` attribute or inferred
     /// from the entry point name by stripping the stage suffix.
     pass: Option<String>,
@@ -228,10 +229,16 @@ impl BuildManifest {
         for i in 0..entry_point_count {
             let layout = program.layout(0).expect("failed to get reflection");
             let ep = layout.entry_point_by_index(i).unwrap();
-            let push_constants_size = get_push_constants_size(&ep);
+            let push_constants_size = get_push_constants_size(ep);
             let work_group_size = {
                 let s = ep.compute_thread_group_size();
                 [s[0] as u32, s[1] as u32, s[2] as u32]
+            };
+
+            let params = {
+                let mut collector = CollectedReflectionData::new(archive, options);
+                collector.reflect_entry_point(ep);
+                collector.params
             };
 
             // Determine the pass name: prefer the `[pass("...")]` attribute, then fall back to
@@ -279,6 +286,7 @@ impl BuildManifest {
                 push_constants_size,
                 pass,
                 work_group_size,
+                params,
             });
         }
 
@@ -308,11 +316,13 @@ impl BuildManifest {
         let mut workgroup_size = [1u32; 3];
         let mut shaders = vec![];
         let mut stage_flags = vk::ShaderStageFlags::default();
+        let mut all_params = vec![];
 
         for &ep in entry_points {
             push_constants_size = push_constants_size.max(ep.push_constants_size);
             workgroup_size = ep.work_group_size;
             stage_flags |= ep.stage;
+            all_params.extend_from_slice(&ep.params);
             shaders.push(Shader { stage: ep.stage, entry_point: ep.name.as_str().into() });
         }
 
@@ -375,6 +385,13 @@ impl BuildManifest {
             })
         };
 
+        let refl_params = archive.write_slice(&all_params);
+        let refl_resources = archive.write_slice(&[]);
+        let signature = archive.write(&sharc::reflection::Signature {
+            params: refl_params,
+            resources: refl_resources,
+        });
+
         Ok(sharc::Pass {
             name: ZString64::new(pipeline_name),
             kind: pipeline_kind,
@@ -382,7 +399,7 @@ impl BuildManifest {
                 byte_size: 0xABCDEF12, // FIXME: populate from reflection
                 parameters: Offset::INVALID,
             },
-            signature: Offset::INVALID, // TODO
+            signature
         })
     }
 
