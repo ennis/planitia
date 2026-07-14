@@ -117,13 +117,14 @@ impl<E> Exc<E> {
     }
 }
 
-impl<E> From<E> for Exc<E>
+impl<G, E> From<E> for Exc<G>
 where
     E: std::error::Error + Send + Sync + 'static,
+    G: std::error::Error + Send + Sync + 'static + Default,
 {
     #[track_caller]
     fn from(e: E) -> Self {
-        Exc::new(e)
+        Exc::new(e).raise(G::default())
     }
 }
 
@@ -215,7 +216,7 @@ where
             Ok(value) => Ok(value),
             Err(err) => {
                 let mut exc = Exc::new(outer);
-                exc.add_child(err);
+                exc.add_child::<E>(Exc::new(err));
                 Err(exc)
             }
         }
@@ -232,7 +233,7 @@ where
             Ok(value) => Ok(value),
             Err(err) => {
                 let mut exc = Exc::new(outer());
-                exc.add_child(err);
+                exc.add_child::<E>(Exc::new(err));
                 Err(exc)
             }
         }
@@ -324,23 +325,23 @@ impl <T> OptionExt<T> for Option<T> {
 mod tests {
     use super::*;
 
-    #[derive(thiserror::Error, Debug)]
+    #[derive(thiserror::Error, Debug, Default)]
     #[error("IO error")]
     struct IOError;
 
-    #[derive(thiserror::Error, Debug)]
+    #[derive(thiserror::Error, Debug, Default)]
     #[error("Parse error")]
     struct ParseError;
 
-    #[derive(thiserror::Error, Debug)]
+    #[derive(thiserror::Error, Debug, Default)]
     #[error("Compilation error: {0}")]
     struct CompilationError(String);
 
-    #[derive(thiserror::Error, Debug)]
+    #[derive(thiserror::Error, Debug, Default)]
     #[error("Execution error")]
     struct ExecutionError;
 
-    #[derive(thiserror::Error, Debug)]
+    #[derive(thiserror::Error, Debug, Default)]
     #[error("Application error")]
     struct AppError;
 

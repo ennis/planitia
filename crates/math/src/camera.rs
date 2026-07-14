@@ -71,6 +71,7 @@ impl Camera {
     }
 
     pub fn eye(&self) -> DVec3 {
+        // TODO this could be extracted more easily
         self.view_inverse.transform_point3(Vec3::ZERO).as_dvec3()
     }
 

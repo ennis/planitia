@@ -3,9 +3,20 @@ name = "math"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+crate-type = ["dylib"]
+
 [dependencies]
 glam = "0.30.5"
-serde = { version = "1", features = ["derive"], optional = true }
+# [Claude Sonnet 4.6] "alloc" and "rc" are explicitly requested here to match the feature set that the full build graph
+# resolves to (egui/epaint activate serde/rc transitively through gamelib). Without them, Cargo
+# builds math's dylib subgraph with a different serde than the rest of the workspace, producing two
+# incompatible compilations of serde_core → serde → glam → math, which causes an output filename
+# collision (math.dll built twice). Keeping the features in sync forces Cargo to unify the units.
+#
+# [patapon] This is also a cargo issue (https://github.com/rust-lang/cargo/issues/6313)
+# [patapon] Eventually we should remove egui and epaint dependencies, which would eliminate the problem
+serde = { version = "1", features = ["derive", "alloc", "rc"], optional = true }
 
 [features]
 default = ["serialization"]

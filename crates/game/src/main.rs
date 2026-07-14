@@ -24,6 +24,7 @@ use log::debug;
 use math::{Camera, Mat4, Vec2, Vec3, rect_xywh, vec2};
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
+use crate::experiments::hot_reload::{load_test_plugin, reload_plugins, PluginHost};
 
 mod experiments;
 
@@ -122,7 +123,7 @@ impl Default for Game {
         Self {
             //demo: WidgetGallery::default(),
             color: Default::default(),
-            bg_top_color: Color32::from_rgb(100, 149, 237),
+            bg_top_color: Color32::from_rgb(100, 149, 238),
             bg_bottom_color: Color32::from_rgb(25, 25, 112),
             depth_stencil_buffer: create_depth_buffer(WIDTH, HEIGHT),
             camera_control: CameraControl::default(),
@@ -184,26 +185,21 @@ impl Game {
     }
 
     fn render_overlay(&mut self, cmd: &mut gpu::CommandBuffer, target: &gpu::Image) {
-        //let mut scene = PaintScene::new(Srgba8::TRANSPARENT);
-        //
-        //let mut text = TextLayout::new(
-        //    &TextFormat { size: 20.0, ..Default::default() },
-        //    concat!(
-        //        "[Home] Home camera\n",
-        //        "[G] Toggle grid\n",
-        //        "[H] Toggle background\n",
-        //        "[P] Toggle painting demo\n",
-        //        "[I] Toggle imgui\n"
-        //    ),
-        //);
-        //text.layout(1000.0);
-
-        //for glyph_run in text.glyph_runs() {
-        //    scene.draw_glyph_run(vec2(0.0, 0.0), &glyph_run, &DrawGlyphRunOptions::default());
-        //}
-        //
-        //scene.finish(cmd, &PaintRenderParams { camera: Default::default(), color_target: target, depth_target: None });
-
+        let mut scene = PaintScene::new(Srgba8::TRANSPARENT);
+        scene.draw_text(
+            vec2(10.0, 10.0),
+            concat!(
+                "  [Home] Home camera\n",
+                "     [G] Toggle grid\n",
+                "     [H] Toggle background\n",
+                "     [P] Toggle painting demo\n",
+                "     [I] Toggle imgui\n",
+                "[Ctrl+G] Load plugin\n",
+            ),
+            &TextFormat { size: 20.0, ..Default::default() },
+            Srgba8::WHITE,
+        );
+        scene.render(cmd, target);
         if self.cfg.show_painting_demo {
             self.svg_experiment.render(cmd, target);
             experiments::painting_test(cmd, target, Srgba8::from(self.color.to_srgba_unmultiplied()));
@@ -243,6 +239,12 @@ impl AppHandler for Game {
         }
         if input_event.is_shortcut("I") {
             self.cfg.show_imgui = !self.cfg.show_imgui;
+        }
+        if input_event.is_shortcut("Ctrl+G") {
+            load_test_plugin();
+        }
+        if input_event.is_shortcut("Ctrl+Shift+G") {
+            reload_plugins();
         }
 
         // --- CAMERA ---

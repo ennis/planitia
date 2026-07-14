@@ -19,7 +19,6 @@ thiserror = "2"
 arrayvec = "0.7.8"
 gpu-types = { workspace = true }
 gpu-macros = { workspace = true }
-math = { workspace = true }
 color = { workspace = true, optional = true }
 
 [dependencies.winapi]

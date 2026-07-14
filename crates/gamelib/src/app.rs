@@ -1,7 +1,7 @@
 //! Global context.
 use crate::event::UserEvent;
 use crate::executor::LocalExecutor;
-use crate::imgui;
+use crate::{imgui, wake_event_loop};
 use crate::imgui::ImguiContext;
 use crate::input::InputEvent;
 use crate::platform::{LoopHandler, Platform, RenderTargetImage, WindowHandle};
@@ -21,6 +21,8 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, OnceLock};
 use std::{mem, ptr};
+use notify_debouncer_mini::{new_debouncer, DebounceEventResult, DebouncedEvent, Debouncer};
+use notify_debouncer_mini::notify::{RecommendedWatcher, RecursiveMode};
 use threadbound::ThreadBound;
 use crate::paint::Painter;
 
@@ -107,7 +109,7 @@ pub trait AppHandler {
     fn render(&mut self, window: WindowHandle, image: RenderTargetImage<'_>) {}
 
     /// Called when a watched file or directory has changed.
-    fn file_changed(&mut self) {}
+    fn file_changed(&mut self, path: &Path) {}
 
     fn close_requested(&mut self, window: WindowHandle) {}
     fn imgui(&mut self, ctx: &egui::Context) {}
@@ -262,6 +264,10 @@ pub(crate) struct MainThreadContext {
     rdoc_launch_replay_ui: Cell<bool>,
     debug_mark_counter: Cell<usize>,
     handler: Box<RefCell<dyn AppHandler + 'static>>,
+    /// File watcher.
+    watch: RefCell<Debouncer<RecommendedWatcher>>,
+    // Hot-reloadable plugin host.
+    //plugin_host: RefCell<PluginHost>,
 }
 
 impl MainThreadContext {
@@ -278,6 +284,29 @@ impl MainThreadContext {
             info!("not running with RenderDoc");
         }
 
+        // Create the file watcher.
+        //
+        // NOTE: `notify` spins a thread to watch for file changes, and calls the callback here.
+        // It's annoying for us because a lot of things are only available on the main thread.
+        // So when we receive an event, we forward it to the event loop on the main thread.
+        // It's probably possible to do this without even spinning a separate thread,
+        // by using the win32 API directly, but I don't have time for this.
+        let watch = RefCell::new(new_debouncer(std::time::Duration::from_secs(1), move |events: DebounceEventResult| {
+            match events {
+                Ok(events) => {
+                    wake_event_loop(move || {
+                        with_app_ctx(|ctx| {
+                            ctx.handle_file_change_events(events);
+                        });
+                    })
+                }
+                Err(err) => {
+                    // Log, but otherwise ignore errors; not much we can do about them.
+                    error!("error: {err}");
+                }
+            }
+        }).expect("failed to create file watcher"));
+
         Self {
             platform,
             imgui,
@@ -290,6 +319,14 @@ impl MainThreadContext {
             handler,
             #[cfg(feature = "lua")]
             lua: Lua::new(),
+            watch
+        }
+    }
+
+    /// Handles file change events from `notify`, and invokes the appropriate handlers.
+    fn handle_file_change_events(&self, events: Vec<DebouncedEvent>) {
+        for event in events {
+            self.handler.borrow_mut().file_changed(&event.path)
         }
     }
 
@@ -318,13 +355,10 @@ impl MainThreadContext {
     }
 
     fn run_event_loop(&'static self) {
-
-
         // Run the event loop.
         // This doesn't return until the application exits.
         let mut this = self;
         self.platform.run_event_loop(&mut this);
-
     }
 }
 
@@ -463,5 +497,22 @@ pub fn quit() {
 pub fn render_imgui(command_stream: &mut gpu::CommandBuffer, image: &gpu::Image) {
     with_app_ctx(|ctx| {
         ctx.imgui.borrow_mut().render(command_stream, image);
+    });
+}
+
+/// Watch for file changes at the specified path.
+///
+/// When a change occurs, the [`file_changed`] method of the currently running [`AppHandler`] will be called with the path of the changed file.
+/// To stop watching a file, call [`unwatch_file`].
+pub fn watch_file(path: &Path) {
+    with_app_ctx(|ctx| {
+        ctx.watch.borrow_mut().watcher().watch(path, RecursiveMode::NonRecursive).expect("failed to watch file");
+    });
+}
+
+/// Stop watching for file changes at the specified path.
+pub fn unwatch_file(path: &Path) {
+    with_app_ctx(|ctx| {
+        ctx.watch.borrow_mut().watcher().unwatch(path).expect("failed to unwatch file");
     });
 }

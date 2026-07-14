@@ -1,4 +1,11 @@
+[profile.release.build-override]
+opt-level = 3
+
 [profile.release-with-dbginfo]
+inherits = "release"
+debug = true
+
+[profile.release-with-dbginfo.build-override]
 inherits = "release"
 debug = true
 

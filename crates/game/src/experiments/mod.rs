@@ -7,7 +7,8 @@ mod ss_contours;
 pub mod svg;
 mod sweep;
 mod winged_edge_mesh;
-mod hot_reload;
+pub mod hot_reload;
+
 
 use color::Srgba8;
 use gamelib::paint::{render_scene, DrawGlyphRunOptions, PaintScene, TextFormat, TextLayout};
