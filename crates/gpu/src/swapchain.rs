@@ -8,6 +8,7 @@ use std::time::Duration;
 #[derive(Debug)]
 pub struct SwapchainImage {
     pub image: Image,
+    /// Sync between rendering & presentation.
     pub render_finished: vk::Semaphore,
 }
 
@@ -90,7 +91,7 @@ impl Device {
         timeout: Duration,
     ) -> Result<(usize, &'a Image), vk::Result> {
         // We can't use `get_or_create_semaphore` because according to the spec the semaphore
-        // passed to `vkAcquireNextImage` must not have any pending operations, whereas
+        // passed to `vkAcquireNextImage` must not have any pending operations.
         // `get_or_create_semaphore` only guarantees that a wait operation has been submitted
         // on the semaphore (not that the wait has completed).
         let ready = {
@@ -143,9 +144,9 @@ impl Device {
             crate::submit(cmd)?;
         }
 
-        //self.delete_after_current_submission(move |this| {
-        //    this.raw.destroy_semaphore(ready, None);
-        //});
+        self.delete_after_current_submission(move |this| {
+            this.raw.destroy_semaphore(ready, None);
+        });
 
         Ok((index as usize, img))
     }

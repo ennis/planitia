@@ -34,7 +34,7 @@ pub(crate) fn get_log_options() -> LogOptions {
     LOG_OPTIONS.with(|options| options.clone())
 }
 
-macro_rules! cprintln_level {
+/*macro_rules! cprintln_level {
     ($level:literal, $fmt:literal) => {
         if get_log_options().verbosity >= $level {
             cprintln!($fmt);
@@ -45,7 +45,7 @@ macro_rules! cprintln_level {
             cprintln!($fmt, $($arg)*);
         }
     };
-}
+}*/
 
 //--------------------------------------------------------------------------------------------------
 

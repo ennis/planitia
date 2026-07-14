@@ -5,24 +5,24 @@
 #[macro_use]
 extern crate log;
 
+use crate::editor::{Editor, EditorConfig};
+use crate::node::{Document, DocumentBox};
+use config::Config;
 use gamelib::asset::AssetCache;
-use gamelib::input::InputEvent;
-use gamelib::paint::{Font, PaintScene, TextFormat};
+use gamelib::color::Srgba8;
+use gamelib::input::{InputEvent, NamedKey};
+use gamelib::paint::{Font, PaintScene};
 use gamelib::platform::RenderTargetImage;
 use gamelib::{App, AppHandler, WindowCreateInfo, WindowHandle};
 
 mod config;
-//mod parser;
-mod layout;
-mod model;
-mod lang;
+mod decl;
 mod editor;
+mod lang;
+mod layout;
+mod node;
+mod style;
 
-use config::Config;
-use gamelib::color::Srgba8;
-use gamelib::math::IVec2;
-use crate::editor::{Editor, EditorConfig};
-use crate::model::{Node, NodeData};
 // ---------------------------------------------------------------------------
 // Application singleton
 // ---------------------------------------------------------------------------
@@ -36,24 +36,6 @@ static APP: App<AppState> = App::new();
 
 const INITIAL_WIDTH: u32 = 1280;
 const INITIAL_HEIGHT: u32 = 720;
-
-// ---------------------------------------------------------------------------
-// Application state
-// ---------------------------------------------------------------------------
-struct EditorPainter<'a> {
-    scene: &'a mut PaintScene,
-    font_size: f32,
-    text_color: Srgba8,
-    cell_size: f32,
-}
-
-impl<'a> EditorPainter<'a> {
-    fn draw_text(&mut self, text: &str, grid_position: IVec2) {
-        let format = TextFormat { size: self.font_size, color: self.text_color, ..Default::default() };
-        let position = grid_position.as_vec2() * self.cell_size;
-        self.scene.draw_text(position, text, &format, self.text_color);
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Application state
@@ -75,12 +57,11 @@ impl Default for AppState {
     }
 }
 
-fn default_document() -> Node {
-    NodeData::new(&lang::STRUCT)
+fn default_document() -> DocumentBox {
+    Document::new(&lang::STRUCT)
 }
 
 impl AppState {
-
     fn new() -> Self {
         // Load configuration from file, or set up defaults.
         let cfg = Config::load();
@@ -88,11 +69,7 @@ impl AppState {
         // Load editor font.
         let font = Font::load_static_font_from_bytes(include_bytes!("../assets/fonts/TX-02-Medium.otf"));
 
-        let editor_config = EditorConfig {
-            font,
-            indent: 2,
-            ..
-        };
+        let editor_config = EditorConfig { font, indent: 2, .. };
         let editor = Editor::new(default_document(), &editor_config);
 
         Self {
@@ -121,36 +98,46 @@ impl AppState {
 
 impl AppHandler for AppState {
     fn started(&mut self) {
-        let _ = gamelib::create_window(&WindowCreateInfo { width: INITIAL_WIDTH, height: INITIAL_HEIGHT, title: "Editor", .. });
+        let _ = gamelib::create_window(&WindowCreateInfo {
+            width: INITIAL_WIDTH,
+            height: INITIAL_HEIGHT,
+            title: "Editor",
+            ..
+        });
         // load config
         self.cfg = Config::load();
     }
 
-    fn input(&mut self, _window: WindowHandle, event: InputEvent) {
+    fn input(&mut self, _window: WindowHandle, event: &InputEvent) {
         if event.is_shortcut("Ctrl+Q") {
             gamelib::quit();
-        }
-
-        if event.is_shortcut("Ctrl++") {
+        } else if event.is_shortcut("Ctrl++") {
             self.font_size += 1;
             info!("Font size: {}px", self.font_size);
             self.editor.set_font_size(self.font_size);
-        }
-
-        if event.is_shortcut("Ctrl+-") {
+        } else if event.is_shortcut("Ctrl+-") {
             if self.font_size > 1 {
                 self.font_size -= 1;
                 info!("Font size: {}px", self.font_size);
             }
             self.editor.set_font_size(self.font_size);
-        }
-
-        if event.is_shortcut("I") {
+        } else if event.is_shortcut("I") {
             self.cfg.show_imgui = !self.cfg.show_imgui;
+        } else if event.is_shortcut(NamedKey::Enter) {
+            // modify the document
+            let doc = self.editor.document_mut();
+            doc.root().insert_in(&lang::STRUCT::fields, doc.create_node(&lang::FIELD), 0);
+            doc.apply_pending_changes();
+        } else if event.is_shortcut(NamedKey::Backspace) {
+            let doc = self.editor.document_mut();
+            doc.root().remove_in(&lang::STRUCT::fields, 0);
+            doc.apply_pending_changes();
         }
-
-        if event.is_shortcut("Ctrl+O") {
+        else if event.is_shortcut("Ctrl+O") {
             //
+        } else {
+            // Pass input events to the editor for processing.
+            self.editor.handle_input(event);
         }
     }
 

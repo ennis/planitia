@@ -600,6 +600,7 @@ fn sync(waits: &[SyncWait], signals: &[SyncSignal]) {
     // /!\ Lock the device for command submission.
     let submission_state = device.submission_state.lock().unwrap();
 
+    // TODO: don't allocate vectors here, use statically sized arrays
     let wait_count = waits.len();
     let mut wait_semaphores = Vec::with_capacity(wait_count);
     let mut wait_semaphore_values = Vec::with_capacity(wait_count);
@@ -687,110 +688,6 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
     let command_buffers = mem::take(&mut cmd.command_buffers_to_submit);
 
     //----------------------
-    // Update tracked resources:
-    //
-    // Update the tracked state of each resource used in the command buffer,
-    // and insert pipeline barriers if necessary.
-    //{
-    //    let (src_stage_mask, src_access_mask) = submission_state.writes.to_vk_scope_flags();
-    //    let (dst_stage_mask, dst_access_mask) = cmd.initial_access.to_vk_scope_flags();
-    //    // TODO: verify that a barrier is necessary
-    //    let global_memory_barrier = Some(vk::MemoryBarrier2 {
-    //        src_stage_mask,
-    //        src_access_mask,
-    //        dst_stage_mask,
-    //        dst_access_mask,
-    //        ..Default::default()
-    //    });
-    //
-    //    let mut image_barriers = Vec::new();
-    //    for (_, state) in cmd.tracked_images.drain() {
-    //        let prev_access = match submission_state.access_per_resource.entry(state.id) {
-    //            Some(entry) => {
-    //                match entry {
-    //                    Entry::Occupied(res) => mem::replace(res.into_mut(), state.last_access),
-    //                    Entry::Vacant(res) => {
-    //                        res.insert(state.last_access);
-    //                        // if the image was not previously tracked, the contents are undefined
-    //                        MemoryAccess::UNINITIALIZED
-    //                    }
-    //                }
-    //            }
-    //            // if the image was not previously tracked, the contents are undefined
-    //            None => MemoryAccess::UNINITIALIZED,
-    //        };
-    //        if prev_access != state.first_access {
-    //            let format = state.format;
-    //            image_barriers.push(vk::ImageMemoryBarrier2 {
-    //                src_stage_mask,
-    //                src_access_mask,
-    //                dst_stage_mask,
-    //                dst_access_mask,
-    //                old_layout: prev_access.to_vk_image_layout(format),
-    //                new_layout: state.first_access.to_vk_image_layout(format),
-    //                image: state.image,
-    //                subresource_range: vk::ImageSubresourceRange {
-    //                    aspect_mask: aspects_for_format(format),
-    //                    base_mip_level: 0,
-    //                    level_count: vk::REMAINING_MIP_LEVELS,
-    //                    base_array_layer: 0,
-    //                    layer_count: vk::REMAINING_ARRAY_LAYERS,
-    //                },
-    //                ..Default::default()
-    //            });
-    //        }
-    //    }
-    //
-    //    // update tracked writes across submissions
-    //    submission_state.writes = cmd.tracked_writes;
-    //
-    //    // If we need a pipeline barrier before submitting the command buffers, we insert a "fixup" command buffer
-    //    // containing the pipeline barrier, before the others.
-    //    if global_memory_barrier.is_some() || !image_barriers.is_empty() {
-    //        let fixup_cb = cmd.command_pool.alloc(&device.raw);
-    //        unsafe {
-    //            device
-    //                .raw
-    //                .begin_command_buffer(
-    //                    fixup_cb,
-    //                    &vk::CommandBufferBeginInfo {
-    //                        flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
-    //                        ..Default::default()
-    //                    },
-    //                )
-    //                .unwrap();
-    //            device.extensions.ext_debug_utils.cmd_begin_debug_utils_label(
-    //                fixup_cb,
-    //                &vk::DebugUtilsLabelEXT {
-    //                    p_label_name: b"barrier fixup\0".as_ptr() as *const c_char,
-    //                    color: [0.0, 0.0, 0.0, 0.0],
-    //                    ..Default::default()
-    //                },
-    //            );
-    //            device.raw.cmd_pipeline_barrier2(
-    //                fixup_cb,
-    //                &vk::DependencyInfo {
-    //                    dependency_flags: Default::default(),
-    //                    memory_barrier_count: global_memory_barrier.iter().len() as u32,
-    //                    p_memory_barriers: global_memory_barrier
-    //                        .as_ref()
-    //                        .map(|b| b as *const vk::MemoryBarrier2)
-    //                        .unwrap_or(ptr::null()),
-    //                    buffer_memory_barrier_count: 0,
-    //                    p_buffer_memory_barriers: ptr::null(),
-    //                    image_memory_barrier_count: image_barriers.len() as u32,
-    //                    p_image_memory_barriers: image_barriers.as_ptr(),
-    //                    ..Default::default()
-    //                },
-    //            );
-    //            device.extensions.ext_debug_utils.cmd_end_debug_utils_label(fixup_cb);
-    //            device.raw.end_command_buffer(fixup_cb).unwrap();
-    //        }
-    //        command_buffers.insert(0, fixup_cb);
-    //    }
-    //}
-
-    //----------------------
     // submit
     let signal_semaphores = vec![device.thread_safe.timeline];
     let signal_semaphore_values = vec![timeline_value];
@@ -836,6 +733,7 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
     result
 }
 
+/// Presents the given swap chain image to the screen.
 pub fn present(swap_chain: &mut SwapChain, index: usize) -> VkResult<()> {
     // transition image to PRESENT_SRC
     let mut cmd = CommandBuffer::new();
@@ -871,7 +769,7 @@ pub fn present(swap_chain: &mut SwapChain, index: usize) -> VkResult<()> {
 
     unsafe {
         let submission_state = device.submission_state.lock().unwrap();
-        let result = Device::global()
+        let result = device
             .extensions
             .khr_swapchain
             .queue_present(

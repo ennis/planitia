@@ -841,3 +841,60 @@ Two implementations:
 
 ## Kinds of strokes
 - Simple texture splats
+
+
+# New QoL goal: hot reloading
+
+There are two approaches to make iteration on games & graphics experiments faster:
+1. build tools (GUI tools, domain-specific languages, etc.) that turn the experiment into a data-driven project, 
+  so that the experiment can be modified without touching the code
+2. hot-reload the experiment code
+
+Option 1. is simply too much work. 
+For GUIs, I don't find the existing frameworks very pleasant to use. 
+Making a GUI for a particular application needs iteration as well, and I don't want to spend time on "making a tool to make GUIs",
+because otherwise I will never make anything.
+DSLs are not much better: in addition to the compiler/interpreter, you also need tooling (syntax highlighting, LSPs) for it to be practical.
+Basically, both options mean working on things not directly related to the experiments, with their own issues and design problems.
+
+Option 2. seems attainable in a more reasonable amount of time. 
+However, this raises a lot of architectural questions and goes into the dark corners of rust tooling.
+The main challenge is making something that is practical to use, without too much magic and boilerplate, 
+and that doesn't require a lot of work to set up for each experiment.
+
+## Hot reloading: what we want
+
+True hot reloading where code changes while the objects in memory stay the same may be too complicated to implement,
+and very unsafe.
+
+Another way of thinking about hot-reloading is _persistence_: being able to save as much application state as possible, and restore it after a code change.
+Currently, a lot of time is lost between iterations because the application must be put back into the previous state after a code change. 
+That's a lot of manual work. Also, a lot of time is lost waiting for recompilation. Thus, there are two axes of improvement:
+
+* (A) Persistence of application state across iterations
+* (B) Faster compilation times
+
+Examples of things that are not persisted, but could be:
+- camera position: we need to set up the camera correctly on each run
+- scene objects (geometry, materials, etc.): we need to browse and open the geometry on each run
+- experiment parameters: values of tweakable parameters, like brush size, light position, etc. are not always saved
+
+There are two approaches to persistence: either we make more application state serializable, or we keep the application state in memory
+while the code is reloaded. The latter is more difficult to implement, but seems more versatile and less intrusive.
+
+Faster compilation times can be achieved by:
+- splitting the project into smaller crates 
+  - it's not clear how much this helps, the smaller crates may need to monomorphize a lot of code from libraries anyway
+  - also, the crate boundaries may not be clear, and may need to be changed often
+- using another compiler backend
+
+## Potential issues
+
+### Static variables
+For instance, `gpu` has a static variable that holds the global Vulkan instance. 
+The hot-reloaded crate can't have its own copy of it, so it must be dynamically linked somehow.
+
+
+## Plan for hot-reloading
+
+- `gpu` should be split into `gpu-types` and `gpu`

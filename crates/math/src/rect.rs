@@ -115,6 +115,13 @@ impl IRect {
         Self { min: origin, max: IVec2::new(origin.x + size.x, origin.y + size.y) }
     }
 
+    pub const fn translate(&self, offset: IVec2) -> Self {
+        Self {
+            min: ivec2(self.min.x + offset.x, self.min.y + offset.y),
+            max: ivec2(self.max.x + offset.x, self.max.y + offset.y),
+        }
+    }
+
     pub const fn top_left(&self) -> IVec2 {
         self.min
     }
@@ -139,6 +146,12 @@ impl IRect {
         } else {
             None
         }
+    }
+
+    pub fn union(&self, other: &IRect) -> IRect {
+        let min = IVec2::new(self.min.x.min(other.min.x), self.min.y.min(other.min.y));
+        let max = IVec2::new(self.max.x.max(other.max.x), self.max.y.max(other.max.y));
+        IRect { min, max }
     }
 
     pub const fn is_null(&self) -> bool {

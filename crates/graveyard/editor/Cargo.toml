@@ -11,3 +11,5 @@ serde = { version = "1.0", features = ["derive"] }
 ron = "0.12"
 rfd = "0.17.2"
 bumpalo = "3.20.3"
+slotmap = "1.1.1"
+aliasable = "0.1.3"

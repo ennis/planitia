@@ -1,3 +1,6 @@
 [profile.release-with-dbginfo]
 inherits = "release"
 debug = true
+
+#[target.'cfg(any(unix, windows))']
+#rustflags = ["-Cprefer-dynamic=yes"]

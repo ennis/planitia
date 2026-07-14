@@ -208,7 +208,6 @@ impl<'a> Printer<'a> {
                     Indent(self.indent)
                 );
                 self.indent();
-                let indent = self.get_indent();
                 self.print_push_constants(data.push_constants_size);
                 cprintln!(
                     "{}<bold>Workgroup Size</>: {}×{}×{}",
@@ -226,13 +225,12 @@ impl<'a> Printer<'a> {
     }
 
     fn print_file_dependency(&mut self, dep: &sharc::FileDependency) {
-        let indent = self.get_indent();
         let path = &self.a[dep.path];
         let mtime = format_unix_time(dep.mtime);
         cprint!("{path} <dim>(mtime: {mtime})</>");
     }
 
-    fn print_module(&mut self, index: usize, module: &sharc::Module) {
+    fn print_module(&mut self, _index: usize, module: &sharc::Module) {
         let name = &self.a[module.name];
 
         cprintln!("{}<bold>Module</> <bold,green>{name}</>", Indent(self.indent));

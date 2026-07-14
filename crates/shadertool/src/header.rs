@@ -14,8 +14,6 @@
 //! ```
 
 use std::collections::BTreeMap;
-use color_print::{ceprintln};
-use crate::get_log_options;
 
 pub(crate) fn parse_metadata_header(source: &str) -> BTreeMap<String, String> {
     let mut metadata = BTreeMap::new();

@@ -296,3 +296,9 @@ impl TryFrom<&str> for Shortcut {
         Shortcut::parse(value)
     }
 }
+
+impl From<NamedKey> for Shortcut {
+    fn from(named: NamedKey) -> Self {
+        Shortcut { modifiers: Modifiers::empty(), key: ShortcutKey::Named(named) }
+    }
+}

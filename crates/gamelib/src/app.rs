@@ -92,7 +92,7 @@ pub trait AppHandler {
     fn started(&mut self) {}
 
     /// Called when the event loop receives an input event.
-    fn input(&mut self, window: WindowHandle, input_event: InputEvent);
+    fn input(&mut self, window: WindowHandle, input_event: &InputEvent);
 
     /// Called when the event loop receives a custom event.
     fn event(&mut self, event: UserEvent) {}
@@ -355,7 +355,7 @@ impl LoopHandler for &'static MainThreadContext {
         }
 
         // Otherwise, pass the event to the inner handler
-        self.handler.borrow_mut().input(window, input_event);
+        self.handler.borrow_mut().input(window, &input_event);
     }
 
     fn event(&mut self, event: UserEvent) {

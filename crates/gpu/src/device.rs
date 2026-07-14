@@ -102,13 +102,9 @@ pub(crate) struct DeviceSubmissionState {
     pub(crate) queue: vk::Queue,
     /// Sorted by create_ticket, not by order of submission.
     pub(crate) active_submissions: VecDeque<ActiveSubmission>,
-    // Pending writes not yet made visible.
-    //pub(crate) writes: MemoryAccess,
-    // Last access type tracked per resource. Used mostly to track image layouts.
-    // Get rid of this once GENERAL layouts with no performance penalty are widely supported.
-    //pub(crate) access_per_resource: SecondaryMap<ResourceId, MemoryAccess>,
 }
 
+// TODO: remove this, we don't do resource tracking anymore
 pub(crate) struct ResourceState {
     //pub(crate) last_submission_index: u64,
 }
@@ -144,7 +140,7 @@ pub struct Device {
 
     // --- descriptor heap ---
 
-    // semaphores ready for reuse
+    /// semaphores ready for reuse.
     pub(crate) semaphores: Mutex<Vec<vk::Semaphore>>,
 
     // Command pools per queue and thread.
@@ -156,7 +152,7 @@ pub struct Device {
     /// Index of the next submission to be submitted.
     pub(crate) next_timeline_value: AtomicU64,
 
-    /// All command buffers with create_index <= than this value have completed execution.
+    /// All command buffers with create_index lower than or equal to this value have completed execution.
     ///
     /// There might be some command buffers with a higher create_index that have also completed,
     /// but this is the highest value for which we can guarantee that all lower-indexed command
@@ -412,6 +408,7 @@ const DEVICE_EXTENSIONS: &[&str] = &[
 
 impl Device {
     /// Returns the global device.
+    #[inline(never)]
     pub fn global() -> &'static Device {
         static DEVICE: LazyLock<&'static Device> =
             LazyLock::new(|| Box::leak(Box::new(create_device().expect("failed to create the GPU device"))));
@@ -1065,8 +1062,8 @@ fn create_stage<'a>(
 
 impl Device {
     /// FIXME: this should be a constructor of `DescriptorSetLayout`, because now we have two
-    /// functions with very similar names (`create_descriptor_set_layout` and `create_descriptor_set_layout_from_handle`)
-    /// that have totally different semantics (one returns a raw vulkan handle, the other returns a RAII wrapper `DescriptorSetLayout`).
+    ///        functions with very similar names (`create_descriptor_set_layout` and `create_descriptor_set_layout_from_handle`)
+    ///        that have totally different semantics (one returns a raw vulkan handle, the other returns a RAII wrapper `DescriptorSetLayout`).
     pub fn create_descriptor_set_layout_from_handle(&self, handle: vk::DescriptorSetLayout) -> DescriptorSetLayout {
         DescriptorSetLayout { last_submission_index: Some(Arc::new(Default::default())), handle }
     }

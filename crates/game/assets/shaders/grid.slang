@@ -8,7 +8,6 @@ struct VSOut
     float2 uv;
 };
 
-
 struct RootParams {
     SceneInfo* scene;
     float grid_scale;

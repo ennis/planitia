@@ -1,6 +1,5 @@
 use crate::{layout, declare_node};
-use crate::layout::LCell;
-
+use crate::layout::LayoutItem;
 
 declare_node! {
     pub static STRUCT: "struct" {
@@ -8,14 +7,16 @@ declare_node! {
         fields : ([FIELD])
     }
     =>
-    [I "struct" %name "{" "\n" [V %fields] "}"]
+    [V "struct" %name "{" "\n" [V %fields] "}"]
 }
 
 declare_node! {
     pub static FIELD: "field" {
         name  :  (str)
         ty    :  (str)
-    } => [I %name ":" %ty "\n"]
+    }
+    =>
+    [V %name ":" %ty "\n"]
 }
 
 declare_node! {

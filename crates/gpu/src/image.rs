@@ -181,8 +181,6 @@ impl VulkanObject for Image {
 }
 
 impl Image {
-    // TODO: a less verbose `new`.
-
     /// Creates a new image resource.
     pub fn new(image_info: ImageCreateInfo) -> Image {
         Device::global().create_image(&image_info)

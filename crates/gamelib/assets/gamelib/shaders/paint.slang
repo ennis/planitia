@@ -294,7 +294,7 @@ void rasterize_tiles(uint3 workgroup_id: SV_GroupID, uint3 group_thread_id : SV_
             case FillType.Texture: {
                 TextureFill fill = reinterpret<TextureFill>(u.fills[fill_index]);
                 float2 uv = mul(fill.deviceToTexCoord, float3(pixel_center_screen, 1.0)).xy;
-                fill_color = fill.texture.Sample(fill.sampler, uv) * srgba8_to_float4(fill.color);
+                fill_color = fill.texture.SampleLevel(fill.sampler, uv, 0) * srgba8_to_float4(fill.color);
                 break;
             }
             case FillType.LinearGradient: {

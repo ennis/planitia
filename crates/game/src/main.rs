@@ -91,6 +91,7 @@ impl Config {
 struct Game {
     width: u32,
     height: u32,
+    cfg: Config,
     color: Color32,
     bg_top_color: Color32,
     bg_bottom_color: Color32,
@@ -104,7 +105,6 @@ struct Game {
     outline_experiment: experiments::outlines::OutlineExperiment,
     automaton_experiment: experiments::automaton::AutomatonExperiment,
     svg_experiment: experiments::svg::SvgExperiment,
-    cfg: Config,
 }
 
 fn create_depth_buffer(width: u32, height: u32) -> Image {
@@ -217,7 +217,7 @@ impl AppHandler for Game {
         let _ = gamelib::create_window(&WindowCreateInfo { width: WIDTH, height: HEIGHT, title: "Planitia", .. });
     }
 
-    fn input(&mut self, _window: WindowHandle, input_event: InputEvent) {
+    fn input(&mut self, _window: WindowHandle, input_event: &InputEvent) {
         // --- SHORTCUTS ---
 
         // App exit

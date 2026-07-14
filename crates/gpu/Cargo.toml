@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Alexandre Bléron <alex.bleron@gmail.com>"]
 edition = "2024"
 
+
 [dependencies]
 ash = "0.38"
 vulkan-headers = "0.2.4" # until ash updates to support vk1.4

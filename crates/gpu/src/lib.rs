@@ -57,7 +57,10 @@ pub trait VulkanObject {
 /// Standard subgroup size.
 pub const SUBGROUP_SIZE: u32 = 32;
 
-/// Device address of a GPU buffer containing elements of type `T` its associated type.
+/// Pointers in GPU device address space.
+///
+/// Like `*mut T`, but in device address space.
+/// They can be used in shaders, via VK_KHR_buffer_device_address (required).
 #[repr(transparent)]
 pub struct Ptr<T: ?Sized + 'static> {
     pub raw: vk::DeviceAddress,
@@ -125,9 +128,9 @@ impl SamplerHandle {
     pub const INVALID: Self = SamplerHandle { index: u32::MAX, _unused: 0 };
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 /// Graphics pipelines.
-///
-/// TODO Drop impl
 #[derive(Clone)]
 pub struct GraphicsPipeline {
     pub(crate) pipeline: vk::Pipeline,
@@ -201,12 +204,28 @@ impl ComputePipeline {
     }
 }
 
+impl Drop for ComputePipeline {
+    fn drop(&mut self) {
+        let pipeline = self.pipeline;
+        let pipeline_layout = self.pipeline_layout;
+        unsafe {
+            Device::global().delete_after_current_submission(move |device| {
+                device.raw.destroy_pipeline(pipeline, None);
+                device.raw.destroy_pipeline_layout(pipeline_layout, None);
+            })
+        }
+    }
+}
+
 impl VulkanObject for ComputePipeline {
     type Handle = vk::Pipeline;
     fn handle(&self) -> Self::Handle {
         self.pipeline
     }
 }
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Samplers
 #[derive(Clone, Debug)]

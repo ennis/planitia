@@ -41,10 +41,13 @@ Backlog:
  ☐ get rid of winit
  ☐ get rid of arboard
  ☐ get rid of egui
+ ☐ get rid of notify
+     Its API is not ergonomic (no per-path callback, so need to store a map from path to callback), each watcher spawns a separate thread (is this really necessary) + mpsc channels
  ☐ object picking
  ☐ arbitrary data containers based on archive format
  ☐ Mesh file format
  ☐ Fix memory leak 
+ ☐ pipeline_cache: hot-reloading of shaders should be less messy (fix double-reload)
  ☐ Move assets, painting, platform etc. to another crate for potential reuse
  ☐ async asset reloading
  ☐ move egui shaders to shader-archive
