@@ -1,5 +1,6 @@
 use crate::device::ActiveSubmission;
 use crate::{BufferUntyped, CommandPool, ComputePipeline, Descriptor, Device, Ptr, SwapChain, vk};
+use arrayvec::ArrayVec;
 use ash::prelude::VkResult;
 use ash::vk::DeviceAddress;
 use bitflags::bitflags;
@@ -390,7 +391,9 @@ impl CommandBuffer {
         let src_access_mask = vk::AccessFlags2::MEMORY_WRITE;
         let dst_stage_mask = vk::PipelineStageFlags2::ALL_COMMANDS;
         // TODO: add COLOR_ATTACHMENT & DEPTH_ATTACHMENT to InvalidateFlags
-        let dst_access_mask = flags.to_access_flags() | vk::AccessFlags2::COLOR_ATTACHMENT_READ | vk::AccessFlags2::DEPTH_STENCIL_ATTACHMENT_READ;
+        let dst_access_mask = flags.to_access_flags()
+            | vk::AccessFlags2::COLOR_ATTACHMENT_READ
+            | vk::AccessFlags2::DEPTH_STENCIL_ATTACHMENT_READ;
 
         let global_memory_barrier = vk::MemoryBarrier2 {
             src_access_mask,
@@ -581,44 +584,54 @@ impl Drop for CommandBuffer {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// Specifies a timeline semaphore wait operation.
 #[derive(Copy, Clone)]
 pub struct SyncWait {
-    pub sync: vk::Semaphore,
+    pub semaphore: vk::Semaphore,
     pub value: u64,
 }
 
+/// Specifies a timeline semaphore signal operation.
 #[derive(Copy, Clone)]
 pub struct SyncSignal {
-    pub sync: vk::Semaphore,
+    pub semaphore: vk::Semaphore,
     pub value: u64,
 }
 
+/// Maximum number of timeline semaphore wait or timeline semaphore signal operations that can be submitted in a single call to `sync`.
+pub const MAX_SYNC_COUNT: usize = 4;
+
+/// Executes semaphore wait and signal operations on the device.
 ///
+/// # Arguments
+/// * `waits` - semaphores to wait for
+/// * `signals` - semaphores to signal, once the waits have completed
+///
+/// # Notes
+///
+/// The number of waits passed to this function
+/// must not exceed `MAX_SYNC_COUNT`. Same with signals.
 fn sync(waits: &[SyncWait], signals: &[SyncSignal]) {
     let device = Device::global();
 
     // /!\ Lock the device for command submission.
     let submission_state = device.submission_state.lock().unwrap();
 
-    // TODO: don't allocate vectors here, use statically sized arrays
-    let wait_count = waits.len();
-    let mut wait_semaphores = Vec::with_capacity(wait_count);
-    let mut wait_semaphore_values = Vec::with_capacity(wait_count);
-    let mut wait_semaphore_dst_stages = Vec::with_capacity(wait_count);
+    let mut wait_semaphores = [vk::Semaphore::null(); MAX_SYNC_COUNT];
+    let mut signal_semaphores = [vk::Semaphore::null(); MAX_SYNC_COUNT];
+    let mut wait_semaphore_values = [0u64; MAX_SYNC_COUNT];
+    let mut signal_semaphore_values = [0u64; MAX_SYNC_COUNT];
+    let mut wait_semaphore_dst_stages = [vk::PipelineStageFlags::empty(); MAX_SYNC_COUNT];
 
-    let signal_count = signals.len();
-    let mut signal_semaphores = Vec::with_capacity(signal_count);
-    let mut signal_semaphore_values = Vec::with_capacity(signal_count);
-
-    for signal in signals.iter() {
-        signal_semaphores.push(signal.sync);
-        signal_semaphore_values.push(signal.value);
+    for (i, signal) in signals.iter().enumerate() {
+        signal_semaphores[i] = signal.semaphore;
+        signal_semaphore_values[i] = signal.value;
     }
 
-    for (_i, w) in waits.iter().enumerate() {
-        wait_semaphore_dst_stages.push(vk::PipelineStageFlags::ALL_COMMANDS);
-        wait_semaphores.push(w.sync);
-        wait_semaphore_values.push(w.value);
+    for (i, w) in waits.iter().enumerate() {
+        wait_semaphore_dst_stages[i] = vk::PipelineStageFlags::ALL_COMMANDS;
+        wait_semaphores[i] = w.semaphore;
+        wait_semaphore_values[i] = w.value;
     }
 
     let timeline_submit_info = vk::TimelineSemaphoreSubmitInfo {
@@ -631,12 +644,12 @@ fn sync(waits: &[SyncWait], signals: &[SyncSignal]) {
 
     let submit_info = vk::SubmitInfo {
         p_next: &timeline_submit_info as *const _ as *const c_void,
-        wait_semaphore_count: wait_semaphores.len() as u32,
+        wait_semaphore_count: waits.len() as u32,
         p_wait_semaphores: wait_semaphores.as_ptr(),
         p_wait_dst_stage_mask: wait_semaphore_dst_stages.as_ptr(),
         command_buffer_count: 0,
         p_command_buffers: ptr::null(),
-        signal_semaphore_count: signal_semaphores.len() as u32,
+        signal_semaphore_count: signals.len() as u32,
         p_signal_semaphores: signal_semaphores.as_ptr(),
         ..Default::default()
     };
@@ -654,12 +667,12 @@ fn sync(waits: &[SyncWait], signals: &[SyncSignal]) {
 
 /// Waits on the given timeline semaphore until it reaches the given value.
 pub fn sync_wait(semaphore: vk::Semaphore, value: u64) {
-    sync(&[SyncWait { sync: semaphore, value }], &[]);
+    sync(&[SyncWait { semaphore, value }], &[]);
 }
 
 /// Signals the given timeline semaphore with the given value.
 pub fn sync_signal(semaphore: vk::Semaphore, value: u64) {
-    sync(&[], &[SyncSignal { sync: semaphore, value }]);
+    sync(&[], &[SyncSignal { semaphore, value }]);
 }
 
 /// Submits the given commands for execution on the GPU.

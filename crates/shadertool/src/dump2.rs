@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use color_print::{cprint, cprintln, cwrite};
 use sharc::archive::Offset;
-use sharc::gpu::vk;
+use sharc::gpu_types::vk;
 use sharc::reflection::{ParamLocation, Signature};
 use std::path::Path;
 

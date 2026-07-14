@@ -9,85 +9,9 @@ use ash::vk::Handle;
 use bitflags::bitflags;
 use gpu_allocator::MemoryLocation;
 use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
+use gpu_types::{ImageType, ImageUsage};
 use slotmap::Key;
 use std::{mem, ptr};
-
-/// Dimensionality of an image.
-#[derive(Copy, Clone, Debug)]
-pub enum ImageType {
-    Image1D,
-    Image2D,
-    Image3D,
-}
-
-impl ImageType {
-    pub const fn to_vk_image_type(self) -> vk::ImageType {
-        match self {
-            Self::Image1D => vk::ImageType::TYPE_1D,
-            Self::Image2D => vk::ImageType::TYPE_2D,
-            Self::Image3D => vk::ImageType::TYPE_3D,
-        }
-    }
-
-    pub const fn to_vk_image_view_type(self, layers: u32) -> vk::ImageViewType {
-        match self {
-            Self::Image1D => {
-                if layers > 1 {
-                    vk::ImageViewType::TYPE_1D_ARRAY
-                } else {
-                    vk::ImageViewType::TYPE_1D
-                }
-            }
-            Self::Image2D => {
-                if layers > 1 {
-                    vk::ImageViewType::TYPE_2D_ARRAY
-                } else {
-                    vk::ImageViewType::TYPE_2D
-                }
-            }
-            Self::Image3D => vk::ImageViewType::TYPE_3D,
-        }
-    }
-}
-
-impl From<ImageType> for vk::ImageType {
-    fn from(ty: ImageType) -> Self {
-        ty.to_vk_image_type()
-    }
-}
-
-bitflags! {
-    /// Bits describing the intended usage of an image.
-    #[repr(transparent)]
-    #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-    pub struct ImageUsage: u32 {
-        const TRANSFER_SRC = 0b1;
-        const TRANSFER_DST = 0b10;
-        const SAMPLED = 0b100;
-        const STORAGE = 0b1000;
-        const COLOR_ATTACHMENT = 0b1_0000;
-        const DEPTH_STENCIL_ATTACHMENT = 0b10_0000;
-        const INPUT_ATTACHMENT = 0b1000_0000;
-    }
-}
-
-impl Default for ImageUsage {
-    fn default() -> Self {
-        Self::empty()
-    }
-}
-
-impl ImageUsage {
-    pub const fn to_vk_image_usage_flags(self) -> vk::ImageUsageFlags {
-        vk::ImageUsageFlags::from_raw(self.bits())
-    }
-}
-
-impl From<ImageUsage> for vk::ImageUsageFlags {
-    fn from(usage: ImageUsage) -> Self {
-        usage.to_vk_image_usage_flags()
-    }
-}
 
 /// Information passed to `Image::new` to describe the image to be created.
 #[derive(Copy, Clone, Debug)]
@@ -216,7 +140,7 @@ impl Image {
 
     /// Shorthand for creating a 2D image suitable for use as a depth-stencil attachment, and for sampling and storage, with the specified properties.
     ///
-    /// Equivalent to `Image::new` with `usage: ImageUsage::SAMPLED | ImageUsage::STORAGE | ImageUsage::DEPTH_STENCIL_ATTACHMENT`.
+    /// Equivalent to `Image::new` with `usage: SAMPLED | STORAGE | DEPTH_STENCIL_ATTACHMENT`.
     pub fn new_depth_stencil_attachment(width: u32, height: u32, format: Format) -> Image {
         Self::new(ImageCreateInfo {
             type_: ImageType::Image2D,
@@ -293,7 +217,7 @@ impl Image {
             !self.descriptors.texture.is_null(),
             "no texture descriptor exists for image (was it created with SAMPLED usage?)"
         );
-        TextureHandle { index: self.descriptors.texture.index(), _unused: 0 }
+        TextureHandle::new(self.descriptors.texture.index())
     }
 
     /// Returns the bindless storage image handle of this image view.
@@ -302,7 +226,7 @@ impl Image {
             !self.descriptors.storage.is_null(),
             "no storage descriptor exists for image (was it created with STORAGE usage?)"
         );
-        StorageImageHandle { index: self.descriptors.storage.index(), _unused: 0 }
+        StorageImageHandle::new(self.descriptors.storage.index())
     }
 
     /// Discards the contents of the image and resizes this image to the new dimensions.
@@ -312,7 +236,7 @@ impl Image {
     /// Any existing descriptors or handles will become invalid, but those used in previous command
     /// buffer operations stay valid until those command buffers have finished executing.
     ///
-    /// This function must be called only on images created with `Image::new`.
+    /// This function must be called only on images created with [`new`](Image::new).
     /// It will panic when called on images that refer to external storage, like swap chain images
     /// or images imported from external handles.
     /// Also, it cannot change the dimensionality of the current image.
@@ -500,8 +424,8 @@ impl Device {
         }
     }
 
-    // to transition to GENERAL layout and appease the validation layers
-    // the contents will be undefined anyway
+    // Helper to transition to GENERAL layout during initialization and appease the validation layers.
+    // The contents of the image will be undefined.
     pub(crate) unsafe fn transition_image_to_general(&self, image: vk::Image, aspect_mask: vk::ImageAspectFlags) {
         unsafe {
             let mut cmd = CommandBuffer::new();

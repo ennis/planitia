@@ -152,7 +152,7 @@ impl<H: AppHandler + Default + 'static> App<H> {
         }
 
         // Setup tracy thread name.
-        tracy_client::set_thread_name!("main thread");
+        tracy_client::Client::running().unwrap().set_thread_name("main thread");
         info!("running with Tracy profiler enabled");
 
         // Create the main thread context object.

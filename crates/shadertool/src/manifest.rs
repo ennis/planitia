@@ -1,10 +1,10 @@
 use crate::get_file_mtime;
 use crate::manifest::Error::{InvalidType, MissingField};
 use anyhow::{Context, anyhow};
-use log::{debug, error};
-use sharc::gpu::vk;
-use sharc::gpu::vk::PolygonMode;
-use sharc::{ColorBlendEquation, gpu};
+use log::error;
+use sharc::ColorBlendEquation;
+use sharc::gpu_types::vk;
+use sharc::gpu_types::vk::PolygonMode;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use toml::Value as TomlValue;
@@ -220,7 +220,7 @@ pub struct BuildManifest {
     pub pass: BTreeMap<String, Pass>,
 }
 
-impl Default for BuildManifest  {
+impl Default for BuildManifest {
     fn default() -> Self {
         Self {
             manifest_path: Default::default(),
@@ -291,7 +291,7 @@ impl BuildManifest {
                 .map(|v| v.as_str().ok_or(InvalidType("include_paths", "array of strings")).map(|s| s.to_string()))
                 .collect::<Result<Vec<String>, Error>>()?,
         );
-        
+
         // default graphics state
         self.default.read(toml.get("default").ok_or(MissingField("default"))?)?;
 

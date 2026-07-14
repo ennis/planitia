@@ -4,16 +4,20 @@ version = "0.1.0"
 authors = ["Alexandre Bléron <alex.bleron@gmail.com>"]
 edition = "2024"
 
+[lib]
+crate-type = ["dylib"]
 
 [dependencies]
 ash = "0.38"
+gpu-allocator = "0.28"
 vulkan-headers = "0.2.4" # until ash updates to support vk1.4
 bitflags = "2"
-gpu-allocator = "0.28"
 raw-window-handle = "0.6.0"
 slotmap = "1"
 log = "0.4.27"
 thiserror = "2"
+arrayvec = "0.7.8"
+gpu-types = { workspace = true }
 gpu-macros = { workspace = true }
 math = { workspace = true }
 color = { workspace = true, optional = true }
@@ -38,5 +42,3 @@ image = "0.25.6"
 [features]
 default = ["color"]
 graal-windows = ["winapi"]
-# Enables integration with the color crate, so that color types are recognized as valid VertexAttribute types
-color = ["dep:color"]

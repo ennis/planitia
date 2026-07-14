@@ -4,7 +4,7 @@ use anyhow::{Context, anyhow, bail};
 use color_print::{ceprintln, cprintln};
 use log::warn;
 use sharc::archive::{ArchiveWriter, Offset};
-use sharc::gpu::{ImageUsage, is_depth_format, vk};
+use sharc::gpu_types::vk;
 use sharc::zstring::ZString64;
 use sharc::{FileDependency, RootParamLayout, Shader, reflection};
 use slang::DebugInfoLevel;
@@ -12,7 +12,7 @@ use std::cell::OnceCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::CString;
 use std::path::{Path, PathBuf};
-use std::{env, fs, slice};
+use std::{fs, slice};
 
 type ShaderArchiveWriter = ArchiveWriter<sharc::ShaderArchiveRoot>;
 
@@ -125,13 +125,18 @@ impl BuildManifest {
     //}
 
     /// Creates a Slang compilation session configured according to the manifest and build options.
-    fn create_slang_session(&self, include_paths: &[PathBuf], options: &BuildOptions) -> anyhow::Result<slang::Session> {
+    fn create_slang_session(
+        &self,
+        include_paths: &[PathBuf],
+        options: &BuildOptions,
+    ) -> anyhow::Result<slang::Session> {
         let global_session = get_slang_global_session();
 
         // Debug information can be requested either in the manifest or via build options.
         let emit_debug_information = self.compiler.debug | options.emit_debug_information;
 
-        let search_paths_cstr: Vec<CString> = include_paths.iter().map(|p| CString::new(&*p.to_string_lossy()).unwrap()).collect();
+        let search_paths_cstr: Vec<CString> =
+            include_paths.iter().map(|p| CString::new(&*p.to_string_lossy()).unwrap()).collect();
         let search_path_ptrs: Vec<_> = search_paths_cstr.iter().map(|p| p.as_ptr()).collect();
 
         let profile = global_session.find_profile(&self.compiler.profile);
@@ -387,10 +392,7 @@ impl BuildManifest {
 
         let refl_params = archive.write_slice(&all_params);
         let refl_resources = archive.write_slice(&[]);
-        let signature = archive.write(&sharc::reflection::Signature {
-            params: refl_params,
-            resources: refl_resources,
-        });
+        let signature = archive.write(&sharc::reflection::Signature { params: refl_params, resources: refl_resources });
 
         Ok(sharc::Pass {
             name: ZString64::new(pipeline_name),
@@ -399,7 +401,7 @@ impl BuildManifest {
                 byte_size: 0xABCDEF12, // FIXME: populate from reflection
                 parameters: Offset::INVALID,
             },
-            signature
+            signature,
         })
     }
 
@@ -408,28 +410,28 @@ impl BuildManifest {
         // TODO Figure out what we want to do with resources.
         //      I'm not sure if we should put this in shadertool.
         /*let images: Vec<_> = self
-            .resources
-            .iter()
-            .map(|(name, desc)| {
-                let size = match (desc.width, desc.height) {
-                    (Some(w), Some(h)) => sharc::ImageResourceSize::Fixed { width: w, height: h },
-                    // TODO: handle the case where only one dimension is specified.
-                    _ => sharc::ImageResourceSize::RenderTarget,
+        .resources
+        .iter()
+        .map(|(name, desc)| {
+            let size = match (desc.width, desc.height) {
+                (Some(w), Some(h)) => sharc::ImageResourceSize::Fixed { width: w, height: h },
+                // TODO: handle the case where only one dimension is specified.
+                _ => sharc::ImageResourceSize::RenderTarget,
+            };
+            // If the usage is not specified explicitly, assume the image will be used as a
+            // render-target attachment and sampled in shaders.  This is conservative, but
+            // it is difficult to infer the correct usage from reflection alone.
+            let usage = desc.usage.unwrap_or_else(|| {
+                let base = if is_depth_format(desc.format) {
+                    ImageUsage::DEPTH_STENCIL_ATTACHMENT
+                } else {
+                    ImageUsage::COLOR_ATTACHMENT
                 };
-                // If the usage is not specified explicitly, assume the image will be used as a
-                // render-target attachment and sampled in shaders.  This is conservative, but
-                // it is difficult to infer the correct usage from reflection alone.
-                let usage = desc.usage.unwrap_or_else(|| {
-                    let base = if is_depth_format(desc.format) {
-                        ImageUsage::DEPTH_STENCIL_ATTACHMENT
-                    } else {
-                        ImageUsage::COLOR_ATTACHMENT
-                    };
-                    base | ImageUsage::SAMPLED | ImageUsage::STORAGE
-                });
-                sharc::ImageResourceDesc { name: name.as_str().into(), format: desc.format, usage, size }
-            })
-            .collect();*/
+                base | ImageUsage::SAMPLED | ImageUsage::STORAGE
+            });
+            sharc::ImageResourceDesc { name: name.as_str().into(), format: desc.format, usage, size }
+        })
+        .collect();*/
         archive.write_slice(&[])
     }
 
@@ -504,7 +506,7 @@ impl BuildManifest {
             file: FileDependency { path, mtime: module.file_mtime },
             params,
             debug_info: options.emit_debug_information,
-            include_paths
+            include_paths,
         })
     }
 

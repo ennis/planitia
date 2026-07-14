@@ -1,22 +1,24 @@
 //! Shader archive files.
 //!
-//! Shader files hold a collection of pipelines (which are variants of the same pipeline).
-//! It contains fixed function state, SPIR-V shader modules, tags for pipeline variants,
-//! specialization constants, useful reflection data (e.g. push constant sizes),
-//! and possibly cached pipeline binary blobs.
+//! Shader archive files hold a collection of modules, each representing a (compiled) slang shader source file (and thus module).
+//! They are produced by the `shadertool` utility.
 //!
-//! Information in a pipeline file is sufficient to create a complete pipeline object.
+//! Each module contains a collection of passes, representing graphics or compute pipelines.
+//! Passes contain all information necessary to create a pipeline object: fixed-function state,
+//! SPIR-V bytecode, and useful reflection data (e.g. push constant sizes).
 //!
-//! Pipeline files can be directly mapped in memory and read without any copy or parsing step.
+//! Shader archive files are directly mapped in memory and read without any copy or parsing step.
 //!
-//! TODO: add documentation for resource entries
-
+//! # Multiple modules deprecation
+//!
+//! While archives can in theory contain multiple modules, shadertool currently emits only one module
+//! per archive. For simplification, the ability to store multiple modules is expected to be dropped in the near future.
 #![feature(default_field_values)]
 
 pub mod reflection;
 
-use gpu::vk;
-use gpu::vk::{CullModeFlags, PolygonMode};
+use gpu_types::{vk, ImageUsage};
+use gpu_types::vk::{CullModeFlags, PolygonMode};
 use std::borrow::Cow;
 use std::ops::Deref;
 use std::path::Path;
@@ -24,10 +26,10 @@ use std::time::SystemTime;
 use std::{fs, io};
 use utils::archive::{ArchiveError, ArchiveReader, ArchiveReaderOwned, ArchiveRoot, Offset};
 use utils::zstring::ZString;
-
-// reexport gpu types
-pub use gpu;
 use log::{debug, warn};
+
+// Reexports
+pub use gpu_types;
 pub use utils::{archive, zstring};
 
 /// Root struct of the shader archive file.
@@ -94,7 +96,7 @@ pub enum ImageResourceSize {
 pub struct ImageResourceDesc {
     pub name: ZString<32>,
     pub format: vk::Format,
-    pub usage: gpu::ImageUsage,
+    pub usage: ImageUsage,
     pub size: ImageResourceSize,
 }
 

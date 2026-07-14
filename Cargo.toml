@@ -3,6 +3,7 @@ members = [
     "crates/gamelib",         # Game support library
     "crates/game",            # Game binary
     "crates/gpu",             # GPU API
+    "crates/gpu-types",       # Common GPU types shared between `gpu` and `gpu-macros`
     "crates/gpu/gpu-macros",  # Derive macros for `gpu`
     "crates/math",            # Common math types
     "crates/color",           # Color types and related functions
@@ -20,6 +21,7 @@ resolver = "2"
 
 [workspace.dependencies]
 gpu = { path = "crates/gpu" }
+gpu-types = { path = "crates/gpu-types" }
 gpu-macros = { path = "crates/gpu/gpu-macros" }
 shader-bridge = { path = "crates/shader-bridge" }
 gamelib = { path = "crates/gamelib" }

@@ -1,0 +1,14 @@
+[package]
+name = "gpu-types"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bitflags = "2"
+ash = "0.38"
+math = { workspace = true }
+color = { workspace = true, optional = true }
+
+[features]
+# Enables integration with the color crate, so that color types are recognized as valid VertexAttribute types
+color = ["dep:color"]

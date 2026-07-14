@@ -4,9 +4,9 @@ use gamelib::paint::{
     ColorStop, GradientExtendMode, LinearGradientFill, PaintScene, Painter, PathBuilder, TextFormat,
     TextLayout,
 };
-use gamelib::tracy_client;
 use math::{Mat3, Vec2, rect_xywh, vec2};
 use usvg::Node;
+use gamelib::span;
 
 pub(crate) struct SvgExperiment {
     document: usvg::Tree,
@@ -156,7 +156,7 @@ impl SvgExperiment {
         let mut scene = PaintScene::new(Srgba8::TRANSPARENT);
 
         {
-            let _span = tracy_client::span!("svg_build_scene");
+            let _span = span!("svg_build_scene");
             // Apply global pan and zoom.
             let sx = self.global_scale.x;
             let sy = self.global_scale.y;
@@ -170,7 +170,7 @@ impl SvgExperiment {
         }
 
         {
-            let _span = tracy_client::span!("svg_render_scene");
+            let _span = span!("svg_render_scene");
             scene.render(cmd, target);
         }
     }

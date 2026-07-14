@@ -3,6 +3,9 @@ name = "gamelib"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+crate-type = ["dylib"]
+
 [dependencies]
 gpu = { workspace = true }
 math = { workspace = true }

@@ -10,18 +10,16 @@ mod instance;
 pub mod platform;
 mod surface;
 mod swapchain;
-mod types;
 pub mod util;
 
-use std::borrow::Cow;
-use std::marker::PhantomData;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
-// --- reexports ---
+// Reexports
 
 pub use ash::{self, vk};
 pub use gpu_allocator::MemoryLocation;
+pub use gpu_types::*;
 
 pub use buffer::*;
 pub use command::*;
@@ -30,19 +28,17 @@ pub use image::*;
 pub use instance::*;
 pub use surface::*;
 pub use swapchain::*;
-pub use types::*;
 
 // proc-macros
 pub use gpu_macros::Vertex;
 
 pub mod prelude {
     pub use crate::{
-        Buffer, BufferUsage, ClearColorValue, ColorBlendEquation, ColorTargetState, CommandBuffer, DepthStencilState,
-        Format, FragmentState, GraphicsPipeline, GraphicsPipelineCreateInfo, Image, ImageCreateInfo, ImageType,
-        ImageUsage, MemoryLocation, PipelineBindPoint, PipelineLayoutDescriptor, Point2D, PreRasterizationShaders,
-        RasterizationState, Rect2D, RenderEncoder, Sampler, SamplerCreateInfo, ShaderCode, ShaderEntryPoint,
-        ShaderSource, Size2D, StencilState, Vertex, VertexBufferDescriptor, VertexBufferLayoutDescription,
-        VertexInputAttributeDescription, VertexInputState, vk,
+        vk, Buffer, BufferUsage, ClearColorValue, ColorBlendEquation, ColorTargetState, CommandBuffer,
+        DepthStencilState, Format, FragmentState, GraphicsPipeline, GraphicsPipelineCreateInfo, Image, ImageCreateInfo,
+        ImageType, ImageUsage, MemoryLocation, Point2D, PreRasterizationShaders, RasterizationState, Rect2D,
+        RenderEncoder, Sampler, SamplerCreateInfo, ShaderCode, ShaderEntryPoint, ShaderSource, Size2D, StencilState,
+        Vertex, VertexBufferLayoutDescription, VertexInputAttributeDescription, VertexInputState,
     };
 }
 
@@ -56,77 +52,6 @@ pub trait VulkanObject {
 
 /// Standard subgroup size.
 pub const SUBGROUP_SIZE: u32 = 32;
-
-/// Pointers in GPU device address space.
-///
-/// Like `*mut T`, but in device address space.
-/// They can be used in shaders, via VK_KHR_buffer_device_address (required).
-#[repr(transparent)]
-pub struct Ptr<T: ?Sized + 'static> {
-    pub raw: vk::DeviceAddress,
-    pub _phantom: PhantomData<T>,
-}
-
-impl<T: ?Sized + 'static> Ptr<T> {
-    /// Null (invalid) device address.
-    pub const NULL: Self = Ptr { raw: 0, _phantom: PhantomData };
-}
-
-impl<T: 'static> Ptr<T> {
-    pub fn offset(self, offset: usize) -> Self {
-        Ptr { raw: self.raw + (offset * size_of::<T>()) as u64, _phantom: PhantomData }
-    }
-}
-
-impl<T: ?Sized + 'static> Clone for Ptr<T> {
-    fn clone(&self) -> Self {
-        Ptr { raw: self.raw, _phantom: PhantomData }
-    }
-}
-
-impl<T: ?Sized + 'static> Copy for Ptr<T> {}
-
-/// Bindless handle to an image.
-#[derive(Copy, Clone, Debug)]
-#[repr(C)]
-pub struct TextureHandle {
-    /// Index of the image in the image descriptor array.
-    pub index: u32,
-    /// For compatibility with slang.
-    _unused: u32,
-}
-
-impl TextureHandle {
-    pub const INVALID: Self = TextureHandle { index: u32::MAX, _unused: 0 };
-}
-
-/// Bindless handle to a storage image.
-#[derive(Copy, Clone, Debug)]
-#[repr(C)]
-pub struct StorageImageHandle {
-    /// Index of the image in the image descriptor array.
-    pub index: u32,
-    /// For compatibility with slang.
-    _unused: u32,
-}
-
-impl StorageImageHandle {
-    pub const INVALID: Self = StorageImageHandle { index: u32::MAX, _unused: 0 };
-}
-
-/// Bindless handle to a sampler.
-#[derive(Default, Copy, Clone, Debug)]
-#[repr(C)]
-pub struct SamplerHandle {
-    /// Index of the image in the sampler descriptor array.
-    pub index: u32,
-    /// For compatibility with slang.
-    _unused: u32,
-}
-
-impl SamplerHandle {
-    pub const INVALID: Self = SamplerHandle { index: u32::MAX, _unused: 0 };
-}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -224,7 +149,6 @@ impl VulkanObject for ComputePipeline {
     }
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Samplers
@@ -252,7 +176,7 @@ impl Sampler {
 
     /// Returns the bindless sampler handle.
     pub fn device_handle(&self) -> SamplerHandle {
-        SamplerHandle { index: self.descriptor_index.index(), _unused: 0 }
+        SamplerHandle::new(self.descriptor_index.index())
     }
 }
 
@@ -326,45 +250,6 @@ impl Drop for DescriptorSetLayout {
         }
     }
 }
-
-/*
-/// Self-contained descriptor set.
-pub struct DescriptorSet {
-    device: Device,
-    last_submission_index: Option<Arc<AtomicU64>>,
-    pool: vk::DescriptorPool,
-    handle: vk::DescriptorSet,
-}
-
-impl DescriptorSet {
-    pub fn handle(&self) -> vk::DescriptorSet {
-        self.handle
-    }
-
-    pub fn device(&self) -> &Device {
-        &self.device
-    }
-
-    pub fn set_name(&self, label: &str) {
-        // SAFETY: the handle is valid
-        unsafe {
-            self.device.set_object_name(self.handle, label);
-        }
-    }
-}
-
-impl Drop for DescriptorSet {
-    fn drop(&mut self) {
-        if let Some(last_submission_index) = Arc::into_inner(self.last_submission_index.take().unwrap()) {
-            let device = self.device.clone();
-            let pool = self.pool;
-            self.device
-                .call_later(last_submission_index.load(Ordering::Relaxed), move || unsafe {
-                    device.destroy_descriptor_pool(pool, None);
-                });
-        }
-    }
-}*/
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -483,10 +368,11 @@ pub type BufferRangeUntyped<'a> = BufferRange<'a, u8>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Describes a color, depth, or stencil attachment.
+/// Specifies a color attachment.
 #[derive(Clone)]
 pub struct ColorAttachment<'a> {
     pub image: &'a Image,
+    /// The color to clear the attachment before rendering. If `None`, existing data is kept.
     // f64 because it can represent all i32 and u32 values exactly.
     pub clear: Option<[f64; 4]> = None,
 }
@@ -521,6 +407,7 @@ impl ColorAttachment<'_> {
     }
 }
 
+/// Specifies a depth-stencil attachment.
 #[derive(Clone)]
 pub struct DepthStencilAttachment<'a> {
     pub image: &'a Image,
@@ -537,6 +424,7 @@ impl DepthStencilAttachment<'_> {
     }
 }
 
+/*
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 #[derive(Clone, Debug)]
 pub struct VertexBufferDescriptor<'a> {
@@ -561,7 +449,7 @@ pub struct VertexBufferView<T: Vertex> {
     pub buffer: vk::Buffer,
     pub offset: vk::DeviceSize,
     pub _phantom: PhantomData<*const T>,
-}
+}*/
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -572,30 +460,6 @@ pub enum ShaderCode<'a> {
     Source(ShaderSource<'a>),
     /// Create the shader from the specified SPIR-V binary.
     Spirv(&'a [u32]),
-}
-
-/// Describes a shader.
-///
-/// This type references the SPIR-V code of the shader, as well as the entry point function in the shader
-/// and metadata.
-#[derive(Debug, Clone, Copy)]
-pub struct ShaderEntryPoint<'a> {
-    /// Shader stage.
-    pub stage: ShaderStage,
-    /// SPIR-V code.
-    pub code: &'a [u32],
-    /// Name of the entry point function in SPIR-V code.
-    pub entry_point: &'a str,
-    /// Size of the push constants in bytes.
-    pub push_constants_size: usize,
-    /// Optional path to the source file of the shader.
-    ///
-    /// Used for diagnostic purposes and as a convenience for hot-reloading shaders.
-    pub source_path: Option<&'a str>,
-    /// Size of the local workgroup in each dimension, if applicable to the shader type.
-    ///
-    /// This is valid for compute, task, and mesh shaders.
-    pub workgroup_size: [u32; 3],
 }
 
 /// Specifies the shaders of a graphics pipeline.
@@ -638,189 +502,6 @@ pub struct ComputePipelineCreateInfo<'a> {
     pub push_constants_size: usize,
     /// Compute shader.
     pub shader: ShaderEntryPoint<'a>,
-}
-
-/// Computes the number of mip levels for a 2D image of the given size.
-///
-/// # Examples
-///
-/// ```
-/// use gpu::mip_level_count;
-/// assert_eq!(mip_level_count(512, 512), 9);
-/// assert_eq!(mip_level_count(512, 256), 9);
-/// assert_eq!(mip_level_count(511, 256), 8);
-/// ```
-pub fn mip_level_count(width: u32, height: u32) -> u32 {
-    (width.max(height) as f32).log2().floor() as u32
-}
-
-pub fn is_depth_format(fmt: vk::Format) -> bool {
-    is_depth_only_format(fmt) || is_depth_and_stencil_format(fmt)
-}
-
-pub fn is_depth_and_stencil_format(fmt: vk::Format) -> bool {
-    matches!(fmt, Format::D16_UNORM_S8_UINT | Format::D24_UNORM_S8_UINT | Format::D32_SFLOAT_S8_UINT)
-}
-
-pub fn is_depth_only_format(fmt: vk::Format) -> bool {
-    matches!(fmt, Format::D16_UNORM | Format::X8_D24_UNORM_PACK32 | Format::D32_SFLOAT)
-}
-
-pub fn is_stencil_only_format(fmt: vk::Format) -> bool {
-    matches!(fmt, Format::S8_UINT)
-}
-
-pub fn aspects_for_format(fmt: vk::Format) -> vk::ImageAspectFlags {
-    if is_depth_only_format(fmt) {
-        vk::ImageAspectFlags::DEPTH
-    } else if is_stencil_only_format(fmt) {
-        vk::ImageAspectFlags::STENCIL
-    } else if is_depth_and_stencil_format(fmt) {
-        vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL
-    } else {
-        vk::ImageAspectFlags::COLOR
-    }
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub enum FormatNumericType {
-    SInt,
-    UInt,
-    Float,
-}
-
-pub fn format_numeric_type(fmt: vk::Format) -> FormatNumericType {
-    match fmt {
-        Format::R8_UINT
-        | Format::R8G8_UINT
-        | Format::R8G8B8_UINT
-        | Format::R8G8B8A8_UINT
-        | Format::R16_UINT
-        | Format::R16G16_UINT
-        | Format::R16G16B16_UINT
-        | Format::R16G16B16A16_UINT
-        | Format::R32_UINT
-        | Format::R32G32_UINT
-        | Format::R32G32B32_UINT
-        | Format::R32G32B32A32_UINT
-        | Format::R64_UINT
-        | Format::R64G64_UINT
-        | Format::R64G64B64_UINT
-        | Format::R64G64B64A64_UINT => FormatNumericType::UInt,
-
-        Format::R8_SINT
-        | Format::R8G8_SINT
-        | Format::R8G8B8_SINT
-        | Format::R8G8B8A8_SINT
-        | Format::R16_SINT
-        | Format::R16G16_SINT
-        | Format::R16G16B16_SINT
-        | Format::R16G16B16A16_SINT
-        | Format::R32_SINT
-        | Format::R32G32_SINT
-        | Format::R32G32B32_SINT
-        | Format::R32G32B32A32_SINT
-        | Format::R64_SINT
-        | Format::R64G64_SINT
-        | Format::R64G64B64_SINT
-        | Format::R64G64B64A64_SINT => FormatNumericType::SInt,
-
-        Format::R16_SFLOAT
-        | Format::R16G16_SFLOAT
-        | Format::R16G16B16_SFLOAT
-        | Format::R16G16B16A16_SFLOAT
-        | Format::R32_SFLOAT
-        | Format::R32G32_SFLOAT
-        | Format::R32G32B32_SFLOAT
-        | Format::R32G32B32A32_SFLOAT
-        | Format::R64_SFLOAT
-        | Format::R64G64_SFLOAT
-        | Format::R64G64B64_SFLOAT
-        | Format::R64G64B64A64_SFLOAT => FormatNumericType::Float,
-
-        // TODO
-        _ => FormatNumericType::Float,
-    }
-}
-
-/// Returns the byte size of one pixel in the specified format.
-///
-/// # Panics
-///
-/// Panics if the format is a block-compressed format.
-///
-pub fn format_pixel_byte_size(fmt: vk::Format) -> u32 {
-    match fmt {
-        Format::R8_UNORM
-        | Format::R8_SNORM
-        | Format::R8_USCALED
-        | Format::R8_SSCALED
-        | Format::R8_UINT
-        | Format::R8_SINT
-        | Format::R8_SRGB => 1,
-        Format::R8G8_UNORM
-        | Format::R8G8_SNORM
-        | Format::R8G8_USCALED
-        | Format::R8G8_SSCALED
-        | Format::R8G8_UINT
-        | Format::R8G8_SINT
-        | Format::R8G8_SRGB => 2,
-        Format::R5G6B5_UNORM_PACK16
-        | Format::B5G6R5_UNORM_PACK16
-        | Format::R5G5B5A1_UNORM_PACK16
-        | Format::B5G5R5A1_UNORM_PACK16
-        | Format::A1R5G5B5_UNORM_PACK16
-        | Format::R16_UNORM
-        | Format::R16_SNORM
-        | Format::R16_USCALED
-        | Format::R16_SSCALED
-        | Format::R16_UINT
-        | Format::R16_SINT
-        | Format::R16_SFLOAT => 2,
-        Format::R8G8B8_UNORM
-        | Format::R8G8B8_SNORM
-        | Format::R8G8B8_USCALED
-        | Format::R8G8B8_SSCALED
-        | Format::R8G8B8_UINT
-        | Format::R8G8B8_SINT
-        | Format::R8G8B8_SRGB
-        | Format::B8G8R8_UNORM
-        | Format::B8G8R8_SNORM
-        | Format::B8G8R8_USCALED
-        | Format::B8G8R8_SSCALED
-        | Format::B8G8R8_UINT
-        | Format::B8G8R8_SINT
-        | Format::B8G8R8_SRGB => 3,
-        Format::R32_UINT | Format::R32_SINT | Format::R32_SFLOAT | Format::D32_SFLOAT | Format::D24_UNORM_S8_UINT => 4,
-        Format::R8G8B8A8_UNORM
-        | Format::R8G8B8A8_SNORM
-        | Format::R8G8B8A8_USCALED
-        | Format::R8G8B8A8_SSCALED
-        | Format::R8G8B8A8_UINT
-        | Format::R8G8B8A8_SINT
-        | Format::R8G8B8A8_SRGB
-        | Format::B8G8R8A8_UNORM
-        | Format::B8G8R8A8_SNORM
-        | Format::B8G8R8A8_USCALED
-        | Format::B8G8R8A8_SSCALED
-        | Format::B8G8R8A8_UINT
-        | Format::B8G8R8A8_SINT
-        | Format::B8G8R8A8_SRGB
-        | Format::A2B10G10R10_UNORM_PACK32
-        | Format::A2B10G10R10_UINT_PACK32
-        | Format::A2R10G10B10_UNORM_PACK32
-        | Format::A2R10G10B10_UINT_PACK32
-        | Format::R16G16_UNORM
-        | Format::R16G16_SNORM
-        | Format::R16G16_USCALED
-        | Format::R16G16_SSCALED
-        | Format::R16G16_UINT
-        | Format::R16G16_SINT
-        | Format::R16G16_SFLOAT => 4,
-        Format::R32G32_UINT | Format::R32G32_SINT | Format::R32G32_SFLOAT => 8,
-        Format::R32G32B32A32_SFLOAT | Format::R32G32B32A32_UINT | Format::R32G32B32A32_SINT => 16,
-        _ => panic!("unsupported or block-compressed format"),
-    }
 }
 
 // Implementation detail of the VertexInput macro
