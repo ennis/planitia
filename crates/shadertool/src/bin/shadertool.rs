@@ -1,6 +1,6 @@
-use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 use color_print::ceprintln;
+use std::path::PathBuf;
 
 ///////////////////////////////////////////////////////////////////////////////////
 
@@ -79,10 +79,7 @@ fn cmd_build(args: BuildArgs) {
         include_paths: args.include,
         output_directory: None,
     };
-    let log_options = shadertool::LogOptions {
-        quiet: args.quiet,
-        verbosity: args.verbose,
-    };
+    let log_options = shadertool::LogOptions { quiet: args.quiet, verbosity: args.verbose };
 
     let input_files = args.input_files.iter().map(|s| s.as_str());
     match shadertool::build(input_files, &build_options, &log_options) {

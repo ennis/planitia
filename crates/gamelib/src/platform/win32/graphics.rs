@@ -1,5 +1,5 @@
 use crate::platform::win32::{D3D12CommandQueue, D3D12Device, DXGIFactory4, GpuFenceData};
-use log::info;
+use log::{info, warn};
 use std::cell::{Cell, OnceCell};
 use std::ffi::OsString;
 use threadbound::ThreadBound;
@@ -52,6 +52,8 @@ impl GraphicsContext {
 
         let mut chosen_adapter = None;
         let mut chosen_adapter_name = String::new();
+        let mut chosen_adapter_luid = None;
+        info!("DXGI adapters:");
         for adapter in adapters.iter() {
             let desc = unsafe { adapter.GetDesc1().unwrap() };
             use std::os::windows::ffi::OsStringExt;
@@ -60,7 +62,7 @@ impl GraphicsContext {
             let name = OsString::from_wide(&desc.Description[..name_len]).to_string_lossy().into_owned();
             let is_software = (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32) != 0;
             info!(
-                "DXGI adapter: {} (LUID:{:08x}{:08x}{})",
+                "     - {} (LUID:{:08x}{:08x}{})",
                 name,
                 desc.AdapterLuid.HighPart,
                 desc.AdapterLuid.LowPart,
@@ -72,9 +74,39 @@ impl GraphicsContext {
             if chosen_adapter.is_none() {
                 chosen_adapter = Some(adapter.clone());
                 chosen_adapter_name = name;
+                chosen_adapter_luid = Some(desc.AdapterLuid);
             }
         }
+
         let adapter = chosen_adapter.expect("no suitable video adapter found");
+
+        // Check that the adapter is the same as the vulkan physical device
+        // that was chosen when creating the Vulkan device, otherwise this is useless
+        // for interop.
+        if let Some(vk_luid) = gpu::get_device_luid() {
+            let dxgi_adapter_desc = unsafe { adapter.GetDesc1().unwrap() };
+            let dxgi_luid = dxgi_adapter_desc.AdapterLuid;
+            // convert dxgi_adapter_luid to [u8; 8] for comparison
+            let dxgi_luid = [
+                (dxgi_luid.LowPart & 0xFF) as u8,
+                ((dxgi_luid.LowPart >> 8) & 0xFF) as u8,
+                ((dxgi_luid.LowPart >> 16) & 0xFF) as u8,
+                ((dxgi_luid.LowPart >> 24) & 0xFF) as u8,
+                (dxgi_luid.HighPart & 0xFF) as u8,
+                ((dxgi_luid.HighPart >> 8) & 0xFF) as u8,
+                ((dxgi_luid.HighPart >> 16) & 0xFF) as u8,
+                ((dxgi_luid.HighPart >> 24) & 0xFF) as u8,
+            ];
+            if vk_luid != dxgi_luid {
+                warn!(
+                    "Vulkan physical device LUID ({:02x?}) does not match DXGI adapter LUID ({:02x?})",
+                    vk_luid, dxgi_luid
+                );
+            }
+        } else {
+            warn!("Vulkan device LUID not available, could not compare with DXGI adapter.")
+        }
+
         info!("using DXGI adapter: {}", chosen_adapter_name);
 
         //=========================================================

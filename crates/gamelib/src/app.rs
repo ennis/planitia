@@ -1,18 +1,22 @@
 //! Global context.
+use crate::error::{ExcResult, ResultExt};
 use crate::event::UserEvent;
 use crate::executor::LocalExecutor;
-use crate::{imgui, wake_event_loop};
 use crate::imgui::ImguiContext;
 use crate::input::InputEvent;
+use crate::paint::{PaintScene, Painter, TextFormat};
 use crate::platform::{LoopHandler, Platform, RenderTargetImage, WindowHandle};
 use crate::tweak::show_tweaks_gui;
 use crate::util::env_flag;
+use crate::{imgui, wake_event_loop, PluginEvent};
 use color_print::cwriteln;
 use env_logger::fmt::style::AnsiColor;
 use futures::future::AbortHandle;
 use gpu::vk::Handle;
 use keyboard_types::{Key, KeyState, Modifiers, NamedKey};
 use log::{debug, error, info, warn};
+use notify_debouncer_mini::notify::{RecommendedWatcher, RecursiveMode};
+use notify_debouncer_mini::{DebounceEventResult, DebouncedEvent, Debouncer, new_debouncer};
 use renderdoc::{RenderDoc, V141};
 use std::cell::{Cell, OnceCell, RefCell};
 use std::ffi::c_void;
@@ -21,10 +25,10 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, OnceLock};
 use std::{mem, ptr};
-use notify_debouncer_mini::{new_debouncer, DebounceEventResult, DebouncedEvent, Debouncer};
-use notify_debouncer_mini::notify::{RecommendedWatcher, RecursiveMode};
 use threadbound::ThreadBound;
-use crate::paint::Painter;
+use color::Srgba8;
+use math::{vec2, IVec2, Vec2};
+use crate::plugin_host::PluginHost;
 
 /// Tries to load the RenderDoc DLL.
 fn load_renderdoc_dll() {
@@ -144,7 +148,6 @@ impl<H: AppHandler + Default + 'static> App<H> {
     }
 
     pub fn run(&'static self, init_options: &AppOptions) {
-
         // Setup env_logger.
         setup_env_logger();
 
@@ -266,6 +269,8 @@ pub(crate) struct MainThreadContext {
     handler: Box<RefCell<dyn AppHandler + 'static>>,
     /// File watcher.
     watch: RefCell<Debouncer<RecommendedWatcher>>,
+    /// Text overlay.
+    text_overlay: RefCell<String>,
     // Hot-reloadable plugin host.
     //plugin_host: RefCell<PluginHost>,
 }
@@ -291,21 +296,22 @@ impl MainThreadContext {
         // So when we receive an event, we forward it to the event loop on the main thread.
         // It's probably possible to do this without even spinning a separate thread,
         // by using the win32 API directly, but I don't have time for this.
-        let watch = RefCell::new(new_debouncer(std::time::Duration::from_secs(1), move |events: DebounceEventResult| {
-            match events {
-                Ok(events) => {
-                    wake_event_loop(move || {
+        let watch = RefCell::new(
+            new_debouncer(std::time::Duration::from_millis(250), move |events: DebounceEventResult| {
+                match events {
+                    Ok(events) => wake_event_loop(move || {
                         with_app_ctx(|ctx| {
                             ctx.handle_file_change_events(events);
                         });
-                    })
+                    }),
+                    Err(err) => {
+                        // Log, but otherwise ignore errors; not much we can do about them.
+                        error!("error: {err}");
+                    }
                 }
-                Err(err) => {
-                    // Log, but otherwise ignore errors; not much we can do about them.
-                    error!("error: {err}");
-                }
-            }
-        }).expect("failed to create file watcher"));
+            })
+            .expect("failed to create file watcher"),
+        );
 
         Self {
             platform,
@@ -319,12 +325,14 @@ impl MainThreadContext {
             handler,
             #[cfg(feature = "lua")]
             lua: Lua::new(),
-            watch
+            watch,
+            text_overlay: RefCell::new(String::new()),
         }
     }
 
     /// Handles file change events from `notify`, and invokes the appropriate handlers.
     fn handle_file_change_events(&self, events: Vec<DebouncedEvent>) {
+        crate::reload_plugins();
         for event in events {
             self.handler.borrow_mut().file_changed(&event.path)
         }
@@ -401,6 +409,8 @@ impl LoopHandler for &'static MainThreadContext {
     }
 
     fn vsync(&mut self) {
+
+
         // invoke application vsync handler
         self.handler.borrow_mut().vsync();
 
@@ -421,10 +431,28 @@ impl LoopHandler for &'static MainThreadContext {
             self.start_renderdoc_capture();
         }
 
-
         // render the frame (the application is expected to render the GUI as part of its rendering)
         self.platform.render_all(&mut |window, render_target| {
             self.handler.borrow_mut().render(window, render_target);
+
+            // invoke plugins vsync handlers
+            PluginHost::instance().send_event(PluginEvent::VSync(render_target.image));
+
+            // render text overlay
+            {
+                let text = self.text_overlay.take();
+                let mut scene = PaintScene::new(Srgba8::TRANSPARENT);
+                let pos = vec2(10.0, 10.0);
+                let shadow_pos = pos + vec2(1.0, 1.0);
+                // Draw shadow
+                let format = TextFormat {
+                    size: 20.0,
+                    ..Default::default()
+                };
+                scene.draw_text(shadow_pos, &text, &format, Srgba8::BLACK);
+                scene.draw_text(pos, &text, &format, Srgba8::WHITE);
+                scene.render(render_target.image);
+            }
         });
 
         // end frame capture
@@ -432,8 +460,6 @@ impl LoopHandler for &'static MainThreadContext {
             self.rdoc_capture_requested.set(false);
             self.end_renderdoc_capture(self.rdoc_launch_replay_ui.replace(false));
         }
-
-
 
         // mark the end of the frame for tracy
         tracy_client::frame_mark();
@@ -483,7 +509,6 @@ pub(crate) fn get_context() -> &'static MainThreadContext {
     with_app_ctx(|ctx| ctx)
 }
 
-
 /// Quits the application.
 ///
 /// This causes the event loop to exit and `App::run` to return to the caller.
@@ -500,19 +525,75 @@ pub fn render_imgui(command_stream: &mut gpu::CommandBuffer, image: &gpu::Image)
     });
 }
 
+#[derive(thiserror::Error, Debug, Copy, Clone)]
+#[error("failed to watch file")]
+pub struct WatchFileError;
+
 /// Watch for file changes at the specified path.
 ///
 /// When a change occurs, the [`file_changed`] method of the currently running [`AppHandler`] will be called with the path of the changed file.
 /// To stop watching a file, call [`unwatch_file`].
-pub fn watch_file(path: &Path) {
+pub fn watch_file(path: &Path) -> ExcResult<(), WatchFileError> {
+    debug!("watching file: {}", path.display());
     with_app_ctx(|ctx| {
-        ctx.watch.borrow_mut().watcher().watch(path, RecursiveMode::NonRecursive).expect("failed to watch file");
-    });
+        match ctx.watch.borrow_mut().watcher().watch(path, RecursiveMode::NonRecursive).raise(WatchFileError) {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                err.log_to_stderr();
+                Err(err)
+            }
+        }
+    })
 }
 
 /// Stop watching for file changes at the specified path.
 pub fn unwatch_file(path: &Path) {
+    debug!("unwatching file: {}", path.display());
     with_app_ctx(|ctx| {
         ctx.watch.borrow_mut().watcher().unwatch(path).expect("failed to unwatch file");
+    });
+}
+
+/// Options for [`show_file_dialog`](show_file_dialog).
+///
+/// # Example
+///
+/// * Show a file picker for image files:
+/// ```rust
+/// let options = FileDialogOptions {
+///     filters: &[("Image files", &["png", "jpg", "jpeg"])],
+/// };
+#[derive(Clone, Debug, Default)]
+pub struct FileDialogOptions<'a> {
+    /// File type filter.
+    ///
+    /// It's a list of (file_type_description, allowed_extensions) tuples.
+    pub filters: &'a [(&'a str, &'a [&'a str])] = &[],
+}
+
+/// Shows a file picker dialog.
+pub fn show_file_dialog(options: &FileDialogOptions<'_>) -> Option<std::path::PathBuf> {
+    let mut dialog = rfd::FileDialog::new();
+    for (name, extensions) in options.filters {
+        dialog = dialog.add_filter(*name, extensions);
+    }
+    dialog.pick_file()
+}
+
+/// Shows a file picker dialog (shorthand for `show_file_dialog` with one filter).
+///
+/// # Arguments
+/// * `file_type_description` - A description of the file type.
+/// * `extensions` - A list of allowed file extensions (without the dot) (e.g. `["png", "jpg"]`).
+pub fn pick_file(file_type_description: &str, extensions: &[&str]) -> Option<std::path::PathBuf> {
+    let mut dialog = rfd::FileDialog::new();
+    dialog = dialog.add_filter(file_type_description, extensions);
+    dialog.pick_file()
+}
+
+/// Prints a message on screen.
+pub fn print_message(message: impl AsRef<str>) {
+    with_app_ctx(|ctx| {
+        ctx.text_overlay.borrow_mut().push_str(message.as_ref());
     });
 }

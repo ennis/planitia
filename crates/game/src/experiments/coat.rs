@@ -1,6 +1,7 @@
 use crate::experiments::lines::{Line, LineVertex};
 use crate::{SceneInfo, SceneInfoUniforms};
 use color::srgba8;
+use gamelib::app::FileDialogOptions;
 use gamelib::asset::Handle;
 use gamelib::input::InputEvent;
 use gamelib::render::pipeline_cache::{get_compute_pipeline, get_graphics_pipeline};
@@ -109,7 +110,7 @@ impl CoatExperiment {
     }
 
     fn open(&mut self) {
-        if let Some(path) = rfd::FileDialog::new().add_filter("Geometry Archive", &["geom"]).pick_file() {
+        if let Some(path) = gamelib::pick_file("Geometry Archive", &["geom"]) {
             match geom::GeoArchive::load(&path) {
                 Ok(geo) => {
                     self.geometry = Some(geo);

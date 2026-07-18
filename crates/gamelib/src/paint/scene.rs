@@ -4,7 +4,11 @@ use crate::paint::flatten::flatten_path;
 use crate::paint::gradient::ColorStop;
 use crate::paint::renderer::DrawCommand;
 use crate::paint::text::Glyph;
-use crate::paint::{AsPathSlice, BlendMode, GlyphRun, GradientIntegralSegment, GradientRampData, PaintVertex, Painter, Path, PathBuilder, PathSlice, RRect, TextFormat, TextLayout, TextureFill, compute_gradient_integral, renderer, StrokeLocation};
+use crate::paint::{
+    AsPathSlice, BlendMode, GlyphRun, GradientIntegralSegment, GradientRampData, PaintVertex, Painter, Path,
+    PathBuilder, PathSlice, RRect, StrokeLocation, TextFormat, TextLayout, TextureFill, compute_gradient_integral,
+    renderer,
+};
 use color::{Srgba8, srgba8};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::{CommandBuffer, Format, Ptr, PushDataSource};
@@ -199,7 +203,7 @@ impl PaintScene {
             self.draw_glyph_run(position, &glyph_run, &DrawGlyphRunOptions { color });
         }
     }
-    
+
     /// Draws a TextLayout object.
     pub fn draw_text_layout(&mut self, position: Vec2, layout: &TextLayout, color: Srgba8) {
         for glyph_run in layout.glyph_runs() {
@@ -262,8 +266,8 @@ impl PaintScene {
     }
 
     /// Alias for [`render_scene(cmd, render_target, self)`](render_scene).
-    pub fn render(self, cmd: &mut CommandBuffer, render_target: &gpu::Image) {
-        render_scene(cmd, render_target, self);
+    pub fn render(self, render_target: &gpu::Image) {
+        render_scene(render_target, self);
     }
 }
 
@@ -272,8 +276,8 @@ impl PaintScene {
 /// This consumes the `PaintScene` object.
 ///
 /// # Arguments
-/// - `cmd`: Command buffer to record rendering commands into.
-pub fn render_scene(cmd: &mut CommandBuffer, render_target: &gpu::Image, scene: PaintScene) {
+///
+pub fn render_scene(render_target: &gpu::Image, scene: PaintScene) {
     if !scene.transform_stack.is_empty() {
         warn!("finish() called with unbalanced save/restore calls");
     }
@@ -287,10 +291,10 @@ pub fn render_scene(cmd: &mut CommandBuffer, render_target: &gpu::Image, scene: 
 
     // Upload pending changes to texture atlas.
     let mut painter = get_context().painter.borrow_mut();
-    painter.update_texture_atlas(cmd);
+    painter.update_texture_atlas();
 
     // Render the scene.
-    if let Err(err) = renderer::render_scene(cmd, &mut painter, render_target, &scene.rscene) {
+    if let Err(err) = renderer::render_scene(&mut painter, render_target, &scene.rscene) {
         error!("failed to render scene: {err}");
     }
 }

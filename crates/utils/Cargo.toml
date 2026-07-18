@@ -7,3 +7,4 @@ edition = "2024"
 aligned-vec = "0.6.4"
 thiserror = "2.0.17"
 bumpalo = "3.20.2"
+planitia-workspace-hack = { version = "0.1", path = "../../planitia-workspace-hack" }

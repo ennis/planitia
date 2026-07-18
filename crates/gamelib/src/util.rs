@@ -1,6 +1,5 @@
 mod profiler;
 
-use arboard::Clipboard;
 use log::error;
 use std::env;
 use std::future::pending;
@@ -16,7 +15,7 @@ pub async fn forever() {
 pub fn env_flag(name: &str) -> bool {
     env::var(name).map(|v| v == "1" || v == "true" || v == "yes").unwrap_or(false)
 }
-
+/*
 /// Copies the given text to the system clipboard.
 ///
 /// If this fails, an error message is logged.
@@ -48,6 +47,7 @@ pub fn read_clipboard() -> String {
         }
     }
 }
+*/
 
 /// Checks if a file or directory at the given path exists, and returns another path with a numeric suffix if it does.
 ///

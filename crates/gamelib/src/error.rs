@@ -1,10 +1,10 @@
 //! Context-capturing error type.
 
+use color_print::{ceprintln, cwriteln};
 use std::error::Error;
 use std::fmt;
 use std::marker::PhantomData;
 use std::panic::Location;
-use color_print::{ceprintln, cwriteln};
 
 pub struct ExcFrame {
     location: &'static Location<'static>,
@@ -20,12 +20,12 @@ impl ExcFrame {
 
         match prefix.pop() {
             Some('├') => prefix.push('│'),
-            None => {},
+            None => {}
             _ => prefix.push(' '),
         }
 
         prefix.push(' ');
-        for (i,child) in self.children.iter().enumerate() {
+        for (i, child) in self.children.iter().enumerate() {
             prefix.push(if i == self.children.len() - 1 { '╰' } else { '├' });
             child.print_error_tree_rec(f, prefix)?;
             prefix.pop();
@@ -111,8 +111,25 @@ impl<E> Exc<E> {
         new_exc
     }
 
+    #[track_caller]
+    pub fn with_info(self, context: impl Into<String>) -> Exc<impl std::error::Error + Send + Sync + 'static> {
+        struct ContextError(String);
+        impl fmt::Debug for ContextError {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "{}", self.0)
+            }
+        }
+        impl fmt::Display for ContextError {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "{}", self.0)
+            }
+        }
+        impl std::error::Error for ContextError {}
+        self.raise(ContextError(context.into()))
+    }
+
     /// Logs the error tree to stderr.
-    pub fn log_error(&self) {
+    pub fn log_to_stderr(&self) {
         self.frame.log_error();
     }
 }
@@ -227,7 +244,7 @@ where
     where
         Self: Sized,
         F: FnOnce() -> G,
-        G: Error + Send + Sync + 'static
+        G: Error + Send + Sync + 'static,
     {
         match self {
             Ok(value) => Ok(value),
@@ -267,7 +284,7 @@ where
     where
         Self: Sized,
         F: FnOnce() -> G,
-        G: Error + Send + Sync + 'static
+        G: Error + Send + Sync + 'static,
     {
         match self {
             Ok(value) => Ok(value),
@@ -277,7 +294,7 @@ where
 
     fn log_error(self) -> Self {
         if let Err(exc) = &self {
-            exc.log_error();
+            exc.log_to_stderr();
         }
         self
     }
@@ -296,7 +313,7 @@ pub trait OptionExt<T> {
         G: std::error::Error + Send + Sync + 'static;
 }
 
-impl <T> OptionExt<T> for Option<T> {
+impl<T> OptionExt<T> for Option<T> {
     #[track_caller]
     fn ok_or_raise<F, G>(self, outer: F) -> ExcResult<T, G>
     where
@@ -419,7 +436,6 @@ mod tests {
         let _ = try_stuff_any()?;
         Ok(())
     }*/
-
 
     #[test]
     fn test_exc() {

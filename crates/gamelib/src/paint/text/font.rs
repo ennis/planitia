@@ -66,7 +66,7 @@ impl Font {
 
     /// Returns the default font for regular text.
     pub fn default_regular() -> &'static Self {
-        static INTER_DISPLAY_REGULAR: &[u8] = include_bytes!("Zurich Condensed BT.ttf");
+        //static INTER_DISPLAY_REGULAR: &[u8] = include_bytes!("Zurich Condensed BT.ttf");
         static TX_02_MEDIUM: &[u8] = include_bytes!("TX-02-Medium.otf");
         static FONT: OnceLock<Font> = OnceLock::new();
         FONT.get_or_init(|| Font::load_static_font_from_bytes(TX_02_MEDIUM))

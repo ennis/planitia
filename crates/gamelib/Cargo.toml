@@ -13,6 +13,7 @@ color = { workspace = true }
 utils = { workspace = true }
 shadertool = { workspace = true, optional = true }
 futures = { version = "0.3", features = ["executor"] }
+rfd = "0.16.0"
 #slab = "0.4"
 winit = "0.30"
 slotmap = "1.0.7"
@@ -30,12 +31,28 @@ renderdoc = "0.12.1"
 sharc = { workspace = true }
 ab_glyph = "0.2.31"
 anyhow = "1.0.100"
+tempfile = "3.27.0"
+
 notify-debouncer-mini = "0.7.0"
 libloading = "0.9.0"
 ron = "0.12.0"
-serde = { version = "1.0.228", features = ["derive"] }
+serde = { version = "1", features = ["derive", "alloc", "rc"] }
 color-print = "0.3.7"
 scoped-tls = "1.0.1"
+planitia-workspace-hack = { version = "0.1", path = "../../planitia-workspace-hack" }
+
+# gamelib itself, and downstream crates that link to gamelib may depend (directly or indirectly) on the same crate but
+# with different enabled features. This leads to gamelib being recompiled unnecessarily because of feature mismatches.
+# To avoid that as much as possible, we eagerly specify those dependencies here to ensure that they are compiled with
+# a set of features that matches how they are used in downstream crates.
+# This needs to be updated when a downstream crate adds a potentially conflicting dependency.
+
+# TODO ideally we'd do that, but it's hard to track conflicting dependencies
+
+#       gamelib -> renderdoc -> float-cmp (default features)
+# game -> usvg -> strict-num -> float-cmp (no default features, "std")
+#float-cmp = { version = "0.9.0", features = ["std"] }
+
 
 [target.'cfg(target_os="windows")'.dependencies]
 windows = { version = "0.61.3", features = [

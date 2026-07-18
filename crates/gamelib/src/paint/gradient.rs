@@ -53,12 +53,16 @@ pub(crate) struct GradientRampData {
 }
 
 pub(crate) fn compute_gradient_integral(
-    color_stops: &[ColorStop],
+    mut color_stops: &[ColorStop],
     segments: &mut Vec<GradientIntegralSegment>,
 ) -> GradientRampData {
     let seg_start = segments.len();
 
-    assert!(!color_stops.is_empty(), "Gradient must have at least one color stop");
+    // Ensure that the gradient has at least one color stop.
+    if color_stops.is_empty() {
+        warn!("gradient has no color stops");
+        color_stops = &[ColorStop { position: 0.0, color: Srgba8::BLACK }];
+    }
 
     let n = color_stops.len();
     let opaque = color_stops.iter().all(|stop| stop.color.is_opaque());

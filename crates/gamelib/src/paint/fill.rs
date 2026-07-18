@@ -13,7 +13,7 @@ pub struct LinearGradientFill {
     pub end: Vec2,
     /// Gradient ramp
     pub ramp: GradientRamp,
-    pub extend_mode: GradientExtendMode,
+    pub extend_mode: GradientExtendMode = GradientExtendMode::Clamp,
 }
 
 #[derive(Debug, Clone, Copy)]

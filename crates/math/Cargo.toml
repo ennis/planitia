@@ -17,6 +17,7 @@ glam = "0.30.5"
 # [patapon] This is also a cargo issue (https://github.com/rust-lang/cargo/issues/6313)
 # [patapon] Eventually we should remove egui and epaint dependencies, which would eliminate the problem
 serde = { version = "1", features = ["derive", "alloc", "rc"], optional = true }
+planitia-workspace-hack = { version = "0.1", path = "../../planitia-workspace-hack" }
 
 [features]
 default = ["serialization"]

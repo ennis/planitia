@@ -129,7 +129,7 @@ impl Atlas {
     }*/
 
     ///
-    fn upload_to_gpu(&mut self, cmd: &mut gpu::CommandBuffer) {
+    fn upload_to_gpu(&mut self) {
         unsafe fn slice_to_u8<T: Copy>(slice: &[T]) -> &[u8] {
             unsafe {
                 use std::mem::size_of;
@@ -147,7 +147,7 @@ impl Atlas {
 
         debug!("uploading atlas rows {}..{}", self.dirty.start, self.dirty.end);
 
-        cmd.upload_image_data(
+        gpu::upload_image_data(
             ImageCopyView {
                 image: &self.texture,
                 mip_level: 0,
@@ -168,9 +168,9 @@ impl Atlas {
     /// Returns the GPU image handle for the atlas, uploading it if necessary.
     ///
     /// The image is prepared for shader read access.
-    pub(crate) fn prepare_texture(&mut self, cmd: &mut gpu::CommandBuffer) -> gpu::TextureHandle {
-        self.upload_to_gpu(cmd);
-        cmd.barrier(InvalidateFlags::TEXTURE);
+    pub(crate) fn prepare_texture(&mut self) -> gpu::TextureHandle {
+        self.upload_to_gpu();
+        gpu::barrier(InvalidateFlags::TEXTURE);
         self.texture.texture_handle()
     }
 }

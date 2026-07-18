@@ -15,7 +15,7 @@ use crate::{
 };
 use ash::vk;
 use gpu_allocator::vulkan::AllocationCreateDesc;
-use log::{debug, error, trace};
+use log::{debug, error, info, trace};
 use slotmap::SlotMap;
 use std::collections::{HashMap, VecDeque};
 use std::ffi::{CStr, CString, c_void};
@@ -83,10 +83,11 @@ pub(crate) struct DeviceExtensions {
 /// the fields themselves may not be Send or Sync.
 pub(crate) struct DeviceThreadSafeState {
     pub(crate) physical_device_memory_properties: vk::PhysicalDeviceMemoryProperties,
+    pub(crate) physical_device_id_properties: vk::PhysicalDeviceIDProperties<'static>,
     pub(crate) descriptor_heap_properties: vk2::VkPhysicalDeviceDescriptorHeapPropertiesEXT,
 
     _physical_device_descriptor_buffer_properties: vk::PhysicalDeviceDescriptorBufferPropertiesEXT<'static>,
-    _physical_device_properties: vk::PhysicalDeviceProperties2<'static>,
+    physical_device_properties: vk::PhysicalDeviceProperties,
 
     // SAFETY: we're never using this as an externally-synchronized command parameter.
     pub(crate) timeline: vk::Semaphore,
@@ -139,7 +140,6 @@ pub struct Device {
     pub(crate) descriptor_heaps: DescriptorHeaps,
 
     // --- descriptor heap ---
-
     /// semaphores ready for reuse.
     pub(crate) semaphores: Mutex<Vec<vk::Semaphore>>,
 
@@ -458,7 +458,7 @@ impl Device {
     /// * `physical_device` - the physical device that the device was created on
     /// * `device` - the vulkan device handle
     /// * `graphics_queue_family_index` - queue family index of the main graphics queue
-    pub unsafe fn from_existing(
+    unsafe fn from_existing(
         physical_device: vk::PhysicalDevice,
         device: vk::Device,
         graphics_queue_family_index: u32,
@@ -534,16 +534,41 @@ impl Device {
             sparseDescriptorHeaps: 0,
             protectedDescriptorHeaps: 0,
         };
-        let mut physical_device_properties = vk::PhysicalDeviceProperties2 {
+        let mut physical_device_id_properties = vk::PhysicalDeviceIDProperties {
             p_next: &mut descriptor_heap_properties as *mut _ as *mut c_void,
+            ..Default::default()
+        };
+        let mut physical_device_properties = vk::PhysicalDeviceProperties2 {
+            p_next: &mut physical_device_id_properties as *mut _ as *mut c_void,
             ..Default::default()
         };
 
         instance.get_physical_device_properties2(physical_device, &mut physical_device_properties);
 
+        let device_name = CStr::from_ptr(physical_device_properties.properties.device_name.as_ptr()).to_string_lossy();
+        info!("gpu: using device {device_name}",);
+        info!(
+            "    deviceType: {:?}  deviceID: {:04x}  vendorID: {:04x}",
+            physical_device_properties.properties.device_type,
+            physical_device_properties.properties.device_id,
+            physical_device_properties.properties.vendor_id
+        );
+        info!("    pipelineCacheUUID: {:02x?}", physical_device_properties.properties.pipeline_cache_uuid);
+        info!(
+            "    apiVersion: {}.{}.{}   driverVersion: {}",
+            vk::api_version_major(physical_device_properties.properties.api_version),
+            vk::api_version_minor(physical_device_properties.properties.api_version),
+            vk::api_version_patch(physical_device_properties.properties.api_version),
+            physical_device_properties.properties.driver_version
+        );
+        if physical_device_id_properties.device_luid_valid == vk::TRUE {
+            info!("    deviceLUID: {:02x?}", physical_device_id_properties.device_luid);
+        }
+
         // Create global descriptor tables
         let descriptor_table = BindlessDescriptorTable::new(&device, DESCRIPTOR_TABLE_SIZE);
 
+        // Descriptor heap stuff (unused for now)
         let descriptor_heaps = DescriptorHeaps::new(&mut allocator, &device, &descriptor_heap_properties);
 
         Ok(Device {
@@ -559,9 +584,10 @@ impl Device {
             platform_extensions,
             thread_safe: DeviceThreadSafeState {
                 physical_device_memory_properties,
+                physical_device_id_properties,
                 descriptor_heap_properties,
                 _physical_device_descriptor_buffer_properties: physical_device_descriptor_buffer_properties,
-                _physical_device_properties: physical_device_properties,
+                physical_device_properties: physical_device_properties.properties,
                 timeline,
                 physical_device,
             },
@@ -618,8 +644,6 @@ impl Device {
             vk::QueueFlags::GRAPHICS,
             present_surface,
         );
-
-        debug!("selected physical device: {:?}", CStr::from_ptr(phy.properties.device_name.as_ptr()));
 
         // ------ Setup device create info ------
         let queue_priorities = [1.0f32];
@@ -768,6 +792,7 @@ impl Device {
         };
 
         // ------ Create device ------
+
         let device: ash::Device = instance
             .create_device(phy.physical_device, &device_create_info, None)
             .expect("could not create vulkan device");
@@ -1513,4 +1538,27 @@ pub unsafe fn set_debug_name<Object: VulkanObject>(object: &Object, name: impl A
     unsafe {
         set_debug_name_raw(object.handle(), name);
     }
+}
+
+/// Returns the `VkPhysicalDeviceProperties` of the physical device used by the global device.
+pub fn get_physical_device_properties() -> vk::PhysicalDeviceProperties {
+    Device::global().thread_safe.physical_device_properties
+}
+
+/// Returns the name of the physical device used by the global device.
+pub fn get_physical_device_name() -> String {
+    let properties = get_physical_device_properties();
+    let device_name = unsafe { CStr::from_ptr(properties.device_name.as_ptr()) };
+    device_name.to_string_lossy().into_owned()
+}
+
+/// Returns the device UUID of the physical device.
+pub fn get_device_uuid() -> [u8; 16] {
+    Device::global().thread_safe.physical_device_id_properties.device_uuid
+}
+
+/// Returns the device LUID of the physical device.
+pub fn get_device_luid() -> Option<[u8; 8]> {
+    let id_properties = &Device::global().thread_safe.physical_device_id_properties;
+    if id_properties.device_luid_valid == vk::TRUE { Some(id_properties.device_luid) } else { None }
 }

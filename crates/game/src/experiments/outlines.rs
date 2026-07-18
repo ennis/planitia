@@ -4,14 +4,15 @@ use crate::{SceneInfo, SceneInfoUniforms};
 use bytesize::ByteSize;
 use color::{Srgba8, srgba8};
 use gamelib::asset::{AssetError, AssetNotLoadedError, AssetReadGuard, Handle, VfsPath, VfsPathBuf};
+use gamelib::error::ExcResult;
 use gamelib::input::InputEvent;
 use gamelib::render::RenderTarget;
 use gamelib::render::pipeline_cache::{get_compute_pipeline, get_graphics_pipeline};
-use gamelib::worksheet::Worksheet;
 use gamelib::{egui, static_assets, tweak};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::{
-    Buffer, BufferCreateInfo, DrawIndirectCommand, Image, InvalidateFlags, MemoryLocation, Ptr, PushDataSource, Size3D,
+    BARRIER_INDIRECT, BARRIER_STORAGE, BARRIER_TEXTURE, Buffer, BufferCreateInfo, DrawIndirectCommand, Image,
+    InvalidateFlags, MemoryLocation, Ptr, PushDataSource, Size3D,
 };
 use hgeo::util::polygons_to_triangle_mesh;
 use log::{info, warn};
@@ -22,7 +23,6 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 use std::path::Path;
 use std::{fmt, ptr};
-use gamelib::error::ExcResult;
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -65,8 +65,6 @@ pub struct OutlineExperiment {
 
     lock_view: bool,
     locked_eye: Vec3,
-
-    worksheet: gamelib::worksheet::Worksheet,
 }
 
 /// GPU root parameters for contour extraction, ranking, and expansion passes.
@@ -229,7 +227,6 @@ impl OutlineExperiment {
             ),
             lock_view: false,
             locked_eye: Vec3::ZERO,
-            worksheet: Worksheet::default(),
         }
     }
 
@@ -335,7 +332,7 @@ impl OutlineExperiment {
 
     pub(crate) fn input(&mut self, input_event: &InputEvent) {
         if input_event.is_shortcut("Ctrl+O") {
-            if let Some(path) = rfd::FileDialog::new().add_filter("Houdini Geometry", &["geo", "bgeo"]).pick_file() {
+            if let Some(path) = gamelib::pick_file("Houdini Geometry File", &["geo", "bgeo"]) {
                 self.load_geometry(&path);
             }
         }
@@ -355,7 +352,6 @@ impl OutlineExperiment {
 
     pub(crate) fn render(
         &mut self,
-        cmd: &mut gpu::CommandBuffer,
         color_target: &gpu::Image,
         depth_target: &gpu::Image,
         scene_info: &SceneInfo,
@@ -372,15 +368,13 @@ impl OutlineExperiment {
         self.normal_texture.setup(width, height);
         self.shading_texture.setup(width, height);
 
-        use InvalidateFlags as IF;
-
         // handle view lock
         self.lock_view = tweak!(lock_view = false);
         if !self.lock_view {
             self.locked_eye = scene_info.eye;
         }
 
-        let root_params = cmd.upload(&ContoursRootParams {
+        let root_params = gpu::upload(&ContoursRootParams {
             mesh: self.mesh.gpu_data(),
             scene_info: scene_info.gpu,
 
@@ -407,52 +401,41 @@ impl OutlineExperiment {
             shading_texture: self.shading_texture.texture_handle(),
         });
 
-        /////////////////////////////////////////////////////////
         // base render & depth pass
-        {
-            let mut pass = cmd.begin_rendering(
-                &[
-                    self.shading_texture.as_color_attachment([0.0, 0.0, 0.0, 0.0]),
-                    self.normal_texture.as_color_attachment([0.0, 0.0, 0.0, 0.0]),
-                    self.angle_texture.as_color_attachment([0.0, 0.0, 0.0, 0.0]),
-                ],
-                Some(depth_target.as_depth_stencil_attachment(None, None)),
-            );
-            pass.bind_graphics_pipeline(&*BASE_RENDER.read()?);
-            pass.draw(TriangleList, None, 0..self.mesh.face_vertices.len() as u32, 0..1, root_params);
-            pass.finish();
-        }
+        let base_render = BASE_RENDER.read()?;
+        gpu::render(
+            &[
+                self.shading_texture.as_color_attachment([0.0, 0.0, 0.0, 0.0]),
+                self.normal_texture.as_color_attachment([0.0, 0.0, 0.0, 0.0]),
+                self.angle_texture.as_color_attachment([0.0, 0.0, 0.0, 0.0]),
+            ],
+            Some(depth_target.as_depth_stencil_attachment(None, None)),
+            |encoder| {
+                encoder.bind_graphics_pipeline(&*base_render);
+                encoder.draw(TriangleList, None, 0..self.mesh.face_vertices.len() as u32, 0..1, root_params);
+            },
+        );
 
-        unsafe {
-            // clear DrawIndirectCommand::vertex
-            cmd.update_buffer(&self.expanded_contours_draw_command.as_bytes(), 0, &[0; 4]);
-        }
+        // clear DrawIndirectCommand::vertex
+        gpu::update_buffer(&self.expanded_contours_draw_command.as_bytes(), 0, &[0; 4]);
 
-        /////////////////////////////////////////////////////////
         // contour extraction
-
-        unsafe {
-            // clear ContourEdgeBuffer::count
-            // not very pretty
-            cmd.update_buffer(&self.segments.as_bytes(), 0, &[0; 4]);
-            cmd.fill_buffer(&self.global_to_contour_index_map.as_bytes().slice(..), 0xFFFF_FFFF);
-            cmd.fill_buffer(&self.contour_point_list.as_bytes().slice(..), 0xFFFF_FFFF);
-            cmd.fill_buffer(&self.contour_point_list_subdiv.as_bytes().slice(..), 0xFFFF_FFFF);
-        }
-
-        cmd.barrier(IF::STORAGE);
-
-        cmd.bind_compute_pipeline(&*EXTRACT_INTERPOLATED_CONTOURS.read()?);
-        cmd.dispatch(
+        // clear ContourEdgeBuffer::count
+        // not very pretty
+        gpu::update_buffer(&self.segments.as_bytes(), 0, &[0; 4]);
+        gpu::fill_buffer(&self.global_to_contour_index_map.as_bytes().slice(..), 0xFFFF_FFFF);
+        gpu::fill_buffer(&self.contour_point_list.as_bytes().slice(..), 0xFFFF_FFFF);
+        gpu::fill_buffer(&self.contour_point_list_subdiv.as_bytes().slice(..), 0xFFFF_FFFF);
+        gpu::barrier(BARRIER_STORAGE);
+        gpu::dispatch(
+            &*EXTRACT_INTERPOLATED_CONTOURS.read()?,
             self.mesh.faces.len().div_ceil(EXTRACT_CONTOURS_THREAD_GROUP_SIZE as usize) as u32,
             1,
             1,
             root_params,
         );
+        gpu::barrier(BARRIER_STORAGE | BARRIER_INDIRECT | BARRIER_TEXTURE);
 
-        cmd.barrier(IF::STORAGE | IF::INDIRECT | IF::TEXTURE);
-
-        /////////////////////////////////////////////////////////
         // contour loop breaking
         // find contour loops and determine a "break" point for each loop that defines the starting
         // point for ranking the list
@@ -506,7 +489,6 @@ impl OutlineExperiment {
             }
         }*/
 
-        /////////////////////////////////////////////////////////
         // contour subdivision
         /*if !use_interpolated_contours {
             let point_count = self.contour_point_list.len() as u32;
@@ -531,27 +513,24 @@ impl OutlineExperiment {
             }
         }*/
 
-        /////////////////////////////////////////////////////////
         // expand contours to quad geometry
         {
             let n = self.mesh.edges.len() as u32;
             let groups_count = n.div_ceil(EXPAND_CONTOURS_GROUP_SIZE);
-            cmd.bind_compute_pipeline(&*EXPAND_INTERPOLATED_CONTOURS.read()?);
-            cmd.dispatch(groups_count, 1, 1, root_params);
+            gpu::dispatch(&*EXPAND_INTERPOLATED_CONTOURS.read()?, groups_count, 1, 1, root_params);
         }
+        gpu::barrier(BARRIER_STORAGE | BARRIER_INDIRECT);
 
-        cmd.barrier(IF::STORAGE | IF::INDIRECT);
 
-        /////////////////////////////////////////////////////////
         // render contours
         {
-            let mut encoder = cmd.begin_rendering(&[color_target.as_color_attachment(None)], None);
-            encoder.bind_graphics_pipeline(&*RENDER_OUTLINES.read()?);
-            encoder.draw_indirect(TriangleList, None, &self.expanded_contours_draw_command, 0..1, root_params);
-            encoder.finish();
+            let render_outlines = RENDER_OUTLINES.read()?;
+            gpu::render(&[color_target.as_color_attachment(None)], None, |encoder| {
+                encoder.bind_graphics_pipeline(&*render_outlines);
+                encoder.draw_indirect(TriangleList, None, &self.expanded_contours_draw_command, 0..1, root_params);
+            });
         }
-
-        cmd.barrier(IF::STORAGE | IF::TEXTURE);
+        gpu::barrier(BARRIER_STORAGE | BARRIER_TEXTURE);
 
         Ok(())
     }

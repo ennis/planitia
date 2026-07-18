@@ -321,7 +321,6 @@ unsafe impl<T: ?Sized + Send + Sync> Send for Entry<T> {}
 unsafe impl<T: ?Sized + Send + Sync> Sync for Entry<T> {}
 
 impl<T: Asset> Entry<AssetStorage<T>> {
-
     /// Loads or reloads the asset.
     fn reload(&self) {
         // Mark as clean before reloading, because some loaders may immediately modify/rebuild
@@ -344,7 +343,7 @@ impl<T: Asset> Entry<AssetStorage<T>> {
                 #[cfg(feature = "hot_reload")]
                 if let Some(ref local_path) = metadata.local_path {
                     if let Err(err) = deps.watch_local_file(local_path) {
-                        err.log_error();
+                        err.log_to_stderr();
                     }
                 }
 
@@ -362,7 +361,7 @@ impl<T: Asset> Entry<AssetStorage<T>> {
             Ok(_) => debug!("loaded asset `{}`", self.path.as_str()),
             Err(ref err) => {
                 error!("failed to load asset `{}`: {}", self.path.as_str(), err)
-            },
+            }
         }
 
         let load_successful = result.is_ok();
@@ -512,8 +511,7 @@ impl AssetCache {
         }
     }
 
-    unsafe fn insert_inner<T: Asset>(&self, path: &VfsPath, loader: LoadFn<T>) -> Handle<T>
-    {
+    unsafe fn insert_inner<T: Asset>(&self, path: &VfsPath, loader: LoadFn<T>) -> Handle<T> {
         let key = CacheKey { path: path.to_path_buf(), type_id: TypeId::of::<T>() };
 
         // Check if an entry already exists and is clean.

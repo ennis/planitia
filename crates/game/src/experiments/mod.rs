@@ -7,14 +7,13 @@ mod ss_contours;
 pub mod svg;
 mod sweep;
 mod winged_edge_mesh;
-pub mod hot_reload;
 
 
 use color::Srgba8;
 use gamelib::paint::{render_scene, DrawGlyphRunOptions, PaintScene, TextFormat, TextLayout};
 use math::{rect_xywh, vec2};
 
-pub(super) fn painting_test(cmd: &mut gpu::CommandBuffer, target: &gpu::Image, color: Srgba8)
+pub(super) fn painting_test(target: &gpu::Image, color: Srgba8)
 {
     let mut scene = PaintScene::new(Srgba8::TRANSPARENT);
 
@@ -39,5 +38,5 @@ And what is else not to be overcome?",
         scene.draw_glyph_run(vec2(0.0, 0.0), &glyph_run, &DrawGlyphRunOptions::default());
     }
 
-    render_scene(cmd, target, scene);
+    render_scene(target, scene);
 }

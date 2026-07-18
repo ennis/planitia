@@ -14,3 +14,5 @@ rustflags = ["-Cprefer-dynamic=yes"]
 
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-Zshare-generics=off"]
+#linker = "rust-lld.exe"
+

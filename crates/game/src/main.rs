@@ -15,7 +15,7 @@ use gamelib::platform::RenderTargetImage;
 use gamelib::render::pipeline_cache::get_graphics_pipeline;
 use gamelib::{App, AppHandler, UserEvent, WindowCreateInfo, WindowHandle, egui};
 use std::ops::Deref;
-
+use std::path::Path;
 use color::{Srgba8, srgba8};
 //use egui_demo_lib::{View, WidgetGallery};
 use gpu::PrimitiveTopology::TriangleList;
@@ -24,7 +24,6 @@ use log::debug;
 use math::{Camera, Mat4, Vec2, Vec3, rect_xywh, vec2};
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
-use crate::experiments::hot_reload::{load_test_plugin, reload_plugins, PluginHost};
 
 mod experiments;
 
@@ -48,8 +47,24 @@ pub struct SceneInfoUniforms {
 
 /// Scene info and GPU buffer containing it.
 pub struct SceneInfo {
-    info: SceneInfoUniforms,
+    pub info: SceneInfoUniforms,
     pub gpu: Ptr<SceneInfoUniforms>,
+}
+
+impl SceneInfo {
+    pub fn new(camera: &Camera, time: f32, frame: u32) -> Self {
+        let uniforms = SceneInfoUniforms {
+            view_matrix: camera.view,
+            proj_matrix: camera.projection,
+            view_proj_matrix: camera.view_projection(),
+            screen_size: camera.screen_size.as_vec2(),
+            time,
+            frame,
+            eye: camera.eye().as_vec3(),
+        };
+        let gpu_ptr = gpu::upload(&uniforms);
+        Self { info: uniforms, gpu: gpu_ptr }
+    }
 }
 
 impl Deref for SceneInfo {
@@ -143,51 +158,59 @@ impl Default for Game {
 }
 
 impl Game {
-    fn render_scene(&mut self, encoder: &mut gpu::RenderEncoder, _camera: &Camera, scene_info: &SceneInfo) {
-        //----------------------------------
-        // Draw background
-        let bottom_color = Srgba8::from(self.bg_bottom_color.to_srgba_unmultiplied());
-        let top_color = Srgba8::from(self.bg_top_color.to_srgba_unmultiplied());
-        if self.cfg.show_background {
-            if let Ok(background_shader) = self.background_shader.read() {
-                encoder.bind_graphics_pipeline(&*background_shader);
-                encoder.draw(
-                    TriangleList,
-                    None,
-                    0..6,
-                    0..1,
-                    root_params! {
-                        scene_uniforms: Ptr<SceneInfoUniforms> = scene_info.gpu,
-                        bottom_color: Srgba8 = bottom_color,
-                        top_color: Srgba8 = top_color
-                    },
-                );
-            }
-        }
+    fn render_scene(&mut self, target: &Image, scene_info: &SceneInfo) {
+        gpu::render(
+            &[gpu::ColorAttachment { image: target, clear: Some([0.0, 0.0, 0.0, 1.0]) }],
+            Some(gpu::DepthStencilAttachment {
+                image: &self.depth_stencil_buffer,
+                depth_clear: Some(1.0),
+                stencil_clear: Some(0),
+            }),
+            |encoder| {
+                // Draw background
+                let bottom_color = Srgba8::from(self.bg_bottom_color.to_srgba_unmultiplied());
+                let top_color = Srgba8::from(self.bg_top_color.to_srgba_unmultiplied());
+                if self.cfg.show_background {
+                    if let Ok(background_shader) = self.background_shader.read() {
+                        encoder.bind_graphics_pipeline(&*background_shader);
+                        encoder.draw(
+                            TriangleList,
+                            None,
+                            0..6,
+                            0..1,
+                            root_params! {
+                                scene_uniforms: Ptr<SceneInfoUniforms> = scene_info.gpu,
+                                bottom_color: Srgba8 = bottom_color,
+                                top_color: Srgba8 = top_color
+                            },
+                        );
+                    }
+                }
 
-        //----------------------------------
-        // Draw grid
-        if self.cfg.show_grid {
-            if let Ok(grid_shader) = self.grid_shader.read() {
-                encoder.bind_graphics_pipeline(&*grid_shader);
-                encoder.draw(
-                    TriangleList,
-                    None,
-                    0..6,
-                    0..1,
-                    root_params! {
-                        scene_uniforms: Ptr<SceneInfoUniforms> = scene_info.gpu,
-                        grid_scale: f32 = 100.0
-                    },
-                );
-            }
-        }
+                // Draw grid
+                if self.cfg.show_grid {
+                    if let Ok(grid_shader) = self.grid_shader.read() {
+                        encoder.bind_graphics_pipeline(&*grid_shader);
+                        encoder.draw(
+                            TriangleList,
+                            None,
+                            0..6,
+                            0..1,
+                            root_params! {
+                                scene_uniforms: Ptr<SceneInfoUniforms> = scene_info.gpu,
+                                grid_scale: f32 = 100.0
+                            },
+                        );
+                    }
+                }
+            },
+        );
     }
 
-    fn render_overlay(&mut self, cmd: &mut gpu::CommandBuffer, target: &gpu::Image) {
+    fn render_overlay(&mut self, target: &gpu::Image) {
         let mut scene = PaintScene::new(Srgba8::TRANSPARENT);
         scene.draw_text(
-            vec2(10.0, 10.0),
+            vec2(target.width() as f32 - 340.0, 10.0),
             concat!(
                 "  [Home] Home camera\n",
                 "     [G] Toggle grid\n",
@@ -199,10 +222,10 @@ impl Game {
             &TextFormat { size: 20.0, ..Default::default() },
             Srgba8::WHITE,
         );
-        scene.render(cmd, target);
+        scene.render(target);
         if self.cfg.show_painting_demo {
-            self.svg_experiment.render(cmd, target);
-            experiments::painting_test(cmd, target, Srgba8::from(self.color.to_srgba_unmultiplied()));
+            self.svg_experiment.render(target);
+            experiments::painting_test(target, Srgba8::from(self.color.to_srgba_unmultiplied()));
         }
     }
 }
@@ -241,10 +264,10 @@ impl AppHandler for Game {
             self.cfg.show_imgui = !self.cfg.show_imgui;
         }
         if input_event.is_shortcut("Ctrl+G") {
-            load_test_plugin();
+            gamelib::register_plugin("hot_reload_test.dll");
         }
         if input_event.is_shortcut("Ctrl+Shift+G") {
-            reload_plugins();
+            gamelib::reload_plugins();
         }
 
         // --- CAMERA ---
@@ -284,59 +307,34 @@ impl AppHandler for Game {
         #[cfg(feature = "hot_reload")]
         AssetCache::instance().do_reload();
 
-        let mut cmd = gpu::CommandBuffer::new();
+        //let mut cmd = gpu::CommandBuffer::new();
         let time = self.start_time.elapsed().as_secs_f32();
         let frame = self.frame_count;
         self.frame_count += 1;
 
-        //-------------------------------
         // Render 3D scene
-        {
-            let camera = self.camera_control.camera();
-            let mut scene_info = SceneInfo {
-                info: SceneInfoUniforms {
-                    view_matrix: camera.view,
-                    proj_matrix: camera.projection,
-                    view_proj_matrix: camera.view_projection(),
-                    screen_size: camera.screen_size.as_vec2(),
-                    time,
-                    frame,
-                    eye: camera.eye().as_vec3(),
-                },
-                gpu: Ptr::NULL,
-            };
-            scene_info.gpu = cmd.upload(&scene_info.info);
+        let scene_info = SceneInfo::new(&self.camera_control.camera(), time, frame);
+        self.render_scene(target.image, &scene_info);
 
-            let mut encoder = cmd.begin_rendering(
-                &[gpu::ColorAttachment { image: target.image, clear: Some([0.0, 0.0, 0.0, 1.0]) }],
-                Some(gpu::DepthStencilAttachment {
-                    image: &self.depth_stencil_buffer,
-                    depth_clear: Some(1.0),
-                    stencil_clear: Some(0),
-                }),
-            );
+        //self.coat_experiment.render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
+        //let _ = self.outline_experiment.render(&target.image, &self.depth_stencil_buffer, &scene_info);
+        //let _ = self.automaton_experiment.render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
 
-            self.render_scene(&mut encoder, &camera, &scene_info);
-            encoder.finish();
-
-            //self.coat_experiment
-            //    .render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
-            self.outline_experiment.render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
-            //let _ = self.automaton_experiment
-            //    .render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
-        }
-
-        //-------------------------------
         // Render 2D overlays
-        self.render_overlay(&mut cmd, &target.image);
+        self.render_overlay(&target.image);
 
-        //-------------------------------
         // Render GUI
         if self.cfg.show_imgui {
-            gamelib::render_imgui(&mut cmd, &target.image);
+            gpu::with_default_cb(|mut cmd| {
+                gamelib::render_imgui(&mut cmd, &target.image);
+            });
         }
 
-        gpu::submit(cmd).unwrap();
+        gpu::flush().unwrap();
+    }
+
+    fn file_changed(&mut self, path: &Path) {
+        gamelib::reload_plugins();
     }
 
     fn close_requested(&mut self, _window: WindowHandle) {
@@ -383,6 +381,8 @@ impl AppHandler for Game {
     fn exiting(&mut self) {
         self.cfg.save();
     }
+
+
 }
 
 fn main() {

@@ -12,8 +12,8 @@ mod surface;
 mod swapchain;
 pub mod util;
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 // Reexports
 
@@ -34,11 +34,11 @@ pub use gpu_macros::Vertex;
 
 pub mod prelude {
     pub use crate::{
-        vk, Buffer, BufferUsage, ClearColorValue, ColorBlendEquation, ColorTargetState, CommandBuffer,
-        DepthStencilState, Format, FragmentState, GraphicsPipeline, GraphicsPipelineCreateInfo, Image, ImageCreateInfo,
-        ImageType, ImageUsage, MemoryLocation, Point2D, PreRasterizationShaders, RasterizationState, Rect2D,
-        RenderEncoder, Sampler, SamplerCreateInfo, ShaderCode, ShaderEntryPoint, ShaderSource, Size2D, StencilState,
-        Vertex, VertexBufferLayoutDescription, VertexInputAttributeDescription, VertexInputState,
+        Buffer, BufferUsage, ClearColorValue, ColorBlendEquation, ColorTargetState, CommandBuffer, DepthStencilState,
+        Format, FragmentState, GraphicsPipeline, GraphicsPipelineCreateInfo, Image, ImageCreateInfo, ImageType,
+        ImageUsage, MemoryLocation, Point2D, PreRasterizationShaders, RasterizationState, Rect2D, RenderEncoder,
+        Sampler, SamplerCreateInfo, ShaderCode, ShaderEntryPoint, ShaderSource, Size2D, StencilState, Vertex,
+        VertexBufferLayoutDescription, VertexInputAttributeDescription, VertexInputState, vk,
     };
 }
 

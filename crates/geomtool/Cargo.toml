@@ -16,3 +16,4 @@ utils = { workspace = true }
 geom = { workspace = true }
 hgeo = { workspace = true }
 math = { workspace = true }
+planitia-workspace-hack = { version = "0.1", path = "../../planitia-workspace-hack" }

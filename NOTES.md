@@ -898,3 +898,7 @@ The hot-reloaded crate can't have its own copy of it, so it must be dynamically 
 ## Plan for hot-reloading
 
 - `gpu` should be split into `gpu-types` and `gpu`
+
+## Benefits
+If hot-reload is robust enough, we can revisit the idea of embedding compiled shaders directly in rust code, 
+and generate a type-safe interface to them.

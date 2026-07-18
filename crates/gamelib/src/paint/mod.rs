@@ -12,9 +12,9 @@ mod text;
 pub use fill::*;
 pub use gradient::*;
 pub use path::*;
-pub use scene::{DrawGlyphRunOptions, StrokeOptions, PaintScene, render_scene};
+pub use scene::{DrawGlyphRunOptions, PaintScene, StrokeOptions, render_scene};
 pub use shape::*;
-pub use text::{GlyphRun, TextFormat, TextLayout, Font};
+pub use text::{Font, GlyphRun, TextFormat, TextLayout};
 
 use crate::paint::atlas::Atlas;
 use crate::paint::text::{GlyphCache, GlyphEntry, GlyphId};
@@ -120,21 +120,15 @@ impl Painter {
         id: GlyphId,
         size: u32,
         position: Vec2,
-    ) -> (GlyphEntry, Vec2)
-    {
-        let (entry, quantized_pos) = self.glyph_cache.rasterize_glyph(
-            &mut self.texture_atlas,
-            &font,
-            id,
-            size,
-            position,
-        );
+    ) -> (GlyphEntry, Vec2) {
+        let (entry, quantized_pos) =
+            self.glyph_cache.rasterize_glyph(&mut self.texture_atlas, &font, id, size, position);
         (entry, quantized_pos)
     }
 
     /// Flushes pending changes to the glyph texture atlas.
-    pub(crate) fn update_texture_atlas(&mut self, cmd: &mut gpu::CommandBuffer) {
-        let _ = self.texture_atlas.prepare_texture(cmd);
+    pub(crate) fn update_texture_atlas(&mut self) {
+        let _ = self.texture_atlas.prepare_texture();
     }
 }
 

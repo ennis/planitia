@@ -1,13 +1,12 @@
 #![feature(default_field_values)]
+use bitflags::bitflags;
 use std::marker::PhantomData;
 use std::path::Path;
 use std::slice;
-use bitflags::bitflags;
 
 // Reexports
 pub use ash::{self, vk};
 pub use vk::Format;
-
 
 /// 2D point with integer coordinates.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -172,7 +171,6 @@ impl From<BufferUsage> for vk::BufferUsageFlags {
     }
 }
 
-
 /// Computes the number of mip levels for a 2D image of the given size.
 ///
 /// # Examples
@@ -186,7 +184,6 @@ impl From<BufferUsage> for vk::BufferUsageFlags {
 pub fn mip_level_count(width: u32, height: u32) -> u32 {
     (width.max(height) as f32).log2().floor() as u32
 }
-
 
 /// Returns the byte size of one pixel in the specified format.
 ///
@@ -328,7 +325,6 @@ pub fn format_numeric_type(fmt: vk::Format) -> FormatNumericType {
     }
 }
 
-
 /// Specifies the image aspect to consider in image operations.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum ImageAspect {
@@ -341,7 +337,6 @@ pub enum ImageAspect {
     /// Operate on the stencil aspect of the image (for depth-stencil images).
     Stencil = 4,
 }
-
 
 impl ImageAspect {
     /// Converts this enum to a `VkImageAspectFlags` value, based on the specified image format.
@@ -394,7 +389,6 @@ pub fn aspects_for_format(fmt: Format) -> vk::ImageAspectFlags {
         vk::ImageAspectFlags::COLOR
     }
 }
-
 
 /// Dimensionality of an image.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
@@ -530,7 +524,6 @@ impl ImageDataLayout {
     }
 }
 
-
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
 pub struct SamplerCreateInfo {
     pub mag_filter: vk::Filter = vk::Filter::LINEAR,
@@ -596,7 +589,6 @@ impl From<SamplerCreateInfo> for SamplerCreateInfoHashable {
         }
     }
 }
-
 
 /// Represents a clear value for use in image clear operations.
 #[derive(Clone, Copy, Debug)]
@@ -863,7 +855,6 @@ macro_rules! impl_index_data {
 impl_index_data!(u16, UINT16);
 impl_index_data!(u32, UINT32);
 
-
 /// Primitive topology.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum PrimitiveTopology {
@@ -1124,7 +1115,6 @@ impl<T: ?Sized + 'static> Clone for Ptr<T> {
 }
 
 impl<T: ?Sized + 'static> Copy for Ptr<T> {}
-
 
 /// Bindless handle to an image.
 #[derive(Copy, Clone, Debug)]

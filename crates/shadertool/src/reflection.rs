@@ -154,10 +154,7 @@ impl<'a> CollectedReflectionData<'a> {
                 let type_layout = param.type_layout().unwrap();
                 let offset = param.offset(slang::ParameterCategory::Uniform);
                 let location = ParamLocation::PushData { offset: offset as u32 };
-                eprintln!(
-                    "push data {}: {:?} offset {}",
-                    name, category,  offset
-                );
+                eprintln!("push data {}: {:?} offset {}", name, category, offset);
                 let size = type_layout.size(ParameterCategory::Uniform) as u32;
                 let index = self.add_param(name, location, size, None);
                 self.reflect_variable_type_layout(index, name, location, type_layout, &mut vec![]);
@@ -177,15 +174,12 @@ impl<'a> CollectedReflectionData<'a> {
                 self.reflect_variable_type_layout(index, name, location, cbuffer_content_layout, &mut vec![]);
             }
             ParameterCategory::None => {
-                eprintln!(
-                    "resource {}: {:?}",
-                    name, category
-                );
+                eprintln!("resource {}: {:?}", name, category);
                 return;
             }
             _ => {
                 ceprintln!("<r>error</>: unsupported parameter category {category:?} for {name}");
-            },
+            }
         };
     }
 

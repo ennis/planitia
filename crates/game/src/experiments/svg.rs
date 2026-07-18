@@ -152,7 +152,7 @@ impl SvgExperiment {
         }
     }
 
-    pub fn render(&mut self, cmd: &mut gpu::CommandBuffer, target: &gpu::Image) {
+    pub fn render(&mut self, target: &gpu::Image) {
         let mut scene = PaintScene::new(Srgba8::TRANSPARENT);
 
         {
@@ -171,7 +171,7 @@ impl SvgExperiment {
 
         {
             let _span = span!("svg_render_scene");
-            scene.render(cmd, target);
+            scene.render(target);
         }
     }
 }

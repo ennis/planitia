@@ -23,7 +23,7 @@ pub type InputDeviceId = win32::Win32InputDeviceId;
 //----------------------------------------------------------------------------------
 
 /// Image returned by `acquire` that can be rendered to.
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 pub struct RenderTargetImage<'a> {
     pub image: &'a gpu::Image,
 }

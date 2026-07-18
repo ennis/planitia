@@ -7,3 +7,4 @@ edition = "2024"
 utils = { workspace = true }
 gpu-types = { workspace = true }
 log = "0.4.28"
+planitia-workspace-hack = { version = "0.1", path = "../../planitia-workspace-hack" }

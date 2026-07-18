@@ -68,7 +68,6 @@ struct WinitAppHandler<'a> {
 }
 
 impl<'a> WinitAppHandler<'a> {
-
     /// Maintains the list of active timers, firing events for all expired timers.
     ///
     /// For each expired timer, this sends an event to the handler with the corresponding token,
@@ -138,7 +137,15 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
             WakeReason::Task => {}
             WakeReason::User(event) => {
                 ACTIVE_EVENT_LOOP.set(event_loop, || {
-                    self.inner.event(event);
+                    match event {
+                        UserEvent::Timeout(_) => {
+                            // TODO invoke timer callback?
+                        }
+                        UserEvent::Callback(func) => {
+                            // invoke user callback
+                            func();
+                        }
+                    }
                 });
             }
         }
@@ -279,12 +286,6 @@ impl Win32Platform {
     pub(crate) fn run_event_loop(&'static self, mut handler: &mut dyn LoopHandler) {
         let event_loop = winit::event_loop::EventLoop::<WakeReason>::with_user_event().build().unwrap();
         EVENT_LOOP_PROXY.set(event_loop.create_proxy()).expect("main loop already initialized");
-        event_loop
-            .run_app(&mut WinitAppHandler {
-                this: self,
-                inner: handler,
-                modifiers: Default::default(),
-            })
-            .unwrap();
+        event_loop.run_app(&mut WinitAppHandler { this: self, inner: handler, modifiers: Default::default() }).unwrap();
     }
 }

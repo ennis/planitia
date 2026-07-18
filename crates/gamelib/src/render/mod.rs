@@ -1,15 +1,14 @@
 use crate::asset::{AssetCache, DefaultLoader, Handle, VfsPath};
 use log::{debug, warn};
 use sharc::ShaderArchive;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use std::{fs, io};
-use std::path::{Path, PathBuf};
 
 pub mod pipeline_cache;
 mod reflection;
 mod render_world;
 mod util;
-mod workbench;
 //mod technique;
 
 //pub use technique::{Technique, TechniqueInstance};
@@ -82,23 +81,25 @@ pub(crate) fn load_shader_archive(path: impl AsRef<VfsPath>) -> Handle<ShaderArc
             // we should hot-reload when a shader source file changes, so add a dependency on them
             for source in a.shader_sources() {
                 if let Err(err) = deps.watch_local_file(&a[source.path]) {
-                    err.log_error();
+                    err.log_to_stderr();
                 }
             }
             // also hot-reload if manifest used to build the archive has changed
             if a.manifest_file().path.is_valid() && !a[a.manifest_file().path].is_empty() {
                 if let Err(err) = deps.watch_local_file(&a[a.manifest_file().path]) {
-                    err.log_error();
+                    err.log_to_stderr();
                 }
             }
 
-            if should_rebuild_archive(&a) && let Some(ref local_path) = metadata.local_path {
-
+            if should_rebuild_archive(&a)
+                && let Some(ref local_path) = metadata.local_path
+            {
                 let output_directory = local_path.parent().map(Path::to_path_buf);
 
                 // FIXME This syntax is atrocious.
                 let module = &a[a.root().modules][0];
-                let module_include_paths = a[module.include_paths].iter().map(|p| PathBuf::from(&a[*p])).collect::<Vec<_>>();
+                let module_include_paths =
+                    a[module.include_paths].iter().map(|p| PathBuf::from(&a[*p])).collect::<Vec<_>>();
                 let module_file = &a[module.file.path];
 
                 // Either the manifest or shader sources have changed, rebuild the archive.
@@ -120,7 +121,7 @@ pub(crate) fn load_shader_archive(path: impl AsRef<VfsPath>) -> Handle<ShaderArc
                         emit_debug_information: module.debug_info,
                         emit_spirv_binaries: true,
                         include_paths: module_include_paths,
-                        output_directory
+                        output_directory,
                     },
                     &shadertool::LogOptions { quiet: false, .. },
                 )?;

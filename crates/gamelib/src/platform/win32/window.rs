@@ -1,3 +1,4 @@
+use crate::WindowInputState;
 use crate::platform::RenderTargetImage;
 use crate::platform::win32::graphics::GraphicsContext;
 use crate::platform::win32::swap_chain::{DxgiVulkanInteropSwapChain, dxgi_to_vk_format};
@@ -19,7 +20,6 @@ use winit::event_loop::ActiveEventLoop;
 use winit::platform::windows::WindowAttributesExtWindows;
 use winit::raw_window_handle::HasWindowHandle;
 use winit::window::WindowAttributes;
-use crate::WindowInputState;
 
 struct DCompState {
     composition_target: IDCompositionTarget,
@@ -40,7 +40,6 @@ pub(super) enum SwapChainImpl {
     /// Vulkan swap chains (VK_KHR_swapchain).
     Vulkan(gpu::SwapChain),
 }
-
 
 /// Win32 window with associated swap chain.
 pub(super) struct Window {

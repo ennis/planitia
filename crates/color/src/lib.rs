@@ -105,7 +105,7 @@ impl Srgba8 {
             a: self.a as f32 / 255.0,
         }
     }
-    
+
     /// Decodes this color into linear-light `f32` array.
     pub fn to_linear_array(self) -> [f32; 4] {
         [
@@ -115,14 +115,9 @@ impl Srgba8 {
             self.a as f32 / 255.0,
         ]
     }
-    
+
     pub fn to_float_array(self) -> [f32; 4] {
-        [
-            self.r as f32 / 255.0,
-            self.g as f32 / 255.0,
-            self.b as f32 / 255.0,
-            self.a as f32 / 255.0,
-        ]
+        [self.r as f32 / 255.0, self.g as f32 / 255.0, self.b as f32 / 255.0, self.a as f32 / 255.0]
     }
 
     /// Constructs an `Srgba8` from *linear*-light sRGB `f32` components.

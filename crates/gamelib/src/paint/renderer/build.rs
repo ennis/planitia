@@ -2,7 +2,7 @@
 use crate::paint::fill::Fill;
 use crate::paint::flatten::flatten_path;
 use crate::paint::renderer::{
-    Command, DrawCommand, FillData, LinearGradientFill, GpuSceneData, Scene, SolidFill, TILE_SIZE, TextureFill,
+    Command, DrawCommand, FillData, GpuSceneData, LinearGradientFill, Scene, SolidFill, TILE_SIZE, TextureFill,
     TileCover, TileDrawData, pack_tile_cover_id,
 };
 use crate::paint::{PathSlice, PathVerb};
@@ -24,9 +24,9 @@ struct SceneBuilder<'a> {
     contours: Vec<Range<usize>>,                // temporary
     coarse_raster_tiles: Vec<CoarseRasterTile>, // temporary
     path_index: usize,
-    commands: Vec<Command>,   // output
-    tiles: Vec<TileDrawData>, // output
-    start_cover: usize,       // index of the first cover of the current batch of tiles to render
+    commands: Vec<Command>,          // output
+    tiles: Vec<TileDrawData>,        // output
+    start_cover: usize,              // index of the first cover of the current batch of tiles to render
     culled_viewport_tiles: u32,      // stats
     culled_fully_covered_tiles: u32, // stats
 }
@@ -243,7 +243,8 @@ impl<'a> SceneBuilder<'a> {
 pub(super) fn build_gpu_scene(scene: &Scene, viewport_width: u32, viewport_height: u32) -> GpuSceneData {
     let _span = tracy_client::span!("prepare_scene");
 
-    let viewport_tile_size = ivec2(viewport_width.div_ceil(TILE as u32) as i32, viewport_height.div_ceil(TILE as u32) as i32);
+    let viewport_tile_size =
+        ivec2(viewport_width.div_ceil(TILE as u32) as i32, viewport_height.div_ceil(TILE as u32) as i32);
     let mut builder = SceneBuilder::new(scene, viewport_tile_size);
 
     for cmd in scene.draw_commands.iter() {

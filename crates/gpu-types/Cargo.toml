@@ -8,6 +8,7 @@ bitflags = "2"
 ash = "0.38"
 math = { workspace = true }
 color = { workspace = true, optional = true }
+planitia-workspace-hack = { version = "0.1", path = "../../planitia-workspace-hack" }
 
 [features]
 # Enables integration with the color crate, so that color types are recognized as valid VertexAttribute types

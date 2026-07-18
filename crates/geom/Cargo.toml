@@ -7,3 +7,4 @@ edition = "2024"
 math = {workspace = true}
 utils = {workspace = true}
 color = {workspace = true}
+planitia-workspace-hack = { version = "0.1", path = "../../planitia-workspace-hack" }

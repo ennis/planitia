@@ -56,6 +56,8 @@ impl BindlessDescriptorTable {
             },
         ];
 
+        // TODO: review mutable_descriptor_type_list, seems sketchy
+
         //let binding_0_types = [vk::DescriptorType::SAMPLER];
         //let binding_1_types = [vk::DescriptorType::COMBINED_IMAGE_SAMPLER];
         let binding_2_types = [vk::DescriptorType::SAMPLED_IMAGE, vk::DescriptorType::STORAGE_IMAGE];

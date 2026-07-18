@@ -9,6 +9,7 @@ edition = "2021"
 quote = "1"
 syn = "2"
 proc-macro2 = "1"
+planitia-workspace-hack = { version = "0.1", path = "../../../planitia-workspace-hack" }
 
 [lib]
 proc-macro = true

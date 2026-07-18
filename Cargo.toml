@@ -15,9 +15,9 @@ members = [
     "crates/terrain-file",    # Terrain file format and related functions
     "crates/geom",            # Common geometry types and definition of various geometry file formats
     "crates/hgeo",            # Reads houdini JSON-based .geo/.bgeo files
-    "crates/hot-reload-test",
+    "crates/hot-reload-test", "crates/dummytool", "planitia-workspace-hack",
 ]
-resolver = "3"
+resolver = "1"
 
 [workspace.dependencies]
 gpu = { path = "crates/gpu" }

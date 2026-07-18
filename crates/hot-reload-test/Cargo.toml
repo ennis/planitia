@@ -1,0 +1,12 @@
+[package]
+name = "hot-reload-test"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+gamelib = { workspace = true }
+gpu = { workspace = true }
+planitia-workspace-hack = { version = "0.1", path = "../../planitia-workspace-hack" }

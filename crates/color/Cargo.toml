@@ -5,7 +5,8 @@ edition = "2024"
 
 [dependencies]
 math = { workspace = true }
-serde = { version = "1", features = ["derive"], optional = true }
+serde = { version = "1", features = ["derive", "alloc", "rc"], optional = true }
+planitia-workspace-hack = { version = "0.1", path = "../../planitia-workspace-hack" }
 
 [features]
 default = ["serialization"]

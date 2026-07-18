@@ -1,11 +1,18 @@
 use crate::device::ActiveSubmission;
-use crate::{BufferUntyped, CommandPool, ComputePipeline, Descriptor, Device, Ptr, SwapChain, vk};
+use crate::{
+    Buffer, BufferRangeUntyped, BufferUntyped, ColorAttachment, CommandPool, ComputePipeline, DepthStencilAttachment,
+    Descriptor, Device, Image, ImageCopyBuffer, ImageCopyView, ImageCreateInfo, Ptr, SwapChain, vk,
+};
 use arrayvec::ArrayVec;
 use ash::prelude::VkResult;
 use ash::vk::DeviceAddress;
 use bitflags::bitflags;
+use gpu_types::{
+    ClearColorValue, ImageAspect, ImageDataLayout, ImageSubresourceLayers, ImageUsage, Offset3D, Rect3D, Size3D,
+};
 use log::{error, trace};
 pub use render::{DrawIndexedIndirectCommand, DrawIndirectCommand, RenderEncoder};
+use std::cell::RefCell;
 use std::ffi::{CString, c_void};
 use std::mem::ManuallyDrop;
 use std::sync::atomic::Ordering::Relaxed;
@@ -48,6 +55,20 @@ bitflags! {
         const UNIFORM = 1 << 3;
     }
 }
+
+// non-associated consts look better in code
+
+/// Invalidate any cache related to shader storage memory, in preparation for storage reads or writes.
+pub const BARRIER_STORAGE: InvalidateFlags = InvalidateFlags::STORAGE;
+
+/// Invalidate any cache related to texture memory, in preparation for texture reads.
+pub const BARRIER_TEXTURE: InvalidateFlags = InvalidateFlags::TEXTURE;
+
+/// Invalidate any cache related to indirect command data, in preparation for indirect draws or dispatches.
+pub const BARRIER_INDIRECT: InvalidateFlags = InvalidateFlags::INDIRECT;
+
+/// Invalidate any cache related to uniform buffer memory, in preparation for uniform buffer reads.
+pub const BARRIER_UNIFORM: InvalidateFlags = InvalidateFlags::UNIFORM;
 
 impl InvalidateFlags {
     fn to_access_flags(self) -> vk::AccessFlags2 {
@@ -377,7 +398,7 @@ impl CommandBuffer {
     /// in Vulkan).
     ///
     /// The `flags` specify the memory access types that should be made available to subsequent commands.
-    /// You can think of it as a list of non-coherent caches that should be invalidated as a result
+    /// You can think of it as a list of caches that should be invalidated as a result
     /// of previous commands.
     ///
     /// The barrier makes all previous writes visible unconditionally (equivalent to
@@ -385,8 +406,8 @@ impl CommandBuffer {
     pub fn barrier(&mut self, flags: InvalidateFlags) {
         // This simplified barrier API just includes all previous stages and memory write types
         // in the source scope.
-        // On nvidia, stage execution dependencies seem to be ignored anyway.
-        // On AMD this may affect performance, but I'm not sure.
+        // NVIDIA: stage execution dependencies seem to be ignored anyway.
+        // AMD: this may affect performance, but I'm not sure.
         let src_stage_mask = vk::PipelineStageFlags2::ALL_COMMANDS;
         let src_access_mask = vk::AccessFlags2::MEMORY_WRITE;
         let dst_stage_mask = vk::PipelineStageFlags2::ALL_COMMANDS;
@@ -447,6 +468,10 @@ impl CommandBuffer {
     }
 
     /// Writes values to a buffer.
+    ///
+    /// # Safety
+    ///
+    /// TODO not sure why this was made unsafe?
     pub unsafe fn update_buffer(&mut self, buffer: &BufferUntyped, offset: usize, data: &[u8]) {
         let device = Device::global();
         let cb = self.get_or_create_command_buffer();
@@ -748,6 +773,9 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
 
 /// Presents the given swap chain image to the screen.
 pub fn present(swap_chain: &mut SwapChain, index: usize) -> VkResult<()> {
+    // Automatically flush the default command buffer before presenting.
+    flush()?;
+
     // transition image to PRESENT_SRC
     let mut cmd = CommandBuffer::new();
     let image = &swap_chain.images[index];
@@ -799,5 +827,212 @@ pub fn present(swap_chain: &mut SwapChain, index: usize) -> VkResult<()> {
             )
             .map(|_| ());
         result
+    }
+}
+
+thread_local! {
+    static DEFAULT_COMMAND_BUFFER: RefCell<Option<CommandBuffer>> = RefCell::new(None);
+}
+
+#[inline]
+pub fn with_default_cb<R>(f: impl FnOnce(&mut CommandBuffer) -> R) -> R {
+    DEFAULT_COMMAND_BUFFER.with_borrow_mut(|cb| {
+        let cb = cb.get_or_insert_with(|| CommandBuffer::new());
+        f(cb)
+    })
+}
+
+pub(crate) fn take_default_cb() -> Option<CommandBuffer> {
+    DEFAULT_COMMAND_BUFFER.take()
+}
+
+/// Dispatches compute work items.
+///
+/// This uses the default command buffer.
+///
+/// # Arguments
+///
+/// * `group_count_x` - Number of workgroups to dispatch in the X dimension.
+/// * `group_count_y` - Number of workgroups to dispatch in the Y dimension.
+/// * `group_count_z` - Number of workgroups to dispatch in the Z dimension.
+/// * `root_params` - Root parameters to bind for the dispatch.
+pub fn dispatch<'params, T: Copy + 'static>(
+    pipeline: &ComputePipeline,
+    group_count_x: u32,
+    group_count_y: u32,
+    group_count_z: u32,
+    root_params: impl Into<PushDataSource<'params, T>>,
+) {
+    with_default_cb(|cb| {
+        cb.bind_compute_pipeline(pipeline);
+        cb.dispatch(group_count_x, group_count_y, group_count_z, root_params);
+    });
+}
+
+/// Encodes a render pass on the default command buffer.
+pub fn render(
+    color_attachments: &[ColorAttachment],
+    depth_stencil_attachment: Option<DepthStencilAttachment>,
+    encoder_fn: impl FnOnce(&mut RenderEncoder),
+) {
+    with_default_cb(|cb| {
+        let mut encoder = cb.begin_rendering(color_attachments, depth_stencil_attachment);
+        encoder_fn(&mut encoder);
+        encoder.finish();
+    });
+}
+
+/// Starts a debug group on the default command buffer.
+pub fn push_debug_group(label: &str) {
+    with_default_cb(|cb| {
+        cb.push_debug_group(label);
+    });
+}
+
+/// Ends a debug group on the default command buffer.
+pub fn pop_debug_group() {
+    with_default_cb(|cb| {
+        cb.pop_debug_group();
+    });
+}
+
+/// Emits a pipeline barrier on the default command buffer.
+///
+/// The barrier introduces an unconditional execution dependency between all previous
+/// and subsequent commands (equivalent to an ALL_COMMANDS -> ALL_COMMANDS execution dependency
+/// in Vulkan).
+///
+/// The `flags` specify the memory access types that should be made available to subsequent commands.
+/// You can think of it as a list of caches that should be invalidated as a result
+/// of previous commands.
+///
+/// The barrier makes all previous writes visible unconditionally (equivalent to
+/// src_access_mask = MEMORY_WRITE).
+pub fn barrier(flags: InvalidateFlags) {
+    with_default_cb(|cb| {
+        cb.barrier(flags);
+    });
+}
+
+pub fn update_buffer(buffer: &BufferUntyped, offset: usize, data: &[u8]) {
+    with_default_cb(|cb| {
+        unsafe {
+            // TODO figure out why we needed unsafe here
+            cb.update_buffer(buffer, offset, data);
+        }
+    });
+}
+
+pub fn upload_image_data(image: ImageCopyView, size: Size3D, data: &[u8]) {
+    with_default_cb(|cb| {
+        cb.upload_image_data(image, size, data);
+    });
+}
+
+pub fn create_image_with_data(create_info: &ImageCreateInfo, aspect: ImageAspect, data: &[u8]) -> Image {
+    with_default_cb(|cb| cb.create_image_with_data(create_info, aspect, data))
+}
+
+pub fn blit_full_image_top_mip_level(src: &Image, dst: &Image) {
+    with_default_cb(|cb| {
+        cb.blit_full_image_top_mip_level(src, dst);
+    });
+}
+
+pub fn fill_buffer(range: &BufferRangeUntyped, data: u32) {
+    with_default_cb(|cb| {
+        cb.fill_buffer(range, data);
+    });
+}
+
+pub fn clear_image(image: &Image, clear_color_value: ClearColorValue) {
+    with_default_cb(|cb| {
+        cb.clear_image(image, clear_color_value);
+    });
+}
+
+pub fn clear_depth_image(image: &Image, depth: f32) {
+    with_default_cb(|cb| {
+        cb.clear_depth_image(image, depth);
+    });
+}
+
+pub fn copy_image_to_image(source: ImageCopyView<'_>, destination: ImageCopyView<'_>, copy_size: vk::Extent3D) {
+    with_default_cb(|cb| {
+        cb.copy_image_to_image(source, destination, copy_size);
+    });
+}
+
+/// Copies data from one buffer to another.
+pub fn copy_buffer(source: &BufferUntyped, src_offset: u64, destination: &BufferUntyped, dst_offset: u64, size: u64) {
+    with_default_cb(|cb| {
+        cb.copy_buffer(source, src_offset, destination, dst_offset, size);
+    });
+}
+
+/// Copies data from a buffer to an image.
+///
+/// TODO copy to layer other than 0
+pub fn copy_buffer_to_image(source: ImageCopyBuffer<'_>, destination: ImageCopyView<'_>, copy_size: vk::Extent3D) {
+    with_default_cb(|cb| {
+        cb.copy_buffer_to_image(source, destination, copy_size);
+    });
+}
+
+/// Copies data from an image to a buffer.
+pub fn copy_image_to_buffer(source: ImageCopyView<'_>, destination: ImageCopyBuffer<'_>, copy_size: Size3D) {
+    with_default_cb(|cb| {
+        cb.copy_image_to_buffer(source, destination, copy_size);
+    });
+}
+
+pub fn blit_image(
+    src: &Image,
+    src_subresource: ImageSubresourceLayers,
+    src_region: Rect3D,
+    dst: &Image,
+    dst_subresource: ImageSubresourceLayers,
+    dst_region: Rect3D,
+    filter: vk::Filter,
+) {
+    with_default_cb(|cb| {
+        cb.blit_image(src, src_subresource, src_region, dst, dst_subresource, dst_region, filter);
+    });
+}
+
+/// Uploads data to the GPU and returns a device pointer to it.
+///
+/// # Validity
+///
+/// The pointer is valid for use in any command buffer recording commands at the time this function
+/// is called (i.e. any live instance of `CommandBuffer`), in the calling thread.
+/// In addition, the pointer is valid for use in commands using the default command buffer
+/// (of the calling thread), up until the next call to [`flush`] or [`present`].
+pub fn upload<T: Copy>(data: &T) -> Ptr<T> {
+    Device::global().upload_one(data)
+}
+
+/// Uploads data to the GPU and returns a device pointer to it.
+///
+/// # Validity
+///
+/// The pointer is valid for use in any command buffer in the calling thread currently
+/// recording commands. See [upload] for details.
+pub fn upload_slice<T: Copy>(data: &[T]) -> Ptr<T> {
+    Device::global().upload(data)
+}
+
+/// Submits commands in the default command buffer for execution on the GPU.
+///
+/// # Upload invalidation
+///
+/// After this function is called, all pointers returned by prior calls to [`upload`] and [`upload_slice`]
+/// become invalid for use in subsequent commands using the default command buffer of this thread.
+pub fn flush() -> VkResult<()> {
+    if let Some(cb) = take_default_cb() {
+        submit(cb)
+    } else {
+        // Nothing to submit.
+        Ok(())
     }
 }

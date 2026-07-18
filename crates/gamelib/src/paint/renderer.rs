@@ -3,6 +3,7 @@ mod build;
 mod dump_svg;
 
 use crate::asset::AssetError;
+use crate::error::{Exc, ExcResult, ResultExt};
 use crate::paint::fill::Fill;
 use crate::paint::renderer::build::build_gpu_scene;
 use crate::paint::scene::GroupOptions;
@@ -15,7 +16,6 @@ use gpu::{ClearColorValue, CommandBuffer, InvalidateFlags, Ptr, root_params};
 use math::{IVec2, Mat3, Rect, U8Vec4, UVec2, Vec2, Vec4, ivec2, uvec2};
 use std::ops::Range;
 use std::sync::Once;
-use crate::error::{Exc, ExcResult, ResultExt};
 
 /// Size of a raster tile in pixels. The rasterization compute shader processes the scene in tiles of this size.
 ///
@@ -285,9 +285,7 @@ struct GpuSceneData {
     commands: Vec<Command>,
 }
 
-
 pub(super) fn render_scene(
-    cmd: &mut CommandBuffer,
     painter: &mut Painter,
     render_target: &gpu::Image,
     scene: &Scene,
@@ -301,7 +299,7 @@ pub(super) fn render_scene(
     // Resize and clear internal render target.
     painter.render_target.setup(width, height);
     let clear_color = scene.clear_color.to_linear_array();
-    cmd.clear_image(painter.render_target.image(), ClearColorValue::Float(clear_color));
+    gpu::clear_image(painter.render_target.image(), ClearColorValue::Float(clear_color));
 
     if !scene.draw_commands.is_empty() {
         // Build the GPU data structures of the scene for rendering.
@@ -324,12 +322,12 @@ pub(super) fn render_scene(
 
         // Upload scene data to GPU.
         let scene_data = {
-            let segments = cmd.upload_slice(&prep_scene.clip_segs[..]);
-            let covers = cmd.upload_slice(&prep_scene.covers[..]);
+            let segments = gpu::upload_slice(&prep_scene.clip_segs[..]);
+            let covers = gpu::upload_slice(&prep_scene.covers[..]);
             let cover_count = prep_scene.covers.len() as u32;
-            let cover_lists = cmd.upload_slice(&prep_scene.tiles[..]);
-            let fills = cmd.upload_slice(&scene.fills[..]);
-            let gradient_integral_segments = cmd.upload_slice(&scene.gradient_integral_segments);
+            let cover_lists = gpu::upload_slice(&prep_scene.tiles[..]);
+            let fills = gpu::upload_slice(&scene.fills[..]);
+            let gradient_integral_segments = gpu::upload_slice(&scene.gradient_integral_segments);
             SceneData { segments, covers, cover_count, tiles: cover_lists, gradient_integral_segments, fills }
         };
 
@@ -337,35 +335,34 @@ pub(super) fn render_scene(
         for command in prep_scene.commands.iter() {
             match command {
                 Command::Clear(color) => {
-                    cmd.clear_image(painter.render_target.image(), ClearColorValue::Float(color.to_linear_array()));
+                    gpu::clear_image(painter.render_target.image(), ClearColorValue::Float(color.to_linear_array()));
                 }
                 Command::RasterizeTiles { start, count } => {
                     let output = painter.render_target.storage_handle();
                     let raster_tiles_params = RasterizeTilesParams { scene_data, output, start_cover_list: *start };
-                    cmd.barrier(InvalidateFlags::STORAGE);
-                    cmd.bind_compute_pipeline(&*rasterize_tiles);
-                    cmd.dispatch(*count, 1, 1, &raster_tiles_params);
+                    gpu::barrier(InvalidateFlags::STORAGE);
+                    gpu::dispatch(&*rasterize_tiles, *count, 1, 1, &raster_tiles_params);
                 }
             }
         }
     }
 
     // Copy internal render target to provided render target.
-    cmd.barrier(InvalidateFlags::TEXTURE);
+    gpu::barrier(InvalidateFlags::TEXTURE);
 
-    let mut encoder = cmd.begin_rendering(&[gpu::ColorAttachment { image: &render_target, clear: None }], None);
-    encoder.bind_graphics_pipeline(&*copy_to_screen);
-    encoder.draw(
-        TriangleList,
-        None,
-        0..6,
-        0..1,
-        root_params! {
-            texture: gpu::StorageImageHandle = painter.render_target.storage_handle(),
-            sampler: gpu::SamplerHandle = painter.sampler.device_handle()
-        },
-    );
-    encoder.finish();
+    gpu::render(&[gpu::ColorAttachment { image: &render_target, clear: None }], None, |encoder| {
+        encoder.bind_graphics_pipeline(&*copy_to_screen);
+        encoder.draw(
+            TriangleList,
+            None,
+            0..6,
+            0..1,
+            root_params! {
+                texture: gpu::StorageImageHandle = painter.render_target.storage_handle(),
+                sampler: gpu::SamplerHandle = painter.sampler.device_handle()
+            },
+        );
+    });
 
     Ok(())
 }

@@ -11,3 +11,4 @@ heck = "0.5"
 slang = { package = "shader-slang", git = "https://github.com/ennis/slang-rs.git" }
 logos = "0.12"
 gpu = { workspace = true }
+planitia-workspace-hack = { version = "0.1", path = "../../planitia-workspace-hack" }

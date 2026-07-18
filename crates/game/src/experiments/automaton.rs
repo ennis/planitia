@@ -155,7 +155,7 @@ impl AutomatonExperiment {
 
     pub(crate) fn input(&mut self, input_event: &InputEvent) {
         if input_event.is_shortcut("Ctrl+O") {
-            if let Some(path) = rfd::FileDialog::new().add_filter("Houdini Geometry", &["geo", "bgeo"]).pick_file() {
+            if let Some(path) = gamelib::pick_file("Houdini Geometry", &["geo", "bgeo"]) {
                 self.load_geometry(&path);
             }
         }

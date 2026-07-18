@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 use std::slice;
 
+use crate::imgui::shaders::{EGUI_FRAG_MAIN, EGUI_VERTEX_MAIN};
+use crate::static_assets;
 use egui::epaint::Primitive;
 use egui::{ClippedPrimitive, ImageData};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::prelude::*;
 use gpu::{ColorAttachment, Device, ImageCopyView, InvalidateFlags, Offset3D, PushDataSource, Size3D, Vertex};
 use log::debug;
-use crate::imgui::shaders::{EGUI_FRAG_MAIN, EGUI_VERTEX_MAIN};
-use crate::static_assets;
 
 #[derive(Copy, Clone, Vertex)]
 #[repr(C)]

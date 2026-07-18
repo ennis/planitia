@@ -8,7 +8,6 @@
 //! We might also move to our own immediate mode GUI in the future.
 
 use crate::input::{InputEvent, MouseScrollDelta, PointerButton};
-use arboard::Clipboard;
 use egui::{OutputCommand, Pos2};
 use keyboard_types::{Key, Modifiers, NamedKey};
 use log::{error, warn};
@@ -162,9 +161,10 @@ fn key_event_to_egui(key: &keyboard_types::KeyboardEvent) -> Option<egui::Event>
                     "x" => return Some(egui::Event::Cut),
                     "v" => {
                         // fetch clipboard content
-                        let mut clipboard = arboard::Clipboard::new().unwrap();
-                        let text = clipboard.get_text().unwrap_or_default();
-                        return Some(egui::Event::Paste(text));
+                        //let mut clipboard = arboard::Clipboard::new().unwrap();
+                        //let text = clipboard.get_text().unwrap_or_default();
+                        //return Some(egui::Event::Paste(text));
+                        return None;
                     }
                     _ => {
                         // If it's a control character, we don't want to generate an event

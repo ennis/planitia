@@ -203,10 +203,7 @@ impl<'a> Printer<'a> {
                 cprintln!();
             }
             sharc::PipelineKind::Compute(ref data) => {
-                cprintln!(
-                    "{}<dim>[{index}]</> <bold>Pass</> <bold,yellow>{name}</> [Compute]",
-                    Indent(self.indent)
-                );
+                cprintln!("{}<dim>[{index}]</> <bold>Pass</> <bold,yellow>{name}</> [Compute]", Indent(self.indent));
                 self.indent();
                 self.print_push_constants(data.push_constants_size);
                 cprintln!(

@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 log = "0.4.28"
 utils = { workspace = true }
+planitia-workspace-hack = { version = "0.1", path = "../../planitia-workspace-hack" }

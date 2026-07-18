@@ -18,7 +18,9 @@ pub enum PipelineCreateError {
     PipelineNotFound(String),
     #[error("multiple pipelines found in archive with the same name: {0}")]
     AmbiguousName(String),
-    #[error("multiple pipelines found in archive but no pipeline name specified. Specify a pipeline name in the path (e.g. `/path/to/archive.sharc#my_pipeline`).")]
+    #[error(
+        "multiple pipelines found in archive but no pipeline name specified. Specify a pipeline name in the path (e.g. `/path/to/archive.sharc#my_pipeline`)."
+    )]
     NoDefaultPipeline,
     #[error("pipeline creation failed")]
     #[default]

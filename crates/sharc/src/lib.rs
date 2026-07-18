@@ -17,8 +17,9 @@
 
 pub mod reflection;
 
-use gpu_types::{vk, ImageUsage};
 use gpu_types::vk::{CullModeFlags, PolygonMode};
+use gpu_types::{ImageUsage, vk};
+use log::{debug, warn};
 use std::borrow::Cow;
 use std::ops::Deref;
 use std::path::Path;
@@ -26,7 +27,6 @@ use std::time::SystemTime;
 use std::{fs, io};
 use utils::archive::{ArchiveError, ArchiveReader, ArchiveReaderOwned, ArchiveRoot, Offset};
 use utils::zstring::ZString;
-use log::{debug, warn};
 
 // Reexports
 pub use gpu_types;

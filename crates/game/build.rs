@@ -3,7 +3,51 @@ use std::path::PathBuf;
 
 static SHADERS: &[&str] = &["assets/shaders/*.slang"];
 
+/// Copy Rust stdlib DLLs from the active toolchain's `bin/` directory into
+/// the cargo output directory (i.e. next to `game.exe`) so the executable can
+/// be run without the Rust toolchain on PATH.
+fn copy_rust_stdlib_dlls() {
+    let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR not set");
+    // OUT_DIR = target/<profile>/build/<crate>-<hash>/out
+    // ancestors(3) steps up to target/<profile>/
+    let target_dir = PathBuf::from(&out_dir).ancestors().nth(3).expect("unexpected OUT_DIR depth").to_path_buf();
+
+    // Use the same rustc that cargo is using.
+    let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".into());
+    let output = std::process::Command::new(&rustc)
+        .args(["--print", "sysroot"])
+        .output()
+        .expect("failed to run `rustc --print sysroot`");
+    let sysroot = std::str::from_utf8(&output.stdout).expect("non-UTF8 sysroot").trim().to_string();
+
+    let bin_dir = PathBuf::from(&sysroot).join("bin");
+    let entries = match std::fs::read_dir(&bin_dir) {
+        Ok(e) => e,
+        Err(err) => {
+            println!("cargo:warning=Could not read {}: {}", bin_dir.display(), err);
+            return;
+        }
+    };
+
+    for entry in entries.flatten() {
+        let src = entry.path();
+        let is_dll = src.extension().and_then(|e| e.to_str()) == Some("dll");
+        let name = src.file_name().unwrap_or_default().to_string_lossy();
+        // Copy only the Rust runtime DLLs (std-*.dll), not rustc_driver etc.
+        if is_dll && name.starts_with("std-") {
+            let dest = target_dir.join(src.file_name().unwrap());
+            if let Err(err) = std::fs::copy(&src, &dest) {
+                println!("cargo:warning=Failed to copy {} → {}: {}", src.display(), dest.display(), err);
+            }
+        }
+    }
+}
+
 fn main() {
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        copy_rust_stdlib_dlls();
+    }
+
     // build shaders
     if let Err(err) = shadertool::build(
         SHADERS.iter().cloned(),
