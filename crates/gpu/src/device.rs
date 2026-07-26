@@ -16,14 +16,16 @@ use crate::{
 use ash::vk;
 use gpu_allocator::vulkan::AllocationCreateDesc;
 use log::{debug, error, info, trace};
-use slotmap::SlotMap;
+use slotmap::{SlotMap, new_key_type};
 use std::collections::{HashMap, VecDeque};
 use std::ffi::{CStr, CString, c_void};
+use std::ops::Range;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::{fmt, mem, ptr};
 use vulkan_headers::vulkan::vulkan as vk2;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Size of the global descriptor heaps (in number of descriptors).
@@ -32,7 +34,24 @@ const DESCRIPTOR_TABLE_SIZE: usize = 4096;
 const RESOURCE_DESCRIPTOR_HEAP_SIZE: usize = 1024 * 1024;
 const SAMPLER_DESCRIPTOR_HEAP_SIZE: usize = 64 * 1024;
 
+/// Maximum number of timestamp queries within a submission.
+/// TODO: make this configurable.
+pub const MAX_TIMESTAMP_QUERY_COUNT: u32 = 4096;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+slotmap::new_key_type! {
+    /// Identifies a GPU resource for tracking.
+    pub struct ResourceId;
+    /// Identifies an image resource (sampled or storage image) in a bindless descriptor heap.
+    pub(crate) struct ResourceDescriptorIndex;
+    /// Identifies a sampler in a bindless sampler descriptor heap.
+    pub struct SamplerDescriptorIndex;
+    /// Identifies a resource group.
+    pub struct GroupId;
+    /// Identifies a timestamp query.
+    pub struct TimestampQuery;
+}
 
 pub(crate) struct ExtDescriptorHeap {
     pub(crate) cmd_bind_resource_heap: vk2::NonNullPFN_vkCmdBindResourceHeapEXT,
@@ -73,6 +92,7 @@ pub(crate) struct DeviceExtensions {
     pub(crate) khr_swapchain: ash::khr::swapchain::Device,
     //pub(crate) ext_shader_object: ash::ext::,
     pub(crate) khr_push_descriptor: ash::khr::push_descriptor::Device,
+    pub(crate) khr_calibrated_timestamps: ash::khr::calibrated_timestamps::Device,
     pub(crate) ext_mesh_shader: ash::ext::mesh_shader::Device,
     pub(crate) _ext_extended_dynamic_state3: ash::ext::extended_dynamic_state3::Device,
     pub(crate) ext_debug_utils: ash::ext::debug_utils::Device,
@@ -110,6 +130,8 @@ pub(crate) struct ResourceState {
     //pub(crate) last_submission_index: u64,
 }
 
+pub(crate) struct TimestampQueryPool {}
+
 pub struct Device {
     /// Underlying vulkan device
     pub(crate) raw: ash::Device,
@@ -145,6 +167,7 @@ pub struct Device {
 
     // Command pools per queue and thread.
     free_command_pools: Mutex<Vec<CommandPool>>,
+    free_timestamp_query_pools: Mutex<Vec<vk::QueryPool>>,
 
     /// Index of the next submission not yet created.
     pub(crate) next_create_ticket: AtomicU64,
@@ -179,10 +202,14 @@ impl fmt::Debug for Device {
     }
 }
 
+/// Data and resources associated to a submission that was submitted to the GPU.
 pub(crate) struct ActiveSubmission {
     pub(crate) create_ticket: u64,
     pub(crate) timeline_value: u64,
     pub(crate) command_pools: Vec<CommandPool>,
+    pub(crate) timestamp_query_pool: vk::QueryPool,
+    pub(crate) timestamp_query_count: u32,
+    pub(crate) timestamp_callbacks: Vec<Box<dyn FnOnce(u64) + Send>>,
 }
 
 struct DeleteQueueEntry {
@@ -215,18 +242,6 @@ pub(crate) fn get_vk_sample_count(count: u32) -> vk::SampleCountFlags {
         64 => vk::SampleCountFlags::TYPE_64,
         _ => panic!("unsupported number of samples"),
     }
-}
-
-slotmap::new_key_type! {
-    /// Identifies a GPU resource for tracking.
-    pub struct ResourceId;
-    /// Identifies an image resource (sampled or storage image) in a bindless descriptor heap.
-    pub(crate) struct ResourceDescriptorIndex;
-    /// Identifies a sampler in a bindless sampler descriptor heap.
-    pub struct SamplerDescriptorIndex;
-    /// Identifies a resource group.
-    pub struct GroupId;
-
 }
 
 impl ResourceDescriptorIndex {
@@ -398,6 +413,7 @@ const DEVICE_EXTENSIONS: &[&str] = &[
     "VK_EXT_conservative_rasterization",
     "VK_EXT_fragment_shader_interlock",
     "VK_EXT_shader_image_atomic_int64",
+    "VK_KHR_calibrated_timestamps",
     // "VK_EXT_descriptor_heap",
     "VK_EXT_mutable_descriptor_type", //"VK_EXT_descriptor_buffer",
 ];
@@ -500,6 +516,7 @@ impl Device {
         // Extensions
         let khr_swapchain = ash::khr::swapchain::Device::new(instance, &device);
         let khr_push_descriptor = ash::khr::push_descriptor::Device::new(instance, &device);
+        let khr_calibrated_timestamps = ash::khr::calibrated_timestamps::Device::new(instance, &device);
         let ext_extended_dynamic_state3 = ash::ext::extended_dynamic_state3::Device::new(instance, &device);
         let ext_mesh_shader = ash::ext::mesh_shader::Device::new(instance, &device);
         //let vk_ext_descriptor_buffer = ash::extensions::ext::DescriptorBuffer::new(instance, &device);
@@ -545,6 +562,12 @@ impl Device {
 
         instance.get_physical_device_properties2(physical_device, &mut physical_device_properties);
 
+        // Create global descriptor tables
+        let descriptor_table = BindlessDescriptorTable::new(&device, DESCRIPTOR_TABLE_SIZE);
+
+        // Descriptor heap stuff (unused for now)
+        let descriptor_heaps = DescriptorHeaps::new(&mut allocator, &device, &descriptor_heap_properties);
+
         let device_name = CStr::from_ptr(physical_device_properties.properties.device_name.as_ptr()).to_string_lossy();
         info!("gpu: using device {device_name}",);
         info!(
@@ -564,18 +587,15 @@ impl Device {
         if physical_device_id_properties.device_luid_valid == vk::TRUE {
             info!("    deviceLUID: {:02x?}", physical_device_id_properties.device_luid);
         }
-
-        // Create global descriptor tables
-        let descriptor_table = BindlessDescriptorTable::new(&device, DESCRIPTOR_TABLE_SIZE);
-
-        // Descriptor heap stuff (unused for now)
-        let descriptor_heaps = DescriptorHeaps::new(&mut allocator, &device, &descriptor_heap_properties);
+        info!("    Timestamp information:");
+        info!("        timestampPeriod: {}", physical_device_properties.properties.limits.timestamp_period);
 
         Ok(Device {
             raw: device,
             extensions: DeviceExtensions {
                 khr_swapchain,
                 khr_push_descriptor,
+                khr_calibrated_timestamps,
                 ext_mesh_shader,
                 _ext_extended_dynamic_state3: ext_extended_dynamic_state3,
                 ext_debug_utils,
@@ -602,6 +622,7 @@ impl Device {
             descriptor_table,
             sampler_cache: Mutex::new(Default::default()),
             free_command_pools: Mutex::new(Default::default()),
+            free_timestamp_query_pools: Mutex::new(vec![]),
             next_create_ticket: AtomicU64::new(1),
             next_timeline_value: AtomicU64::new(1),
             semaphores: Default::default(),
@@ -742,6 +763,7 @@ impl Device {
             storage_push_constant8: vk::TRUE,
             shader_int8: vk::TRUE,
             scalar_block_layout: vk::TRUE,
+            host_query_reset: vk::TRUE,
             ..Default::default()
         };
 
@@ -923,12 +945,14 @@ impl Device {
             );
             for _buffer in full {
                 // nothing to do, the drop impl does what we want
+                // TODO recycle them instead of destroying them
             }
         }
     }
 
-    fn maintain(&self) {
+    fn poll(&self) {
         self.retire_upload_buffers();
+
         let last_completed_submission_index = unsafe {
             self.raw.get_semaphore_counter_value(self.thread_safe.timeline).expect("get_semaphore_counter_value failed")
         };
@@ -941,24 +965,51 @@ impl Device {
 
         // process all completed submissions
         let mut free_command_pools = self.free_command_pools.lock().unwrap();
-        let mut submission_state = self.submission_state.lock().unwrap();
+        let mut free_timestamp_query_pools = self.free_timestamp_query_pools.lock().unwrap();
+        let mut ss = self.submission_state.lock().unwrap();
         loop {
-            let Some(submission) = submission_state.active_submissions.front() else {
+            if ss.active_submissions.is_empty() {
+                break;
+            }
+
+            if ss.active_submissions.front().unwrap().timeline_value > last_completed_submission_index {
                 break;
             };
-            if submission.timeline_value > last_completed_submission_index {
-                break;
-            }
-            let submission = submission_state.active_submissions.pop_front().unwrap();
-            for mut command_pool in submission.command_pools {
+
+            let sub = ss.active_submissions.pop_front().unwrap();
+            for mut cp in sub.command_pools {
                 // SAFETY: command buffers are not in use anymore
                 unsafe {
-                    command_pool.reset(&self.raw);
+                    cp.reset(&self.raw);
                 }
-                free_command_pools.push(command_pool);
+                free_command_pools.push(cp);
             }
+
             // update completed tickets
-            self.completed_tickets.store(submission.create_ticket, Relaxed);
+            self.completed_tickets.store(sub.create_ticket, Relaxed);
+
+            // read timestamp query results
+            unsafe {
+                if sub.timestamp_query_count > 0 {
+                    let mut timestamp_results = vec![0u64; sub.timestamp_query_count as usize];
+                    self.raw
+                        .get_query_pool_results(
+                            sub.timestamp_query_pool,
+                            0,
+                            &mut timestamp_results[..],
+                            vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT,
+                        )
+                        .expect("vkGetQueryPoolResults failed");
+                    self.raw.reset_query_pool(sub.timestamp_query_pool, 0, sub.timestamp_query_count);
+                    // Invoke callbacks with the results
+                    for (i, cb) in sub.timestamp_callbacks.into_iter().enumerate() {
+                        (cb)(timestamp_results[i]);
+                    }
+                }
+            }
+
+            // recycle query pools
+            free_timestamp_query_pools.push(sub.timestamp_query_pool);
         }
 
         let mut deletion_queue = self.deletion_queue.lock().unwrap();
@@ -1031,12 +1082,38 @@ impl Device {
     }
 
     pub(crate) fn get_or_create_command_pool(&self, queue_family: u32) -> CommandPool {
-        let free_command_pools = &mut self.free_command_pools.lock().unwrap();
-        let index = free_command_pools.iter().position(|pool| pool.queue_family == queue_family);
+        let free = &mut self.free_command_pools.lock().unwrap();
+        let index = free.iter().position(|pool| pool.queue_family == queue_family);
         if let Some(index) = index {
-            free_command_pools.swap_remove(index)
+            free.swap_remove(index)
         } else {
             unsafe { CommandPool::new(&self.raw, queue_family) }
+        }
+    }
+
+    pub(crate) fn get_or_create_timestamp_query_pool(&self) -> vk::QueryPool {
+        let free = &mut self.free_timestamp_query_pools.lock().unwrap();
+        if let Some(pool) = free.pop() {
+            pool
+        } else {
+            unsafe {
+                let pool = self
+                    .raw
+                    .create_query_pool(
+                        &vk::QueryPoolCreateInfo {
+                            flags: Default::default(),
+                            query_type: vk::QueryType::TIMESTAMP,
+                            query_count: MAX_TIMESTAMP_QUERY_COUNT,
+                            pipeline_statistics: Default::default(),
+                            _marker: Default::default(),
+                            ..Default::default()
+                        },
+                        None,
+                    )
+                    .expect("failed to create timestamp query pool");
+                self.raw.reset_query_pool(pool, 0, MAX_TIMESTAMP_QUERY_COUNT);
+                pool
+            }
         }
     }
 }
@@ -1504,8 +1581,8 @@ pub fn wait_idle() {
 /// This should be called periodically (e.g. per-frame) to free resources that are no longer
 /// used by the GPU.
 /// Otherwise, tasks scheduled with `call_later` or `delete_later` will never be executed.
-pub fn maintain() {
-    Device::global().maintain()
+pub fn poll() {
+    Device::global().poll()
 }
 
 /// Assigns a debug name to an object represented by its raw vulkan handle
@@ -1572,4 +1649,47 @@ pub fn get_device_uuid() -> [u8; 16] {
 pub fn get_device_luid() -> Option<[u8; 8]> {
     let id_properties = &Device::global().thread_safe.physical_device_id_properties;
     if id_properties.device_luid_valid == vk::TRUE { Some(id_properties.device_luid) } else { None }
+}
+
+/// Returns the timestamp period in nanoseconds.
+pub fn get_timestamp_period() -> f32 {
+    let properties = get_physical_device_properties();
+    properties.limits.timestamp_period
+}
+
+/// Returns a pair (device, system) of calibrated timestamps.
+///
+/// The first timestamp is a system-specific timestamp value, and the second is a closely corresponding
+/// timestamp on the device (the same kind returned by [`write_timestamp`](crate::write_timestamp)).
+///
+/// # Platform-specific notes
+/// - On Windows, the system timestamp is a QueryPerformanceCounter value
+/// - On Linux, it's a value in the CLOCK_MONOTONIC time domain returned by clock_gettime(CLOCK_MONOTONIC).
+pub fn get_calibrated_timestamp_pair() -> (u64, u64) {
+    let device = Device::global();
+
+    // Create the query pool for timestamps.
+    let (timestamps, _) = unsafe {
+        device
+            .extensions
+            .khr_calibrated_timestamps
+            .get_calibrated_timestamps(&[
+                vk::CalibratedTimestampInfoKHR { time_domain: vk::TimeDomainKHR::DEVICE, ..Default::default() },
+                #[cfg(windows)]
+                vk::CalibratedTimestampInfoKHR {
+                    time_domain: vk::TimeDomainKHR::QUERY_PERFORMANCE_COUNTER,
+                    ..Default::default()
+                },
+                #[cfg(unix)]
+                vk::CalibratedTimestampInfoKHR {
+                    time_domain: vk::TimeDomainKHR::CLOCK_MONOTONIC,
+                    ..Default::default()
+                },
+            ])
+            .expect("vkGetCalibratedTimestamps failed")
+    };
+
+    let device_timestamp = timestamps[0];
+    let system_timestamp = timestamps[1];
+    (device_timestamp, system_timestamp)
 }

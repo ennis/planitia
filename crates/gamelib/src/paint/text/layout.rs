@@ -348,6 +348,7 @@ impl TextLayout {
 
     /// Recomputes the layout of the text given the specified available width.
     pub fn layout(&mut self, available_width: f32) {
+        let _span = crate::span!("text layout");
         let mut y = 0.0f32;
         let mut cursor = CursorData::default(); // beginning of text
         let mut max_width = 0.0f32;

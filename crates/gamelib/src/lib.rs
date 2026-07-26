@@ -29,23 +29,23 @@ mod window;
 mod world;
 
 pub use app::{
-    App, AppHandler, FileDialogOptions, pick_file, print_message, quit, render_imgui, show_file_dialog, unwatch_file,
-    watch_file,
+    App, AppHandler, FileDialogOptions, TracyGpuSpanGuard, pick_file, print_message, quit, render_imgui,
+    show_file_dialog, tracy_begin_gpu_span, tracy_end_gpu_span, unwatch_file, watch_file,
 };
 pub use event::UserEvent;
 pub use input::InputEvent;
 pub use platform::{WindowHandle, wake_event_loop};
-pub use plugin_host::{PluginCtx, PluginEvent, PluginResult, PluginHost, dispatch_plugin_event};
+pub use plugin_host::{PluginCtx, PluginEvent, PluginHost, PluginResult, dispatch_plugin_event};
 pub use window::{WindowCreateInfo, WindowInputState, create_window};
 
 //--- reexports ---
+use crate::app::with_app_ctx;
 pub use color;
 pub use egui;
 pub use gpu;
 pub use math;
 pub use tracy_client;
 pub use tweak::*;
-
 ///////////////////////////////////////////////////////////////////
 
 use crate::asset::AssetCache;

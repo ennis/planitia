@@ -152,7 +152,7 @@ impl ApplicationHandler for App {
 
                 gpu::submit(cmd).unwrap();
                 gpu::present(&mut window.swap_chain, index).unwrap();
-                gpu::maintain();
+                gpu::poll();
             }
             _ => {}
         }

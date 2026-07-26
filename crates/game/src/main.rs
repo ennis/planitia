@@ -210,6 +210,7 @@ impl Game {
     }
 
     fn render_overlay(&mut self, target: &gpu::Image) {
+        let _span = gamelib::span!("render_overlay");
         let mut scene = PaintScene::new(Srgba8::TRANSPARENT);
         scene.draw_text(
             vec2(target.width() as f32 - 340.0, 10.0),
@@ -324,17 +325,19 @@ impl AppHandler for Game {
         //let _ = self.outline_experiment.render(&target.image, &self.depth_stencil_buffer, &scene_info);
         //let _ = self.automaton_experiment.render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
 
+        self.plugin.render(window, target);
+
         // Render 2D overlays
         self.render_overlay(&target.image);
 
         // Render GUI
         if self.cfg.show_imgui {
+            let _span = gamelib::span!("render_imgui");
             gpu::with_default_cb(|mut cmd| {
                 gamelib::render_imgui(&mut cmd, &target.image);
             });
         }
 
-        self.plugin.render(window, target);
 
         gpu::flush().unwrap();
     }

@@ -1,7 +1,8 @@
 use crate::device::ActiveSubmission;
 use crate::{
     Buffer, BufferRangeUntyped, BufferUntyped, ColorAttachment, CommandPool, ComputePipeline, DepthStencilAttachment,
-    Descriptor, Device, Image, ImageCopyBuffer, ImageCopyView, ImageCreateInfo, Ptr, SwapChain, vk,
+    Descriptor, Device, Image, ImageCopyBuffer, ImageCopyView, ImageCreateInfo, MAX_TIMESTAMP_QUERY_COUNT, Ptr,
+    SwapChain, TimestampQuery, vk,
 };
 use arrayvec::ArrayVec;
 use ash::prelude::VkResult;
@@ -12,7 +13,8 @@ use gpu_types::{
 };
 use log::{error, trace};
 pub use render::{DrawIndexedIndirectCommand, DrawIndirectCommand, RenderEncoder};
-use std::cell::RefCell;
+use slotmap::new_key_type;
+use std::cell::{BorrowMutError, RefCell, RefMut};
 use std::ffi::{CString, c_void};
 use std::mem::ManuallyDrop;
 use std::sync::atomic::Ordering::Relaxed;
@@ -31,6 +33,9 @@ union DescriptorBufferOrImage {
 /// These should be submitted to the GPU using [`submit`].
 pub struct CommandBuffer {
     command_pool: ManuallyDrop<CommandPool>,
+    timestamp_query_pool: vk::QueryPool,
+    timestamp_query_count: u32,
+    timestamp_callbacks: Vec<Box<dyn FnOnce(u64) + Send>>,
     /// Command buffers waiting to be submitted.
     command_buffers_to_submit: Vec<vk::CommandBuffer>,
     /// Current command buffer.
@@ -130,6 +135,7 @@ impl CommandBuffer {
     pub fn new() -> CommandBuffer {
         let device = Device::global();
         let command_pool = device.get_or_create_command_pool(device.queue_family);
+        let timestamp_query_pool = device.get_or_create_timestamp_query_pool();
 
         // Each command stream gets a "creation ticket number" that tracks in which order they were
         // *created*.
@@ -143,6 +149,9 @@ impl CommandBuffer {
 
         CommandBuffer {
             command_pool: ManuallyDrop::new(command_pool),
+            timestamp_query_pool,
+            timestamp_query_count: 0,
+            timestamp_callbacks: vec![],
             command_buffers_to_submit: vec![],
             command_buffer: None,
             //tracked_images: Default::default(),
@@ -275,64 +284,6 @@ impl CommandBuffer {
             );
         }
     }
-
-    /*/// Binds push constants.
-    fn do_cmd_push_constants(
-        &mut self,
-        command_buffer: vk::CommandBuffer,
-        bind_point: vk::PipelineBindPoint,
-        pipeline_layout: vk::PipelineLayout,
-        data: &[MaybeUninit<u8>],
-    ) {
-        let size = size_of_val(data);
-
-        // Minimum push constant size guaranteed by Vulkan is 128 bytes.
-        assert!(size <= 128, "push constant size must be <= 128 bytes");
-        assert!(size % 4 == 0, "push constant size must be a multiple of 4 bytes");
-
-        // None of the relevant drivers on desktop care about the actual stages,
-        // only if it's graphics, compute, or ray tracing.
-        let stages = match bind_point {
-            vk::PipelineBindPoint::GRAPHICS => {
-                vk::ShaderStageFlags::ALL_GRAPHICS | vk::ShaderStageFlags::MESH_EXT | vk::ShaderStageFlags::TASK_EXT
-            }
-            vk::PipelineBindPoint::COMPUTE => vk::ShaderStageFlags::COMPUTE,
-            _ => panic!("unsupported bind point"),
-        };
-
-        // Use the raw function pointer because the wrapper takes a `&[u8]` slice which we can't
-        // get from `&[MaybeUninit<u8>]` safely (even if we won't read uninitialized data).
-        unsafe {
-            (Device::global().raw.fp_v1_0().cmd_push_constants)(
-                command_buffer,
-                pipeline_layout,
-                stages,
-                0,
-                size as u32,
-                data as *const _ as *const c_void,
-            );
-        }
-    }*/
-
-    /*/// Binds push constants.
-    ///
-    /// Push constants stay valid until the bound pipeline is changed.
-    ///
-    /// FIXME: this assumes that `bind_compute_pipeline` has been called.
-    fn push_constants<P>(&mut self, data: &P)
-    where
-        P: Copy,
-    {
-        let cb = self.get_or_create_command_buffer();
-        unsafe {
-            self.do_cmd_push_constants(
-                cb,
-                vk::PipelineBindPoint::COMPUTE,
-                self.pipeline_layout,
-                slice::from_raw_parts(data as *const P as *const MaybeUninit<u8>, size_of_val(data)),
-            );
-        }
-    }*/
 
     /// Internal function to emit an image memory barrier.
     ///
@@ -545,6 +496,23 @@ impl CommandBuffer {
         self.push_debug_group(label);
         f(self);
         self.pop_debug_group();
+    }
+
+    pub fn write_timestamp(&mut self, callback: impl FnOnce(u64) + Send + 'static) {
+        let cb = self.get_or_create_command_buffer();
+        let index = self.timestamp_query_count;
+        assert!(index < MAX_TIMESTAMP_QUERY_COUNT, "maximum number of timestamp queries reached");
+        self.timestamp_query_count += 1;
+        self.timestamp_callbacks.push(Box::new(callback));
+
+        unsafe {
+            Device::global().raw.cmd_write_timestamp2(
+                cb,
+                vk::PipelineStageFlags2::BOTTOM_OF_PIPE,
+                self.timestamp_query_pool,
+                index,
+            );
+        }
     }
 
     pub(crate) fn create_command_buffer_raw(&mut self) -> vk::CommandBuffer {
@@ -763,6 +731,9 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
                 timeline_value,
                 // SAFETY: submitted = false so the command pool is valid
                 command_pools: vec![ManuallyDrop::take(&mut cmd.command_pool)],
+                timestamp_query_pool: cmd.timestamp_query_pool,
+                timestamp_query_count: cmd.timestamp_query_count,
+                timestamp_callbacks: mem::take(&mut cmd.timestamp_callbacks),
             },
         );
     };
@@ -830,15 +801,23 @@ pub fn present(swap_chain: &mut SwapChain, index: usize) -> VkResult<()> {
     }
 }
 
+// TODO is this safe with multiple threads? 
 thread_local! {
     static DEFAULT_COMMAND_BUFFER: RefCell<Option<CommandBuffer>> = RefCell::new(None);
 }
 
 #[inline]
 pub fn with_default_cb<R>(f: impl FnOnce(&mut CommandBuffer) -> R) -> R {
-    DEFAULT_COMMAND_BUFFER.with_borrow_mut(|cb| {
-        let cb = cb.get_or_insert_with(|| CommandBuffer::new());
-        f(cb)
+    DEFAULT_COMMAND_BUFFER.with(|cb| {
+        match cb.try_borrow_mut() {
+            Ok(mut cb) => {
+                let cb = cb.get_or_insert_with(|| CommandBuffer::new());
+                f(cb)
+            }
+            Err(_) => {
+                panic!("the default GPU command buffer is already borrowed (maybe a command was called inside a `gpu::render` callback?)")
+            }
+        }
     })
 }
 
@@ -1035,4 +1014,9 @@ pub fn flush() -> VkResult<()> {
         // Nothing to submit.
         Ok(())
     }
+}
+
+/// Writes a timestamp to
+pub fn write_timestamp(callback: impl FnOnce(u64) + Send + 'static) {
+    with_default_cb(|cb| cb.write_timestamp(callback))
 }

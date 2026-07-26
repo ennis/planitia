@@ -6,31 +6,31 @@ use crate::imgui::ImguiContext;
 use crate::input::InputEvent;
 use crate::paint::{PaintScene, Painter, TextFormat};
 use crate::platform::{LoopHandler, Platform, RenderTargetImage, WindowHandle};
+use crate::plugin_host::PluginHost;
 use crate::tweak::show_tweaks_gui;
 use crate::util::env_flag;
-use crate::{imgui, wake_event_loop, PluginEvent};
+use crate::{PluginEvent, imgui, wake_event_loop};
+use color::Srgba8;
 use color_print::cwriteln;
 use env_logger::fmt::style::AnsiColor;
 use futures::future::AbortHandle;
 use gpu::vk::Handle;
 use keyboard_types::{Key, KeyState, Modifiers, NamedKey};
 use log::{debug, error, info, warn};
+use math::{IVec2, Vec2, vec2};
 use notify_debouncer_mini::notify::{RecommendedWatcher, RecursiveMode};
 use notify_debouncer_mini::{DebounceEventResult, DebouncedEvent, Debouncer, new_debouncer};
 use renderdoc::{RenderDoc, V141};
+use std::any::{Any, TypeId};
 use std::cell::{Cell, OnceCell, RefCell};
+use std::collections::HashMap;
 use std::ffi::c_void;
 use std::marker::PhantomData;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, OnceLock};
 use std::{mem, ptr};
-use std::any::{Any, TypeId};
-use std::collections::HashMap;
 use threadbound::ThreadBound;
-use color::Srgba8;
-use math::{vec2, IVec2, Vec2};
-use crate::plugin_host::PluginHost;
 
 /// Tries to load the RenderDoc DLL.
 fn load_renderdoc_dll() {
@@ -145,7 +145,6 @@ impl AppHandler for DummyHandler {
     }
 }
 
-
 //--------------------------------------------------------------------------------------------------
 
 /// Main application object.
@@ -181,10 +180,6 @@ impl<H: AppHandler + Default + 'static> App<H> {
             load_renderdoc_dll();
         }
 
-        // Setup tracy thread name.
-        tracy_client::Client::running().unwrap().set_thread_name("main thread");
-        info!("running with Tracy profiler enabled");
-
         // Create the main thread context object.
         let main_thread_ctx = self.0.get_or_init(|| {
             let handler = RefCell::new(Box::new(DummyHandler));
@@ -202,7 +197,6 @@ impl<H: AppHandler + Default + 'static> App<H> {
         // Create handler.
         let handler = Box::new(H::default());
         ctx.handler.replace(handler);
-
 
         // Schedule the first render on the next VSync.
         // TODO: we probably should render immediately?
@@ -303,24 +297,43 @@ pub(crate) struct MainThreadContext {
     text_overlay: RefCell<String>,
     // Registered global resources, ordered by type.
     //global_resources: RefCell<HashMap<TypeId, Box<dyn Any>>>,
-
-    // Hot-reloadable plugin host.
-    //plugin_host: RefCell<PluginHost>,
+    pub(crate) tracy_gpu_context: tracy_client::GpuContext,
+    timestamp_query_counter: Cell<u16>,
 }
 
 impl MainThreadContext {
     /// Creates a new application instance and initializes the global systems.
     fn new(handler: RefCell<Box<dyn AppHandler + 'static>>, options: &AppOptions) -> Self {
+        // Setup platform. This will also initialize the GPU device.
         let platform = Platform::new(options);
-        let executor = LocalExecutor::new();
-        let imgui = RefCell::new(ImguiContext::new());
 
+        // Setup tracy.
+        let tracy_client = tracy_client::Client::running().unwrap();
+        tracy_client.set_thread_name("main thread");
+        info!("running with Tracy profiler enabled");
+
+        // Setup tracy GPU context
+        // This depends on the GPU device being initialized.
+        let (device_timestamp, system_timestamp) = gpu::get_calibrated_timestamp_pair();
+        let tracy_gpu_context = tracy_client
+            .new_gpu_context(
+                Some(&gpu::get_physical_device_name()),
+                tracy_client::GpuContextType::Vulkan,
+                device_timestamp as i64,
+                gpu::get_timestamp_period(),
+            )
+            .expect("failed to create tracy GPU context");
+
+        // Create a RenderDoc connection, if available.
         let rdoc = RenderDoc::new().ok();
         if rdoc.is_some() {
             info!("running with RenderDoc");
         } else {
             info!("not running with RenderDoc");
         }
+
+        let executor = LocalExecutor::new();
+        let imgui = RefCell::new(ImguiContext::new());
 
         // Create the file watcher.
         //
@@ -360,6 +373,8 @@ impl MainThreadContext {
             lua: Lua::new(),
             watch,
             text_overlay: RefCell::new(String::new()),
+            tracy_gpu_context,
+            timestamp_query_counter: Cell::new(0),
         }
     }
 
@@ -441,8 +456,6 @@ impl LoopHandler for &'static MainThreadContext {
     }
 
     fn vsync(&mut self) {
-
-
         // invoke application vsync handler
         self.handler.borrow_mut().vsync();
 
@@ -474,10 +487,7 @@ impl LoopHandler for &'static MainThreadContext {
                 let pos = vec2(10.0, 10.0);
                 let shadow_pos = pos + vec2(1.0, 1.0);
                 // Draw shadow
-                let format = TextFormat {
-                    size: 20.0,
-                    ..Default::default()
-                };
+                let format = TextFormat { size: 20.0, ..Default::default() };
                 scene.draw_text(shadow_pos, &text, &format, Srgba8::BLACK);
                 scene.draw_text(pos, &text, &format, Srgba8::WHITE);
                 scene.render(render_target.image);
@@ -494,7 +504,7 @@ impl LoopHandler for &'static MainThreadContext {
         tracy_client::frame_mark();
 
         // cleanup expired GPU resources
-        gpu::maintain();
+        gpu::poll();
 
         // ask for a re-render on the next vsync
         self.platform.wake_at_next_vsync();
@@ -637,6 +647,63 @@ macro_rules! format_message {
 }
 
 /// Registers a global resource object.
-pub fn register_resource<T: Any>(resource: T) {
+pub fn register_resource<T: Any>(resource: T) {}
 
+//--------------------------------------------------------------------------------------------------
+
+impl MainThreadContext {
+    pub(crate) fn begin_gpu_span(&self, span_location: &'static tracy_client::SpanLocation) {
+        let query_id = self.timestamp_query_counter.get();
+        // TODO: this breaks if there are more than u16::MAX pending queries: old queries
+        //       will start to overwrite new ones with the same query_id. This can also happen before
+        //       that if queries are not fulfilled in `query_id` order.
+        //       To do that cleanly, you'd need a free list of query IDs but that's just too ridiculous
+        //       for something that's supposed to be low overhead.
+        self.timestamp_query_counter.set(query_id.wrapping_add(1));
+        gpu::write_timestamp(move |ts| {
+            with_app_ctx(|ctx| ctx.tracy_gpu_context.upload_gpu_timestamp(query_id, ts as i64))
+        });
+        self.tracy_gpu_context.begin_span(span_location, query_id);
+    }
+
+    pub(crate) fn end_gpu_span(&self) {
+        let query_id = self.timestamp_query_counter.get();
+        self.timestamp_query_counter.set(query_id.wrapping_add(1));
+        gpu::write_timestamp(move |ts| {
+            with_app_ctx(|ctx| ctx.tracy_gpu_context.upload_gpu_timestamp(query_id, ts as i64))
+        });
+        self.tracy_gpu_context.end_span(query_id);
+    }
+}
+
+pub struct TracyGpuSpanGuard;
+
+impl Drop for TracyGpuSpanGuard {
+    fn drop(&mut self) {
+        tracy_end_gpu_span();
+    }
+}
+
+#[doc(hidden)]
+pub fn tracy_begin_gpu_span(location: &'static tracy_client::SpanLocation) {
+    with_app_ctx(|app| {
+        app.begin_gpu_span(location);
+    })
+}
+
+pub fn tracy_end_gpu_span() {
+    with_app_ctx(|app| {
+        app.end_gpu_span();
+    })
+}
+
+#[macro_export]
+macro_rules! gpu_span {
+    ($name:expr) => {
+        {
+            let location = $crate::tracy_client::span_location!($name);
+            $crate::tracy_begin_gpu_span(location);
+            $crate::TracyGpuSpanGuard
+        }
+    };
 }

@@ -1,5 +1,6 @@
 #![feature(default_field_values)]
 
+use std::path::PathBuf;
 use crate::background::SceneInfo;
 use chrono::{DateTime, Local};
 use gamelib::camera_control::CameraControl;
@@ -7,12 +8,16 @@ use gamelib::color::{Srgba8, srgba8};
 use gamelib::math::vec2;
 use gamelib::paint::{ColorStop, GradientExtendMode, LinearGradientFill, PaintScene};
 use gamelib::platform::RenderTargetImage;
-use gamelib::{format_message, register_plugin, AppHandler, InputEvent, WindowHandle};
+use gamelib::{format_message, gpu_span, register_plugin, AppHandler, InputEvent, WindowHandle};
 use gpu::{self, Ptr, root_params};
-use std::time::{Duration, Instant};
+use std::time::Instant;
+use gpu::PrimitiveTopology::TriangleList;
 
 #[gpu::shader_module("shaders/background.slang#447")]
 mod background {}
+
+#[gpu::shader_module("shaders/grid.slang#447")]
+mod grid {}
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct HotReloadTest {
@@ -21,6 +26,9 @@ struct HotReloadTest {
     load_time: DateTime<Local>,
     frames_rendered: usize,
     camera_control: CameraControl,
+    geometry_file: PathBuf,
+    #[serde(skip)]
+    geometry: hgeo::Geo,
 }
 
 impl Default for HotReloadTest {
@@ -37,6 +45,8 @@ impl HotReloadTest {
             load_time: Local::now(),
             camera_control: Default::default(),
             frames_rendered: 0,
+            geometry: Default::default(),
+            geometry_file: Default::default(),
         }
     }
 
@@ -45,20 +55,52 @@ impl HotReloadTest {
 
 impl AppHandler for HotReloadTest {
     fn input(&mut self, window: WindowHandle, input_event: &InputEvent) {
-        //
+        self.camera_control.handle_input(input_event);
+        if input_event.is_shortcut("Ctrl+O") {
+            if let Some(geometry_file) = gamelib::pick_file("Houdini Geometry File", &["bgeo", "geo"]) {
+                eprintln!("Picked file: {}", geometry_file.display());
+                self.geometry_file = geometry_file;
+            }
+        }
     }
 
     fn started(&mut self) {}
 
     fn loaded(&mut self) {
         self.load_time = Local::now();
+        if !self.geometry_file.as_os_str().is_empty() {
+            match hgeo::Geo::load(&self.geometry_file) {
+                Ok(geometry) => {
+                    self.geometry = geometry;
+                    eprintln!("Loaded geometry file: {}", self.geometry_file.display());
+                }
+                Err(err) => {
+                    eprintln!("Failed to load geometry file: {}: {}", self.geometry_file.display(), err);
+                }
+            }
+        }
     }
 
     fn render(&mut self, window: WindowHandle, image: RenderTargetImage<'_>) {
+
+        let _span = gamelib::span!("plugin render");
+
         let image = image.image;
 
         let gpu_device_name = gpu::get_physical_device_name();
         //eprintln!("GPU device name: {}", gpu_device_name);
+
+        let camera = self.camera_control.camera();
+        let scene_info = SceneInfo {
+            view_matrix: camera.view,
+            proj_matrix: camera.projection,
+            view_proj_matrix: camera.projection * camera.view,
+            screen_size: vec2(image.width() as f32, image.height() as f32),
+            time: self.frames_rendered as f32,
+            frame: self.frames_rendered as u32,
+            eye: camera.eye().as_vec3(),
+        };
+        let scene_info_gpu = gpu::upload(&scene_info);
 
         self.frames_rendered += 1;
 
@@ -98,24 +140,29 @@ impl AppHandler for HotReloadTest {
         );
         scene.render(image);
 
-        gpu::render(&[gpu::ColorAttachment { image, clear: None }], None, |encoder| {
-            encoder.bind_graphics_pipeline(&background::background);
-            let scene_info = encoder.upload(&SceneInfo {
-                view_matrix: Default::default(),
-                proj_matrix: Default::default(),
-                view_proj_matrix: Default::default(),
-                screen_size: Default::default(),
-                time: self.frames_rendered as f32,
-                frame: self.frames_rendered as u32,
-                eye: Default::default(),
-            });
+        {
+            let _span = gpu_span!("render background");
+            gpu::render(&[gpu::ColorAttachment { image, clear: None }], None, |encoder| {
+                encoder.bind_graphics_pipeline(&background::background);
+                encoder.draw_screen_quad(root_params! {
+                    scene: Ptr<SceneInfo> = scene_info_gpu,
+                    bottom_color: u32 = 0xFF000000,
+                    top_color: u32 = 0xFF0000FF
+                });
 
-            encoder.draw_screen_quad(root_params! {
-                scene: Ptr<SceneInfo> = scene_info,
-                bottom_color: u32 = 0xFF000000,
-                top_color: u32 = 0xFF0000FF
+                encoder.bind_graphics_pipeline(&grid::grid);
+                encoder.draw(
+                    TriangleList,
+                    None,
+                    0..6,
+                    0..1,
+                    root_params! {
+                        scene_uniforms: Ptr<SceneInfo> = scene_info_gpu,
+                        grid_scale: f32 = 100.0
+                    },
+                );
             });
-        })
+        }
     }
 
     fn resized(&mut self, window: WindowHandle, width: u32, height: u32) {

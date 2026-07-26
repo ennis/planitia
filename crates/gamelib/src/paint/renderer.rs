@@ -8,7 +8,7 @@ use crate::paint::fill::Fill;
 use crate::paint::renderer::build::build_gpu_scene;
 use crate::paint::scene::GroupOptions;
 use crate::paint::{GradientExtendMode, GradientIntegralSegment, GradientRampData, Painter, PathVerb};
-use crate::static_assets;
+use crate::{gpu_span, static_assets};
 use crate::util::env_flag;
 use color::Srgba8;
 use gpu::PrimitiveTopology::TriangleList;
@@ -290,6 +290,9 @@ pub(super) fn render_scene(
     render_target: &gpu::Image,
     scene: &Scene,
 ) -> ExcResult<(), RenderSceneError> {
+
+    let _span = gpu_span!("render_scene");
+
     let width = render_target.width();
     let height = render_target.height();
     // Ensure shaders are loaded.
@@ -338,6 +341,7 @@ pub(super) fn render_scene(
                     gpu::clear_image(painter.render_target.image(), ClearColorValue::Float(color.to_linear_array()));
                 }
                 Command::RasterizeTiles { start, count } => {
+                    let _span = gpu_span!("rasterize_tiles");
                     let output = painter.render_target.storage_handle();
                     let raster_tiles_params = RasterizeTilesParams { scene_data, output, start_cover_list: *start };
                     gpu::barrier(InvalidateFlags::STORAGE);
@@ -350,19 +354,22 @@ pub(super) fn render_scene(
     // Copy internal render target to provided render target.
     gpu::barrier(InvalidateFlags::TEXTURE);
 
-    gpu::render(&[gpu::ColorAttachment { image: &render_target, clear: None }], None, |encoder| {
-        encoder.bind_graphics_pipeline(&*copy_to_screen);
-        encoder.draw(
-            TriangleList,
-            None,
-            0..6,
-            0..1,
-            root_params! {
-                texture: gpu::StorageImageHandle = painter.render_target.storage_handle(),
-                sampler: gpu::SamplerHandle = painter.sampler.device_handle()
-            },
-        );
-    });
+    {
+        let _span = gpu_span!("copy_to_screen");
+        gpu::render(&[gpu::ColorAttachment { image: &render_target, clear: None }], None, |encoder| {
+            encoder.bind_graphics_pipeline(&*copy_to_screen);
+            encoder.draw(
+                TriangleList,
+                None,
+                0..6,
+                0..1,
+                root_params! {
+                    texture: gpu::StorageImageHandle = painter.render_target.storage_handle(),
+                    sampler: gpu::SamplerHandle = painter.sampler.device_handle()
+                },
+            );
+        });
+    }
 
     Ok(())
 }

@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 glam = "0.30.5"
+approx = "0.5.1"
 # [Claude Sonnet 4.6] "alloc" and "rc" are explicitly requested here to match the feature set that the full build graph
 # resolves to (egui/epaint activate serde/rc transitively through gamelib). Without them, Cargo
 # builds math's dylib subgraph with a different serde than the rest of the workspace, producing two

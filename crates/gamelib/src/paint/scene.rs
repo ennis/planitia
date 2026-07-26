@@ -197,6 +197,7 @@ impl PaintScene {
     /// * `format` the text format to use.
     /// * `color` text color.
     pub fn draw_text(&mut self, position: Vec2, text: &str, format: &TextFormat, color: Srgba8) {
+        let _span = crate::span!("draw_text");
         let mut layout = TextLayout::new(format, text);
         layout.layout(1000.0);
         for glyph_run in layout.glyph_runs() {
@@ -213,6 +214,7 @@ impl PaintScene {
 
     /// Draws a glyph run.
     pub fn draw_glyph_run(&mut self, position: Vec2, glyph_run: &GlyphRun<'_>, options: &DrawGlyphRunOptions) {
+        let _span = crate::span!("draw_glyph_run");
         let format = glyph_run.format();
         let x = glyph_run.offset();
         let y = glyph_run.baseline();
@@ -278,6 +280,7 @@ impl PaintScene {
 /// # Arguments
 ///
 pub fn render_scene(render_target: &gpu::Image, scene: PaintScene) {
+    let _span = crate::span!("render_scene");
     if !scene.transform_stack.is_empty() {
         warn!("finish() called with unbalanced save/restore calls");
     }

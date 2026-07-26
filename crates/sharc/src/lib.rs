@@ -435,6 +435,7 @@ mod tests {
     use super::*;
     use std::fs;
     use gpu_types::{ColorBlendEquation, ColorTargetState};
+    use gpu_types::vk::{CullModeFlags, PolygonMode};
     use utils::archive::ArchiveWriter;
     use utils::zstring::ZString64;
 

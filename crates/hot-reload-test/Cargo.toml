@@ -12,5 +12,6 @@ gpu = { workspace = true }
 math = { workspace = true, features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 chrono = { version = "0.4.45", features = ["serde"] }
+hgeo = {workspace = true}
 humantime = "2.4.0"
 planitia-workspace-hack = { version = "0.1", path = "../../planitia-workspace-hack" }

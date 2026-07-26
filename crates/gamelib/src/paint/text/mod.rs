@@ -62,6 +62,7 @@ pub struct ShapingParams {
 ///
 /// NOTE: currently it doesn't do any CTL shaping or ligatures.
 pub fn shape_text(format: &ShapingParams, text: &str, callback: &mut dyn FnMut(&GlyphCluster)) {
+    let _span = crate::span!("shape_text");
     let font = &format.font;
     let size = format.size;
     let mut prev_glyph_id: Option<GlyphId> = None;
