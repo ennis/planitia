@@ -6,6 +6,7 @@
 #[macro_use]
 extern crate log;
 
+use color::{Srgba8, srgba8};
 use gamelib::asset::{AssetCache, Handle};
 use gamelib::camera_control::{CameraControl, CameraControlInput};
 use gamelib::egui::{Color32, Scene};
@@ -13,10 +14,9 @@ use gamelib::input::{InputEvent, PointerButton};
 use gamelib::paint::{DrawGlyphRunOptions, PaintScene, Painter, TextFormat, TextLayout};
 use gamelib::platform::RenderTargetImage;
 use gamelib::render::pipeline_cache::get_graphics_pipeline;
-use gamelib::{App, AppHandler, UserEvent, WindowCreateInfo, WindowHandle, egui};
+use gamelib::{App, AppHandler, PluginHost, UserEvent, WindowCreateInfo, WindowHandle, egui};
 use std::ops::Deref;
 use std::path::Path;
-use color::{Srgba8, srgba8};
 //use egui_demo_lib::{View, WidgetGallery};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::{Image, Ptr, PushDataSource, root_params};
@@ -121,6 +121,7 @@ struct Game {
     outline_experiment: experiments::outlines::OutlineExperiment,
     automaton_experiment: experiments::automaton::AutomatonExperiment,
     svg_experiment: experiments::svg::SvgExperiment,
+    plugin: PluginHost,
 }
 
 fn create_depth_buffer(width: u32, height: u32) -> Image {
@@ -152,6 +153,7 @@ impl Default for Game {
             outline_experiment: experiments::outlines::OutlineExperiment::new(),
             automaton_experiment: experiments::automaton::AutomatonExperiment::new(),
             svg_experiment: experiments::svg::SvgExperiment::new(),
+            plugin: PluginHost::new("hot_reload_test.dll"),
             cfg: Config::load(),
         }
     }
@@ -212,12 +214,12 @@ impl Game {
         scene.draw_text(
             vec2(target.width() as f32 - 340.0, 10.0),
             concat!(
-                "  [Home] Home camera\n",
-                "     [G] Toggle grid\n",
-                "     [H] Toggle background\n",
-                "     [P] Toggle painting demo\n",
-                "     [I] Toggle imgui\n",
-                "[Ctrl+G] Load plugin\n",
+                "        [Home] Home camera\n",
+                "           [G] Toggle grid\n",
+                "           [H] Toggle background\n",
+                "           [P] Toggle painting demo\n",
+                "           [I] Toggle imgui\n",
+                "[Ctrl+Shift+G] Reload plugin\n",
             ),
             &TextFormat { size: 20.0, ..Default::default() },
             Srgba8::WHITE,
@@ -236,7 +238,7 @@ impl AppHandler for Game {
         let _ = gamelib::create_window(&WindowCreateInfo { width: WIDTH, height: HEIGHT, title: "Planitia", .. });
     }
 
-    fn input(&mut self, _window: WindowHandle, input_event: &InputEvent) {
+    fn input(&mut self, window: WindowHandle, input_event: &InputEvent) {
         // --- SHORTCUTS ---
 
         // App exit
@@ -263,15 +265,15 @@ impl AppHandler for Game {
         if input_event.is_shortcut("I") {
             self.cfg.show_imgui = !self.cfg.show_imgui;
         }
-        if input_event.is_shortcut("Ctrl+G") {
-            gamelib::register_plugin("hot_reload_test.dll");
-        }
         if input_event.is_shortcut("Ctrl+Shift+G") {
-            gamelib::reload_plugins();
+            self.plugin.reload();
         }
 
-        // --- CAMERA ---
         self.svg_experiment.input(&input_event);
+
+        self.plugin.input(window, input_event);
+
+        // --- CAMERA ---
         if self.camera_control.handle_input(&input_event) {
             return;
         }
@@ -286,9 +288,10 @@ impl AppHandler for Game {
         /*if let Ok(FileSystemEvent { .. }) = event.downcast::<FileSystemEvent>() {
             self.
         }*/
+        self.plugin.event(event);
     }
 
-    fn resized(&mut self, _window: WindowHandle, width: u32, height: u32) {
+    fn resized(&mut self, window: WindowHandle, width: u32, height: u32) {
         self.width = width;
         self.height = height;
         // TODO painter.resize() method
@@ -296,11 +299,12 @@ impl AppHandler for Game {
         self.depth_stencil_buffer = create_depth_buffer(width, height);
         self.outline_experiment.resize(width, height);
         //self.automaton_experiment.resize(width, height);
+        self.plugin.resized(window, width, height);
     }
 
     fn vsync(&mut self) {}
 
-    fn render(&mut self, _window: WindowHandle, target: RenderTargetImage) {
+    fn render(&mut self, window: WindowHandle, target: RenderTargetImage) {
         // TODO: that's not the right time to reload assets.
         //       Ideally this should be done asynchronously, on another thread, so as not
         //       to block the GUI and rendering.
@@ -330,14 +334,17 @@ impl AppHandler for Game {
             });
         }
 
+        self.plugin.render(window, target);
+
         gpu::flush().unwrap();
     }
 
     fn file_changed(&mut self, path: &Path) {
-        gamelib::reload_plugins();
+        self.plugin.reload();
     }
 
-    fn close_requested(&mut self, _window: WindowHandle) {
+    fn close_requested(&mut self, window: WindowHandle) {
+        self.plugin.close_requested(window);
         gamelib::quit();
     }
 
@@ -376,13 +383,15 @@ impl AppHandler for Game {
 
         //self.automaton_experiment.ui(ctx);
         self.outline_experiment.gui(ctx);
+
+        self.plugin.imgui(ctx);
     }
 
     fn exiting(&mut self) {
         self.cfg.save();
+
+        self.plugin.exiting();
     }
-
-
 }
 
 fn main() {

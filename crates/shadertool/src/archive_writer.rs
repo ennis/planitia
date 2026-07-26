@@ -15,7 +15,6 @@ use sharc::zstring::ZString64;
 use sharc::{FileDependency, RootParamLayout, Shader};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
-use std::{fs, slice};
 
 type ShaderArchiveWriter = ArchiveWriter<sharc::ShaderArchiveRoot>;
 

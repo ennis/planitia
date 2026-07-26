@@ -99,6 +99,12 @@ pub trait AppHandler {
     /// Called when the event loop starts running.
     fn started(&mut self) {}
 
+    /// Called when the application is about to be reloaded (for hot-reloading).
+    fn unloading(&mut self) {}
+
+    /// Called when the application has been reloaded.
+    fn loaded(&mut self) {}
+
     /// Called when the event loop receives an input event.
     fn input(&mut self, window: WindowHandle, input_event: &InputEvent);
 
@@ -122,6 +128,23 @@ pub trait AppHandler {
 
     fn exiting(&mut self) {}
 }
+
+/// Dummy handler used during app initialization, before the actual handler is created.
+struct DummyHandler;
+impl AppHandler for DummyHandler {
+    fn input(&mut self, _window: WindowHandle, _input_event: &InputEvent) {
+        panic!("dummy handler called")
+    }
+
+    fn resized(&mut self, _window: WindowHandle, _width: u32, _height: u32) {
+        panic!("dummy handler called")
+    }
+
+    fn vsync(&mut self) {
+        panic!("dummy handler called")
+    }
+}
+
 
 //--------------------------------------------------------------------------------------------------
 
@@ -164,7 +187,7 @@ impl<H: AppHandler + Default + 'static> App<H> {
 
         // Create the main thread context object.
         let main_thread_ctx = self.0.get_or_init(|| {
-            let handler = Box::new(RefCell::new(H::default()));
+            let handler = RefCell::new(Box::new(DummyHandler));
             // This needs to be a leaked static because ThreadBound wouldn't be Send, and
             // OnceLock requires its contents to be Send + Sync in order to be Sync and usable
             // within a static.
@@ -175,6 +198,11 @@ impl<H: AppHandler + Default + 'static> App<H> {
 
         let ctx = *main_thread_ctx.get_ref().unwrap();
         CURRENT_CTX.set(Some(ctx));
+
+        // Create handler.
+        let handler = Box::new(H::default());
+        ctx.handler.replace(handler);
+
 
         // Schedule the first render on the next VSync.
         // TODO: we probably should render immediately?
@@ -268,7 +296,7 @@ pub(crate) struct MainThreadContext {
     rdoc_capture_requested: Cell<bool>,
     rdoc_launch_replay_ui: Cell<bool>,
     debug_mark_counter: Cell<usize>,
-    handler: Box<RefCell<dyn AppHandler + 'static>>,
+    handler: RefCell<Box<dyn AppHandler + 'static>>,
     /// File watcher.
     watch: RefCell<Debouncer<RecommendedWatcher>>,
     /// Text overlay.
@@ -282,7 +310,7 @@ pub(crate) struct MainThreadContext {
 
 impl MainThreadContext {
     /// Creates a new application instance and initializes the global systems.
-    fn new(handler: Box<RefCell<dyn AppHandler + 'static>>, options: &AppOptions) -> Self {
+    fn new(handler: RefCell<Box<dyn AppHandler + 'static>>, options: &AppOptions) -> Self {
         let platform = Platform::new(options);
         let executor = LocalExecutor::new();
         let imgui = RefCell::new(ImguiContext::new());
@@ -337,7 +365,6 @@ impl MainThreadContext {
 
     /// Handles file change events from `notify`, and invokes the appropriate handlers.
     fn handle_file_change_events(&self, events: Vec<DebouncedEvent>) {
-        crate::reload_plugins();
         for event in events {
             self.handler.borrow_mut().file_changed(&event.path)
         }
@@ -439,9 +466,6 @@ impl LoopHandler for &'static MainThreadContext {
         // render the frame (the application is expected to render the GUI as part of its rendering)
         self.platform.render_all(&mut |window, render_target| {
             self.handler.borrow_mut().render(window, render_target);
-
-            // invoke plugins vsync handlers
-            PluginHost::instance().send_event(PluginEvent::VSync(render_target.image));
 
             // render text overlay
             {
@@ -601,6 +625,15 @@ pub fn print_message(message: impl AsRef<str>) {
     with_app_ctx(|ctx| {
         ctx.text_overlay.borrow_mut().push_str(message.as_ref());
     });
+}
+
+/// Formats a message on screen.
+#[macro_export]
+macro_rules! format_message {
+    ($($arg:tt)*) => {{
+        let message = format!($($arg)*);
+        $crate::print_message(message);
+    }};
 }
 
 /// Registers a global resource object.

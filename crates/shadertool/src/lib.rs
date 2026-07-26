@@ -19,7 +19,6 @@ use thiserror::Error;
 
 use crate::archive_writer::build_and_write_archive;
 use crate::build::{compile_slang_module, create_slang_session};
-use crate::reflection::Param;
 pub use dump2::dump_archive_file;
 use sharc::gpu_types::vk;
 //--------------------------------------------------------------------------------------------------

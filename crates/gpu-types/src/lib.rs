@@ -6,7 +6,6 @@ use std::{fmt, slice};
 
 // Reexports
 pub use ash::{self, vk};
-use ash::vk::PolygonMode;
 pub use vk::Format;
 
 /// 2D point with integer coordinates.

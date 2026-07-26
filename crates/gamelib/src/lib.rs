@@ -35,7 +35,7 @@ pub use app::{
 pub use event::UserEvent;
 pub use input::InputEvent;
 pub use platform::{WindowHandle, wake_event_loop};
-pub use plugin_host::{PluginEvent, PluginResult, PluginState, register_plugin, reload_plugins, PluginInterface, PluginCtx};
+pub use plugin_host::{PluginCtx, PluginEvent, PluginResult, PluginHost, dispatch_plugin_event};
 pub use window::{WindowCreateInfo, WindowInputState, create_window};
 
 //--- reexports ---

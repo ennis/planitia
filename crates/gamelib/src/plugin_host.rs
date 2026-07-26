@@ -1,7 +1,10 @@
 use crate::error::{ExcResult, OptionExt, ResultExt};
-use crate::{watch_file, AppHandler, InputEvent};
+use crate::platform::RenderTargetImage;
+use crate::{AppHandler, InputEvent, UserEvent, WindowHandle, watch_file};
+use egui::Context;
 use libloading::Library;
-use serde::Serialize;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use std::any::{Any, TypeId};
 use std::cell::{Cell, RefCell};
 use std::env::temp_dir;
@@ -60,22 +63,6 @@ impl PluginCtx {
     }
 }
 
-/// Events sent to a plugin.
-#[repr(C)]
-#[derive(Copy,Clone)]
-pub enum PluginEvent<'a> {
-    /// VSync
-    VSync,
-    /// The plugin was just loaded.
-    Init,
-    /// The plugin is about to be unloaded.
-    Deinit,
-    /// A new frame should be rendered.
-    Render(&'a gpu::Image),
-    /// An input event occurred.
-    Input(&'a InputEvent),
-}
-
 /// Result of the plugin event handler.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(C)]
@@ -86,8 +73,9 @@ pub enum PluginResult {
     WaitInput,
 }
 
-pub type PluginEntryFn = for<'a> unsafe extern "C" fn(ctx: &mut PluginCtx, event: &PluginEvent) -> PluginResult;
-
+pub type PluginInitFn = for<'a> unsafe extern "C" fn(ctx: &mut PluginCtx);
+pub type PluginShutdownFn = for<'a> unsafe extern "C" fn(ctx: &mut PluginCtx);
+pub type PluginEntryFn = for<'a> unsafe extern "C" fn(ctx: &mut PluginCtx, event: Box<PluginEvent>) -> PluginResult;
 
 /// Represents a loaded plugin library.
 struct PluginLibrary {
@@ -95,6 +83,8 @@ struct PluginLibrary {
     tmpdir: tempfile::TempDir,
     library: Library,
     entry: PluginEntryFn,
+    init: PluginInitFn,
+    shutdown: PluginShutdownFn,
 }
 
 impl PluginLibrary {
@@ -118,11 +108,16 @@ impl PluginLibrary {
             // (https://github.com/nagisa/rust_libloading/issues/13)
             let entry =
                 (*library.get::<PluginEntryFn>("plugin_entry").raise(PluginLoadError::EntryPointNotFound)?).clone();
+            let shutdown =
+                (*library.get::<PluginShutdownFn>("plugin_shutdown").raise(PluginLoadError::EntryPointNotFound)?)
+                    .clone();
+            let init =
+                (*library.get::<PluginInitFn>("plugin_init").raise(PluginLoadError::EntryPointNotFound)?).clone();
 
             // Initialize the plugin.
             //let mut ctx = PluginCtx { data: PluginData::default(), user_ptr: None };
             //let _result = entry(&mut ctx, &PluginEvent::Init);
-            Ok(PluginLibrary { last_modified, library, entry, tmpdir })
+            Ok(PluginLibrary { last_modified, library, entry, tmpdir, init, shutdown })
         }
     }
 
@@ -144,7 +139,24 @@ impl Drop for PluginLibrary {
     }
 }
 
-pub struct Plugin {
+pub fn get_plugin_library_path<P: AsRef<Path>>(path: P) -> PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        let exe_dir = std::env::current_exe()
+            .expect("failed to get current executable path")
+            .parent()
+            .expect("unexpected executable path")
+            .to_path_buf();
+        exe_dir.join(path)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        path.as_ref().to_path_buf()
+    }
+}
+
+/// Manages loading and reloading of hot-reloadable plugin libraries.
+pub struct PluginHost {
     /// Path to shared library file.
     path: PathBuf,
     /// Canonical path to the shared library file.
@@ -152,113 +164,68 @@ pub struct Plugin {
     /// Handle to the loaded library.
     library: Option<PluginLibrary>,
     ctx: PluginCtx,
-}
-
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PluginState {
-    Registered,
-    Loaded,
-}
-
-/// Manages loading and reloading of hot-reloadable plugin libraries.
-pub struct PluginHost {
-    plugins: RefCell<Vec<Plugin>>,
-    last_reload_time: Cell<SystemTime>,
-    current_plugin: Cell<Option<usize>>,
+    last_reload_time: SystemTime,
 }
 
 impl PluginHost {
     /// Creates a new `PluginHost` instance.
-    pub fn new() -> Self {
-        Self {
-            plugins: RefCell::new(Vec::new()),
-            last_reload_time: Cell::new(SystemTime::UNIX_EPOCH),
-            current_plugin: Cell::new(None),
-        }
-    }
+    pub fn new<P: AsRef<Path>>(path: P) -> Self {
+        fn new_inner(path: &Path) -> PluginHost {
+            let path = get_plugin_library_path(path);
+            let last_reload_time = SystemTime::now();
 
-    /// Returns whether [register](PluginHost::register) has already been called with the given path,
-    /// and if so, whether the plugin has been loaded successfully.
-    ///
-    /// # Return value
-    /// * `None` if the plugin has not been inserted yet.
-    /// * `Some(PluginState::Registered)` if the plugin has been inserted but not loaded yet.
-    /// * `Some(PluginState::Loaded)` if the plugin has been inserted and loaded successfully.
-    pub fn plugin_state(&self, path: &Path) -> Option<PluginState> {
-        let Some(canonical_path) = fs::canonicalize(path).ok() else { return None };
-        self.plugins.borrow().iter().find_map(|plugin| {
-            if plugin.canonical_path == canonical_path {
-                if plugin.library.is_some() { Some(PluginState::Loaded) } else { Some(PluginState::Registered) }
-            } else {
-                None
-            }
-        })
-    }
+            match fs::exists(&path) {
+                Ok(true) => {
+                    debug!("loading plugin library: {}", path.display());
+                    let _ = watch_file(&path);
+                    let library = PluginLibrary::load_or_log_error(&path);
+                    // Not sure what could cause canonicalize to fail here (the path exists), so unwrap.
+                    let canonical_path = fs::canonicalize(&path).unwrap();
 
-    fn init_plugin(&self, plugin: &mut Plugin) {
-        if let Some(ref library) = plugin.library {
-            unsafe {
-                (library.entry)(&mut plugin.ctx, &PluginEvent::Init);
-            }
-        }
-    }
-
-    fn deinit_plugin(&self, plugin: &mut Plugin) {
-        if let Some(ref library) = plugin.library {
-            unsafe {
-                (library.entry)(&mut plugin.ctx, &PluginEvent::Deinit);
-            }
-        }
-        plugin.library = None;
-    }
-
-    /// Iterates over available interfaces of the specified type.
-    // Issue:
-    //pub fn interfaces<Interface: ?Sized + Any>(&self)
-
-    /// Registers a plugin library.
-    ///
-    /// This will try to load the library immediately if the file exists.
-    pub fn register(&self, path: PathBuf) -> PluginState {
-        match self.plugin_state(&path) {
-            Some(state @ PluginState::Registered | state @ PluginState::Loaded) => {
-                debug!("plugin library `{}` is already inserted", path.display());
-                return state;
-            }
-            None => {}
-        }
-
-        match fs::exists(&path) {
-            Ok(true) => {
-                debug!("loading plugin library: {}", path.display());
-                let _ = watch_file(&path);
-                let library = PluginLibrary::load_or_log_error(&path);
-                // Not sure what could cause canonicalize to fail here (the path exists), so unwrap.
-                let canonical_path = fs::canonicalize(&path).unwrap();
-
-                let mut plugin = Plugin { path, library, canonical_path, ctx: Default::default() };
-                self.init_plugin(&mut plugin);
-                self.plugins.borrow_mut().push(plugin);
-                PluginState::Loaded
-            }
-            _ => {
-                // Add a file watch on the parent directory if the library file isn't there yet, so that we can reload it when it is created.
-                debug!("plugin library `{}` not found", path.display());
-                if let Some(parent) = path.parent()
-                    && fs::exists(parent).unwrap_or(false)
-                {
-                    let _ = watch_file(parent);
+                    let mut plugin =
+                        PluginHost { path, library, canonical_path, ctx: Default::default(), last_reload_time };
+                    plugin.init();
+                    plugin
                 }
-                self.plugins.borrow_mut().push(Plugin {
-                    path,
-                    library: None,
-                    canonical_path: PathBuf::new(),
-                    ctx: Default::default(),
-                });
-                PluginState::Registered
+                _ => {
+                    // Add a file watch on the parent directory if the library file isn't there yet, so that we can reload it when it is created.
+                    debug!("plugin library `{}` not found", path.display());
+
+                    if let Some(parent) = path.parent()
+                        && fs::exists(parent).unwrap_or(false)
+                    {
+                        let _ = watch_file(parent);
+                    }
+
+                    PluginHost {
+                        path,
+                        library: None,
+                        canonical_path: PathBuf::new(),
+                        ctx: Default::default(),
+                        last_reload_time,
+                    }
+                }
             }
         }
+
+        new_inner(path.as_ref())
+    }
+
+    fn init(&mut self) {
+        if let Some(ref library) = self.library {
+            unsafe {
+                (library.init)(&mut self.ctx);
+            }
+        }
+    }
+
+    fn shutdown(&mut self) {
+        if let Some(ref library) = self.library {
+            unsafe {
+                (library.shutdown)(&mut self.ctx);
+            }
+        }
+        self.library = None;
     }
 
     fn path_is_newer(path: &Path, last_modified: SystemTime) -> bool {
@@ -267,97 +234,183 @@ impl PluginHost {
     }
 
     /// Reloads plugins whose shared library files have been modified since the last reload.
-    pub fn reload(&self) {
+    pub fn reload(&mut self) {
         let reload_start_time = SystemTime::now();
 
-        for plugin in self.plugins.borrow_mut().iter_mut() {
-            let Some(exists) = fs::exists(&plugin.path).ok() else { continue };
-            if !exists {
-                // Library file doesn't exist; do nothing. We might be in the middle of
-                // recompilation.
-                continue;
-            }
-
-            if let Some(ref lib) = plugin.library {
-                if Self::path_is_newer(&plugin.path, lib.last_modified) {
-                    debug!("plugin library `{}` is new", plugin.path.display());
-
-                    self.deinit_plugin(plugin);
-                    plugin.library = PluginLibrary::load_or_log_error(&plugin.path);
-                    // Update canonical path in case the file was replaced with a different file.
-                    plugin.canonical_path = fs::canonicalize(&plugin.path).unwrap();
-                    self.init_plugin(plugin);
-                }
-            } else {
-                // Library is not loaded yet. Try to load it.
-                plugin.library = PluginLibrary::load_or_log_error(&plugin.path);
-                plugin.canonical_path = fs::canonicalize(&plugin.path).unwrap();
-            }
+        let Some(exists) = fs::exists(&self.path).ok() else { return };
+        if !exists {
+            // Library file doesn't exist; do nothing. We might be in the middle of
+            // recompilation.
+            return;
         }
 
-        self.last_reload_time.set(reload_start_time);
+        if let Some(ref lib) = self.library {
+            if Self::path_is_newer(&self.path, lib.last_modified) {
+                debug!("plugin library `{}` is new", self.path.display());
+                self.send_event(PluginEvent::Unloading);
+                self.shutdown();
+                self.library = None;
+                self.library = PluginLibrary::load_or_log_error(&self.path);
+                // Update canonical path in case the file was replaced with a different file.
+                self.canonical_path = fs::canonicalize(&self.path).unwrap();
+                self.init();
+                self.send_event(PluginEvent::Loaded);
+            }
+        } else {
+            // Library is not loaded yet. Try to load it.
+            self.library = PluginLibrary::load_or_log_error(&self.path);
+            self.canonical_path = fs::canonicalize(&self.path).unwrap();
+        }
+
+        self.last_reload_time = reload_start_time;
     }
 
-    /// Sends an event to all loaded plugins.
-    pub fn send_event(&self, event: PluginEvent) {
-        for (_i, plugin) in self.plugins.borrow_mut().iter_mut().enumerate() {
-            if let Some(ref mut lib) = plugin.library {
-                unsafe {
-                    (lib.entry)(&mut plugin.ctx, &event);
-                }
-            }
+    fn send_event(&mut self, event: PluginEvent) -> PluginResult {
+        if let Some(ref library) = self.library {
+            unsafe { (library.entry)(&mut self.ctx, Box::new(event)) }
+        } else {
+            PluginResult::WaitVSync
         }
     }
+}
 
-    /// Returns a reference to the singleton instance of `PluginHost`.
-    pub fn instance() -> &'static Self {
-        // FIXME: we should check that this function is only called from the main thread.
-        PLUGIN_HOST.with(|host| *host)
+/// Events sent to a plugin.
+#[repr(C)]
+pub enum PluginEvent<'a> {
+    /// `AppHandler::unloading`
+    Unloading,
+    /// `AppHandler::loaded`
+    Loaded,
+    /// `AppHandler::started`
+    Started,
+    /// `AppHandler::render`
+    Render(WindowHandle, RenderTargetImage<'a>),
+    /// `AppHandler::input`
+    Input(WindowHandle, &'a InputEvent),
+    /// `AppHandler::event`
+    UserEvent(UserEvent),
+    /// `AppHandler::resized`
+    Resized(WindowHandle, u32, u32),
+    /// `AppHandler::vsync`
+    VSync,
+    /// `AppHandler::file_changed`
+    FileChanged(&'a Path),
+    /// `AppHandler::close_requested`
+    CloseRequested(WindowHandle),
+    /// `AppHandler::exiting`
+    Exiting,
+    /// `AppHandler::imgui`
+    Imgui(&'a egui::Context),
+}
+
+impl AppHandler for PluginHost {
+    fn started(&mut self) {
+        self.send_event(PluginEvent::Started);
     }
-}
 
-thread_local! {
-    static PLUGIN_HOST: &'static PluginHost = Box::leak(Box::new(PluginHost::new()));
-}
-
-/// Registers a dynamically-loaded plugin library.
-pub fn register_plugin<P: AsRef<Path>>(path: P) -> PluginState {
-    let plugin_host = PluginHost::instance();
-    #[cfg(target_os = "windows")]
-    {
-        let exe_dir = std::env::current_exe()
-            .expect("failed to get current executable path")
-            .parent()
-            .expect("unexpected executable path")
-            .to_path_buf();
-        let path = exe_dir.join(path);
-        plugin_host.register(path)
+    fn unloading(&mut self) {
+        self.send_event(PluginEvent::Unloading);
     }
-}
 
-/// Reloads all hot-reloadable plugins.
-pub fn reload_plugins() {
-    let plugin_host = PluginHost::instance();
-    plugin_host.reload();
+    fn loaded(&mut self) {
+        self.send_event(PluginEvent::Loaded);
+    }
+
+    fn input(&mut self, window: WindowHandle, input_event: &InputEvent) {
+        self.send_event(PluginEvent::Input(window, input_event));
+    }
+
+    fn event(&mut self, event: UserEvent) {
+        self.send_event(PluginEvent::UserEvent(event));
+    }
+
+    fn resized(&mut self, window: WindowHandle, width: u32, height: u32) {
+        self.send_event(PluginEvent::Resized(window, width, height));
+    }
+
+    fn vsync(&mut self) {
+        self.send_event(PluginEvent::VSync);
+    }
+
+    fn render(&mut self, window: WindowHandle, image: RenderTargetImage<'_>) {
+        self.send_event(PluginEvent::Render(window, image));
+    }
+
+    fn file_changed(&mut self, path: &Path) {
+        self.send_event(PluginEvent::FileChanged(path));
+    }
+
+    fn close_requested(&mut self, window: WindowHandle) {
+        self.send_event(PluginEvent::CloseRequested(window));
+    }
+
+    fn imgui(&mut self, ctx: &egui::Context) {
+        self.send_event(PluginEvent::Imgui(ctx));
+    }
+
+    fn exiting(&mut self) {
+        self.send_event(PluginEvent::Exiting);
+    }
 }
 
 //--------------------------------------------------------------------------------------------------
 
-pub trait PluginInterface {
-    fn event(&mut self, event: &PluginEvent) -> PluginResult;
-}
-
-impl<T> PluginInterface for T where T: AppHandler {
-    fn event(&mut self, event: &PluginEvent) -> PluginResult {
-        match event {
-            PluginEvent::VSync => {
-                self.vsync();
-            }
-            PluginEvent::Render(_) => {
-                self.render()
-            }
-            PluginEvent::Init => {}
-            PluginEvent::Deinit => {}
+#[doc(hidden)]
+pub fn dispatch_plugin_event<T: AppHandler + Serialize + DeserializeOwned>(
+    ctx: &mut PluginCtx,
+    handler: &mut T,
+    event: Box<PluginEvent>,
+) -> PluginResult {
+    match *event {
+        PluginEvent::Started => {
+            handler.started();
+            PluginResult::WaitVSync
+        }
+        PluginEvent::Render(window, image) => {
+            handler.render(window, image);
+            PluginResult::WaitVSync
+        }
+        PluginEvent::Input(window, input_event) => {
+            handler.input(window, input_event);
+            PluginResult::WaitVSync
+        }
+        PluginEvent::UserEvent(user_event) => {
+            handler.event(user_event);
+            PluginResult::WaitVSync
+        }
+        PluginEvent::Resized(window, width, height) => {
+            handler.resized(window, width, height);
+            PluginResult::WaitVSync
+        }
+        PluginEvent::VSync => {
+            handler.vsync();
+            PluginResult::WaitVSync
+        }
+        PluginEvent::FileChanged(path) => {
+            handler.file_changed(path);
+            PluginResult::WaitVSync
+        }
+        PluginEvent::CloseRequested(window) => {
+            handler.close_requested(window);
+            PluginResult::WaitVSync
+        }
+        PluginEvent::Imgui(ctx) => {
+            handler.imgui(ctx);
+            PluginResult::WaitVSync
+        }
+        PluginEvent::Exiting => {
+            handler.exiting();
+            PluginResult::WaitVSync
+        }
+        PluginEvent::Unloading => {
+            handler.unloading();
+            ctx.save(&handler);
+            PluginResult::WaitVSync
+        }
+        PluginEvent::Loaded => {
+            ctx.load(handler);
+            handler.loaded();
+            PluginResult::WaitVSync
         }
     }
 }
@@ -365,62 +418,36 @@ impl<T> PluginInterface for T where T: AppHandler {
 #[macro_export]
 macro_rules! register_plugin {
     ($init_fn:expr) => {
-        #[unsafe(no_mangle)]
-        pub extern "C" fn plugin_entry(
-            ctx: &mut $crate::PluginCtx,
-            event: &$crate::PluginEvent,
-        ) -> $crate::PluginResult {
+        mod plugin {
+            use super::*;
 
             fn cast<T>(ptr: ::std::ptr::NonNull<()>, _fn: fn() -> T) -> ::std::ptr::NonNull<T> {
                 ::std::ptr::NonNull::new(ptr.as_ptr() as *mut T).unwrap()
             }
 
-            // On initialization, allocate the plugin object.
-            match event {
-                $crate::PluginEvent::Init => {
-                    ctx.set_user_ptr(Some(
-                        ::std::ptr::NonNull::new(Box::into_raw(Box::new($init_fn())) as *mut ()).unwrap(),
-                    ));
-                }
-                _ => {}
+            #[unsafe(no_mangle)]
+            pub extern "C" fn plugin_init(ctx: &mut $crate::PluginCtx) {
+                let mut handler = $init_fn();
+                let _ = ctx.set_user_ptr(Some(::std::ptr::NonNull::new(Box::into_raw(Box::new(handler)) as *mut ()).unwrap()));
             }
 
-
-            // Handle event.
-            let result = if let Some(ptr) = ctx.get_user_ptr() {
-                let t = cast(ptr, $init_fn);
-                let t = unsafe { &mut *t.as_ptr() };
-                match event {
-                    $crate::PluginEvent::Init => {
-                        ctx.load(t);
-                        t.event(event)
-                    }
-                    $crate::PluginEvent::Deinit => {
-                        let result = t.event(event);
-                        ctx.save(t);
-                        result
-                    }
-                    other => {
-                        t.event(other)
-                    }
+            #[unsafe(no_mangle)]
+            pub extern "C" fn plugin_shutdown(ctx: &mut $crate::PluginCtx) {
+                let handler = cast(ctx.set_user_ptr(None).expect("expected non-zero user pointer"), $init_fn);
+                unsafe {
+                    let _ = Box::from_raw(handler.as_ptr() as *mut _);
                 }
-            } else {
-                $crate::PluginResult::WaitVSync
-            };
-
-            match event {
-                $crate::PluginEvent::Deinit => {
-                    let prev = ctx.set_user_ptr(None);
-                    if let Some(ptr) = prev {
-                        unsafe {
-                            let _ = Box::from_raw(ptr.as_ptr() as *mut _);
-                       }
-                    }
-                }
-                _ => {}
             }
 
-            result
+            #[unsafe(no_mangle)]
+            pub extern "C" fn plugin_entry(
+                ctx: &mut $crate::PluginCtx,
+                event: Box<$crate::PluginEvent>,
+            ) -> $crate::PluginResult {
+                let handler = cast(ctx.get_user_ptr().expect("expected non-zero user pointer"), $init_fn);
+                let handler = unsafe { &mut *handler.as_ptr() };
+                $crate::dispatch_plugin_event(ctx, handler, event)
+            }
         }
     };
 }

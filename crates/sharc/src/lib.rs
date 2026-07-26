@@ -17,7 +17,6 @@
 
 pub mod reflection;
 
-use gpu_types::vk::{CullModeFlags, PolygonMode};
 use gpu_types::{ImageUsage, vk, RasterizationState};
 use log::{debug, warn};
 use std::borrow::Cow;
