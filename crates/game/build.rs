@@ -55,6 +55,7 @@ fn main() {
             emit_cargo_deps: true,
             emit_debug_information: true,
             emit_spirv_binaries: true,
+            emit_reflection: false,
             include_paths: vec![PathBuf::from("../gamelib/assets/gamelib/shaders")],
             output_directory: None,
         },

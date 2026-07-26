@@ -15,7 +15,7 @@ struct RootParams {
 };
 
 [shader("vertex")]
-[pass("grid")]
+[pipeline("grid")]
 VSOut grid_vertex_main(uint vertex_id : SV_VertexID, uniform RootParams* u)
 {
     // unscaled XZ plane quad positions
@@ -88,7 +88,7 @@ float4 grid(float2 uv, float line_width)
 }
 
 [shader("fragment")]
-[pass("grid")]
+[pipeline("grid")]
 float4 grid_fragment_main(VSOut i, uint2 frag_pos: SV_Position, uniform RootParams* u)
 {
     float2 frag_uv = frag_pos.xy / u.scene.screen_size;

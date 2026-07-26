@@ -902,3 +902,53 @@ The hot-reloaded crate can't have its own copy of it, so it must be dynamically 
 ## Benefits
 If hot-reload is robust enough, we can revisit the idea of embedding compiled shaders directly in rust code, 
 and generate a type-safe interface to them.
+
+-----------------------------------------------------------------------
+
+Next steps:
+- plugin modules should provide/register interfaces
+- examples: Renderer
+  - takes a scene as input, renders it
+- examples: Scene
+  - manages scene objects, lights, cameras, etc.
+  - does no rendering by itself
+
+Registered objects should be exclusively traits; otherwise plugins would need to depend on each other.
+
+Application is composed of multiple hot-reloadable components, managed by plugins.
+Issue: communication between components.
+- Components can't directly hold references (borrows) between each other: since they are hot-reloadable and no one owns the
+other, the lifetime relationship between them is undefined.
+- Components are registered in a central directory. To communicate, acquire a borrow and call a method.
+  - Issue: reentrant calls / circular dependencies between components that lead to "already borrowed" issues.
+
+- Alternative: components only communicate by events and read-only shared data.
+  - no borrowing issues
+  - Drawbacks: harder to debug and reason about
+
+Example: a "scene" component and a "renderer" component
+
+When the scene changes, a global event "SceneChange" is emitted, containing a Rc reference to the scene.
+Then, control flows back to the main loop of the host application, and the emitted events are dispatched in sequence.
+The renderer receives a copy of this event and updates its internal buffers.
+
+Issue: rendering
+Rendering should be a synchronous operation: the host app calls "render(&Image)" on all renderers, and waits for the result.
+This is different from other events because it takes a reference to a swapchain image that is only valid within a stack frame,
+and control doesn't flow back to the main event loop.
+
+Inconsistency:
+- multiple renderer plugins don't make sense without a way to choose which one is used, or a way to order them, at least
+
+Idea: plugins declare their dependencies statically.
+When invoking a plugin method, 
+
+-----------------------------------------------------------------------
+
+Plugin interfaces are too complex.
+In all likelihood, it makes no sense to have multiple implementations of the same interface trait.
+The data structures should live in the application, not in plugins.
+Plugins only define behavior, and they don't call other plugins.
+Plugins gain access to a "World" object when they are invoked.
+They don't expose any internal data to the outside world.
+

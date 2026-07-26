@@ -10,6 +10,7 @@ fn main() {
             emit_cargo_deps: true,
             emit_debug_information: false,
             emit_spirv_binaries: false,
+            emit_reflection: false,
             include_paths: vec![],
             output_directory: None,
         },

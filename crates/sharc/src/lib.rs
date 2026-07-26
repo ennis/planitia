@@ -18,7 +18,7 @@
 pub mod reflection;
 
 use gpu_types::vk::{CullModeFlags, PolygonMode};
-use gpu_types::{ImageUsage, vk};
+use gpu_types::{ImageUsage, vk, RasterizationState};
 use log::{debug, warn};
 use std::borrow::Cow;
 use std::ops::Deref;
@@ -40,7 +40,6 @@ pub struct ShaderArchiveRoot {
     /// The manifest that was used to generate this archive.
     pub manifest: FileDependency,
     pub modules: Offset<[Module]>,
-    pub images: Offset<[ImageResourceDesc]>,
 }
 
 #[repr(C)]
@@ -220,9 +219,9 @@ pub struct GraphicsPipeline {
     /// Rasterization data.
     pub rasterization: RasterizationState,
     /// Depth/stencil data.
-    pub depth_stencil: DepthStencilState,
+    pub depth_stencil: Option<gpu_types::DepthStencilState>,
     /// Color targets
-    pub color_targets: Offset<[Offset<ColorTarget>]>,
+    pub color_targets: Offset<[Offset<gpu_types::ColorTargetState>]>,
     pub color_attachments: Offset<[ColorAttachment]>,
     pub depth_stencil_attachment: Option<DepthStencilAttachment>,
     pub shaders: Offset<[Shader]>,
@@ -237,13 +236,7 @@ pub struct ComputePipeline {
     pub workgroup_size: [u32; 3],
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Default)]
-pub struct RasterizationState {
-    pub polygon_mode: PolygonMode,
-    pub cull_mode: CullModeFlags,
-}
-
+/*
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct DepthStencilState {
@@ -251,8 +244,9 @@ pub struct DepthStencilState {
     pub format: vk::Format,
     pub depth_compare_op: vk::CompareOp,
     pub depth_write_enable: bool,
-}
+}*/
 
+/*
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct ColorBlendEquation {
@@ -262,14 +256,15 @@ pub struct ColorBlendEquation {
     pub src_alpha_blend_factor: vk::BlendFactor,
     pub dst_alpha_blend_factor: vk::BlendFactor,
     pub alpha_blend_op: vk::BlendOp,
-}
+}*/
 
+/*
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct ColorTarget {
     pub format: vk::Format,
     pub blend: Option<ColorBlendEquation>,
-}
+}*/
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -440,6 +435,7 @@ impl Deref for ShaderArchive {
 mod tests {
     use super::*;
     use std::fs;
+    use gpu_types::{ColorBlendEquation, ColorTargetState};
     use utils::archive::ArchiveWriter;
     use utils::zstring::ZString64;
 
@@ -449,9 +445,9 @@ mod tests {
         // start with the header since it contains the signature
 
         let color_targets = {
-            let color_targets = &[writer.write(&ColorTarget {
+            let color_targets = &[writer.write(&ColorTargetState {
                 format: vk::Format::R8G8B8A8_UNORM,
-                blend: Some(ColorBlendEquation {
+                blend_equation: Some(ColorBlendEquation {
                     src_color_blend_factor: vk::BlendFactor::SRC_ALPHA,
                     dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
                     color_blend_op: vk::BlendOp::ADD,
@@ -459,6 +455,7 @@ mod tests {
                     dst_alpha_blend_factor: vk::BlendFactor::ZERO,
                     alpha_blend_op: vk::BlendOp::ADD,
                 }),
+                ..
             })];
             writer.write_slice(color_targets)
         };
@@ -472,13 +469,16 @@ mod tests {
                     rasterization: RasterizationState {
                         polygon_mode: PolygonMode::FILL,
                         cull_mode: CullModeFlags::BACK,
+                        front_face: Default::default(),
+                        depth_clamp_enable: false,
+                        conservative_rasterization_mode: Default::default(),
                     },
-                    depth_stencil: DepthStencilState {
+                    depth_stencil: Some(gpu_types::DepthStencilState {
                         format: vk::Format::D32_SFLOAT,
                         depth_compare_op: vk::CompareOp::ALWAYS,
-                        enable: true,
                         depth_write_enable: true,
-                    },
+                        stencil_state: Default::default(),
+                    }),
                     color_targets,
                     color_attachments: Offset::INVALID,
                     depth_stencil_attachment: None,
@@ -491,7 +491,6 @@ mod tests {
         writer.write_root(&ShaderArchiveRoot {
             manifest: FileDependency { path: Offset::INVALID, mtime: 0 },
             modules: Offset::INVALID,
-            images: Offset::INVALID,
         });
 
         // dump to disk

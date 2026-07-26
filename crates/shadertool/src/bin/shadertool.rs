@@ -34,6 +34,9 @@ struct BuildArgs {
     /// Emit shader debug information.
     #[arg(short, long)]
     debug: bool,
+    /// Emit rust reflection source code alongside the archive.
+    #[arg(long, short = 'r')]
+    emit_reflection: bool,
     /// Dump SPIR-V binaries to disk alongside the archive.
     #[arg(long)]
     dump_spirv: bool,
@@ -76,6 +79,7 @@ fn cmd_build(args: BuildArgs) {
         emit_cargo_deps: args.emit_cargo_deps,
         emit_debug_information: args.debug,
         emit_spirv_binaries: args.dump_spirv,
+        emit_reflection: args.emit_reflection,
         include_paths: args.include,
         output_directory: None,
     };

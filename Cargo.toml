@@ -15,7 +15,7 @@ members = [
     "crates/terrain-file",    # Terrain file format and related functions
     "crates/geom",            # Common geometry types and definition of various geometry file formats
     "crates/hgeo",            # Reads houdini JSON-based .geo/.bgeo files
-    "crates/hot-reload-test", "crates/dummytool", "planitia-workspace-hack",
+    "crates/hot-reload-test", "crates/dummytool", "planitia-workspace-hack", "crates/experiment-host", "crates/experiment-host-lib",
 ]
 resolver = "1"
 
@@ -34,6 +34,7 @@ geomtool = { path = "crates/geomtool" }
 terrain-file = { path = "crates/terrain-file" }
 geom = { path = "crates/geom" }
 hgeo = { path = "crates/hgeo" }
+experiment-host-lib = { path = "crates/experiment-host-lib" }
 
 [profile.release]
 debug = true

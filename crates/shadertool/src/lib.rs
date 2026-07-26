@@ -1,6 +1,7 @@
 #![feature(default_field_values)]
 mod build;
 //mod dump;
+mod archive_writer;
 mod dump2;
 mod header;
 mod manifest;
@@ -11,13 +12,16 @@ use color_print::{ceprintln, cprintln};
 use log::warn;
 pub use manifest::*;
 use scoped_tls::scoped_thread_local;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
+use std::{fs, io};
 use thiserror::Error;
 
+use crate::archive_writer::build_and_write_archive;
+use crate::build::{compile_slang_module, create_slang_session};
+use crate::reflection::Param;
 pub use dump2::dump_archive_file;
-
+use sharc::gpu_types::vk;
 //--------------------------------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
@@ -31,21 +35,87 @@ pub struct LogOptions {
 scoped_thread_local!(pub(crate) static LOG_OPTIONS: LogOptions);
 
 pub(crate) fn get_log_options() -> LogOptions {
-    LOG_OPTIONS.with(|options| options.clone())
+    if LOG_OPTIONS.is_set() {
+        LOG_OPTIONS.with(|options| options.clone())
+    } else {
+        LogOptions { quiet: true, verbosity: 0 }
+    }
 }
 
-/*macro_rules! cprintln_level {
-    ($level:literal, $fmt:literal) => {
-        if get_log_options().verbosity >= $level {
-            cprintln!($fmt);
+/// Generic error type wrapper.
+#[derive(Error, Debug)]
+#[error(transparent)]
+pub enum Error {
+    /// Errors from the slang compiler.
+    #[error("{0}")]
+    CompilerErrors(String),
+    /// Other errors.
+    Other(#[from] anyhow::Error),
+}
+
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Self {
+        Error::Other(anyhow!(err))
+    }
+}
+
+impl Error {
+    pub fn print_cargo_error(&self) {
+        let fmt = format!("{:#}", self);
+        for line in fmt.lines() {
+            println!("cargo::error={line}");
         }
-    };
-    ($level:literal, $fmt:literal, $($arg:tt)*) => {
-        if get_log_options().verbosity >= $level {
-            cprintln!($fmt, $($arg)*);
-        }
-    };
-}*/
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+
+pub type EntryPointIndex = usize;
+
+/// Represents a shader pipeline.
+pub struct Pipeline {
+    pub name: String,
+    /// Indices in [`Module::entry_points`].
+    pub stages: Vec<EntryPointIndex>,
+    pub graphics_state: GraphicsState,
+    pub workgroup_size: [u32; 3],
+    pub push_constants_size: usize,
+}
+
+#[derive(Clone, Debug)]
+pub struct ModuleDependency {
+    pub path: PathBuf,
+    pub mtime: u64
+}
+
+/// A compiled Slang shader module with all its entry points.
+pub struct Module {
+    // Keep the session alive for the lifetime of the module.
+    _session: slang::Session,
+    pub name: String,
+    pub module: slang::Module,
+    pub program: slang::ComponentType,
+    pub file_path: PathBuf,
+    pub file_mtime: u64,
+    pub spirv: Vec<u32>,
+    //pub reflection: Vec<Param>,
+    pub entry_points: Vec<EntryPoint>,
+    pub pipelines: Vec<Pipeline>,
+    /// List of all slang module dependencies (including transitive dependencies).
+    pub dependencies: Vec<ModuleDependency>,
+}
+
+/// A single shader entry point extracted from a [`Module`].
+pub struct EntryPoint {
+    pub name: String,
+    //pub params: Vec<Param>,
+    /// The pipeline that this entry point belongs to, either from a `[pipeline("...")]` attribute or inferred
+    /// from the entry point name by stripping the stage suffix.
+    pub pipeline_name: Option<String>,
+    pub stage: vk::ShaderStageFlags,
+    pub push_constants_size: usize,
+    pub workgroup_size: [u32; 3],
+}
 
 //--------------------------------------------------------------------------------------------------
 
@@ -55,24 +125,12 @@ pub struct BuildOptions {
     pub emit_cargo_deps: bool,
     /// Emit shader debug information.
     pub emit_debug_information: bool,
-    /// Dumps SPIR-V binaries to disk alongside the archive.
+    /// Dumps SPIR-V binaries to disk.
     pub emit_spirv_binaries: bool,
+    pub emit_reflection: bool,
     pub include_paths: Vec<PathBuf>,
     /// Output directory
     pub output_directory: Option<PathBuf> = None,
-}
-
-#[derive(Error, Debug)]
-#[error(transparent)]
-pub struct Error(#[from] anyhow::Error);
-
-impl Error {
-    pub fn print_cargo_error(&self) {
-        let fmt = format!("{:#}", self.0);
-        for line in fmt.lines() {
-            println!("cargo::error={line}");
-        }
-    }
 }
 
 static KNOWN_METADATA: &[&str] = &["Manifest"];
@@ -90,6 +148,12 @@ fn check_metadata(metadata: &std::collections::BTreeMap<String, String>) -> Resu
 ///
 /// The function first looks for a `Manifest` metadata header in the shader source. If found, it uses the specified path to load the manifest.
 /// Otherwise, it looks for a manifest file with the same name as the shader file but with a `.toml` extension in the same directory.
+///
+/// # Return value
+///
+/// If no manifest file is found, an empty manifest is returned (this is not an error condition).
+/// This function returns an error if the manifest file is specified but does not exist,
+/// or if the manifest is malformed or cannot be loaded for any other reason.
 fn load_manifest_for_source(shader_file_path: &Path, shader_source: &str) -> Result<BuildManifest, Error> {
     if get_log_options().verbosity >= 2 {
         ceprintln!("parsing metadata header: {}", shader_file_path.display());
@@ -199,7 +263,7 @@ fn build_inner(glob_patterns: &[&str], options: &BuildOptions) -> Result<(), Err
             }
         };
 
-        if let Err(err) = manifest.build(&file, &source, options) {
+        if let Err(err) = build_and_write_archive(&file, &source, &manifest, options) {
             ceprintln!("<r,bold>error</>: failed to build from manifest for source file {}: {}", file.display(), err);
             has_errors = true;
             continue;
@@ -225,4 +289,14 @@ fn get_file_mtime(path: &Path) -> anyhow::Result<(PathBuf, u64)> {
         }
     };
     Ok((canonical_path, mtime))
+}
+
+//--------------------------------------------------------------------------------------------------
+
+pub fn compile<P: AsRef<Path>>(file: P, options: &BuildOptions) -> Result<Module, Error> {
+    let file = file.as_ref();
+    let source = fs::read_to_string(&file)?;
+    let manifest = load_manifest_for_source(&file, &source)?;
+    let compiler_session = create_slang_session(&options.include_paths, &manifest, options)?;
+    compile_slang_module(&compiler_session, file, &source, &manifest, options)
 }

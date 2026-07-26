@@ -8,7 +8,7 @@ public static const float FRAC_PI_4 = 0.785398163397448309615660845819875721;
 
 // Marks a shader as belonging to the specified pipeline.
 [__AttributeUsage(_AttributeTargets.Function)]
-struct passAttribute
+struct pipelineAttribute
 {
     string pass;
 }

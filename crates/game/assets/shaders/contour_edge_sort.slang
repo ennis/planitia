@@ -29,7 +29,7 @@ struct SortContourEdgesRootParams {
 }
 
 [shader("compute")]
-[pass("sort_contour_edges")]
+[pipeline("sort_contour_edges")]
 [numthreads(32, 1, 1)]
 void sort_contour_edges(
     SortContourEdgesRootParams root_params,

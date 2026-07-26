@@ -3,9 +3,6 @@ name = "math"
 version = "0.1.0"
 edition = "2021"
 
-[lib]
-crate-type = ["dylib"]
-
 [dependencies]
 glam = "0.30.5"
 # [Claude Sonnet 4.6] "alloc" and "rc" are explicitly requested here to match the feature set that the full build graph
@@ -20,5 +17,5 @@ serde = { version = "1", features = ["derive", "alloc", "rc"], optional = true }
 planitia-workspace-hack = { version = "0.1", path = "../../planitia-workspace-hack" }
 
 [features]
-default = ["serialization"]
-serialization = ["serde", "glam/serde"]
+default = ["serde"]
+serde = ["dep:serde", "glam/serde"]

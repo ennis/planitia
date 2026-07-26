@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 log = "0.4.28"
-#shader-bridge = { workspace = true }
 sharc = { workspace = true }
 toml = "0.9.8"
 glob = "0.3.3"
@@ -14,10 +13,12 @@ anyhow = "1.0.100"
 color-print = "0.3.7"
 chrono = "0.4"
 clap = { version = "4.5.50", features = ["derive"], optional = true }
-slang = { package = "shader-slang", git = "https://github.com/ennis/slang-rs.git", rev = "a7e6a2726c63482c77870e31caa06a47e6043585" }
+slang = { package = "shader-slang", git = "https://github.com/ennis/slang-rs.git", rev = "9959806aeaeed017ab7f9443eafc6149ecfeac28" }
 env_logger = "0.11"
 scoped-tls = "1.0.1"
 planitia-workspace-hack = { version = "0.1", path = "../../planitia-workspace-hack" }
+quote = "1.0.47"
+proc-macro2 = "1"
 
 [features]
 binary = ["clap"]

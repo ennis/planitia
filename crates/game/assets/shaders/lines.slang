@@ -28,7 +28,7 @@ struct DrawLinesRootParams {
 };
 
 [shader("vertex")]
-[pass("draw_lines")]
+[pipeline("draw_lines")]
 VSOut draw_lines_vertex(uint vertex_id : SV_VertexID, uint draw_index : SV_DrawIndex, uniform DrawLinesRootParams* u)
 {
     Line l = u.lines[draw_index];
@@ -98,7 +98,7 @@ struct FSOut
 
 
 [shader("fragment")]
-[pass("draw_lines")]
+[pipeline("draw_lines")]
 FSOut draw_lines_fragment(VSOut v, uniform DrawLinesRootParams* u) {
     FSOut o;
     // clamped width

@@ -1,3 +1,5 @@
+//! Game and application support library.
+
 #![expect(unused, reason = "noisy")]
 #![feature(default_field_values)]
 #![allow(unsafe_op_in_unsafe_fn, reason = "too verbose, and my IDE already highlights unsafe call sites")]
@@ -33,7 +35,7 @@ pub use app::{
 pub use event::UserEvent;
 pub use input::InputEvent;
 pub use platform::{WindowHandle, wake_event_loop};
-pub use plugin_host::{PluginEvent, PluginResult, PluginState, register_plugin, reload_plugins};
+pub use plugin_host::{PluginEvent, PluginResult, PluginState, register_plugin, reload_plugins, PluginInterface, PluginCtx};
 pub use window::{WindowCreateInfo, WindowInputState, create_window};
 
 //--- reexports ---

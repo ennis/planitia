@@ -120,6 +120,7 @@ pub(crate) fn load_shader_archive(path: impl AsRef<VfsPath>) -> Handle<ShaderArc
                         emit_cargo_deps: false,
                         emit_debug_information: module.debug_info,
                         emit_spirv_binaries: true,
+                        emit_reflection: false,
                         include_paths: module_include_paths,
                         output_directory,
                     },

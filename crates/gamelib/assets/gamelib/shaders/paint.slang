@@ -11,7 +11,7 @@ struct GradientIntegralSegment {
     float4 c;
     float t_min;
     float t_max;
-    float padding[2];
+    uint2 padding;
 };
 
 enum GradientExtendMode : uint8_t {

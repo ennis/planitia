@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use color_print::{cprint, cprintln, cwrite};
 use sharc::archive::Offset;
-use sharc::gpu_types::vk;
+use sharc::gpu_types::{vk, RasterizationState, DepthStencilState, ColorTargetState};
 use sharc::reflection::{ParamLocation, Signature};
 use std::path::Path;
 
@@ -114,9 +114,9 @@ impl<'a> Printer<'a> {
         }
     }
 
-    fn print_color_target(&mut self, index: usize, target: &sharc::ColorTarget) {
+    fn print_color_target(&mut self, index: usize, target: &ColorTargetState) {
         let format = target.format;
-        if let Some(blend) = target.blend {
+        if let Some(blend) = target.blend_equation {
             let src_color = blend.src_color_blend_factor;
             let dst_color = blend.dst_color_blend_factor;
             let color_op = blend.color_blend_op;
@@ -132,7 +132,7 @@ impl<'a> Printer<'a> {
         }
     }
 
-    fn print_color_targets(&mut self, targets: &[Offset<sharc::ColorTarget>]) {
+    fn print_color_targets(&mut self, targets: &[Offset<ColorTargetState>]) {
         cprintln!("{}<bold>Color Targets</>: {}", Indent(self.indent), targets.len());
         self.indent();
         for (index, target) in targets.iter().enumerate() {
@@ -157,7 +157,7 @@ impl<'a> Printer<'a> {
         cprintln!();
     }
 
-    fn print_rasterization_state(&mut self, rs: &sharc::RasterizationState) {
+    fn print_rasterization_state(&mut self, rs: &RasterizationState) {
         cprint!("{}<bold>Rasterization</>:  ", Indent(self.indent));
         let cull_mode = match rs.cull_mode {
             vk::CullModeFlags::FRONT => "FRONT",
@@ -169,15 +169,23 @@ impl<'a> Printer<'a> {
         cprintln!("Cull Mode:<cyan>{}</>  Polygon Mode:<cyan>{:?}</>", cull_mode, rs.polygon_mode);
     }
 
-    fn print_depth_stencil_state(&mut self, ds: &sharc::DepthStencilState) {
-        cprintln!(
-            "{}<bold>Depth/Stencil</>:  <cyan>{:?}</>   Depth Test:{}  Compare:<cyan>{:?}</>  Depth Write:{}",
-            Indent(self.indent),
-            ds.format,
-            OnOff(ds.enable),
-            ds.depth_compare_op,
-            OnOff(ds.depth_write_enable),
-        );
+    fn print_depth_stencil_state(&mut self, ds: &Option<DepthStencilState>) {
+        if let Some(ds) = ds {
+            cprintln!(
+                "{}<bold>Depth/Stencil</>:  <cyan>{:?}</>   Depth Test:{}  Compare:<cyan>{:?}</>  Depth Write:{}",
+                Indent(self.indent),
+                ds.format,
+                OnOff(true),
+                ds.depth_compare_op,
+                OnOff(ds.depth_write_enable),
+            );
+        } else {
+            cprintln!(
+                "{}<bold>Depth/Stencil</>: {} ",
+                Indent(self.indent),
+                OnOff(false),
+            );
+        }
     }
 
     fn print_push_constants(&mut self, push_constants_size: u16) {

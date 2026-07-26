@@ -97,7 +97,7 @@ float compute_curvature(float2 p_a, float2 p_b, float2 p_c)
 }
 
 [shader("compute")]
-[pass("expand_strokes")]
+[pipeline("expand_strokes")]
 [numthreads(MAX_STROKE_VERTICES, 1, 1)]
 void expand_strokes_main(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_GroupThreadID, uniform ExpandStrokesPushConstants u)
 {
@@ -289,7 +289,7 @@ struct SweepPushConstants {
 };
 
 [shader("compute")]
-[pass("sweep_stroke")]
+[pipeline("sweep_stroke")]
 [numthreads(MAX_STROKE_VERTICES, 1, 1)]
 void sweep_stroke_main(uint3 group_id : SV_GroupID, uint3 group_thread_id: SV_GroupThreadID, uniform SweepPushConstants* u)
 {

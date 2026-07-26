@@ -6,6 +6,7 @@ use std::f32::consts::PI;
 use std::f64::consts::TAU;
 
 #[derive(Copy, Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize)]
 struct CameraFrame {
     eye: DVec3,
     up: DVec3,
@@ -14,6 +15,7 @@ struct CameraFrame {
 
 /// Camera movement mode.
 #[derive(Copy, Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize)]
 enum Mode {
     None,
     /// Panning motion
@@ -31,6 +33,7 @@ enum Mode {
 
 /// Camera controller state.
 #[derive(Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct CameraControl {
     fov_y_radians: f64,
     z_near: f64,

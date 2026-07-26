@@ -11,6 +11,7 @@ use syn::spanned::Spanned;
 //mod arguments;
 mod attachments;
 mod vertex;
+mod shader_module;
 
 //--------------------------------------------------------------------------------------------------
 struct CrateName;
@@ -31,22 +32,26 @@ fn expect_struct_fields<'a>(input: &'a syn::DeriveInput, derive_name: &str) -> s
 
 //--------------------------------------------------------------------------------------------------
 
-fn try_derive(
-    input: proc_macro::TokenStream,
-    f: fn(proc_macro::TokenStream) -> syn::Result<TokenStream>,
-) -> proc_macro::TokenStream {
-    match f(input) {
+#[proc_macro_derive(Vertex, attributes(normalized))]
+pub fn vertex_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    match vertex::derive_vertex(input) {
         Ok(tokens) => tokens.into(),
         Err(e) => e.into_compile_error().into(),
     }
 }
 
-#[proc_macro_derive(Vertex, attributes(normalized))]
-pub fn vertex_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    try_derive(input, vertex::derive_vertex)
-}
-
 #[proc_macro_derive(Attachments, attributes(attachment))]
 pub fn attachments_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    try_derive(input, attachments::derive_attachments)
+    match attachments::derive_attachments(input) {
+        Ok(tokens) => tokens.into(),
+        Err(e) => e.into_compile_error().into(),
+    }
+}
+
+#[proc_macro_attribute]
+pub fn shader_module(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    match shader_module::shader_module_impl(attr, item) {
+        Ok(tokens) => tokens.into(),
+        Err(e) => e.into_compile_error().into(),
+    }
 }

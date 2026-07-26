@@ -31,6 +31,7 @@ pub use swapchain::*;
 
 // proc-macros
 pub use gpu_macros::Vertex;
+pub use gpu_macros::shader_module;
 
 pub mod prelude {
     pub use crate::{
@@ -424,32 +425,6 @@ impl DepthStencilAttachment<'_> {
     }
 }
 
-/*
-////////////////////////////////////////////////////////////////////////////////////////////////////
-#[derive(Clone, Debug)]
-pub struct VertexBufferDescriptor<'a> {
-    pub binding: u32,
-    pub buffer_range: BufferRangeUntyped<'a>,
-    pub stride: u32,
-}
-
-pub trait VertexInput {
-    /// Vertex buffer bindings
-    fn buffer_layout(&self) -> Cow<'_, [VertexBufferLayoutDescription]>;
-
-    /// Vertex attributes.
-    fn attributes(&self) -> Cow<'_, [VertexInputAttributeDescription]>;
-
-    /// Returns an iterator over the vertex buffers referenced in this object.
-    fn vertex_buffers(&self) -> impl Iterator<Item = VertexBufferDescriptor<'_>>;
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct VertexBufferView<T: Vertex> {
-    pub buffer: vk::Buffer,
-    pub offset: vk::DeviceSize,
-    pub _phantom: PhantomData<*const T>,
-}*/
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -482,24 +457,24 @@ pub enum PreRasterizationShaders<'a> {
 #[derive(Copy, Clone, Debug)]
 pub struct GraphicsPipelineCreateInfo<'a> {
     /// If left empty, use the universal descriptor set layout.
-    pub set_layouts: &'a [DescriptorSetLayout],
+    pub set_layouts: &'a [DescriptorSetLayout] = &[],
     // None of the relevant drivers on desktop seem to care about precise push constant ranges,
     // so we just store the total size of push constants.
     // FIXME: this is redundant with the information in ShaderDescriptors
-    pub push_constants_size: usize,
-    pub vertex_input: VertexInputState<'a>,
+    pub push_constants_size: usize = 0,
+    pub vertex_input: VertexInputState<'a> = VertexInputState { .. },
     pub pre_rasterization_shaders: PreRasterizationShaders<'a>,
     pub rasterization: RasterizationState,
-    pub depth_stencil: Option<DepthStencilState>,
+    pub depth_stencil: Option<DepthStencilState> = None,
     pub fragment: FragmentState<'a>,
 }
 
 #[derive(Copy, Clone, Debug)]
 pub struct ComputePipelineCreateInfo<'a> {
     /// If left empty, use the universal descriptor set layout.
-    pub set_layouts: &'a [DescriptorSetLayout],
+    pub set_layouts: &'a [DescriptorSetLayout] = &[],
     /// FIXME: this is redundant with the information in `compute_shader`
-    pub push_constants_size: usize,
+    pub push_constants_size: usize = 0,
     /// Compute shader.
     pub shader: ShaderEntryPoint<'a>,
 }
@@ -532,4 +507,28 @@ pub const fn append_attributes<const N: usize>(
     }
 
     result
+}
+
+// Implementation detail of shader_module
+#[doc(hidden)]
+#[macro_export]
+macro_rules! include_bytes_as_u32 {
+    // https://docs.rs/resb/latest/src/resb/binary.rs.html#25-44
+    ($path:literal) => {
+        const {
+            #[repr(align(4))]
+            pub struct AlignedAs<Bytes: ?Sized> {
+                pub bytes: Bytes,
+            }
+
+            const B: &[u8] = &AlignedAs {
+                bytes: *include_bytes!($path),
+            }.bytes;
+            // SAFETY: B is statically borrowed, 4-aligned, and the length is within
+            // the static slice (truncated to a multiple of four).
+            unsafe {
+                core::slice::from_raw_parts(B.as_ptr() as *const u32, B.len() / size_of::<u32>())
+            }
+        }
+    };
 }

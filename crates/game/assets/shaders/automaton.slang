@@ -73,7 +73,7 @@ struct BaseRenderFSOut {
 
 
 [shader("vertex")]
-[pass("automaton_base_render")]
+[pipeline("automaton_base_render")]
 BaseRenderVSOut base_render_vertex(uint vertex_id : SV_VertexID, uint draw_id: SV_DrawIndex, uniform RootParams* u)
 {
     BaseRenderVSOut o;
@@ -88,7 +88,7 @@ BaseRenderVSOut base_render_vertex(uint vertex_id : SV_VertexID, uint draw_id: S
 }
 
 [shader("fragment")]
-[pass("automaton_base_render")]
+[pipeline("automaton_base_render")]
 BaseRenderFSOut base_render_fragment(BaseRenderVSOut i, uniform RootParams* u) {
     BaseRenderFSOut o;
     float3 normal = normalize(i.normal);
@@ -109,14 +109,14 @@ BaseRenderFSOut base_render_fragment(BaseRenderVSOut i, uniform RootParams* u) {
 // Contour detection
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-[pass("contour_detection")]
+[pipeline("contour_detection")]
 [shader("vertex")]
 ScreenQuadVSOut contour_detection_vertex_shader(uint vertex_id : SV_VertexID)
 {
     return screen_quad_vertex_shader(vertex_id);
 }
 
-[pass("contour_detection")]
+[pipeline("contour_detection")]
 [shader("fragment")]
 float4 contour_detection_fragment_shader(
     float3 frag_coord: SV_Position,
@@ -150,7 +150,7 @@ float4 contour_detection_fragment_shader(
 // Debug
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-[pass("automaton_debug")]
+[pipeline("automaton_debug")]
 [shader("vertex")]
 ScreenQuadVSOut automaton_debug_vertex_shader(uint vertex_id : SV_VertexID)
 {
@@ -161,7 +161,7 @@ struct DebugFSOut {
     [[vk::location(0)]] float4 color;
 }
 
-[pass("automaton_debug")]
+[pipeline("automaton_debug")]
 [shader("fragment")]
 float4 automaton_debug_fragment_shader(
     float3 frag_coord: SV_Position,
@@ -215,7 +215,7 @@ float4 automaton_debug_fragment_shader(
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-[pass("sim_init_emitters")]
+[pipeline("sim_init_emitters")]
 [shader("compute")]
 [NumThreads(64, 1, 1)]
 void sim_init_emitters(uint3 dispatch_id : SV_DispatchThreadID, uniform RootParams* p) {
@@ -228,7 +228,7 @@ void sim_init_emitters(uint3 dispatch_id : SV_DispatchThreadID, uniform RootPara
     }
 }
 
-[pass("sim_init_trails")]
+[pipeline("sim_init_trails")]
 [shader("compute")]
 [NumThreads(16, 16, 1)]
 void sim_init_trails(uint3 dispatch_id : SV_DispatchThreadID, uniform RootParams* params) {
@@ -248,7 +248,7 @@ void sim_init_trails(uint3 dispatch_id : SV_DispatchThreadID, uniform RootParams
 }
 
 
-[pass("sim_step_emitters")]
+[pipeline("sim_step_emitters")]
 [shader("compute")]
 [NumThreads(64, 1, 1)]
 void sim_step_emitters(uint3 dispatch_id : SV_DispatchThreadID, uniform RootParams* params) {
@@ -257,7 +257,7 @@ void sim_step_emitters(uint3 dispatch_id : SV_DispatchThreadID, uniform RootPara
 
 }
 
-[pass("sim_step_trails")]
+[pipeline("sim_step_trails")]
 [shader("compute")]
 [NumThreads(16, 16, 1)]
 void sim_step_trails(uint3 dispatch_id : SV_DispatchThreadID, uniform RootParams* params) {
@@ -299,7 +299,7 @@ void sim_step_trails(uint3 dispatch_id : SV_DispatchThreadID, uniform RootParams
     output.Store(coords, float4(lerp(maxv, avg, 0.1), 0, 0, 0));
 }
 
-[pass("sim_step_next")]
+[pipeline("sim_step_next")]
 [shader("compute")]
 [NumThreads(1, 1, 1)]
 void sim_step_next(uint3 dispatch_id : SV_DispatchThreadID, uniform RootParams* params) {
@@ -308,7 +308,7 @@ void sim_step_next(uint3 dispatch_id : SV_DispatchThreadID, uniform RootParams* 
     }
 }
 
-[pass("sim_render")]
+[pipeline("sim_render")]
 [shader("vertex")]
 ScreenQuadVSOut sim_render_vertex_main(uint vertex_id : SV_VertexID, uniform RootParams* params) {
     return screen_quad_vertex_shader(vertex_id);
@@ -318,7 +318,7 @@ struct SimRenderFSOut {
     [[vk::location(0)]] float4 color;
 };
 
-[pass("sim_render")]
+[pipeline("sim_render")]
 [shader("fragment")]
 SimRenderFSOut sim_render_fragment_main(float3 frag_coord: SV_Position, ScreenQuadVSOut vertex_output, uniform RootParams* params) {
     SimRenderFSOut o;

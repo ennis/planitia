@@ -1,24 +1,20 @@
-/*enum EntityData {
-    SceneObject,
-    Task,
-    Variable,
-    Shader,
-    Event,
-}*/
-
-//! Constraints on entity data:
-//! - must be copyable, relocatable plain-old-data (POD) types
-//! - must not contain any references or pointers to other data (IDs are fine)
-//! - must not have any destructors
-//! - ideally should not have any indeterminate padding bytes, so that hashing is consistent
-//!
-//! This allows us to trivially copy/clone and serialize entities by memory copy.
-
 use slotmap::{SlotMap, new_key_type};
 use std::cell::{RefCell, RefMut};
 
-const ENTITY_DATA_ALIGNMENT: usize = 16;
+pub struct Scene {
+    geometry: hgeo::Geo,
+}
 
+
+/*
+// Constraints on entity data:
+// - must be copyable, relocatable plain-old-data (POD) types
+// - must not contain any references or pointers to other data (IDs are fine)
+// - must not have any destructors
+// - ideally should not have any indeterminate padding bytes, so that hashing is consistent
+//
+// This allows us to trivially copy/clone and serialize entities by memory copy.
+const ENTITY_DATA_ALIGNMENT: usize = 16;
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Entity {
     parent: Option<ID>,
@@ -97,3 +93,4 @@ impl<'a> Batch<'a> {
         // TODO
     }
 }
+*/

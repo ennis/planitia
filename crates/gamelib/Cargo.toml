@@ -8,7 +8,7 @@ crate-type = ["dylib"]
 
 [dependencies]
 gpu = { workspace = true }
-math = { workspace = true }
+math = { workspace = true, features = ["serde"] }
 color = { workspace = true }
 utils = { workspace = true }
 shadertool = { workspace = true, optional = true }
@@ -32,6 +32,7 @@ sharc = { workspace = true }
 ab_glyph = "0.2.31"
 anyhow = "1.0.100"
 tempfile = "3.27.0"
+hgeo = { workspace = true }
 
 notify-debouncer-mini = "0.7.0"
 libloading = "0.9.0"

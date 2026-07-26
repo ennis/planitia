@@ -1,10 +1,9 @@
 use crate::get_file_mtime;
-use crate::manifest::Error::{InvalidType, MissingField};
+use crate::manifest::ManifestError::{InvalidType, MissingField};
 use anyhow::{Context, anyhow};
 use log::error;
-use sharc::ColorBlendEquation;
-use sharc::gpu_types::vk;
 use sharc::gpu_types::vk::PolygonMode;
+use sharc::gpu_types::{ColorBlendEquation, ColorTargetState, DepthStencilState, RasterizationState, vk};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use toml::Value as TomlValue;
@@ -15,7 +14,7 @@ pub const MAX_COLOR_TARGETS: usize = 8;
 pub const DEFAULT_SHADER_PROFILE: &str = "glsl_460";
 
 #[derive(thiserror::Error, Debug)]
-pub enum Error {
+pub enum ManifestError {
     #[error("missing field: {0}")]
     MissingField(&'static str),
     #[error("invalid type for field {0}, expected {1}")]
@@ -49,10 +48,10 @@ fn validate_keys(toml_value: &TomlValue, mandatory: &[&str], optional: &[&str]) 
             }
         }
 
-        if has_errors { Err(Error::InvalidField.into()) } else { Ok(()) }
+        if has_errors { Err(ManifestError::InvalidField.into()) } else { Ok(()) }
     } else {
         error!("expected a table");
-        Err(Error::Other("expected a table").into())
+        Err(ManifestError::Other("expected a table").into())
     }
 }
 
@@ -289,7 +288,7 @@ impl BuildManifest {
                 .unwrap_or(&vec![])
                 .iter()
                 .map(|v| v.as_str().ok_or(InvalidType("include_paths", "array of strings")).map(|s| s.to_string()))
-                .collect::<Result<Vec<String>, Error>>()?,
+                .collect::<Result<Vec<String>, ManifestError>>()?,
         );
 
         // default graphics state
@@ -342,7 +341,7 @@ impl Default for CompilerOptions {
 }
 
 impl CompilerOptions {
-    fn load_from_toml(&mut self, toml: &TomlValue) -> Result<(), Error> {
+    fn load_from_toml(&mut self, toml: &TomlValue) -> Result<(), ManifestError> {
         if let Some(defines_array) = toml.get_optional_array("defines")? {
             for define_value in defines_array {
                 let define_str = define_value.as_str().ok_or(InvalidType("defines", "array of strings"))?;
@@ -376,18 +375,14 @@ impl CompilerOptions {
 /// Graphics state configuration for a graphics pipeline.
 #[derive(Clone)]
 pub struct GraphicsState {
-    pub rasterizer: sharc::RasterizationState,
-    pub depth_stencil: sharc::DepthStencilState,
-    pub color_targets: Vec<sharc::ColorTarget>,
+    pub rasterizer: RasterizationState,
+    pub depth_stencil: Option<DepthStencilState>,
+    pub color_targets: Vec<ColorTargetState>,
 }
 
 impl Default for GraphicsState {
     fn default() -> Self {
-        Self {
-            rasterizer: sharc::RasterizationState::default(),
-            depth_stencil: sharc::DepthStencilState::default(),
-            color_targets: vec![],
-        }
+        Self { rasterizer: RasterizationState::default(), depth_stencil: None, color_targets: vec![] }
     }
 }
 
@@ -430,13 +425,13 @@ trait TomlExt {
     ///
     /// Returns `Ok(None)` if the field is not present.
     /// Returns `Err(Error::InvalidType)` if the field is present but not a string.
-    fn get_optional_str(&self, field: &'static str) -> Result<Option<&str>, Error>;
+    fn get_optional_str(&self, field: &'static str) -> Result<Option<&str>, ManifestError>;
 
     /// Retrieves an optional string field from a TOML value as an owned string.
     ///
     /// Returns `Ok(None)` if the field is not present.
     /// Returns `Err(Error::InvalidType)` if the field is present but not a string.
-    fn get_optional_string(&self, field: &'static str) -> Result<Option<String>, Error> {
+    fn get_optional_string(&self, field: &'static str) -> Result<Option<String>, ManifestError> {
         match self.get_optional_str(field)? {
             Some(s) => Ok(Some(s.to_string())),
             None => Ok(None),
@@ -447,33 +442,33 @@ trait TomlExt {
     ///
     /// Returns `Ok(None)` if the field is not present.
     /// Returns `Err(Error::InvalidType)` if the field is present but neither a string nor an array of strings.
-    fn get_optional_str_or_array(&self, field: &'static str) -> Result<Option<Vec<&str>>, Error>;
+    fn get_optional_str_or_array(&self, field: &'static str) -> Result<Option<Vec<&str>>, ManifestError>;
 
     /// Retrieves an optional boolean field from a TOML value.
     ///
     /// Returns `Ok(None)` if the field is not present.
     /// Returns `Err(Error::InvalidType)` if the field is present but not a boolean
-    fn get_optional_bool(&self, field: &'static str) -> Result<Option<bool>, Error>;
-    fn get_optional_integer(&self, field: &'static str) -> Result<Option<i64>, Error>;
-    fn get_optional_float(&self, field: &'static str) -> Result<Option<f64>, Error>;
+    fn get_optional_bool(&self, field: &'static str) -> Result<Option<bool>, ManifestError>;
+    fn get_optional_integer(&self, field: &'static str) -> Result<Option<i64>, ManifestError>;
+    fn get_optional_float(&self, field: &'static str) -> Result<Option<f64>, ManifestError>;
     /// Retrieves an optional table field from a TOML value.
     ///
     /// Returns `Ok(None)` if the field is not present.
     /// Returns `Err(Error::InvalidType)` if the field is present but not a table
-    fn get_optional_table(&self, field: &'static str) -> Result<Option<&TomlValue>, Error>;
+    fn get_optional_table(&self, field: &'static str) -> Result<Option<&TomlValue>, ManifestError>;
     /// Retrieves an optional array field from a TOML value.
     ///
     /// Returns `Ok(None)` if the field is not present.
     /// Returns `Err(Error::InvalidType)` if the field is present but not an array
-    fn get_optional_array(&self, field: &'static str) -> Result<Option<&Vec<TomlValue>>, Error>;
+    fn get_optional_array(&self, field: &'static str) -> Result<Option<&Vec<TomlValue>>, ManifestError>;
     /// Retrieves an optional field that is either a table or an array from a TOML value.
     ///
     /// Returns `Ok(None)` if the field is not present.
     /// Returns `Err(Error::InvalidType)` if the field is present but neither a table nor an array.
-    fn get_optional_table_or_array(&self, field: &'static str) -> Result<Option<&TomlValue>, Error>;
+    fn get_optional_table_or_array(&self, field: &'static str) -> Result<Option<&TomlValue>, ManifestError>;
 
     /// Retrieves a field array value.
-    fn get_array(&self, field: &'static str) -> Result<&Vec<TomlValue>, Error>;
+    fn get_array(&self, field: &'static str) -> Result<&Vec<TomlValue>, ManifestError>;
 
     /// Retrieves an optional enum value.
     fn get_optional_enum<T: Copy>(
@@ -481,13 +476,13 @@ trait TomlExt {
         field: &'static str,
         values: &[(&str, T)],
         expected: &'static str,
-    ) -> Result<Option<T>, Error> {
+    ) -> Result<Option<T>, ManifestError> {
         match self.get_optional_str(field)? {
             Some(s) => values
                 .iter()
                 .find(|(name, _)| *name == s)
                 .map(|(_, value)| *value)
-                .ok_or(Error::InvalidEnumValue(field, s.to_string(), expected))
+                .ok_or(ManifestError::InvalidEnumValue(field, s.to_string(), expected))
                 .map(Some),
             None => Ok(None),
         }
@@ -533,18 +528,18 @@ static BLEND_OPS: &[(&str, vk::BlendOp)] = &[
 ];
 
 impl TomlExt for toml::Value {
-    fn get_array(&self, field: &'static str) -> Result<&Vec<TomlValue>, Error> {
+    fn get_array(&self, field: &'static str) -> Result<&Vec<TomlValue>, ManifestError> {
         self.as_array().ok_or(InvalidType(field, "array"))
     }
 
-    fn get_optional_str(&self, field: &'static str) -> Result<Option<&str>, Error> {
+    fn get_optional_str(&self, field: &'static str) -> Result<Option<&str>, ManifestError> {
         match self.get(field) {
             None => Ok(None),
             Some(value) => value.as_str().ok_or(InvalidType(field, "string")).map(Some),
         }
     }
 
-    fn get_optional_str_or_array(&self, field: &'static str) -> Result<Option<Vec<&str>>, Error> {
+    fn get_optional_str_or_array(&self, field: &'static str) -> Result<Option<Vec<&str>>, ManifestError> {
         match self.get(field) {
             None => Ok(None),
             Some(value) => {
@@ -567,42 +562,42 @@ impl TomlExt for toml::Value {
         }
     }
 
-    fn get_optional_bool(&self, field: &'static str) -> Result<Option<bool>, Error> {
+    fn get_optional_bool(&self, field: &'static str) -> Result<Option<bool>, ManifestError> {
         match self.get(field) {
             None => Ok(None),
             Some(value) => value.as_bool().ok_or(InvalidType(field, "boolean")).map(Some),
         }
     }
 
-    fn get_optional_integer(&self, field: &'static str) -> Result<Option<i64>, Error> {
+    fn get_optional_integer(&self, field: &'static str) -> Result<Option<i64>, ManifestError> {
         match self.get(field) {
             None => Ok(None),
             Some(value) => value.as_integer().ok_or(InvalidType(field, "integer")).map(Some),
         }
     }
 
-    fn get_optional_float(&self, field: &'static str) -> Result<Option<f64>, Error> {
+    fn get_optional_float(&self, field: &'static str) -> Result<Option<f64>, ManifestError> {
         match self.get(field) {
             None => Ok(None),
             Some(value) => value.as_float().ok_or(InvalidType(field, "float")).map(Some),
         }
     }
 
-    fn get_optional_table(&self, field: &'static str) -> Result<Option<&TomlValue>, Error> {
+    fn get_optional_table(&self, field: &'static str) -> Result<Option<&TomlValue>, ManifestError> {
         match self.get(field) {
             None => Ok(None),
             Some(value) => value.as_table().ok_or(InvalidType(field, "table")).map(|_| Some(value)),
         }
     }
 
-    fn get_optional_array(&self, field: &'static str) -> Result<Option<&Vec<TomlValue>>, Error> {
+    fn get_optional_array(&self, field: &'static str) -> Result<Option<&Vec<TomlValue>>, ManifestError> {
         match self.get(field) {
             None => Ok(None),
             Some(value) => value.as_array().ok_or(InvalidType(field, "array")).map(|arr| Some(arr)),
         }
     }
 
-    fn get_optional_table_or_array(&self, field: &'static str) -> Result<Option<&TomlValue>, Error> {
+    fn get_optional_table_or_array(&self, field: &'static str) -> Result<Option<&TomlValue>, ManifestError> {
         match self.get(field) {
             None => Ok(None),
             Some(value) => {
@@ -616,7 +611,7 @@ impl TomlExt for toml::Value {
     }
 }
 
-fn read_rasterizer_state(toml: &TomlValue, out: &mut sharc::RasterizationState) -> Result<(), Error> {
+fn read_rasterizer_state(toml: &TomlValue, out: &mut RasterizationState) -> Result<(), ManifestError> {
     //let cull_mode = read_str(json, "cull_mode", Some("back"))?;
 
     let polygon_mode = toml.get_optional_enum("polygon_mode", POLYGON_MODES, "<polygon mode>")?;
@@ -672,23 +667,20 @@ fn get_blend_op(op_str: &str) -> Option<vk::BlendOp> {
     }
 }*/
 
-fn read_depth_stencil_state(toml: &TomlValue, out: &mut sharc::DepthStencilState) -> anyhow::Result<()> {
+fn read_depth_stencil_state(toml: &TomlValue, out: &mut Option<DepthStencilState>) -> anyhow::Result<()> {
     // any depth-stencil field automatically enables depth testing
     if let Some(format) = toml.get_optional_enum("format", FORMATS, "<image format>")? {
-        out.format = format;
-        out.enable = true;
+        out.get_or_insert_default().format = format;
     }
     if let Some(depth_compare_op) = toml.get_optional_enum("compare_op", COMPARE_OPS, "<compare op>")? {
-        out.depth_compare_op = depth_compare_op;
-        out.enable = true;
+        out.get_or_insert_default().depth_compare_op = depth_compare_op;
     }
     if let Some(depth_write_enable) = toml.get_optional_bool("write_enable")? {
-        out.depth_write_enable = depth_write_enable;
-        out.enable = true;
+        out.get_or_insert_default().depth_write_enable = depth_write_enable;
     }
     // ... but if "enable" is explicitly set, it overrides everything
-    if let Some(enable) = toml.get_optional_bool("enable")? {
-        out.enable = enable;
+    if let Some(_enable) = toml.get_optional_bool("enable")? {
+        out.get_or_insert_default();
     }
     Ok(())
 }
@@ -742,22 +734,22 @@ fn read_blend(toml: &TomlValue) -> anyhow::Result<Option<ColorBlendEquation>> {
     }
 }
 
-fn read_color_target(toml: &TomlValue, out: &mut sharc::ColorTarget) -> anyhow::Result<()> {
+fn read_color_target(toml: &TomlValue, out: &mut ColorTargetState) -> anyhow::Result<()> {
     validate_keys(toml, &[], &["format", "blend"]).context("in color target")?;
     if let Some(format) = toml.get_optional_enum("format", FORMATS, "<image format>")? {
         out.format = format;
     }
     if let Some(blend_toml) = toml.get("blend") {
-        out.blend = read_blend(blend_toml)?;
+        out.blend_equation = read_blend(blend_toml)?;
     }
     Ok(())
 }
 
-fn read_color_targets(toml: &TomlValue, out: &mut Vec<sharc::ColorTarget>) -> anyhow::Result<()> {
+fn read_color_targets(toml: &TomlValue, out: &mut Vec<ColorTargetState>) -> anyhow::Result<()> {
     if let Some(array) = toml.as_array() {
         out.clear();
         for item in array {
-            let mut color_target = sharc::ColorTarget::default();
+            let mut color_target = ColorTargetState::default();
             read_color_target(item, &mut color_target).context("in color_targets")?;
             out.push(color_target);
         }
@@ -776,7 +768,7 @@ fn read_color_targets(toml: &TomlValue, out: &mut Vec<sharc::ColorTarget>) -> an
                     return Err(anyhow!("color target index out of range").context("in color_targets"));
                 }
                 if index >= out.len() {
-                    out.resize(index + 1, sharc::ColorTarget::default());
+                    out.resize(index + 1, ColorTargetState::default());
                 }
                 read_color_target(value, &mut out[index]).context("in color_targets")?;
             }

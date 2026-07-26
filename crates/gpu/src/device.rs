@@ -1162,11 +1162,11 @@ impl Device {
         &self,
         create_info: ComputePipelineCreateInfo,
     ) -> Result<ComputePipeline, Error> {
-        let pipeline_layout = self.create_pipeline_layout(
-            vk::PipelineBindPoint::COMPUTE,
-            create_info.set_layouts,
-            create_info.push_constants_size,
-        );
+        let mut push_constants_size = create_info.push_constants_size;
+        push_constants_size = push_constants_size.max(create_info.shader.push_constants_size);
+
+        let pipeline_layout =
+            self.create_pipeline_layout(vk::PipelineBindPoint::COMPUTE, create_info.set_layouts, push_constants_size);
 
         let is_bindless = create_info.set_layouts.is_empty();
 
@@ -1214,11 +1214,22 @@ impl Device {
         &self,
         create_info: GraphicsPipelineCreateInfo,
     ) -> Result<GraphicsPipeline, Error> {
-        let pipeline_layout = self.create_pipeline_layout(
-            vk::PipelineBindPoint::GRAPHICS,
-            create_info.set_layouts,
-            create_info.push_constants_size,
-        );
+        let mut push_constants_size = create_info.push_constants_size;
+        match create_info.pre_rasterization_shaders {
+            PreRasterizationShaders::PrimitiveShading { vertex } => {
+                push_constants_size = push_constants_size.max(vertex.push_constants_size);
+            }
+            PreRasterizationShaders::MeshShading { mesh, task } => {
+                push_constants_size = push_constants_size.max(mesh.push_constants_size);
+                if let Some(task) = task {
+                    push_constants_size = push_constants_size.max(task.push_constants_size);
+                }
+            }
+        }
+        push_constants_size = push_constants_size.max(create_info.fragment.shader.push_constants_size);
+
+        let pipeline_layout =
+            self.create_pipeline_layout(vk::PipelineBindPoint::GRAPHICS, create_info.set_layouts, push_constants_size);
 
         let bindless = create_info.set_layouts.is_empty();
 

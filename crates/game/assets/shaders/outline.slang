@@ -98,7 +98,7 @@ struct DepthPassVertexOutput {
 };
 
 [shader("vertex")]
-[pass("depth_pass")]
+[pipeline("depth_pass")]
 DepthPassVertexOutput depth_pass_vertex(uint vertex_id : SV_VertexID, uint draw_id: SV_DrawIndex)
 {
     let vertex = u.mesh.face_vertices[vertex_id].data;
@@ -109,7 +109,7 @@ DepthPassVertexOutput depth_pass_vertex(uint vertex_id : SV_VertexID, uint draw_
 }
 
 [shader("fragment")]
-[pass("depth_pass")]
+[pipeline("depth_pass")]
 void depth_pass_fragment(DepthPassVertexOutput i) {
     // nothing
 }
@@ -135,7 +135,7 @@ struct BaseRenderFSOut {
 
 
 [shader("vertex")]
-[pass("base_render")]
+[pipeline("base_render")]
 BaseRenderVSOut base_render_vertex(uint vertex_id : SV_VertexID, uint draw_id: SV_DrawIndex)
 {
     let vertex = u.mesh.face_vertices[vertex_id].data;
@@ -152,7 +152,7 @@ BaseRenderVSOut base_render_vertex(uint vertex_id : SV_VertexID, uint draw_id: S
 }
 
 [shader("fragment")]
-[pass("base_render")]
+[pipeline("base_render")]
 BaseRenderFSOut base_render_fragment(BaseRenderVSOut i) {
     BaseRenderFSOut o;
     float3 normal = normalize(i.normal);
@@ -183,7 +183,7 @@ static const uint EXTRACT_CONTOURS_THREAD_GROUP_SIZE = 128;
 
 [shader("compute")]
 [numthreads(EXTRACT_CONTOURS_THREAD_GROUP_SIZE, 1, 1)]
-[pass("extract_interpolated_contours")]
+[pipeline("extract_interpolated_contours")]
 void extract_interpolated_contours(uint3 thread_id: SV_DispatchThreadID)
 {
     // one thread per face
@@ -275,7 +275,7 @@ struct RankContoursRootParams {
 
 [shader("compute")]
 [numthreads(RANK_BLOCK_SIZE, 1, 1)]
-[pass("break_contours_init")]
+[pipeline("break_contours_init")]
 void break_contours_init(uint3 thread_id : SV_DispatchThreadID, uniform RankContoursRootParams* u) {
     let i = thread_id.x;
     if (i < u.len) {
@@ -292,7 +292,7 @@ void break_contours_init(uint3 thread_id : SV_DispatchThreadID, uniform RankCont
 
 [shader("compute")]
 [numthreads(RANK_BLOCK_SIZE, 1, 1)]
-[pass("break_contours_step")]
+[pipeline("break_contours_step")]
 void break_contours_step(uint3 thread_id : SV_DispatchThreadID, uniform RankContoursRootParams* u) {
     let i = thread_id.x;
     if (i >= u.len)
@@ -314,7 +314,7 @@ void break_contours_step(uint3 thread_id : SV_DispatchThreadID, uniform RankCont
 
 [shader("compute")]
 [numthreads(RANK_BLOCK_SIZE, 1, 1)]
-[pass("rank_contours_init")]
+[pipeline("rank_contours_init")]
 void rank_contours_init(uint3 thread_id : SV_DispatchThreadID, uniform RankContoursRootParams* u) {
     let i = thread_id.x;
     if (i < u.len) {
@@ -332,7 +332,7 @@ void rank_contours_init(uint3 thread_id : SV_DispatchThreadID, uniform RankConto
 
 [shader("compute")]
 [numthreads(RANK_BLOCK_SIZE, 1, 1)]
-[pass("rank_contours_step")]
+[pipeline("rank_contours_step")]
 void rank_contours_step(uint3 thread_id : SV_DispatchThreadID, uniform RankContoursRootParams* u) {
     let i = thread_id.x;
     if (i >= u.len)
@@ -354,7 +354,7 @@ void rank_contours_step(uint3 thread_id : SV_DispatchThreadID, uniform RankConto
 
 [shader("compute")]
 [numthreads(RANK_BLOCK_SIZE, 1, 1)]
-[pass("rank_contours_finalize")]
+[pipeline("rank_contours_finalize")]
 void rank_contours_finalize(uint3 thread_id : SV_DispatchThreadID, uniform RankContoursRootParams* u) {
     let i = thread_id.x;
     if (i < u.len) {
@@ -374,14 +374,14 @@ struct SubdivideContoursRootParams {
     uint point_count;
 }
 
-[pass("setup_subdivide_contours")]
+[pipeline("setup_subdivide_contours")]
 [shader("compute")]
 [numthreads(1, 1, 1)]
 void setup_subdivide_contours(uint3 thread_id : SV_DispatchThreadID, uniform SubdivideContoursRootParams* u) {
     u.point_count = u.common.contour_point_count;
 }
 
-[pass("subdivide_contours")]
+[pipeline("subdivide_contours")]
 [shader("compute")]
 [numthreads(SUBDIVIDE_CONTOURS_GROUP_SIZE, 1, 1)]
 void subdivide_contours(uint3 thread_id : SV_DispatchThreadID, uniform SubdivideContoursRootParams* u) {
@@ -414,7 +414,7 @@ void subdivide_contours(uint3 thread_id : SV_DispatchThreadID, uniform Subdivide
 }
 
 
-[pass("finish_subdivide_contours")]
+[pipeline("finish_subdivide_contours")]
 [shader("compute")]
 [numthreads(SUBDIVIDE_CONTOURS_GROUP_SIZE, 1, 1)]
 void finish_subdivide_contours(uint3 thread_id : SV_DispatchThreadID, uniform SubdivideContoursRootParams* u) {
@@ -431,7 +431,7 @@ void finish_subdivide_contours(uint3 thread_id : SV_DispatchThreadID, uniform Su
 
 static const uint EXPAND_CONTOURS_GROUP_SIZE = 256;
 
-[pass("expand_interpolated_contours")]
+[pipeline("expand_interpolated_contours")]
 [shader("compute")]
 [numthreads(EXPAND_CONTOURS_GROUP_SIZE, 1, 1)]
 void expand_interpolated_contours(uint3 thread_id : SV_DispatchThreadID) {
@@ -502,7 +502,7 @@ struct RenderOutlinesVSOut {
     [[vk::location(3)]] nointerpolation float filter_width;
 };
 
-[pass("render_outlines")]
+[pipeline("render_outlines")]
 [shader("vertex")]
 RenderOutlinesVSOut render_outlines_vertex(uint vertex_id : SV_VertexID)
 {
@@ -522,7 +522,7 @@ struct RenderOutlinesFSOut {
     float depth: SV_Depth;
 };
 
-[pass("render_outlines")]
+[pipeline("render_outlines")]
 [shader("fragment")]
 RenderOutlinesFSOut render_outlines_fragment(
     float3 frag_coord: SV_Position,

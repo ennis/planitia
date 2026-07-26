@@ -9,14 +9,12 @@ struct RootParams {
 };
 
 [shader("vertex")]
-[pipeline("background")]
 ScreenQuadVSOut background_vertex_main(uint vertex_id : SV_VertexID, uniform RootParams* u)
 {
     return screen_quad_vertex_shader(vertex_id);
 }
 
 [shader("fragment")]
-[pipeline("background")]
 float4 background_fragment_main(ScreenQuadVSOut v, uint2 frag_pos: SV_Position, uniform RootParams* u) {
     float t = v.uv.y;
     float4 color = lerp(

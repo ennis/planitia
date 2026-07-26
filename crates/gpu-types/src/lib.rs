@@ -2,10 +2,11 @@
 use bitflags::bitflags;
 use std::marker::PhantomData;
 use std::path::Path;
-use std::slice;
+use std::{fmt, slice};
 
 // Reexports
 pub use ash::{self, vk};
+use ash::vk::PolygonMode;
 pub use vk::Format;
 
 /// 2D point with integer coordinates.
@@ -685,14 +686,14 @@ impl ColorBlendEquation {
 /// Describes a color attachment format and blending parameters.
 #[derive(Copy, Clone, Debug)]
 pub struct ColorTargetState {
-    pub format: Format,
-    pub blend_equation: Option<ColorBlendEquation>,
-    pub color_write_mask: vk::ColorComponentFlags,
+    pub format: Format = vk::Format::UNDEFINED,
+    pub blend_equation: Option<ColorBlendEquation> = None,
+    pub color_write_mask: vk::ColorComponentFlags = vk::ColorComponentFlags::RGBA,
 }
 
 impl Default for ColorTargetState {
     fn default() -> Self {
-        Self { format: vk::Format::UNDEFINED, blend_equation: None, color_write_mask: vk::ColorComponentFlags::RGBA }
+        Self { .. }
     }
 }
 
@@ -713,8 +714,8 @@ pub struct VertexInputAttributeDescription {
 
 #[derive(Copy, Clone, Debug, Default)]
 pub struct VertexInputState<'a> {
-    pub buffers: &'a [VertexBufferLayoutDescription],
-    pub attributes: &'a [VertexInputAttributeDescription],
+    pub buffers: &'a [VertexBufferLayoutDescription] = &[],
+    pub attributes: &'a [VertexInputAttributeDescription] = &[],
 }
 
 pub trait StaticVertexInput {
@@ -896,13 +897,14 @@ pub struct DepthBias {
     pub slope_factor: f32,
 }
 
+#[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct RasterizationState {
-    pub polygon_mode: vk::PolygonMode,
-    pub cull_mode: vk::CullModeFlags,
-    pub front_face: vk::FrontFace,
-    pub depth_clamp_enable: bool,
-    pub conservative_rasterization_mode: vk::ConservativeRasterizationModeEXT,
+    pub polygon_mode: vk::PolygonMode = vk::PolygonMode::FILL,
+    pub cull_mode: vk::CullModeFlags = vk::CullModeFlags::NONE,
+    pub front_face: vk::FrontFace = vk::FrontFace::CLOCKWISE,
+    pub depth_clamp_enable: bool = false,
+    pub conservative_rasterization_mode: vk::ConservativeRasterizationModeEXT = vk::ConservativeRasterizationModeEXT::DISABLED,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -952,10 +954,10 @@ impl From<StencilOpState> for vk::StencilOpState {
 
 #[derive(Copy, Clone, Debug)]
 pub struct StencilState {
-    pub front: StencilOpState,
-    pub back: StencilOpState,
-    pub read_mask: u32,
-    pub write_mask: u32,
+    pub front: StencilOpState = StencilOpState::IGNORE,
+    pub back: StencilOpState = StencilOpState::IGNORE,
+    pub read_mask: u32 = 0,
+    pub write_mask: u32 = 0,
 }
 
 //  Adapted from WGPU
@@ -985,48 +987,51 @@ impl StencilState {
 
 impl Default for StencilState {
     fn default() -> Self {
-        Self { front: StencilOpState::IGNORE, back: StencilOpState::IGNORE, read_mask: 0, write_mask: 0 }
+        Self { .. }
     }
 }
 
+/// Describes how a graphics pipeline reads and modifies a depth-stencil attachment.
 #[derive(Copy, Clone, Debug)]
 pub struct DepthStencilState {
-    pub format: vk::Format,
-    pub depth_write_enable: bool,
-    pub depth_compare_op: vk::CompareOp,
-    pub stencil_state: StencilState,
+    pub format: vk::Format = Format::UNDEFINED,
+    pub depth_write_enable: bool = false,
+    pub depth_compare_op: vk::CompareOp = vk::CompareOp::LESS,
+    pub stencil_state: StencilState = StencilState { .. },
 }
 
 impl Default for DepthStencilState {
     fn default() -> Self {
         Self {
-            format: Format::UNDEFINED,
-            depth_write_enable: false,
-            depth_compare_op: vk::CompareOp::LESS,
-            stencil_state: Default::default(),
+            ..
         }
     }
 }
 
+/// Controls multisampling for a graphics pipeline.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct MultisampleState {
-    pub count: u32,
-    pub mask: u64,
-    pub alpha_to_coverage_enabled: bool,
+    /// Number of samples per pixel.
+    ///
+    /// `1` means that multisampling is disabled.
+    pub count: u32 = 1,
+    pub mask: u64 = !0,
+    pub alpha_to_coverage_enabled: bool = false,
 }
 
 impl Default for MultisampleState {
     fn default() -> Self {
-        Self { count: 1, mask: !0, alpha_to_coverage_enabled: false }
+        Self { .. }
     }
 }
 
+/// Controls the fragment shader and color output stages of a graphics pipeline.
 #[derive(Copy, Clone, Debug)]
 pub struct FragmentState<'a> {
     pub shader: ShaderEntryPoint<'a>,
-    pub multisample: MultisampleState,
+    pub multisample: MultisampleState = MultisampleState { .. },
     pub color_targets: &'a [ColorTargetState],
-    pub blend_constants: [f32; 4],
+    pub blend_constants: [f32; 4] = [0.0, 0.0, 0.0, 0.0],
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1095,6 +1100,12 @@ pub struct ShaderEntryPoint<'a> {
 pub struct Ptr<T: ?Sized + 'static> {
     pub raw: vk::DeviceAddress,
     pub _phantom: PhantomData<T>,
+}
+
+impl<T: ?Sized + 'static> fmt::Debug for Ptr<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "GPU:{:#016x}", self.raw)
+    }
 }
 
 impl<T: ?Sized + 'static> Ptr<T> {
@@ -1168,4 +1179,40 @@ impl SamplerHandle {
     pub const fn new(index: u32) -> Self {
         SamplerHandle { index, _unused: 0 }
     }
+}
+
+
+/// Typedefs for compatibility with slang reflection generated by shadertool.
+#[allow(non_camel_case_types)]
+pub mod shader_types {
+    pub type float = f32;
+    pub type vec2f = math::Vec2;
+    pub type vec3f = math::Vec3;
+    pub type vec4f = math::Vec4;
+    pub type int = i32;
+    pub type vec2i = math::IVec2;
+    pub type vec3i = math::IVec3;
+    pub type vec4i = math::IVec4;
+    pub type uint = u32;
+    pub type vec2u = math::UVec2;
+    pub type vec3u = math::UVec3;
+    pub type vec4u = math::UVec4;
+    pub type uint8_t = u8;
+    pub type vec2u8 = math::U8Vec2;
+    pub type vec3u8 = math::U8Vec3;
+    pub type vec4u8 = math::U8Vec4;
+    pub type int8_t = i8;
+    pub type vec2i8 = math::I8Vec2;
+    pub type vec3i8 = math::I8Vec3;
+    pub type vec4i8 = math::I8Vec4;
+    pub type uint16_t = u16;
+    pub type vec2u16 = math::U16Vec2;
+    pub type vec3u16 = math::U16Vec3;
+    pub type vec4u16 = math::U16Vec4;
+    pub type int16_t = i16;
+    pub type vec2i16 = math::I16Vec2;
+    pub type vec3i16 = math::I16Vec3;
+    pub type vec4i16 = math::I16Vec4;
+    pub type mat3x3f = math::Mat3;
+    pub type mat4x4f = math::Mat4;
 }

@@ -56,7 +56,7 @@ fn create_graphics_pipeline_from_archive(
                 let c = &archive[c];
                 gpu::ColorTargetState {
                     format: c.format,
-                    blend_equation: c.blend.map(|blend| gpu::ColorBlendEquation {
+                    blend_equation: c.blend_equation.map(|blend| gpu::ColorBlendEquation {
                         src_color_blend_factor: blend.src_color_blend_factor,
                         dst_color_blend_factor: blend.dst_color_blend_factor,
                         color_blend_op: blend.color_blend_op,
@@ -68,23 +68,6 @@ fn create_graphics_pipeline_from_archive(
                 }
             })
             .collect()
-    };
-
-    let depth_stencil = if entry.depth_stencil.enable {
-        Some(gpu::DepthStencilState {
-            format: entry.depth_stencil.format,
-            depth_write_enable: entry.depth_stencil.depth_write_enable,
-            depth_compare_op: entry.depth_stencil.depth_compare_op,
-            stencil_state: Default::default(),
-        })
-    } else {
-        None
-    };
-
-    let rasterization = gpu::RasterizationState {
-        polygon_mode: entry.rasterization.polygon_mode,
-        cull_mode: entry.rasterization.cull_mode,
-        ..Default::default()
     };
 
     let mut vertex_shader = None;
@@ -135,8 +118,8 @@ fn create_graphics_pipeline_from_archive(
         push_constants_size: entry.push_constants_size as usize,
         vertex_input: Default::default(),
         pre_rasterization_shaders,
-        rasterization,
-        depth_stencil,
+        rasterization: entry.rasterization,
+        depth_stencil: entry.depth_stencil,
         fragment: gpu::FragmentState {
             shader: fragment_shader.unwrap(),
             multisample: Default::default(),

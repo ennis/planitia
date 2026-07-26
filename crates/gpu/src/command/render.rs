@@ -307,10 +307,45 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
+    /// Equivalent to [`draw(TriangleList, None, 0..6, 0..1, root_params)`](draw).
+    ///
+    /// To draw a screen-covering quad, use a vertex shader similar to this:
+    /// ```
+    /// ScreenQuadVSOut shader(uint vertex_id : SV_VertexID) {
+    ///     float2 positions[6] = {
+    ///         float2(-1.0, -1.0),
+    ///         float2( 1.0, -1.0),
+    ///         float2(-1.0,  1.0),
+    ///         float2(-1.0,  1.0),
+    ///         float2( 1.0, -1.0),
+    ///         float2( 1.0,  1.0)
+    ///     };
+    ///     ScreenQuadVSOut o;
+    ///     o.pos = float4(positions[vertex_id], 0.0, 1.0);
+    ///     return o;
+    /// }
+    /// ```
     pub fn draw_screen_quad<'params, T: Copy + 'static>(&mut self, root_params: impl Into<PushDataSource<'params, T>>) {
         self.draw(PrimitiveTopology::TriangleList, None, 0..6, 0..1, root_params);
     }
 
+    /// Draws primitives.
+    ///
+    /// # Root parameters
+    /// `root_params` specifies the uniforms passed to the shaders in [push constants](https://docs.vulkan.org/guide/latest/push_constants.html).
+    /// The following types are supported (through implicit conversions to [`PushDataSource`]):
+    /// * [`gpu::Ptr<T>`](gpu::Ptr) ([`PushDataSource::Indirect`]): a GPU pointer to an instance of `T`.
+    ///   The 64-bit pointer is passed in the push constants (8 bytes).
+    ///   The shader should expect a pointer in push constants..
+    /// * `&T` ([`PushDataSource::IndirectUpload`]): reference to CPU data. The data is uploaded to a temporary GPU buffer and the
+    ///   64-bit GPU pointer to that buffer is passed in the push constants (8 bytes).
+    ///   The shader should expect a pointer in push constants.
+    /// * [`ImmediatePushData<T>`](ImmediatePushData) ([`PushDataSource::Direct`]): the data is passed directly in the push constants
+    ///  (`size_of<T>` bytes).
+    ///
+    /// # Examples
+    ///
+    /// TODO
     pub fn draw<'params, T: Copy + 'static>(
         &mut self,
         topology: PrimitiveTopology,

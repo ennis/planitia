@@ -3,6 +3,7 @@ use glam::{Vec3Swizzles, Vec4Swizzles};
 use std::f32::consts::PI;
 
 #[derive(Copy, Clone, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Frustum {
     pub left: f32,
     pub right: f32,
@@ -16,6 +17,7 @@ pub struct Frustum {
 
 /// Represents a camera (a view of a scene) and the screen size in pixels.
 #[derive(Copy, Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Camera {
     // Projection parameters
     // frustum (for culling)

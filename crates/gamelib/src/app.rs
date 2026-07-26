@@ -25,6 +25,8 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, OnceLock};
 use std::{mem, ptr};
+use std::any::{Any, TypeId};
+use std::collections::HashMap;
 use threadbound::ThreadBound;
 use color::Srgba8;
 use math::{vec2, IVec2, Vec2};
@@ -271,6 +273,9 @@ pub(crate) struct MainThreadContext {
     watch: RefCell<Debouncer<RecommendedWatcher>>,
     /// Text overlay.
     text_overlay: RefCell<String>,
+    // Registered global resources, ordered by type.
+    //global_resources: RefCell<HashMap<TypeId, Box<dyn Any>>>,
+
     // Hot-reloadable plugin host.
     //plugin_host: RefCell<PluginHost>,
 }
@@ -596,4 +601,9 @@ pub fn print_message(message: impl AsRef<str>) {
     with_app_ctx(|ctx| {
         ctx.text_overlay.borrow_mut().push_str(message.as_ref());
     });
+}
+
+/// Registers a global resource object.
+pub fn register_resource<T: Any>(resource: T) {
+
 }

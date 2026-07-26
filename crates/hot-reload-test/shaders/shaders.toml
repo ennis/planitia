@@ -1,0 +1,15 @@
+include_paths = [
+    "../../gamelib/assets/gamelib/shaders",
+    "../../game/assets/shaders"
+]
+
+[default]
+rasterizer.cull_mode = "none"
+rasterizer.polygon_mode = "fill"
+depth_stencil.format = "D32F_S8UI"
+depth_stencil.compare_op = "less"
+depth_stencil.test_enable = true
+depth_stencil.write_enable = true
+color_targets = [
+    { format = "RGBA8", blend = { src_color = "src_alpha", dst_color = "one_minus_src_alpha", color_op = "add", src_alpha = "one", dst_alpha = "zero", alpha_op = "add" } }
+]
