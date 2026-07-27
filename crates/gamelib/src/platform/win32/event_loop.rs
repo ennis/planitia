@@ -159,6 +159,7 @@ impl<'a> ApplicationHandler<WakeReason> for WinitAppHandler<'a> {
 
         match window_event {
             WindowEvent::Resized(size) => {
+                info!("WindowEvent::Resized ({}×{})", size.width, size.height);
                 // if resizing to zero, ignore; it's invalid to resize a swap chain to zero size
                 if size.width == 0 || size.height == 0 {
                     return;

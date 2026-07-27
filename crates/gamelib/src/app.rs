@@ -9,7 +9,7 @@ use crate::platform::{LoopHandler, Platform, RenderTargetImage, WindowHandle};
 use crate::plugin_host::PluginHost;
 use crate::tweak::show_tweaks_gui;
 use crate::util::env_flag;
-use crate::{PluginEvent, imgui, wake_event_loop};
+use crate::{PluginEvent, imgui, span, wake_event_loop};
 use color::Srgba8;
 use color_print::cwriteln;
 use env_logger::fmt::style::AnsiColor;
@@ -423,6 +423,7 @@ impl LoopHandler for &'static MainThreadContext {
     }
 
     fn input(&mut self, window: WindowHandle, input_event: InputEvent) {
+        let _span = span!("input");
         if self.imgui.borrow_mut().handle_input(&input_event) {
             // If the event was processed by egui, don't pass it to the application
             return;
@@ -448,19 +449,25 @@ impl LoopHandler for &'static MainThreadContext {
     }
 
     fn event(&mut self, event: UserEvent) {
+        let _span = span!("event");
         self.handler.borrow_mut().event(event);
     }
 
     fn resized(&mut self, window: WindowHandle, width: u32, height: u32) {
+        let _span = span!("resized");
         self.handler.borrow_mut().resized(window, width, height)
     }
 
     fn vsync(&mut self) {
+        let _span = span!("vsync");
         // invoke application vsync handler
         self.handler.borrow_mut().vsync();
 
         // update the GUI
         {
+            let _span = span!("imgui");
+            let _gpu_span = crate::gpu_span!("imgui");
+
             let mut cmd = gpu::CommandBuffer::new();
             self.imgui.borrow_mut().run(&mut cmd, |imgui_ctx| {
                 egui::Window::new("Tweaks").show(imgui_ctx, |ui| {
@@ -477,22 +484,28 @@ impl LoopHandler for &'static MainThreadContext {
         }
 
         // render the frame (the application is expected to render the GUI as part of its rendering)
-        self.platform.render_all(&mut |window, render_target| {
-            self.handler.borrow_mut().render(window, render_target);
+        {
+            self.platform.render_all(&mut |window, render_target| {
+                let _span = span!("render_window");
+                let _gpu_span = crate::gpu_span!("render_window");
+                self.handler.borrow_mut().render(window, render_target);
 
-            // render text overlay
-            {
-                let text = self.text_overlay.take();
-                let mut scene = PaintScene::new(Srgba8::TRANSPARENT);
-                let pos = vec2(10.0, 10.0);
-                let shadow_pos = pos + vec2(1.0, 1.0);
-                // Draw shadow
-                let format = TextFormat { size: 20.0, ..Default::default() };
-                scene.draw_text(shadow_pos, &text, &format, Srgba8::BLACK);
-                scene.draw_text(pos, &text, &format, Srgba8::WHITE);
-                scene.render(render_target.image);
-            }
-        });
+                // render text overlay
+                {
+                    let _span = span!("text_overlay");
+                    let _gpu_span = crate::gpu_span!("text_overlay");
+                    let text = self.text_overlay.take();
+                    let mut scene = PaintScene::new(Srgba8::TRANSPARENT);
+                    let pos = vec2(10.0, 10.0);
+                    let shadow_pos = pos + vec2(1.0, 1.0);
+                    // Draw shadow
+                    let format = TextFormat { size: 20.0, ..Default::default() };
+                    scene.draw_text(shadow_pos, &text, &format, Srgba8::BLACK);
+                    scene.draw_text(pos, &text, &format, Srgba8::WHITE);
+                    scene.render(render_target.image);
+                }
+            });
+        }
 
         // end frame capture
         if self.rdoc_capture_requested.get() {
@@ -504,21 +517,27 @@ impl LoopHandler for &'static MainThreadContext {
         tracy_client::frame_mark();
 
         // cleanup expired GPU resources
-        gpu::poll();
+        {
+            let _span = span!("gpu_poll");
+            gpu::poll();
+        }
 
         // ask for a re-render on the next vsync
         self.platform.wake_at_next_vsync();
     }
 
     fn poll(&mut self) {
+        let _span = span!("poll");
         // TODO
     }
 
     fn close_requested(&mut self, window: WindowHandle) {
+        let _span = span!("close_requested");
         self.handler.borrow_mut().close_requested(window);
     }
 
     fn exiting(&mut self) {
+        let _span = span!("exiting");
         self.imgui.borrow_mut().save_state();
         self.handler.borrow_mut().exiting();
     }
@@ -663,6 +682,7 @@ impl MainThreadContext {
         gpu::write_timestamp(move |ts| {
             with_app_ctx(|ctx| ctx.tracy_gpu_context.upload_gpu_timestamp(query_id, ts as i64))
         });
+        gpu::flush().unwrap();
         self.tracy_gpu_context.begin_span(span_location, query_id);
     }
 
@@ -672,6 +692,7 @@ impl MainThreadContext {
         gpu::write_timestamp(move |ts| {
             with_app_ctx(|ctx| ctx.tracy_gpu_context.upload_gpu_timestamp(query_id, ts as i64))
         });
+        gpu::flush().unwrap();
         self.tracy_gpu_context.end_span(query_id);
     }
 }
@@ -699,11 +720,9 @@ pub fn tracy_end_gpu_span() {
 
 #[macro_export]
 macro_rules! gpu_span {
-    ($name:expr) => {
-        {
-            let location = $crate::tracy_client::span_location!($name);
-            $crate::tracy_begin_gpu_span(location);
-            $crate::TracyGpuSpanGuard
-        }
-    };
+    ($name:expr) => {{
+        let location = $crate::tracy_client::span_location!($name);
+        $crate::tracy_begin_gpu_span(location);
+        $crate::TracyGpuSpanGuard
+    }};
 }

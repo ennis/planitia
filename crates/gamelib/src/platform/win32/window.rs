@@ -1,4 +1,4 @@
-use crate::WindowInputState;
+use crate::{gpu_span, WindowInputState, span};
 use crate::platform::RenderTargetImage;
 use crate::platform::win32::graphics::GraphicsContext;
 use crate::platform::win32::swap_chain::{DxgiVulkanInteropSwapChain, dxgi_to_vk_format};
@@ -151,6 +151,8 @@ impl Window {
     }
 
     pub(super) fn present(&mut self) {
+        let _span = span!("present");
+        let _gpu_span = gpu_span!("present");
         match self.swap_chain_impl {
             SwapChainImpl::DirectComposition(ref mut swap_chain) => {
                 swap_chain.present();

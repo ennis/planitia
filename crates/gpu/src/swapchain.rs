@@ -4,6 +4,7 @@ use ash::vk;
 use gpu_allocator::MemoryLocation;
 use std::ptr;
 use std::time::Duration;
+use log::info;
 
 #[derive(Debug)]
 pub struct SwapchainImage {
@@ -165,6 +166,8 @@ impl Device {
             } else {
                 capabilities.min_image_count + 1
             };
+        info!("gpu: creating or resizing swapchain ({width}×{height})");
+        info!("     presentMode: {present_mode:?}");
 
         let create_info = vk::SwapchainCreateInfoKHR {
             flags: Default::default(),

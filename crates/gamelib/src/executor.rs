@@ -1,3 +1,4 @@
+//! Main-thread async executor
 use futures::StreamExt;
 use futures::future::LocalFutureObj;
 use futures::stream::FuturesUnordered;

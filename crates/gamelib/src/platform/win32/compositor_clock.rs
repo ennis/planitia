@@ -53,6 +53,9 @@ impl CompositorClock {
                         // Ignore delivery errors if the event loop is not running
                         if let Some(proxy) = EVENT_LOOP_PROXY.get() {
                             if active.swap(false, Relaxed) {
+                                if let Some(client) = tracy_client::Client::running() {
+                                    client.message("compositor_clock_tick", 0);
+                                }
                                 let _ = proxy.send_event(WakeReason::VSync);
                             }
                         }

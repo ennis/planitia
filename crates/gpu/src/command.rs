@@ -669,7 +669,14 @@ pub fn sync_signal(semaphore: vk::Semaphore, value: u64) {
 }
 
 /// Submits the given commands for execution on the GPU.
+///
+/// This implicitly calls [`flush`](flush) to ensure that all pending commands on the default
+/// command buffer are submitted before this command buffer.
 pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
+
+    // Submit the default command buffer.
+    flush()?;
+
     let device = Device::global();
 
     //----------------------
@@ -801,7 +808,7 @@ pub fn present(swap_chain: &mut SwapChain, index: usize) -> VkResult<()> {
     }
 }
 
-// TODO is this safe with multiple threads? 
+// TODO is this safe with multiple threads?
 thread_local! {
     static DEFAULT_COMMAND_BUFFER: RefCell<Option<CommandBuffer>> = RefCell::new(None);
 }
