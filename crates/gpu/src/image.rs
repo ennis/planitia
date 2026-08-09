@@ -1,15 +1,16 @@
 use crate::device::get_vk_sample_count;
 use crate::{
     BufferUntyped, ColorAttachment, CommandBuffer, DepthStencilAttachment, Descriptor, Device, Format,
-    ResourceAllocation, ResourceDescriptorIndex, ResourceId, Size3D, StorageImageHandle, TextureHandle,
-    TrackedResource, VulkanObject, aspects_for_format,
+    ResourceAllocation, ResourceDescriptorIndex, Size3D, StorageImageHandle, TextureHandle, VulkanObject,
+    aspects_for_format, upload_image_data,
 };
 use ash::vk;
 use ash::vk::Handle;
 use bitflags::bitflags;
+use gpu::ImageCopyView;
 use gpu_allocator::MemoryLocation;
 use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
-use gpu_types::{ImageType, ImageUsage};
+use gpu_types::{ImageAspect, ImageType, ImageUsage, Offset3D};
 use slotmap::Key;
 use std::{mem, ptr};
 
@@ -49,7 +50,6 @@ pub struct ImageBuffer {
 /// Represents an image resource on the GPU.
 #[derive(Debug)]
 pub struct Image {
-    pub(crate) id: ResourceId,
     pub(crate) memory_location: MemoryLocation,
     pub(crate) allocation: ResourceAllocation,
     pub(crate) swapchain_image: bool,
@@ -71,7 +71,7 @@ impl Drop for Image {
             let handle = self.handle;
             let descriptors = self.descriptors;
 
-            Device::global().delete_resource_after_current_submission(self.id, move |device| unsafe {
+            Device::instance().delete_resource_after_current_submission(move |device| unsafe {
                 //debug!("dropping image {:?} (handle: {:?})", id, handle);
                 device.free_resource_heap_index(descriptors.texture);
                 device.free_resource_heap_index(descriptors.storage);
@@ -90,12 +90,6 @@ impl Drop for Image {
     }
 }
 
-impl TrackedResource for Image {
-    fn id(&self) -> ResourceId {
-        self.id
-    }
-}
-
 impl VulkanObject for Image {
     type Handle = vk::Image;
 
@@ -107,7 +101,7 @@ impl VulkanObject for Image {
 impl Image {
     /// Creates a new image resource.
     pub fn new(image_info: ImageCreateInfo) -> Image {
-        Device::global().create_image(&image_info)
+        Device::instance().create_image(&image_info)
     }
 
     /// Shorthand for creating a 2D image suitable for sampling and storage uses with the specified properties.
@@ -122,6 +116,17 @@ impl Image {
             height,
             ..
         })
+    }
+
+    /// Creates a new image suitable for sampling and storage uses with the specified properties, and initializes it with the provided data.
+    pub fn new_texture_with_data(width: u32, height: u32, format: Format, aspect: ImageAspect, data: &[u8]) -> Image {
+        let image = Self::new_texture(width, height, format);
+        upload_image_data(
+            ImageCopyView { image: &image, mip_level: 0, origin: Offset3D::ZERO, aspect },
+            Size3D::new(width, height, 1),
+            data,
+        );
+        image
     }
 
     /// Shorthand for creating a 2D image suitable for use as a color attachment, and for sampling and storage, with the specified properties.
@@ -498,7 +503,6 @@ impl Device {
 
             Image {
                 handle,
-                id: self.allocate_resource_id(),
                 memory_location: image_info.memory_location,
                 allocation: ResourceAllocation::Allocation { allocation },
                 swapchain_image: false,

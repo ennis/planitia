@@ -1,0 +1,6 @@
+[default]
+rasterizer.cull_mode = "none"
+rasterizer.polygon_mode = "fill"
+color_targets = [
+    { format = "RGBA8", blend = "over" }
+]

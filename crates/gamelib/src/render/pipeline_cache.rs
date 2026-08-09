@@ -39,6 +39,7 @@ fn get_shader_entry_point<'a>(
         push_constants_size: 0, // ignored by gpu anyway
         source_path: None,
         workgroup_size: [0, 0, 0], // ignored by gpu anyway
+        refl_params: &[],
     }
 }
 

@@ -423,6 +423,7 @@ pub const EGUI_VERTEX_MAIN: ::gpu::ShaderEntryPoint<'static> = ::gpu::ShaderEntr
     ],
     push_constants_size: 8usize,
     workgroup_size: [1u32, 1u32, 1u32],
+    refl_params: &[],
 };
 pub const EGUI_FRAG_MAIN: ::gpu::ShaderEntryPoint<'static> = ::gpu::ShaderEntryPoint {
     stage: gpu::ShaderStage::Fragment,
@@ -644,4 +645,5 @@ pub const EGUI_FRAG_MAIN: ::gpu::ShaderEntryPoint<'static> = ::gpu::ShaderEntryP
     ],
     push_constants_size: 0usize,
     workgroup_size: [1u32, 1u32, 1u32],
+    refl_params: &[],
 };

@@ -3,14 +3,21 @@ use std::path::PathBuf;
 
 static SHADERS: &[&str] = &["assets/shaders/*.slang"];
 
-/// Copy Rust stdlib DLLs from the active toolchain's `bin/` directory into
+/// Copy Rust stdlib DLLs from the active toolchain's `lib/rustlib/<target>/lib/` directory into
 /// the cargo output directory (i.e. next to `game.exe`) so the executable can
 /// be run without the Rust toolchain on PATH.
 fn copy_rust_stdlib_dlls() {
+    // OUT_DIR = target/<profile>/build/<crate>/<hash>/out  (newer Cargo)
+    //        or target/<profile>/build/<crate>-<hash>/out  (older Cargo)
+    // Find the "build" ancestor and step up one more to reach target/<profile>/.
     let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR not set");
-    // OUT_DIR = target/<profile>/build/<crate>-<hash>/out
-    // ancestors(3) steps up to target/<profile>/
-    let target_dir = PathBuf::from(&out_dir).ancestors().nth(3).expect("unexpected OUT_DIR depth").to_path_buf();
+    let out_path = PathBuf::from(&out_dir);
+    let target_dir = out_path
+        .ancestors()
+        .find(|p| p.file_name().map(|n| n == "build") == Some(true))
+        .and_then(|p| p.parent())
+        .expect("could not find target/<profile>/ from OUT_DIR")
+        .to_path_buf();
 
     // Use the same rustc that cargo is using.
     let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".into());
@@ -20,11 +27,13 @@ fn copy_rust_stdlib_dlls() {
         .expect("failed to run `rustc --print sysroot`");
     let sysroot = std::str::from_utf8(&output.stdout).expect("non-UTF8 sysroot").trim().to_string();
 
-    let bin_dir = PathBuf::from(&sysroot).join("bin");
-    let entries = match std::fs::read_dir(&bin_dir) {
+    // DLLs are in lib/rustlib/<target>/lib/, not bin/
+    let target = std::env::var("TARGET").unwrap_or_default();
+    let lib_dir = PathBuf::from(&sysroot).join("lib").join("rustlib").join(&target).join("lib");
+    let entries = match std::fs::read_dir(&lib_dir) {
         Ok(e) => e,
         Err(err) => {
-            println!("cargo:warning=Could not read {}: {}", bin_dir.display(), err);
+            println!("cargo:warning=Could not read {}: {}", lib_dir.display(), err);
             return;
         }
     };
@@ -42,6 +51,8 @@ fn copy_rust_stdlib_dlls() {
         }
     }
 }
+
+
 
 fn main() {
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {

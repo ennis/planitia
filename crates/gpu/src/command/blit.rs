@@ -23,7 +23,7 @@ impl CommandBuffer {
         let cb = self.get_or_create_command_buffer();
         unsafe {
             // SAFETY: FFI call and parameters are valid
-            Device::global().raw.cmd_fill_buffer(cb, range.buffer.handle(), range.byte_offset, range.byte_size, data);
+            Device::instance().raw.cmd_fill_buffer(cb, range.buffer.handle(), range.byte_offset, range.byte_size, data);
         }
     }
 
@@ -32,7 +32,7 @@ impl CommandBuffer {
         let cb = self.get_or_create_command_buffer();
         unsafe {
             // SAFETY: FFI call and parameters are valid
-            Device::global().raw.cmd_clear_color_image(
+            Device::instance().raw.cmd_clear_color_image(
                 cb,
                 image.handle(),
                 vk::ImageLayout::GENERAL,
@@ -46,7 +46,7 @@ impl CommandBuffer {
         let cb = self.get_or_create_command_buffer();
         unsafe {
             // SAFETY: FFI call and parameters are valid
-            Device::global().raw.cmd_clear_depth_stencil_image(
+            Device::instance().raw.cmd_clear_depth_stencil_image(
                 cb,
                 image.handle(),
                 vk::ImageLayout::GENERAL,
@@ -87,7 +87,7 @@ impl CommandBuffer {
         // SAFETY: FFI call and parameters are valid
         let cb = self.get_or_create_command_buffer();
         unsafe {
-            Device::global().raw.cmd_copy_image(
+            Device::instance().raw.cmd_copy_image(
                 cb,
                 source.image.handle(),
                 vk::ImageLayout::GENERAL,
@@ -113,7 +113,7 @@ impl CommandBuffer {
         // SAFETY: FFI call and parameters are valid
         let cb = self.get_or_create_command_buffer();
         unsafe {
-            Device::global().raw.cmd_copy_buffer(
+            Device::instance().raw.cmd_copy_buffer(
                 cb,
                 source.handle(),
                 destination.handle(),
@@ -148,7 +148,7 @@ impl CommandBuffer {
         // SAFETY: FFI call and parameters are valid
         let cb = self.get_or_create_command_buffer();
         unsafe {
-            Device::global().raw.cmd_copy_buffer_to_image(
+            Device::instance().raw.cmd_copy_buffer_to_image(
                 cb,
                 source.buffer.handle(),
                 destination.image.handle(),
@@ -182,7 +182,7 @@ impl CommandBuffer {
         // SAFETY: FFI call and parameters are valid
         let cb = self.get_or_create_command_buffer();
         unsafe {
-            Device::global().raw.cmd_copy_image_to_buffer(
+            Device::instance().raw.cmd_copy_image_to_buffer(
                 cb,
                 source.image.handle(),
                 vk::ImageLayout::GENERAL,
@@ -222,7 +222,7 @@ impl CommandBuffer {
         // SAFETY: command buffer is OK, params OK
         let cb = self.get_or_create_command_buffer();
         unsafe {
-            Device::global().raw.cmd_blit_image(
+            Device::instance().raw.cmd_blit_image(
                 cb,
                 src.handle(),
                 vk::ImageLayout::GENERAL,

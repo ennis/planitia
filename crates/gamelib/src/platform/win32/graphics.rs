@@ -31,7 +31,7 @@ impl GraphicsContext {
     pub(super) fn new() -> Self {
         // XXX: create the vulkan device first so that it is picked up as the main API by
         //      renderdoc (otherwise it picks D3D12 which is not what we want)
-        let _vk_device = gpu::Device::global();
+        let _vk_device = gpu::Device::instance();
 
         //=========================================================
         // DXGI Factory and adapter enumeration

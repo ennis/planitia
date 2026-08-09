@@ -2,8 +2,11 @@
 #![allow(unsafe_op_in_unsafe_fn, reason = "too verbose, and my IDE already highlights unsafe call sites")]
 #![expect(unused, reason = "noisy")]
 
+extern crate self as gpu;
+
 mod buffer;
 mod command;
+mod debugger;
 mod device;
 mod image;
 mod instance;
@@ -14,6 +17,7 @@ pub mod util;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use gpu_types::reflection::{ShaderReflection};
 
 // Reexports
 
@@ -30,24 +34,36 @@ pub use surface::*;
 pub use swapchain::*;
 
 // proc-macros
-pub use gpu_macros::Vertex;
-pub use gpu_macros::shader_module;
+pub use gpu_macros::{Vertex, shader_module};
 
 pub mod prelude {
     pub use crate::{
         Buffer, BufferUsage, ClearColorValue, ColorBlendEquation, ColorTargetState, CommandBuffer, DepthStencilState,
         Format, FragmentState, GraphicsPipeline, GraphicsPipelineCreateInfo, Image, ImageCreateInfo, ImageType,
         ImageUsage, MemoryLocation, Point2D, PreRasterizationShaders, RasterizationState, Rect2D, RenderEncoder,
-        Sampler, SamplerCreateInfo, ShaderCode, ShaderEntryPoint, ShaderSource, Size2D, StencilState, Vertex,
+        Sampler, SamplerParams, ShaderCode, ShaderEntryPoint, ShaderSource, Size2D, StencilState, Vertex,
         VertexBufferLayoutDescription, VertexInputAttributeDescription, VertexInputState, vk,
     };
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("failed to create device")]
+    DeviceCreationFailed(#[from] DeviceCreateError),
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("Vulkan error: {0}")]
+    Vulkan(#[from] vk::Result),
+}
 
-/// Trait for wrappers of Vulkan objects.
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Trait implemented by wrappers of Vulkan API objects.
 pub trait VulkanObject {
+    /// The Vulkan API handle type associated with the object.
     type Handle: vk::Handle;
+    /// Returns the Vulkan API handle of the object.
     fn handle(&self) -> Self::Handle;
 }
 
@@ -56,7 +72,8 @@ pub const SUBGROUP_SIZE: u32 = 32;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Graphics pipelines.
+
+/// Represents a graphics pipeline.
 #[derive(Clone)]
 pub struct GraphicsPipeline {
     pub(crate) pipeline: vk::Pipeline,
@@ -72,15 +89,16 @@ pub struct GraphicsPipeline {
     ///
     /// The descriptor arrays are kept up-to-date automatically as resources are created and destroyed.
     pub(crate) bindless: bool,
+    pub(crate) stage_reflection: Vec<(ShaderStage, ShaderReflection)>,
 }
 
 impl GraphicsPipeline {
     /// Creates a new graphics pipeline.
     pub fn new(create_info: GraphicsPipelineCreateInfo) -> Result<Self, Error> {
-        Device::global().create_graphics_pipeline(create_info)
+        Device::instance().create_graphics_pipeline(create_info)
     }
 
-    /// Returns the Vulkan pipeline handle.
+    /// Returns the `VkPipeline` handle of this pipeline object.
     pub fn pipeline(&self) -> vk::Pipeline {
         self.pipeline
     }
@@ -91,7 +109,7 @@ impl Drop for GraphicsPipeline {
         let pipeline = self.pipeline;
         let pipeline_layout = self.pipeline_layout;
         unsafe {
-            Device::global().delete_after_current_submission(move |device| {
+            Device::instance().delete_after_current_submission(move |device| {
                 device.raw.destroy_pipeline(pipeline, None);
                 device.raw.destroy_pipeline_layout(pipeline_layout, None);
             })
@@ -107,8 +125,6 @@ impl VulkanObject for GraphicsPipeline {
 }
 
 /// Compute pipelines.
-///
-/// TODO Drop impl
 #[derive(Clone)]
 pub struct ComputePipeline {
     pub(crate) pipeline: vk::Pipeline,
@@ -116,12 +132,13 @@ pub struct ComputePipeline {
     _descriptor_set_layouts: Vec<DescriptorSetLayout>,
     /// See `GraphicsPipeline::bindless` for details.
     pub(crate) bindless: bool,
+    pub(crate) reflection: ShaderReflection,
 }
 
 impl ComputePipeline {
     /// Creates a new compute pipeline.
     pub fn new(create_info: ComputePipelineCreateInfo) -> Result<Self, Error> {
-        Device::global().create_compute_pipeline(create_info)
+        Device::instance().create_compute_pipeline(create_info)
     }
 
     /// Returns the Vulkan pipeline handle.
@@ -134,8 +151,11 @@ impl Drop for ComputePipeline {
     fn drop(&mut self) {
         let pipeline = self.pipeline;
         let pipeline_layout = self.pipeline_layout;
+
         unsafe {
-            Device::global().delete_after_current_submission(move |device| {
+            // Wait until the current submission has completed execution since it may be using
+            // the pipeline.
+            Device::instance().delete_after_current_submission(move |device| {
                 device.raw.destroy_pipeline(pipeline, None);
                 device.raw.destroy_pipeline_layout(pipeline_layout, None);
             })
@@ -152,7 +172,7 @@ impl VulkanObject for ComputePipeline {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Samplers
+/// Represents a sampler object.
 #[derive(Clone, Debug)]
 pub struct Sampler {
     descriptor_index: SamplerDescriptorIndex,
@@ -161,23 +181,29 @@ pub struct Sampler {
 
 impl Sampler {
     /// Creates a new sampler object.
-    pub fn new(create_info: SamplerCreateInfo) -> Self {
-        Device::global().create_sampler(&create_info)
+    ///
+    /// Sampler objects are cached by creation parameters, so this function may return
+    /// the same underlying `VkSampler`, given the same [`SamplerParams`].
+    pub fn new(create_info: SamplerParams) -> Self {
+        Device::instance().create_sampler(&create_info)
     }
 
-    /// Returns the Vulkan sampler handle.
-    pub fn handle(&self) -> vk::Sampler {
-        self.sampler
-    }
-
-    /// Returns this sampler as a descriptor.
+    /// Returns this sampler as a [`Descriptor`].
     pub fn descriptor(&self) -> Descriptor<'_> {
         Descriptor::Sampler { sampler: self.clone() }
     }
 
-    /// Returns the bindless sampler handle.
+    /// Returns the sampler handle for use in shader parameters.
     pub fn device_handle(&self) -> SamplerHandle {
         SamplerHandle::new(self.descriptor_index.index())
+    }
+}
+
+impl VulkanObject for Sampler {
+    type Handle = vk::Sampler;
+
+    fn handle(&self) -> Self::Handle {
+        self.sampler
     }
 }
 
@@ -228,13 +254,6 @@ impl CommandPool {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub trait TrackedResource {
-    /// Returns the internal tracking ID of the image.
-    fn id(&self) -> ResourceId;
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
 #[derive(Clone, Debug)]
 pub struct DescriptorSetLayout {
     last_submission_index: Option<Arc<AtomicU64>>,
@@ -245,7 +264,7 @@ impl Drop for DescriptorSetLayout {
     fn drop(&mut self) {
         if let Some(last_submission_index) = Arc::into_inner(self.last_submission_index.take().unwrap()) {
             let handle = self.handle;
-            Device::global().call_later(last_submission_index.load(Ordering::Relaxed), move |device| unsafe {
+            Device::instance().call_later(last_submission_index.load(Ordering::Relaxed), move |device| unsafe {
                 device.raw.destroy_descriptor_set_layout(handle, None);
             });
         }
@@ -253,16 +272,6 @@ impl Drop for DescriptorSetLayout {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("failed to create device")]
-    DeviceCreationFailed(#[from] DeviceCreateError),
-    #[error("I/O error: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("Vulkan error: {0}")]
-    Vulkan(#[from] vk::Result),
-}
 
 /// Describes an image buffer that is used as the source or destination of an image transfer operation.
 #[derive(Copy, Clone, Debug)]
@@ -425,7 +434,6 @@ impl DepthStencilAttachment<'_> {
     }
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Specifies the code of a shader.
@@ -479,6 +487,14 @@ pub struct ComputePipelineCreateInfo<'a> {
     pub shader: ShaderEntryPoint<'a>,
 }
 
+/// Represents the range of GPU addresses associated with a buffer.
+#[derive(Copy, Clone)]
+pub(crate) struct BufferAddressRange {
+    pub(crate) buffer: vk::Buffer,
+    pub(crate) base: vk::DeviceAddress,
+    pub(crate) size: usize,
+}
+
 // Implementation detail of the VertexInput macro
 #[doc(hidden)]
 pub const fn append_attributes<const N: usize>(
@@ -521,14 +537,29 @@ macro_rules! include_bytes_as_u32 {
                 pub bytes: Bytes,
             }
 
-            const B: &[u8] = &AlignedAs {
-                bytes: *include_bytes!($path),
-            }.bytes;
+            const B: &[u8] = &AlignedAs { bytes: *include_bytes!($path) }.bytes;
             // SAFETY: B is statically borrowed, 4-aligned, and the length is within
             // the static slice (truncated to a multiple of four).
-            unsafe {
-                core::slice::from_raw_parts(B.as_ptr() as *const u32, B.len() / size_of::<u32>())
+            unsafe { core::slice::from_raw_parts(B.as_ptr() as *const u32, B.len() / size_of::<u32>()) }
+        }
+    };
+}
+
+// Implementation detail of shader_module
+#[doc(hidden)]
+#[macro_export]
+macro_rules! bytes_as_u32 {
+    ($bytes:literal) => {
+        const {
+            #[repr(align(4))]
+            pub struct AlignedAs<Bytes: ?Sized> {
+                pub bytes: Bytes,
             }
+
+            const B: &[u8] = &AlignedAs { bytes: *$bytes }.bytes;
+            // SAFETY: B is statically borrowed, 4-aligned, and the length is within
+            // the static slice (truncated to a multiple of four).
+            unsafe { core::slice::from_raw_parts(B.as_ptr() as *const u32, B.len() / size_of::<u32>()) }
         }
     };
 }

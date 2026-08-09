@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "crates/gamelib",         # Game support library
-    "crates/game",            # Game binary
+    "crates/game-host",            # Game binary
     "crates/gpu",             # GPU API
     "crates/gpu-types",       # Common GPU types shared between `gpu` and `gpu-macros`
     "crates/gpu/gpu-macros",  # Derive macros for `gpu`
@@ -15,8 +15,9 @@ members = [
     "crates/terrain-file",    # Terrain file format and related functions
     "crates/geom",            # Common geometry types and definition of various geometry file formats
     "crates/hgeo",            # Reads houdini JSON-based .geo/.bgeo files
-    "crates/hot-reload-test",
+    "crates/experiment",
     "crates/dummytool",
+    "crates/vk-layer",
     "planitia-workspace-hack"
 ]
 resolver = "1"
@@ -39,4 +40,6 @@ hgeo = { path = "crates/hgeo" }
 
 [profile.release]
 debug = true
+# Required by vulkan-layer: panics must not cross FFI boundaries.
+panic = "abort"
 

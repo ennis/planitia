@@ -67,7 +67,6 @@ impl Device {
             1,
         );
         Image {
-            id: self.allocate_resource_id(),
             memory_location: MemoryLocation::Unknown,
             allocation: ResourceAllocation::External,
             handle,

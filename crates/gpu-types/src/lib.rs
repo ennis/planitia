@@ -1,4 +1,7 @@
 #![feature(default_field_values)]
+
+pub mod reflection;
+
 use bitflags::bitflags;
 use std::marker::PhantomData;
 use std::path::Path;
@@ -484,7 +487,7 @@ impl Default for ImageSubresourceLayers {
 
 /// Image view creation parameters.
 ///
-/// Same as VkImageViewCreateInfo, but implements Eq and PartialEq.
+/// See [VkImageViewCreateInfo](https://docs.vulkan.org/refpages/latest/refpages/source/VkImageViewCreateInfo.html)
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct ImageViewInfo {
     pub view_type: vk::ImageViewType,
@@ -493,9 +496,9 @@ pub struct ImageViewInfo {
     pub component_mapping: [vk::ComponentSwizzle; 4],
 }
 
-/// Describe a subresource range of an image.
+/// Describes a subresource range of an image.
 ///
-/// Same as VkImageSubresourceRange, but implements Eq and PartialEq.
+/// See [VkImageSubresourceRange](https://docs.vulkan.org/refpages/latest/refpages/source/VkImageSubresourceRange.html)
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct ImageSubresourceRange {
     pub aspect_mask: vk::ImageAspectFlags,
@@ -524,8 +527,11 @@ impl ImageDataLayout {
     }
 }
 
+/// Sampler parameters.
+///
+/// See [VkSamplerCreateInfo](https://docs.vulkan.org/refpages/latest/refpages/source/VkSamplerCreateInfo.html)
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
-pub struct SamplerCreateInfo {
+pub struct SamplerParams {
     pub mag_filter: vk::Filter = vk::Filter::LINEAR,
     pub min_filter: vk::Filter = vk::Filter::LINEAR,
     pub mipmap_mode: vk::SamplerMipmapMode =  vk::SamplerMipmapMode::LINEAR,
@@ -543,14 +549,15 @@ pub struct SamplerCreateInfo {
     pub unnormalized_coordinates: bool = false,
 }
 
-impl Default for SamplerCreateInfo {
+impl Default for SamplerParams {
     fn default() -> Self {
-        SamplerCreateInfo { .. }
+        SamplerParams { .. }
     }
 }
 
+/// [`SamplerParams`] but hashable and usable as a key in a hash map.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, Ord, PartialOrd)]
-pub struct SamplerCreateInfoHashable {
+pub struct SamplerParamsHashable {
     pub mag_filter: vk::Filter,
     pub min_filter: vk::Filter,
     pub mipmap_mode: vk::SamplerMipmapMode,
@@ -568,8 +575,8 @@ pub struct SamplerCreateInfoHashable {
     pub unnormalized_coordinates: bool,
 }
 
-impl From<SamplerCreateInfo> for SamplerCreateInfoHashable {
-    fn from(info: SamplerCreateInfo) -> Self {
+impl From<SamplerParams> for SamplerParamsHashable {
+    fn from(info: SamplerParams) -> Self {
         Self {
             mag_filter: info.mag_filter,
             min_filter: info.min_filter,
@@ -1089,6 +1096,8 @@ pub struct ShaderEntryPoint<'a> {
     ///
     /// This is valid for compute, task, and mesh shaders.
     pub workgroup_size: [u32; 3],
+    /// Parameter reflection data (optional, for debugging purposes).
+    pub refl_params: &'static [&'static reflection::AccessChain<'static>],
 }
 
 /// Pointers in GPU device address space.
@@ -1215,3 +1224,6 @@ pub mod shader_types {
     pub type mat3x3f = math::Mat3;
     pub type mat4x4f = math::Mat4;
 }
+
+
+//--------------------------------------------------------------------------------------------------

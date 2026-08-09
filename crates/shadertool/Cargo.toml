@@ -19,6 +19,8 @@ scoped-tls = "1.0.1"
 planitia-workspace-hack = { version = "0.1", path = "../../planitia-workspace-hack" }
 quote = "1.0.47"
 proc-macro2 = "1"
+bumpalo = "3.20.3"
+gpu-types = { workspace = true}
 
 [features]
 binary = ["clap"]

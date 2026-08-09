@@ -65,7 +65,7 @@ impl UploadBuffer {
         (0, addr, device_address)
     }
 
-    pub(super) fn allocate<T: Copy>(&mut self, data: &T) -> Ptr<T> {
+    pub(super) fn alloc<T: Copy>(&mut self, data: &T) -> Ptr<T> {
         let (_, ptr, raw_addr) = self.allocate_raw(Layout::new::<T>());
         unsafe {
             ptr::copy_nonoverlapping(data as *const T, ptr as *mut T, 1);
@@ -73,7 +73,7 @@ impl UploadBuffer {
         Ptr { raw: raw_addr, _phantom: PhantomData }
     }
 
-    pub(super) fn allocate_slice<T: Copy>(&mut self, data: &[T]) -> Ptr<T> {
+    pub(super) fn alloc_slice<T: Copy>(&mut self, data: &[T]) -> Ptr<T> {
         let (_, ptr, raw_addr) = self.allocate_raw(Layout::for_value(data));
         unsafe {
             ptr::copy_nonoverlapping(data.as_ptr(), ptr as *mut T, data.len());

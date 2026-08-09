@@ -41,7 +41,7 @@ impl Renderer {
     pub fn new() -> Renderer {
         let pipeline = create_pipeline();
 
-        let sampler = Sampler::new(SamplerCreateInfo {
+        let sampler = Sampler::new(SamplerParams {
             mag_filter: vk::Filter::LINEAR,
             min_filter: vk::Filter::LINEAR,
             mipmap_mode: vk::SamplerMipmapMode::NEAREST,
@@ -93,7 +93,7 @@ impl Renderer {
                     gpu::set_debug_name(&image, format!("egui_texture_{id:?}"));
                 }
 
-                let sampler = Sampler::new(SamplerCreateInfo {
+                let sampler = Sampler::new(SamplerParams {
                     mag_filter: convert_filter(tex.options.magnification),
                     min_filter: convert_filter(tex.options.minification),
                     mipmap_mode: vk::SamplerMipmapMode::NEAREST,
@@ -161,7 +161,7 @@ impl Renderer {
 
         let width = color_target.width();
         let height = color_target.height();
-        let params = cmd.upload(&EguiRootParams { screen_size: [width as f32, height as f32] });
+        let params = cmd.alloc_temp(&EguiRootParams { screen_size: [width as f32, height as f32] });
 
         // encode draw commands
         let mut enc = cmd.begin_rendering(&[ColorAttachment { image: color_target, .. }], None);
@@ -210,7 +210,7 @@ impl Renderer {
 }
 
 fn create_pipeline() -> GraphicsPipeline {
-    let set_layout = Device::global().create_push_descriptor_set_layout(&[
+    let set_layout = Device::instance().create_push_descriptor_set_layout(&[
         vk::DescriptorSetLayoutBinding {
             binding: 0,
             descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,

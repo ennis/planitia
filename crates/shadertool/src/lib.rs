@@ -15,12 +15,20 @@ use scoped_tls::scoped_thread_local;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use std::{fs, io};
+use std::collections::HashMap;
 use thiserror::Error;
+use gpu_types::reflection as refl;
+
 
 use crate::archive_writer::build_and_write_archive;
 use crate::build::{compile_slang_module, create_slang_session};
 pub use dump2::dump_archive_file;
 use sharc::gpu_types::vk;
+
+
+/// Arena allocator to allocate compilation results.
+pub type Arena = bumpalo::Bump;
+
 //--------------------------------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
@@ -88,7 +96,7 @@ pub struct ModuleDependency {
 }
 
 /// A compiled Slang shader module with all its entry points.
-pub struct Module {
+pub struct Module<'a> {
     // Keep the session alive for the lifetime of the module.
     _session: slang::Session,
     pub name: String,
@@ -98,14 +106,16 @@ pub struct Module {
     pub file_mtime: u64,
     pub spirv: Vec<u32>,
     //pub reflection: Vec<Param>,
-    pub entry_points: Vec<EntryPoint>,
+    pub entry_points: Vec<EntryPoint<'a>>,
     pub pipelines: Vec<Pipeline>,
     /// List of all slang module dependencies (including transitive dependencies).
     pub dependencies: Vec<ModuleDependency>,
+    pub refl_struct_types: HashMap<&'a str, &'a refl::StructType<'a>>,
+    pub refl_global_params: Vec<&'a refl::AccessChain<'a>>,
 }
 
 /// A single shader entry point extracted from a [`Module`].
-pub struct EntryPoint {
+pub struct EntryPoint<'a> {
     pub name: String,
     //pub params: Vec<Param>,
     /// The pipeline that this entry point belongs to, either from a `[pipeline("...")]` attribute or inferred
@@ -114,6 +124,7 @@ pub struct EntryPoint {
     pub stage: vk::ShaderStageFlags,
     pub push_constants_size: usize,
     pub workgroup_size: [u32; 3],
+    pub refl_params: Vec<&'a refl::AccessChain<'a>>,
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -292,10 +303,10 @@ fn get_file_mtime(path: &Path) -> anyhow::Result<(PathBuf, u64)> {
 
 //--------------------------------------------------------------------------------------------------
 
-pub fn compile<P: AsRef<Path>>(file: P, options: &BuildOptions) -> Result<Module, Error> {
+pub fn compile<'a, P: AsRef<Path>>(file: P, arena: &'a Arena, options: &BuildOptions) -> Result<Module<'a>, Error> {
     let file = file.as_ref();
     let source = fs::read_to_string(&file)?;
     let manifest = load_manifest_for_source(&file, &source)?;
     let compiler_session = create_slang_session(&options.include_paths, &manifest, options)?;
-    compile_slang_module(&compiler_session, file, &source, &manifest, options)
+    compile_slang_module(arena, &compiler_session, file, &source, &manifest, options)
 }

@@ -5,7 +5,7 @@
 //!      less useful, so consider phasing them out
 
 use crate::build::{compile_slang_module, create_slang_session};
-use crate::{BuildManifest, BuildOptions, EntryPoint, Error, GraphicsState, Module, Pass, get_log_options};
+use crate::{get_log_options, Arena, BuildManifest, BuildOptions, EntryPoint, Error, GraphicsState, Module, Pass};
 use anyhow::{Context, bail, anyhow};
 use color_print::{ceprintln, cprintln};
 use log::warn;
@@ -209,6 +209,8 @@ pub(crate) fn build_and_write_archive(
     manifest: &BuildManifest,
     options: &BuildOptions,
 ) -> Result<(), Error> {
+    let arena = Arena::new();
+
     let quiet = get_log_options().quiet;
     let verbosity = get_log_options().verbosity;
 
@@ -243,7 +245,7 @@ pub(crate) fn build_and_write_archive(
     let compiler_session = create_slang_session(&options.include_paths, manifest, options)?;
 
     'compile: {
-        match compile_slang_module(&compiler_session, &file, source_text, manifest, options) {
+        match compile_slang_module(&arena, &compiler_session, &file, source_text, manifest, options) {
             Ok(module) => {
                 if module.entry_points.is_empty() {
                     if verbosity >= 2 {
@@ -253,8 +255,8 @@ pub(crate) fn build_and_write_archive(
                 }
 
                 if options.emit_reflection {
-                    let reflection = module.generate_reflection();
-                    eprintln!("{reflection}");
+                    //let reflection = module.generate_reflection();
+                    //eprintln!("{reflection}");
                 }
 
                 let written = write_module(&mut archive, &module, manifest, options, &mut stats)?;

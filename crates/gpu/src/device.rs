@@ -9,13 +9,15 @@ use crate::device::upload_buffer::{UPLOAD_BUFFER_CHUNK_SIZE, UploadBuffer};
 use crate::instance::vk_khr_surface;
 use crate::platform::PlatformExtensions;
 use crate::{
-    BufferUsage, CommandPool, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error, GraphicsPipeline,
-    GraphicsPipelineCreateInfo, PreRasterizationShaders, Ptr, SUBGROUP_SIZE, Sampler, SamplerCreateInfo,
-    SamplerCreateInfoHashable, VulkanObject, get_vulkan_entry, get_vulkan_instance, is_depth_and_stencil_format,
+    BufferAddressRange, BufferUsage, CommandPool, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout,
+    Error, GraphicsPipeline, GraphicsPipelineCreateInfo, PreRasterizationShaders, Ptr, SUBGROUP_SIZE, Sampler,
+    SamplerParams, SamplerParamsHashable, ShaderReflection, VulkanObject, get_vulkan_entry, get_vulkan_instance,
+    is_depth_and_stencil_format,
 };
 use ash::vk;
 use gpu_allocator::vulkan::AllocationCreateDesc;
-use log::{debug, error, info, trace};
+use gpu_types::ShaderStage;
+use log::{debug, error, info, trace, warn};
 use slotmap::{SlotMap, new_key_type};
 use std::collections::{HashMap, VecDeque};
 use std::ffi::{CStr, CString, c_void};
@@ -25,7 +27,6 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::{fmt, mem, ptr};
 use vulkan_headers::vulkan::vulkan as vk2;
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Size of the global descriptor heaps (in number of descriptors).
@@ -40,17 +41,11 @@ pub const MAX_TIMESTAMP_QUERY_COUNT: u32 = 4096;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-slotmap::new_key_type! {
-    /// Identifies a GPU resource for tracking.
-    pub struct ResourceId;
+new_key_type! {
     /// Identifies an image resource (sampled or storage image) in a bindless descriptor heap.
     pub(crate) struct ResourceDescriptorIndex;
     /// Identifies a sampler in a bindless sampler descriptor heap.
     pub struct SamplerDescriptorIndex;
-    /// Identifies a resource group.
-    pub struct GroupId;
-    /// Identifies a timestamp query.
-    pub struct TimestampQuery;
 }
 
 pub(crate) struct ExtDescriptorHeap {
@@ -125,13 +120,6 @@ pub(crate) struct DeviceSubmissionState {
     pub(crate) active_submissions: VecDeque<ActiveSubmission>,
 }
 
-// TODO: remove this, we don't do resource tracking anymore
-pub(crate) struct ResourceState {
-    //pub(crate) last_submission_index: u64,
-}
-
-pub(crate) struct TimestampQueryPool {}
-
 pub struct Device {
     /// Underlying vulkan device
     pub(crate) raw: ash::Device,
@@ -145,6 +133,10 @@ pub struct Device {
     /// Global upload buffer.
     upload_buffer: Mutex<UploadBuffer>,
 
+    /// GPU VA -> buffer+offset map
+    /// For debugging
+    addr_map: Mutex<Vec<BufferAddressRange>>,
+
     // main graphics queue
     pub(crate) queue_family: u32,
 
@@ -153,8 +145,7 @@ pub struct Device {
 
     // TODO: we don't track resources anymore, so this should go,
     //       unless we have a need for IDs somewhere
-    pub(crate) resources: Mutex<SlotMap<ResourceId, ResourceState>>,
-
+    //pub(crate) resources: Mutex<SlotMap<ResourceId, ResourceState>>,
     pub(crate) descriptor_table: BindlessDescriptorTable,
     pub(crate) descriptor_indices: Mutex<DeviceDescriptorIndexTable>,
 
@@ -193,7 +184,7 @@ pub struct Device {
     /// by the GPU, due to command buffers being submitted out-of-order.
     deletion_queue: Mutex<Vec<DeleteQueueEntry>>,
 
-    pub(crate) sampler_cache: Mutex<HashMap<SamplerCreateInfoHashable, Sampler>>,
+    pub(crate) sampler_cache: Mutex<HashMap<SamplerParamsHashable, Sampler>>,
 }
 
 impl fmt::Debug for Device {
@@ -423,9 +414,9 @@ const DEVICE_EXTENSIONS: &[&str] = &[
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl Device {
-    /// Returns the global device.
+    /// Returns the global device instance.
     #[inline(never)]
-    pub fn global() -> &'static Device {
+    pub fn instance() -> &'static Device {
         static DEVICE: LazyLock<&'static Device> =
             LazyLock::new(|| Box::leak(Box::new(create_device().expect("failed to create the GPU device"))));
         &*DEVICE
@@ -614,7 +605,6 @@ impl Device {
             submission_state: Mutex::new(DeviceSubmissionState { queue, active_submissions: VecDeque::new() }),
             queue_family: graphics_queue_family_index,
             allocator: Mutex::new(allocator),
-            resources: Mutex::new(SlotMap::with_key()),
             descriptor_indices: Mutex::new(DeviceDescriptorIndexTable {
                 resource: Default::default(),
                 sampler: Default::default(),
@@ -630,6 +620,7 @@ impl Device {
             upload_buffer: Mutex::new(UploadBuffer::new(BufferUsage::UNIFORM)),
             completed_tickets: AtomicU64::new(0),
             descriptor_heaps,
+            addr_map: Mutex::new(vec![]),
         })
     }
 
@@ -677,16 +668,9 @@ impl Device {
         }];
 
         let mut fragment_shader_interlock_features = vk::PhysicalDeviceFragmentShaderInterlockFeaturesEXT {
-            //p_next: &mut timeline_features as *mut _ as *mut c_void,
             fragment_shader_pixel_interlock: vk::TRUE,
             ..Default::default()
         };
-
-        /*let mut descriptor_buffer_features = vk::PhysicalDeviceDescriptorBufferFeaturesEXT {
-            p_next: &mut fragment_shader_interlock_features as *mut _ as *mut c_void,
-            descriptor_buffer: vk::TRUE,
-            ..Default::default()
-        };*/
 
         let mut mutable_descriptor_type_features = vk::PhysicalDeviceMutableDescriptorTypeFeaturesEXT {
             p_next: &mut fragment_shader_interlock_features as *mut _ as *mut c_void,
@@ -833,17 +817,17 @@ impl Device {
         &self.raw
     }
 
-    /// Allocates a new resource ID for tracking a resource.
-    pub(crate) fn allocate_resource_id(&self) -> ResourceId {
-        self.resources.lock().unwrap().insert(ResourceState {
-            //last_submission_index: 0,
-        })
-    }
+    ///// Allocates a new resource ID for tracking a resource.
+    //pub(crate) fn allocate_resource_id(&self) -> ResourceId {
+    //    self.resources.lock().unwrap().insert(ResourceState {
+    //        //last_submission_index: 0,
+    //    })
+    //}
 
-    /// Releases a resource ID that is no longer used.
-    pub(crate) fn free_resource_id(&self, resource_id: ResourceId) {
-        self.resources.lock().unwrap().remove(resource_id);
-    }
+    ///// Releases a resource ID that is no longer used.
+    //pub(crate) fn free_resource_id(&self, resource_id: ResourceId) {
+    //    self.resources.lock().unwrap().remove(resource_id);
+    //}
 
     /// Releases a resource heap index that is no longer used.
     pub(crate) fn free_resource_heap_index(&self, index: ResourceDescriptorIndex) {
@@ -880,14 +864,14 @@ impl Device {
     /// Schedules a resource for deletion after the current submission is complete.
     pub(crate) fn delete_resource_after_current_submission(
         &self,
-        resource_id: ResourceId,
+        //resource_id: ResourceId,
         deleter: impl FnOnce(&Self) + Send + Sync + 'static,
     ) {
         // See comments in `delete_after_current_submission`.
         let last_create_ticket = self.next_create_ticket.load(Relaxed) - 1;
         self.call_later(last_create_ticket, move |device| {
             //trace!("GPU: deleting tracked resource {:?}", resource_id);
-            Self::global().free_resource_id(resource_id);
+            //Self::global().free_resource_id(resource_id);
             deleter(device);
         })
     }
@@ -920,17 +904,17 @@ impl Device {
     /// Uploads data to GPU memory via this device's upload buffer.
     ///
     /// The returned pointer is guaranteed to be valid for the current submission.
-    pub fn upload<T: Copy>(&self, data: &[T]) -> Ptr<T> {
+    pub fn alloc_temp<T: Copy>(&self, data: &T) -> Ptr<T> {
         let mut upload_buffer = self.upload_buffer.lock().unwrap();
-        upload_buffer.allocate_slice(data)
+        upload_buffer.alloc(data)
     }
 
     /// Uploads data to GPU memory via this device's upload buffer.
     ///
     /// The returned pointer is guaranteed to be valid for the current submission.
-    pub fn upload_one<T: Copy>(&self, data: &T) -> Ptr<T> {
+    pub fn alloc_slice_temp<T: Copy>(&self, data: &[T]) -> Ptr<T> {
         let mut upload_buffer = self.upload_buffer.lock().unwrap();
-        upload_buffer.allocate(data)
+        upload_buffer.alloc_slice(data)
     }
 
     /// Schedules deletion of full upload buffers.
@@ -1048,8 +1032,8 @@ impl Device {
         self.semaphores.lock().unwrap().push(binary_semaphore);
     }
 
-    pub(crate) fn create_sampler(&self, info: &SamplerCreateInfo) -> Sampler {
-        let info_hashable = SamplerCreateInfoHashable::from(*info);
+    pub(crate) fn create_sampler(&self, info: &SamplerParams) -> Sampler {
+        let info_hashable = SamplerParamsHashable::from(*info);
         if let Some(sampler) = self.sampler_cache.lock().unwrap().get(&info_hashable) {
             return sampler.clone();
         }
@@ -1283,6 +1267,7 @@ impl Device {
             pipeline_layout,
             _descriptor_set_layouts: create_info.set_layouts.to_vec(),
             bindless: is_bindless,
+            reflection: create_info.shader.refl_params,
         })
     }
 
@@ -1392,12 +1377,20 @@ impl Device {
         let _mesh_module;
         let _fragment_module;
 
+        let mut stage_reflection = vec![];
+
+        // let mut refl_vertex = ShaderReflection::default();
+        // let mut refl_task = ShaderReflection::default();
+        // let mut refl_mesh = ShaderReflection::default();
+        // let mut refl_fragment = ShaderReflection::default();
+
         match create_info.pre_rasterization_shaders {
             PreRasterizationShaders::PrimitiveShading { vertex } => {
                 vertex_entry_point = CString::new(vertex.entry_point).unwrap();
                 let (stage, module) =
                     create_stage(&self, p_next, vk::ShaderStageFlags::VERTEX, &vertex.code, &vertex_entry_point)?;
                 _vertex_module = module;
+                stage_reflection.push((ShaderStage::Vertex, vertex.refl_params));
                 stages.push(stage);
             }
             PreRasterizationShaders::MeshShading { mesh, task } => {
@@ -1406,6 +1399,7 @@ impl Device {
                     let (stage, module) =
                         create_stage(&self, p_next, vk::ShaderStageFlags::TASK_EXT, &task.code, &task_entry_point)?;
                     _task_module = module;
+                    stage_reflection.push((ShaderStage::Task, task.refl_params));
                     stages.push(stage);
                 }
 
@@ -1413,6 +1407,7 @@ impl Device {
                 let (stage, module) =
                     create_stage(&self, p_next, vk::ShaderStageFlags::MESH_EXT, &mesh.code, &mesh_entry_point)?;
                 _mesh_module = module;
+                stage_reflection.push((ShaderStage::Mesh, mesh.refl_params));
                 stages.push(stage);
             }
         };
@@ -1426,6 +1421,7 @@ impl Device {
             &fragment_entry_point,
         )?;
         _fragment_module = module;
+        stage_reflection.push((ShaderStage::Fragment, create_info.fragment.shader.refl_params));
         stages.push(stage);
 
         let attachment_states: Vec<_> = create_info
@@ -1567,13 +1563,50 @@ impl Device {
             pipeline_layout,
             _descriptor_set_layouts: create_info.set_layouts.to_vec(),
             bindless,
+            stage_reflection,
         })
+    }
+
+    pub(crate) fn register_address_range(&self, buffer: vk::Buffer, base: vk::DeviceAddress, size: usize) {
+        let r = BufferAddressRange { base, size, buffer };
+        let mut addr_map = self.addr_map.lock().unwrap();
+        match addr_map.binary_search_by(|probe| probe.base.cmp(&r.base)) {
+            Ok(_) => {
+                warn!("register_address_range: {:016x}->{:016x} already registered", r.base, r.base + r.size as u64);
+            }
+            Err(pos) => {
+                addr_map.insert(pos, r);
+            }
+        }
+    }
+
+    pub(crate) fn unregister_address_range(&self, buffer: vk::Buffer) {
+        let mut addr_map = self.addr_map.lock().unwrap();
+        if let Some(pos) = addr_map.iter().position(|r| r.buffer == buffer) {
+            addr_map.remove(pos);
+        }
+    }
+
+    pub(crate) fn get_buffer_for_address(&self, address: vk::DeviceAddress) -> Option<(BufferAddressRange, usize)> {
+        let addr_map = self.addr_map.lock().unwrap();
+        match addr_map.binary_search_by(|probe| {
+            if address < probe.base {
+                std::cmp::Ordering::Greater
+            } else if address >= probe.base + probe.size as u64 {
+                std::cmp::Ordering::Less
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        }) {
+            Ok(pos) => Some((addr_map[pos], (address - addr_map[pos].base) as usize)),
+            Err(_) => None,
+        }
     }
 }
 
 /// Waits for the GPU to complete all submitted work.
 pub fn wait_idle() {
-    unsafe { Device::global().raw.device_wait_idle().unwrap() }
+    unsafe { Device::instance().raw.device_wait_idle().unwrap() }
 }
 
 /// Cleanup expired resources.
@@ -1582,7 +1615,7 @@ pub fn wait_idle() {
 /// used by the GPU.
 /// Otherwise, tasks scheduled with `call_later` or `delete_later` will never be executed.
 pub fn poll() {
-    Device::global().poll()
+    Device::instance().poll()
 }
 
 /// Assigns a debug name to an object represented by its raw vulkan handle
@@ -1597,7 +1630,7 @@ pub fn poll() {
 ///   while this function is executing.
 /// * The handle must be a valid vulkan object handle.
 pub unsafe fn set_debug_name_raw<H: vk::Handle>(handle: H, name: impl AsRef<str>) {
-    let device = Device::global();
+    let device = Device::instance();
     let object_name = CString::new(name.as_ref()).unwrap();
 
     unsafe {
@@ -1630,7 +1663,7 @@ pub unsafe fn set_debug_name<Object: VulkanObject>(object: &Object, name: impl A
 
 /// Returns the `VkPhysicalDeviceProperties` of the physical device used by the global device.
 pub fn get_physical_device_properties() -> vk::PhysicalDeviceProperties {
-    Device::global().thread_safe.physical_device_properties
+    Device::instance().thread_safe.physical_device_properties
 }
 
 /// Returns the name of the physical device used by the global device.
@@ -1642,12 +1675,12 @@ pub fn get_physical_device_name() -> String {
 
 /// Returns the device UUID of the physical device.
 pub fn get_device_uuid() -> [u8; 16] {
-    Device::global().thread_safe.physical_device_id_properties.device_uuid
+    Device::instance().thread_safe.physical_device_id_properties.device_uuid
 }
 
 /// Returns the device LUID of the physical device.
 pub fn get_device_luid() -> Option<[u8; 8]> {
-    let id_properties = &Device::global().thread_safe.physical_device_id_properties;
+    let id_properties = &Device::instance().thread_safe.physical_device_id_properties;
     if id_properties.device_luid_valid == vk::TRUE { Some(id_properties.device_luid) } else { None }
 }
 
@@ -1666,7 +1699,7 @@ pub fn get_timestamp_period() -> f32 {
 /// - On Windows, the system timestamp is a QueryPerformanceCounter value
 /// - On Linux, it's a value in the CLOCK_MONOTONIC time domain returned by clock_gettime(CLOCK_MONOTONIC).
 pub fn get_calibrated_timestamp_pair() -> (u64, u64) {
-    let device = Device::global();
+    let device = Device::instance();
 
     // Create the query pool for timestamps.
     let (timestamps, _) = unsafe {

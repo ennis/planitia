@@ -682,7 +682,9 @@ impl MainThreadContext {
         gpu::write_timestamp(move |ts| {
             with_app_ctx(|ctx| ctx.tracy_gpu_context.upload_gpu_timestamp(query_id, ts as i64))
         });
-        gpu::flush().unwrap();
+        // FIXME: this creates another command buffer, and thus another query pool
+        //        meaning that we create one query pool per span...
+        //gpu::flush().unwrap();
         self.tracy_gpu_context.begin_span(span_location, query_id);
     }
 
@@ -692,7 +694,7 @@ impl MainThreadContext {
         gpu::write_timestamp(move |ts| {
             with_app_ctx(|ctx| ctx.tracy_gpu_context.upload_gpu_timestamp(query_id, ts as i64))
         });
-        gpu::flush().unwrap();
+        //gpu::flush().unwrap();
         self.tracy_gpu_context.end_span(query_id);
     }
 }

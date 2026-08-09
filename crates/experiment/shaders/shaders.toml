@@ -1,6 +1,6 @@
 include_paths = [
     "../../gamelib/assets/gamelib/shaders",
-    "../../game/assets/shaders"
+    "../../game-host/assets/shaders"
 ]
 
 [default]

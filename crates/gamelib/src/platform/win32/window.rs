@@ -99,7 +99,7 @@ impl Window {
                     gpu::ImageUsage::COLOR_ATTACHMENT | gpu::ImageUsage::TRANSFER_DST,
                 ))
             } else {
-                let device = gpu::Device::global();
+                let device = gpu::Device::instance();
                 let surface = gpu::get_vulkan_surface(inner.window_handle().unwrap().as_raw());
                 let swapchain = device.create_swapchain(
                     surface,
@@ -133,7 +133,7 @@ impl Window {
         match &self.swap_chain_impl {
             SwapChainImpl::DirectComposition(swap_chain) => Some(swap_chain.get_image()),
             SwapChainImpl::Vulkan(swap_chain) => {
-                let device = gpu::Device::global();
+                let device = gpu::Device::instance();
                 unsafe {
                     let (index, image) =
                         match device.acquire_next_swapchain_image(swap_chain, Duration::from_millis(1000)) {
@@ -192,7 +192,7 @@ impl Window {
                 );
             }
             SwapChainImpl::Vulkan(ref mut swap_chain) => {
-                let device = gpu::Device::global();
+                let device = gpu::Device::instance();
                 unsafe {
                     device.resize_swapchain(swap_chain, width, height);
                 }

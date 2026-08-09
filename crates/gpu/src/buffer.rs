@@ -1,5 +1,6 @@
-use crate::{BufferRange, BufferUsage, Device, Ptr, ResourceAllocation, ResourceId, TrackedResource, VulkanObject};
+use crate::{BufferRange, BufferUsage, Device, Ptr, ResourceAllocation, VulkanObject};
 use ash::vk;
+use ash::vk::Handle;
 use gpu_allocator::MemoryLocation;
 use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
 use log::{trace, warn};
@@ -19,9 +20,10 @@ impl<T: ?Sized> Drop for Buffer<T> {
         let handle = self.handle;
 
         // skip this if no buffer was actually allocated
-        if !self.id.is_null() {
-            Device::global().delete_resource_after_current_submission(self.id, move |device| unsafe {
+        if !handle.is_null() {
+            Device::instance().delete_resource_after_current_submission(move |device| unsafe {
                 trace!("GPU: deleting buffer: {:?}", handle);
+                device.unregister_address_range(handle);
                 device.raw.destroy_buffer(handle, None);
                 device.free_memory(&mut allocation);
             });
@@ -46,7 +48,6 @@ pub struct BufferCreateInfo {
 /// If the mapped contents are accessed from multiple threads, the caller must
 /// ensure proper synchronization.
 pub struct Buffer<T: ?Sized> {
-    pub(crate) id: ResourceId,
     pub(crate) memory_location: MemoryLocation,
     pub(crate) allocation: ResourceAllocation,
     pub(crate) device_address: vk::DeviceAddress,
@@ -60,13 +61,13 @@ pub struct Buffer<T: ?Sized> {
 // Safe to send to another thread (buffers do not have shared reference semantics).
 unsafe impl<T: ?Sized> Send for Buffer<T> {}
 // References can be shared between threads (access to the content of the buffer on the CPU
-// is done via unsafe methods, and the called should ensure proper synchronization).
+// is done via unsafe methods, and the caller should ensure proper synchronization).
 unsafe impl<T: ?Sized> Sync for Buffer<T> {}
 
 impl<T: ?Sized> Buffer<T> {
     pub unsafe fn from_layout(layout: Layout) -> Buffer<T> {
         // TODO ensure alignment
-        let buffer = Device::global().create_buffer(
+        let buffer = Device::instance().create_buffer(
             1,
             BufferCreateInfo {
                 len: layout.size(),
@@ -87,6 +88,11 @@ impl<T: ?Sized> Buffer<T> {
     /// Returns the device address of the buffer, for use in shaders.
     pub fn ptr(&self) -> Ptr<T> {
         Ptr { raw: self.device_address, _phantom: PhantomData }
+    }
+
+    /// Returns the raw device address of the buffer, for use in shaders.
+    pub fn device_address(&self) -> vk::DeviceAddress {
+        self.device_address
     }
 
     /// Returns the usage flags of the buffer.
@@ -135,7 +141,7 @@ impl<T: Copy> Buffer<T> {
 
     /// Creates a new buffer with the specified number of elements.
     pub fn new(create_info: BufferCreateInfo) -> Self {
-        let buffer = Device::global().create_buffer(size_of::<T>(), create_info);
+        let buffer = Device::instance().create_buffer(size_of::<T>(), create_info);
         unsafe {
             // SAFETY: the buffer is large enough to hold `len` elements of type `T`
             buffer.cast()
@@ -146,7 +152,7 @@ impl<T: Copy> Buffer<T> {
     ///
     /// All other properties of the buffer (usage flags, memory location, etc.) are preserved.
     pub fn resize_no_copy(&mut self, new_len: usize) {
-        let buffer = Device::global().create_buffer(
+        let buffer = Device::instance().create_buffer(
             size_of::<T>(),
             BufferCreateInfo { len: new_len, usage: self.usage, memory_location: self.memory_location },
         );
@@ -219,10 +225,10 @@ impl<T: Copy> Buffer<T> {
     ///     - while this is not strictly required, you probably want the slice DST to have a
     ///       well-defined layout (`repr(C)`) so that you can allocate a byte buffer with the
     ///       correct layout.
-    /// * The host pointer must be correctly aligned for `U`. Technically alignment is defined
+    /// * The host pointer must be correctly aligned for `U`. Technically, alignment is defined
     ///   statically for slices and slice DSTs, but currently there's no way to get it without an
     ///   instance of the type.
-    /// * it should be valid to reinterpret the buffer as `&U`. That's not very useful,
+    /// * it should be valid to reinterpret the buffer as `&U`. That may seem vague and not very useful,
     ///   but the rules are complex. Maybe take a look at [the documentation for the slice_dst crate](https://docs.rs/slice-dst/latest/slice_dst/)
     ///   for an overview of slice DST layout rules.
     pub unsafe fn as_cast_unsized<U: ?Sized>(&self) -> &Buffer<U> {
@@ -306,12 +312,6 @@ impl<T: ?Sized> VulkanObject for Buffer<T> {
     }
 }
 
-impl<T: ?Sized> TrackedResource for Buffer<T> {
-    fn id(&self) -> ResourceId {
-        self.id
-    }
-}
-
 pub type BufferUntyped = Buffer<u8>;
 
 impl<'a, T: Copy> From<&'a Buffer<T>> for BufferRange<'a, T> {
@@ -338,7 +338,6 @@ impl Device {
             // Don't output a warning for this
             // Instead, we should simply not allocate anything in this case.
             return BufferUntyped {
-                id: ResourceId::null(),
                 allocation: ResourceAllocation::None,
                 handle: vk::Buffer::null(),
                 memory_location: create_info.memory_location,
@@ -397,7 +396,7 @@ impl Device {
 
             let mem_req = self.raw.get_buffer_memory_requirements(handle);
             let allocation = self.allocate_memory_or_panic(&AllocationCreateDesc {
-                name: "",
+                name: "", // unfortunately we don't have a name yet, it is set after creation
                 requirements: mem_req,
                 location: create_info.memory_location,
                 linear: true,
@@ -411,12 +410,11 @@ impl Device {
             let device_address = self
                 .raw
                 .get_buffer_device_address(&vk::BufferDeviceAddressInfo { buffer: handle, ..Default::default() });
+            self.register_address_range(handle, device_address, nonzero_byte_size as usize);
 
-            let id = self.allocate_resource_id();
-            trace!("GPU: create buffer {handle:?} {id:?}");
+            trace!("GPU: create_buffer {handle:?}");
 
             BufferUntyped {
-                id,
                 allocation,
                 handle,
                 memory_location: create_info.memory_location,

@@ -1,4 +1,3 @@
-mod command;
 mod push_buffer;
 
 pub use push_buffer::*;

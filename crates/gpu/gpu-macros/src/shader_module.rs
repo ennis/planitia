@@ -1,5 +1,8 @@
-use proc_macro2::TokenStream;
-use quote::{format_ident, quote};
+use std::slice;
+use gpu_types::reflection as refl;
+use gpu_types::reflection::{AccessKind, ScalarType};
+use proc_macro2::{Ident, TokenStream};
+use quote::{format_ident, quote, TokenStreamExt};
 
 macro_rules! return_error {
     ($span:expr, $msg:literal) => {
@@ -8,6 +11,272 @@ macro_rules! return_error {
     ($span:expr, $fmt:literal, $($arg:tt)*) => {
         return Err(syn::Error::new($span, format!($fmt, $($arg)*)));
     };
+}
+
+fn quote_scalar_type(scalar: refl::ScalarType) -> TokenStream {
+    let scalar_str = format!("{scalar:?}");
+    let scalar_ident = format_ident!("{scalar_str}");
+    quote!(refl::ScalarType::#scalar_ident)
+}
+
+fn generate_scalar_type(scalar: refl::ScalarType) -> TokenStream {
+    match scalar {
+        refl::ScalarType::Bool => quote!(bool),
+        refl::ScalarType::I8 => quote!(i8),
+        refl::ScalarType::I16 => quote!(i16),
+        refl::ScalarType::I32 => quote!(i32),
+        refl::ScalarType::I64 => quote!(i64),
+        refl::ScalarType::U8 => quote!(u8),
+        refl::ScalarType::U16 => quote!(u16),
+        refl::ScalarType::U32 => quote!(u32),
+        refl::ScalarType::U64 => quote!(u64),
+        refl::ScalarType::F32 => quote!(f32),
+    }
+}
+
+fn scalar_type_suffix(scalar_type: ScalarType) -> &'static str {
+    match scalar_type {
+        ScalarType::Bool => "b",
+        ScalarType::I8 => "i8",
+        ScalarType::I16 => "i16",
+        ScalarType::I32 => "i",
+        ScalarType::I64 => "i64",
+        ScalarType::U8 => "u8",
+        ScalarType::U16 => "u16",
+        ScalarType::U32 => "u",
+        ScalarType::U64 => "u64",
+        ScalarType::F32 => "f",
+    }
+}
+
+fn generate_vector_type(scalar_type: ScalarType, len: usize) -> Ident {
+    let suffix = scalar_type_suffix(scalar_type);
+    format_ident!("vec{len}{suffix}")
+}
+
+fn generate_matrix_type(scalar_type: ScalarType, rows: usize, cols: usize) -> Ident {
+    let suffix = scalar_type_suffix(scalar_type);
+    format_ident!("mat{cols}x{rows}{suffix}")
+}
+
+fn generate_type(ty: &refl::TypeDesc) -> TokenStream {
+    match ty {
+        refl::TypeDesc::Scalar(scalar_type) => {
+            let scalar_type_tokens = generate_scalar_type(*scalar_type);
+            quote!(#scalar_type_tokens)
+        }
+        refl::TypeDesc::Vector(scalar, len) => {
+            let vector_type_ident = generate_vector_type(*scalar, *len as usize);
+            quote!(#vector_type_ident)
+        }
+        refl::TypeDesc::Matrix(scalar, rows, cols) => {
+            let matrix_type_ident = generate_matrix_type(*scalar, *rows as usize, *cols as usize);
+            quote!(#matrix_type_ident)
+        }
+        refl::TypeDesc::Struct(struct_ty) => {
+            let struct_name = format_ident!("{}", struct_ty.name);
+            quote!(#struct_name)
+        }
+        refl::TypeDesc::Array(elem, len) => {
+            let elem = generate_type(elem);
+            let len = *len as usize;
+            quote!([#elem; #len])
+        }
+        refl::TypeDesc::RuntimeArray(_) => {
+            todo!("Runtime arrays are not yet supported")
+        }
+        refl::TypeDesc::ImageHandle(_) => {
+            todo!("Image handles are not yet supported")
+        }
+        refl::TypeDesc::Pointer(pointee) => {
+            let pointee = generate_type(pointee);
+            quote!(gpu::Ptr<#pointee>)
+        }
+    }
+}
+
+fn quote_type(ty: &refl::TypeDesc) -> TokenStream {
+    match ty {
+        refl::TypeDesc::Scalar(scalar_type) => {
+            let scalar_type = quote_scalar_type(*scalar_type);
+            quote! { refl::TypeDesc::Scalar(#scalar_type) }
+        }
+        refl::TypeDesc::Vector(scalar, len) => {
+            let scalar = quote_scalar_type(*scalar);
+            let len = *len;
+            quote! {
+                refl::TypeDesc::Vector(#scalar, #len)
+            }
+        }
+        refl::TypeDesc::Matrix(scalar, rows, cols) => {
+            let scalar = quote_scalar_type(*scalar);
+            let rows = *rows;
+            let cols = *cols;
+            quote! {
+                refl::TypeDesc::Matrix(#scalar,#rows, #cols)
+            }
+        }
+        refl::TypeDesc::Struct(struct_ty) => {
+            let struct_name = format_ident!("{}", struct_ty.name);
+            quote! {
+                refl::TypeDesc::Struct(&#struct_name::TYPE_DESC)
+            }
+        }
+        refl::TypeDesc::Array(elem, len) => {
+            let elem_quoted = quote_type(elem);
+            let len = *len;
+            quote! {
+                refl::TypeDesc::Array(&const { #elem_quoted }, #len)
+            }
+        }
+        refl::TypeDesc::RuntimeArray(elem) => {
+            let elem_quoted = quote_type(elem);
+            quote! {
+                refl::TypeDesc::RuntimeArray(&const { #elem_quoted })
+            }
+        }
+        refl::TypeDesc::ImageHandle(ih) => {
+            let scalar = quote_scalar_type(ih.sampled.scalar);
+            let components = ih.sampled.components;
+            let read_write = ih.read_write;
+            quote! {
+                refl::TypeDesc::ImageHandle(refl::ImageHandleType {
+                    sampled: refl::SampledType {
+                        scalar: #scalar,
+                        components: #components,
+                    },
+                    read_write: #read_write,
+                })
+            }
+        }
+        refl::TypeDesc::Pointer(pointee) => {
+            let pointee_quoted = quote_type(pointee);
+            quote! {
+                refl::TypeDesc::Pointer(&const { #pointee_quoted })
+            }
+        }
+    }
+}
+
+fn generate_struct_decl(s: &refl::StructType) -> TokenStream {
+    let struct_name = format_ident!("{}", s.name);
+    let struct_name_str = s.name;
+    let fields = s.fields.iter().map(|f| {
+        let field_name = format_ident!("{}", f.name);
+        let field_type = generate_type(&f.ty);
+        quote!(pub #field_name: #field_type)
+    });
+    let fields_meta = s.fields.iter().map(|f| {
+        let field_name = f.name;
+        let field_type = quote_type(&f.ty);
+        let offset = f.offset;
+        quote! {
+            refl::StructField {
+                name: #field_name,
+                ty: #field_type,
+                offset: #offset,
+            }
+        }
+    });
+
+    quote! {
+        #[repr(C)]
+        #[derive(Copy, Clone)]
+        pub struct #struct_name {
+            #(#fields),*
+        }
+        impl #struct_name {
+            pub const TYPE_DESC: refl::StructType<'static> = refl::StructType {
+                name: #struct_name_str,
+                fields: &[
+                    #(#fields_meta),*
+                ],
+            };
+        }
+    }
+}
+
+fn mangle_access_chain_name(entry_point: Option<&str>, name: &str) -> Ident {
+    let components = name.split('.').collect::<Vec<_>>();
+    let mut mangled = if let Some(entry_point) = entry_point {
+        format!("E{}{}", entry_point.len(), entry_point)
+    } else {
+        String::new()
+    };
+    for c in components {
+        if c.starts_with('$') {
+            mangled.push('D');
+        } else if c.starts_with('[') {
+            mangled.push('I');
+        } else {
+            mangled.push_str(&format!("F{}{}", c.len(), c));
+        }
+    }
+
+    format_ident!("{mangled}")
+}
+
+fn generate_access_chain(entry_point: Option<&str>, s: &refl::AccessChain) -> TokenStream {
+    let name = s.name;
+    let ident = mangle_access_chain_name(entry_point, name);
+    let ty = quote_type(&s.ty);
+
+    let kind = match s.kind {
+        AccessKind::Binding { name, resource_index, offset } => {
+            quote! {
+                refl::AccessKind::Binding {
+                    name: #name,
+                    resource_index: #resource_index,
+                    offset: #offset,
+                }
+            }
+        }
+        AccessKind::PushData { offset } => {
+            quote! {
+                refl::AccessKind::PushData {
+                    offset: #offset,
+                }
+            }
+        }
+        AccessKind::Field { offset } => {
+            quote! {
+                refl::AccessKind::Field {
+                    offset: #offset,
+                }
+            }
+        }
+        AccessKind::ArrayIndex { count, stride } => {
+            quote! {
+                refl::AccessKind::ArrayIndex { count,stride }
+            }
+        }
+        AccessKind::RuntimeArrayIndex { stride } => {
+            quote! {
+                refl::AccessKind::RuntimeArrayIndex { stride }
+            }
+        }
+        AccessKind::Load => {
+            quote! {
+                refl::AccessKind::Load
+            }
+        }
+    };
+    let parent = match s.parent {
+        Some(s) => {
+            let parent_name = mangle_access_chain_name(entry_point, s.name);
+            quote!(Some(&#parent_name))
+        }
+        None => quote!(None),
+    };
+
+    quote! {
+        static #ident: refl::AccessChain = refl::AccessChain {
+            parent: #parent,
+            kind: #kind,
+            name: #name,
+            ty: #ty
+        };
+    }
 }
 
 pub(crate) fn shader_module_impl(
@@ -45,32 +314,40 @@ pub(crate) fn shader_module_impl(
     // Compile the shader module
     let options = shadertool::BuildOptions {
         emit_cargo_deps: false,
-        emit_debug_information: true,   // TODO configure?
+        emit_debug_information: true, // TODO configure?
         emit_spirv_binaries: true,
         emit_reflection: false,
         include_paths: vec![],
         output_directory: None,
     };
 
-    let module = shadertool::compile(&shader_file, &options)
+    let arena = shadertool::Arena::new();
+    let module = shadertool::compile(&shader_file, &arena, &options)
         .map_err(|err| syn::Error::new(shader_path_lit.span(), format!("failed to compile shader:\n{err}")))?;
 
-    // Write SPIR-V binary
-    let spirv_output = shader_file
-        .parent()
-        .unwrap()
-        .join(format!("spirv/{}.spv", shader_file.file_stem().unwrap().to_string_lossy()))
-        .to_string_lossy()
-        .to_string();
-    let bytecode = quote! {
-        static __BYTECODE: &[u32] = ::gpu::include_bytes_as_u32!(#spirv_output);
+    // Convert SPIR-V bytecode to u32 array
+    let bytecode_str = {
+        let spirv_bytes = unsafe {
+            slice::from_raw_parts(module.spirv.as_ptr() as *const u8, module.spirv.len() * 4)
+        };
+        syn::LitByteStr::new(&spirv_bytes, shader_path_lit.span())
     };
+
+    let bytecode = quote! {
+        static __BYTECODE: &[u32] = ::gpu::bytes_as_u32!(#bytecode_str);
+    };
+
+    // Write SPIR-V binary
+    //let spirv_output = shader_file
+    //    .parent()
+    //    .unwrap()
+    //    .join(format!("spirv/{}.spv", shader_file.file_stem().unwrap().to_string_lossy()))
+    //    .to_string_lossy()
+    //    .to_string();
 
     // Include all dependencies.
     let dependencies = {
-        let paths = module.dependencies.iter().map(|dep| {
-            dep.path.to_string_lossy()
-        });
+        let paths = module.dependencies.iter().map(|dep| dep.path.to_string_lossy());
         quote! {
             static __DEPENDENCIES: &[&str] = &[
                 #(include_str!(#paths)),*
@@ -80,13 +357,13 @@ pub(crate) fn shader_module_impl(
 
     // Write ShaderEntryPoints
     let mut entry_points = vec![];
-    for entry_point in module.entry_points.iter() {
-        let ep_name = &entry_point.name;
+    for (i, ep) in module.entry_points.iter().enumerate() {
+        let ep_name = &ep.name;
         let ep_name_ident = format_ident!("{}", ep_name);
-        let push_constants_size = entry_point.push_constants_size;
-        let workgroup_size = entry_point.workgroup_size;
+        let push_constants_size = ep.push_constants_size;
+        let workgroup_size = ep.workgroup_size;
 
-        let stage = match entry_point.stage {
+        let stage = match ep.stage {
             gpu_types::vk::ShaderStageFlags::VERTEX => format_ident!("Vertex"),
             gpu_types::vk::ShaderStageFlags::FRAGMENT => format_ident!("Fragment"),
             gpu_types::vk::ShaderStageFlags::MESH_EXT => format_ident!("Mesh"),
@@ -95,7 +372,26 @@ pub(crate) fn shader_module_impl(
             _ => continue,
         };
 
+        // generate entry point parameter reflection
+        let mut param_access_chains = TokenStream::new();
+        param_access_chains.append_all(ep.refl_params.iter().map(|&s| generate_access_chain(Some(ep_name), s)));
+
+        let param_access_chain_names = {
+            let mut names = vec![];
+            for gp in module.refl_global_params.iter() {
+                names.push(mangle_access_chain_name(None, gp.name));
+            }
+            for epp in ep.refl_params.iter() {
+                names.push(mangle_access_chain_name(Some(ep_name), epp.name));
+            }
+            names
+        };
+
+        //let param_reflection = generate_entry_point_param_reflection(&module, &reflection, i);
+
         entry_points.push(quote! {
+            #param_access_chains
+
             #[allow(non_upper_case_globals)]
             pub static #ep_name_ident: ::gpu::ShaderEntryPoint<'static> = ::gpu::ShaderEntryPoint {
                 stage: ::gpu::ShaderStage::#stage,
@@ -104,6 +400,9 @@ pub(crate) fn shader_module_impl(
                 push_constants_size: #push_constants_size,
                 source_path: Some(#shader_path),
                 workgroup_size: [#(#workgroup_size),*],
+                refl_params: &[
+                    #(&#param_access_chain_names),*
+                ]
             };
         });
     }
@@ -296,16 +595,23 @@ pub(crate) fn shader_module_impl(
     }
 
     // reflect types
-    let reflection = module.generate_reflection();
+    let reflection = {
+        let mut tokens = TokenStream::new();
+        tokens.append_all(module.refl_struct_types.values().map(|&s| generate_struct_decl(s)));
+        tokens.append_all(module.refl_global_params.iter().map(|&s| generate_access_chain(None, s)));
+        tokens
+    };
 
     let output = quote! {
         #(#attrs)*
         #vis mod #mod_name {
             use ::gpu::shader_types::*;
+            use ::gpu::reflection as refl;
             #dependencies
             #bytecode
             #reflection
             pub mod entry_points {
+                use super::*;
                 #(#entry_points)*
             }
             #(#pipelines)*

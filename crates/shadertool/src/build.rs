@@ -1,4 +1,7 @@
-use crate::{BuildManifest, BuildOptions, EntryPoint, Error, GraphicsState, Module, ModuleDependency, Pipeline, get_file_mtime, get_log_options};
+use crate::{
+    Arena, BuildManifest, BuildOptions, EntryPoint, Error, GraphicsState, Module, ModuleDependency, Pipeline,
+    get_file_mtime, get_log_options, reflection,
+};
 use anyhow::{Context, anyhow};
 use color_print::cprintln;
 use sharc::gpu_types::vk;
@@ -140,13 +143,14 @@ impl BuildManifest {
 
 /// Loads a Slang source file, compiles all its shader entry points, and returns the resulting
 /// [`Module`] together with reflection data.
-pub(crate) fn compile_slang_module(
+pub(crate) fn compile_slang_module<'a>(
+    arena: &'a Arena,
     session: &slang::Session,
     file: &Path,
     source: &str,
     manifest: &BuildManifest,
     options: &BuildOptions,
-) -> Result<Module, Error> {
+) -> Result<Module<'a>, Error> {
     let (canonical_path, file_mtime) = get_file_mtime(file)?;
 
     //if get_log_options().verbosity >= 2 {
@@ -186,6 +190,8 @@ pub(crate) fn compile_slang_module(
             entry_points: vec![],
             pipelines: vec![],
             dependencies,
+            refl_struct_types: Default::default(),
+            refl_global_params: vec![],
         });
     }
 
@@ -196,13 +202,7 @@ pub(crate) fn compile_slang_module(
     }
     let composite = session.create_composite_component_type(&components)?;
     let program = composite.link()?;
-
-    // Collect reflection data.
-    //let reflection = {
-    //    let mut collector = CollectedReflectionData::new();
-    //    collector.reflect_shader(program.layout(0)?);
-    //    collector.params
-    //};
+    let program_reflection = program.layout(0).expect("failed to get reflection");
 
     // retrieve SPIR-V blob of all entry points
     let spirv = {
@@ -213,27 +213,29 @@ pub(crate) fn compile_slang_module(
     // Dump SPIR-V to disk if requested.
     if options.emit_spirv_binaries {
         let spirv_dump_path = match options.output_directory {
-            Some(ref dir) => dir.join(file.file_name().unwrap()).join("spirv"),
-            None => file.parent().unwrap().join("spirv"),
+            Some(ref dir) => dir.join(file.with_added_extension("spv")),
+            None => file.with_added_extension("spv"),
         };
 
-        if !spirv_dump_path.exists() {
-            fs::create_dir(&spirv_dump_path)?;
-        }
-        let spv_out_path = spirv_dump_path.join(format!("{}.spv", module_name));
-        if !get_log_options().quiet {
-            cprintln!("<g,bold>Dumping</> {}", spv_out_path.display());
+        if let Some(parent) = spirv_dump_path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent)?;
+            }
         }
 
-        fs::write(&spv_out_path, unsafe { slice::from_raw_parts(spirv.as_ptr() as *const u8, spirv.len() * 4) })
-            .context(format!("dumping SPIR-V at {}", spv_out_path.display()))?;
+        if !get_log_options().quiet {
+            cprintln!("<g,bold>Dumping</> {}", spirv_dump_path.display());
+        }
+
+        fs::write(&spirv_dump_path, unsafe { slice::from_raw_parts(spirv.as_ptr() as *const u8, spirv.len() * 4) })
+            .context(format!("dumping SPIR-V at {}", spirv_dump_path.display()))?;
     }
 
-    // Extract per-entry-point metadata.
-    let mut entry_points = Vec::new();
+    // Extract per-entry-point metadata & reflection.
+    let mut type_collector = reflection::TypeCollector::new(arena);
+    let mut entry_points = Vec::with_capacity(entry_point_count as usize);
     for i in 0..entry_point_count {
-        let layout = program.layout(0).expect("failed to get reflection");
-        let ep = layout.entry_point_by_index(i).unwrap();
+        let ep = program_reflection.entry_point_by_index(i).unwrap();
         let push_constants_size = get_push_constants_size(ep);
         let workgroup_size = {
             let s = ep.compute_thread_group_size();
@@ -301,18 +303,23 @@ pub(crate) fn compile_slang_module(
         //    cprintln!("entry point: {}/{}", file.display(), ep.name().unwrap());
         //}
 
+        let mut param_collector = reflection::ParamCollector::new(&mut type_collector);
+        param_collector.reflect_entry_point(ep);
+
         entry_points.push(EntryPoint {
             name: ep.name().unwrap().to_string(),
             stage: slang_stage_to_stage_flags(ep.stage()),
             push_constants_size,
             pipeline_name,
             workgroup_size,
+            refl_params: param_collector.access_chains,
         });
     }
 
+    debug_assert_eq!(entry_points.len(), entry_point_count as usize);
+
     // Collect pipelines.
-    //let mut pipelines: Vec<Pipeline> = Vec::new();
-    // Group entry points by pass name.
+    // Group entry points by pipeline name.
     let mut pipelines_by_name: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
     for (i, ep) in entry_points.iter().enumerate() {
         if let Some(ref pipeline_name) = ep.pipeline_name {
@@ -335,6 +342,9 @@ pub(crate) fn compile_slang_module(
         let mut stage_flags = vk::ShaderStageFlags::default();
         //let mut all_params = vec![];
 
+        // Collect parameter reflection information:
+        // * for global variables (reflect_global_params)
+        // * for parameters passed as arguments to the entry point function (reflect_entry_point)
         for stage in stages.iter() {
             let ep = &entry_points[*stage];
             push_constants_size = push_constants_size.max(ep.push_constants_size);
@@ -351,6 +361,12 @@ pub(crate) fn compile_slang_module(
         })
     }
 
+    let mut param_collector = reflection::ParamCollector::new(&mut type_collector);
+    param_collector.reflect_global_params(program_reflection);
+    
+    let refl_global_params = param_collector.access_chains;
+    let refl_struct_types = type_collector.struct_types;
+
     Ok(Module {
         _session: session.clone(),
         module,
@@ -362,5 +378,7 @@ pub(crate) fn compile_slang_module(
         spirv,
         entry_points,
         dependencies,
+        refl_struct_types,
+        refl_global_params,
     })
 }

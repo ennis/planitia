@@ -12,6 +12,7 @@ use std::time::Instant;
 use winit::application::ApplicationHandler;
 use winit::event::{StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoopProxy};
+use winit::platform::windows::EventLoopBuilderExtWindows;
 use winit::window::WindowId;
 
 // References to `ActiveEventLoop` are necessary to create windows and do other things;
@@ -285,7 +286,14 @@ fn main_loop_waker() -> Waker {
 
 impl Win32Platform {
     pub(crate) fn run_event_loop(&'static self, mut handler: &mut dyn LoopHandler) {
-        let event_loop = winit::event_loop::EventLoop::<WakeReason>::with_user_event().build().unwrap();
+        let mut event_loop_builder = winit::event_loop::EventLoop::<WakeReason>::with_user_event();
+
+        // On windows, allow creating the event loop from any thread, to work around
+        // https://github.com/rust-windowing/winit/issues/3999
+        #[cfg(windows)]
+        event_loop_builder.with_any_thread(true);
+
+        let event_loop = event_loop_builder.build().unwrap();
         EVENT_LOOP_PROXY.set(event_loop.create_proxy()).expect("main loop already initialized");
         event_loop.run_app(&mut WinitAppHandler { this: self, inner: handler, modifiers: Default::default() }).unwrap();
     }

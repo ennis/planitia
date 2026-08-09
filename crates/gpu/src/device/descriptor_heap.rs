@@ -157,7 +157,7 @@ pub(crate) struct DescriptorHeaps {
 
 impl DescriptorHeaps {
     pub(super) unsafe fn bind_descriptor_heaps(&self, command_buffer: vk::CommandBuffer) {
-        let device = Device::global();
+        let device = Device::instance();
         let ext = &device.extensions.ext_descriptor_heap;
         let cb = command_buffer.as_raw() as VkCommandBuffer;
         unsafe {
@@ -256,7 +256,7 @@ impl DescriptorHeaps {
         let index = self.indices.lock().unwrap().sampler.insert(()).index() as usize;
         let addr_range = self.sampler_heap.address_range_by_index(index, 1);
         unsafe {
-            let device = &Device::global();
+            let device = &Device::instance();
             let ext = &device.extensions.ext_descriptor_heap;
             let device = device.raw().handle().as_raw() as VkDevice;
 
@@ -416,7 +416,7 @@ impl DescriptorHeaps {
         }
 
         unsafe {
-            let device = &Device::global();
+            let device = &Device::instance();
             let ext = &device.extensions.ext_descriptor_heap;
             let device = device.raw().handle().as_raw() as VkDevice;
 

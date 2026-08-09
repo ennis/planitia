@@ -238,7 +238,7 @@ impl AutomatonExperiment {
         self.trails_0.setup(width, height);
         self.trails_1.setup(width, height);
 
-        let params = cmd.upload(&RootParams {
+        let params = cmd.alloc_temp(&RootParams {
             scene_info: scene_info.gpu,
             mesh: MeshData {
                 points: self.points.ptr(),

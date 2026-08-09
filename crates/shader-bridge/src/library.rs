@@ -69,6 +69,7 @@ impl CompiledEntryPoint {
             push_constants_size: self.push_constants_size,
             source_path: self.path.as_deref(),
             workgroup_size: self.work_group_size,
+            refl_params: &[],
         }
     }
 }

@@ -95,9 +95,9 @@ impl ApplicationHandler for App {
                 event_loop.create_window(WindowAttributes::default().with_no_redirection_bitmap(false)).unwrap();
             let size = window.inner_size();
             let surface = gpu::get_vulkan_surface(window.window_handle().unwrap().as_raw());
-            let surface_format = unsafe { Device::global().get_preferred_surface_format(surface) };
+            let surface_format = unsafe { Device::instance().get_preferred_surface_format(surface) };
             let swap_chain =
-                unsafe { Device::global().create_swapchain(surface, surface_format, size.width, size.height) };
+                unsafe { Device::instance().create_swapchain(surface, surface_format, size.width, size.height) };
 
             let mut cmd = CommandBuffer::new();
             let image =
@@ -110,7 +110,7 @@ impl ApplicationHandler for App {
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
         let window = self.window.as_mut().unwrap();
-        let device = Device::global();
+        let device = Device::instance();
 
         match event {
             WindowEvent::CloseRequested => {
@@ -167,7 +167,7 @@ impl ApplicationHandler for App {
 
 fn main() {
     let event_loop = EventLoop::new().expect("failed to create event loop");
-    let _device = Device::global();
+    let _device = Device::instance();
     let mut app = App { window: None };
     event_loop.run_app(&mut app).unwrap();
 }

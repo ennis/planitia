@@ -1,8 +1,5 @@
 //! Render command encoders
-use crate::{
-    Buffer, BufferUntyped, ClearColorValue, ColorAttachment, CommandBuffer, DepthBias, DepthStencilAttachment,
-    Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, PushDataSource, Rect2D, is_depth_and_stencil_format,
-};
+use crate::{debugger, is_depth_and_stencil_format, Buffer, BufferUntyped, ClearColorValue, ColorAttachment, CommandBuffer, DepthBias, DepthStencilAttachment, Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, PushDataSource, Rect2D};
 use ash::vk;
 use std::ops::Range;
 use std::ptr;
@@ -53,7 +50,7 @@ impl<'a> RenderEncoder<'a> {
     /// currently bound pipeline, and that the descriptor set is not destroyed while it is still
     /// in use by the GPU.
     pub unsafe fn bind_descriptor_set(&mut self, index: u32, set: vk::DescriptorSet) {
-        Device::global().raw.cmd_bind_descriptor_sets(
+        Device::instance().raw.cmd_bind_descriptor_sets(
             self.command_buffer,
             vk::PipelineBindPoint::GRAPHICS,
             self.pipeline_layout,
@@ -82,7 +79,7 @@ impl<'a> RenderEncoder<'a> {
     }
 
     pub fn set_depth_bias(&mut self, db: Option<DepthBias>) {
-        let device = &Device::global().raw;
+        let device = &Device::instance().raw;
         unsafe {
             match db {
                 Some(db) => {
@@ -116,11 +113,13 @@ impl<'a> RenderEncoder<'a> {
         // Hopefully vkCmdBindDescriptorSets is cheap enough. I'm pretty sure it doesn't do much
         // if the sets are already bound
         // (for reference, see https://gitlab.freedesktop.org/mesa/mesa/-/blob/main/src/nouveau/vulkan/nvk_cmd_buffer.c?ref_type=heads#L648)
+        
+        debugger::bind_graphics_pipeline(pipeline);
 
         // SAFETY: TBD
         // TODO: there's no way to ensure that the pipeline lives long enough
         unsafe {
-            Device::global().raw.cmd_bind_pipeline(
+            Device::instance().raw.cmd_bind_pipeline(
                 self.command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 pipeline.pipeline,
@@ -211,7 +210,7 @@ impl<'a> RenderEncoder<'a> {
     /// Sets the viewport.
     pub fn set_viewport(&mut self, x: f32, y: f32, width: f32, height: f32, min_depth: f32, max_depth: f32) {
         unsafe {
-            Device::global().raw.cmd_set_viewport(
+            Device::instance().raw.cmd_set_viewport(
                 self.command_buffer,
                 0,
                 &[vk::Viewport { x, y, width, height, min_depth, max_depth }],
@@ -233,7 +232,7 @@ impl<'a> RenderEncoder<'a> {
     /// Sets the scissor rectangle.
     pub fn set_scissor(&mut self, x: i32, y: i32, width: u32, height: u32) {
         unsafe {
-            Device::global().raw.cmd_set_scissor(
+            Device::instance().raw.cmd_set_scissor(
                 self.command_buffer,
                 0,
                 &[vk::Rect2D { offset: vk::Offset2D { x, y }, extent: vk::Extent2D { width, height } }],
@@ -267,7 +266,7 @@ impl<'a> RenderEncoder<'a> {
 
     pub fn clear_color_rect(&mut self, attachment: u32, color: ClearColorValue, rect: Rect2D) {
         unsafe {
-            Device::global().raw.cmd_clear_attachments(
+            Device::instance().raw.cmd_clear_attachments(
                 self.command_buffer,
                 &[vk::ClearAttachment {
                     aspect_mask: vk::ImageAspectFlags::COLOR,
@@ -288,7 +287,7 @@ impl<'a> RenderEncoder<'a> {
 
     pub fn clear_depth_rect(&mut self, depth: f32, rect: Rect2D) {
         unsafe {
-            Device::global().raw.cmd_clear_attachments(
+            Device::instance().raw.cmd_clear_attachments(
                 self.command_buffer,
                 &[vk::ClearAttachment {
                     aspect_mask: vk::ImageAspectFlags::DEPTH,
@@ -361,7 +360,7 @@ impl<'a> RenderEncoder<'a> {
                 self.pipeline_layout,
                 root_params.into(),
             );
-            let device = &Device::global().raw;
+            let device = &Device::instance().raw;
             if let Some(vb) = vertex_buffer {
                 device.cmd_bind_vertex_buffers(self.command_buffer, 0, &[vb.handle()], &[0]);
             }
@@ -394,7 +393,7 @@ impl<'a> RenderEncoder<'a> {
                 root_params.into(),
             );
 
-            let device = &Device::global().raw;
+            let device = &Device::instance().raw;
             if let Some(vb) = vertex_buffer {
                 device.cmd_bind_vertex_buffers(self.command_buffer, 0, &[vb.handle()], &[0]);
             }
@@ -426,7 +425,7 @@ impl<'a> RenderEncoder<'a> {
                 self.pipeline_layout,
                 root_params.into(),
             );
-            let device = &Device::global().raw;
+            let device = &Device::instance().raw;
             if let Some(vb) = vertex_buffer {
                 device.cmd_bind_vertex_buffers(self.command_buffer, 0, &[vb.handle()], &[0]);
             }
@@ -457,7 +456,7 @@ impl<'a> RenderEncoder<'a> {
                 self.pipeline_layout,
                 root_params.into(),
             );
-            let device = &Device::global().raw;
+            let device = &Device::instance().raw;
             if let Some(vb) = vertex_buffer {
                 device.cmd_bind_vertex_buffers(self.command_buffer, 0, &[vb.handle()], &[0]);
             }
@@ -487,7 +486,7 @@ impl<'a> RenderEncoder<'a> {
                 self.pipeline_layout,
                 root_params.into(),
             );
-            Device::global().extensions.ext_mesh_shader.cmd_draw_mesh_tasks(
+            Device::instance().extensions.ext_mesh_shader.cmd_draw_mesh_tasks(
                 self.command_buffer,
                 group_count_x,
                 group_count_y,
@@ -497,11 +496,11 @@ impl<'a> RenderEncoder<'a> {
     }
 
     pub fn upload<T: Copy + 'static>(&mut self, data: &T) -> Ptr<T> {
-        self.stream.upload(data)
+        self.stream.alloc_temp(data)
     }
 
     pub fn upload_slice<T: Copy + 'static>(&mut self, data: &[T]) -> Ptr<T> {
-        self.stream.upload_slice(data)
+        self.stream.alloc_slice_temp(data)
     }
 
     pub fn finish(self) {
@@ -510,7 +509,7 @@ impl<'a> RenderEncoder<'a> {
 
     fn do_finish(&mut self) {
         unsafe {
-            Device::global().raw.cmd_end_rendering(self.command_buffer);
+            Device::instance().raw.cmd_end_rendering(self.command_buffer);
         }
     }
 }
@@ -645,7 +644,7 @@ impl CommandBuffer {
 
         let command_buffer = self.get_or_create_command_buffer();
         unsafe {
-            Device::global().raw.cmd_begin_rendering(command_buffer, &rendering_info);
+            Device::instance().raw.cmd_begin_rendering(command_buffer, &rendering_info);
         }
 
         let mut encoder =

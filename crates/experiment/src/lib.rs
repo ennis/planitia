@@ -1,5 +1,7 @@
 #![feature(default_field_values)]
 
+mod terrain;
+
 use std::path::PathBuf;
 use crate::background::SceneInfo;
 use chrono::{DateTime, Local};
@@ -13,14 +15,14 @@ use gpu::{self, Ptr, root_params};
 use std::time::Instant;
 use gpu::PrimitiveTopology::TriangleList;
 
-#[gpu::shader_module("shaders/background.slang#447")]
+#[gpu::shader_module("shaders/background.slang#1511")]
 mod background {}
 
-#[gpu::shader_module("shaders/grid.slang#447")]
+#[gpu::shader_module("shaders/grid.slang#487")]
 mod grid {}
 
 #[derive(serde::Serialize, serde::Deserialize)]
-struct HotReloadTest {
+struct ExperimentApp {
     #[serde(skip)]
     last_time: Option<Instant>,
     load_time: DateTime<Local>,
@@ -31,16 +33,16 @@ struct HotReloadTest {
     geometry: hgeo::Geo,
 }
 
-impl Default for HotReloadTest {
+impl Default for ExperimentApp {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl HotReloadTest {
-    fn new() -> HotReloadTest {
+impl ExperimentApp {
+    fn new() -> ExperimentApp {
         let start = Instant::now();
-        HotReloadTest {
+        ExperimentApp {
             last_time: Some(start),
             load_time: Local::now(),
             camera_control: Default::default(),
@@ -53,7 +55,7 @@ impl HotReloadTest {
     fn update(&mut self) {}
 }
 
-impl AppHandler for HotReloadTest {
+impl AppHandler for ExperimentApp {
     fn input(&mut self, window: WindowHandle, input_event: &InputEvent) {
         self.camera_control.handle_input(input_event);
         if input_event.is_shortcut("Ctrl+O") {
@@ -174,4 +176,4 @@ impl AppHandler for HotReloadTest {
     }
 }
 
-register_plugin!(HotReloadTest::new);
+register_plugin!(ExperimentApp::new);

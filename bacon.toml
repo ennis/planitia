@@ -11,10 +11,10 @@ default_job = "check"
 env.CARGO_TERM_COLOR = "always"
 
 [jobs.hot-reload-debug]
-command = ["cargo", "build", "-p", "hot-reload-test"]
+command = ["cargo", "build", "-p", "experiment"]
 
 [jobs.hot-reload]
-command = ["cargo", "build", "-p", "hot-reload-test", "--release"]
+command = ["cargo", "build", "-p", "experiment", "--release"]
 
 
 [jobs.check]

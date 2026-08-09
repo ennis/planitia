@@ -1,5 +1,5 @@
 param([string]$profile = "release")
 
-cargo build -p game -p hot-reload-test --profile $profile
-Start-Process "wt" "-d . cargo run -p game --profile $profile"
+cargo build -p game-host -p experiment --profile $profile
+Start-Process "wt" "-d . cargo run -p game-host --profile $profile"
 bacon -j hot-reload
