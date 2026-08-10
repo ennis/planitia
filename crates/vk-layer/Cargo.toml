@@ -1,0 +1,13 @@
+[package]
+name = "vk-layer"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+name = "VkLayer_planitia"
+
+[dependencies]
+ash = { version = "0.38", default-features = false }
+ash-layer = "0.0.2"
+dashmap = "6"

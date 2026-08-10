@@ -672,8 +672,14 @@ impl Device {
             ..Default::default()
         };
 
-        let mut mutable_descriptor_type_features = vk::PhysicalDeviceMutableDescriptorTypeFeaturesEXT {
+        let mut maintenance5_features = vk::PhysicalDeviceMaintenance5FeaturesKHR {
             p_next: &mut fragment_shader_interlock_features as *mut _ as *mut c_void,
+            maintenance5: vk::TRUE,
+            ..Default::default()
+        };
+
+        let mut mutable_descriptor_type_features = vk::PhysicalDeviceMutableDescriptorTypeFeaturesEXT {
+            p_next: &mut maintenance5_features as *mut _ as *mut c_void,
             mutable_descriptor_type: vk::TRUE,
             ..Default::default()
         };
@@ -1124,7 +1130,7 @@ fn create_stage<'a>(
     device: &'a Device,
     p_next: *const c_void,
     stage: vk::ShaderStageFlags,
-    code: &[u32],
+    code: &'a [u32],
     entry_point: &CStr,
 ) -> Result<(vk::PipelineShaderStageCreateInfo<'static>, ShaderModuleGuard<'a>), Error> {
     let create_info = vk::ShaderModuleCreateInfo {
@@ -1144,6 +1150,24 @@ fn create_stage<'a>(
         ..Default::default()
     };
     Ok((stage_create_info, ShaderModuleGuard { device, module }))
+}
+macro_rules! make_stage {
+    ($sh:expr, $stage_flags:expr, $module:ident, $p_next:ident, $entry_point_name:ident) => {{
+        $entry_point_name = CString::new($sh.entry_point).unwrap();
+        $module = vk::ShaderModuleCreateInfo {
+            p_next: &$p_next as *const _ as *const c_void,
+            code_size: $sh.code.len() * 4,
+            p_code: $sh.code.as_ptr(),
+            ..Default::default()
+        };
+        vk::PipelineShaderStageCreateInfo {
+            p_next: &$module as *const _ as *const c_void,
+            stage: $stage_flags,
+            p_name: $entry_point_name.as_ptr(),
+            ..Default::default()
+        }
+    }};
+    () => {};
 }
 
 impl Device {
@@ -1237,14 +1261,15 @@ impl Device {
             ..Default::default()
         };
 
-        let entry_point = CString::new(create_info.shader.entry_point).unwrap();
-        let (compute_stage, _module) = create_stage(
-            &self,
-            &req_subgroup_size as *const _ as *const c_void,
+        let _module;
+        let _entry_point_name;
+        let compute_stage = make_stage!(
+            create_info.shader,
             vk::ShaderStageFlags::COMPUTE,
-            &create_info.shader.code,
-            &entry_point,
-        )?;
+            _module,
+            req_subgroup_size,
+            _entry_point_name
+        );
 
         let cpci = vk::ComputePipelineCreateInfo {
             flags: vk::PipelineCreateFlags::empty(),
@@ -1362,7 +1387,6 @@ impl Device {
             p_next: ptr::null_mut(),
             ..Default::default()
         };
-        let p_next = &req_subgroup_size as *const _ as *const c_void;
 
         let mut stages = Vec::new();
 
@@ -1372,57 +1396,55 @@ impl Device {
         let task_entry_point;
         let mesh_entry_point;
         let fragment_entry_point;
-        let _vertex_module;
-        let _task_module;
-        let _mesh_module;
-        let _fragment_module;
+        let vertex_module;
+        let task_module;
+        let mesh_module;
+        let fragment_module;
 
         let mut stage_reflection = vec![];
 
-        // let mut refl_vertex = ShaderReflection::default();
-        // let mut refl_task = ShaderReflection::default();
-        // let mut refl_mesh = ShaderReflection::default();
-        // let mut refl_fragment = ShaderReflection::default();
-
         match create_info.pre_rasterization_shaders {
             PreRasterizationShaders::PrimitiveShading { vertex } => {
-                vertex_entry_point = CString::new(vertex.entry_point).unwrap();
-                let (stage, module) =
-                    create_stage(&self, p_next, vk::ShaderStageFlags::VERTEX, &vertex.code, &vertex_entry_point)?;
-                _vertex_module = module;
+                stages.push(make_stage!(
+                    vertex,
+                    vk::ShaderStageFlags::VERTEX,
+                    vertex_module,
+                    req_subgroup_size,
+                    vertex_entry_point
+                ));
                 stage_reflection.push((ShaderStage::Vertex, vertex.refl_params));
-                stages.push(stage);
             }
             PreRasterizationShaders::MeshShading { mesh, task } => {
                 if let Some(task) = task {
-                    task_entry_point = CString::new(task.entry_point).unwrap();
-                    let (stage, module) =
-                        create_stage(&self, p_next, vk::ShaderStageFlags::TASK_EXT, &task.code, &task_entry_point)?;
-                    _task_module = module;
+                    stages.push(make_stage!(
+                        task,
+                        vk::ShaderStageFlags::TASK_EXT,
+                        task_module,
+                        req_subgroup_size,
+                        task_entry_point
+                    ));
                     stage_reflection.push((ShaderStage::Task, task.refl_params));
-                    stages.push(stage);
                 }
 
-                mesh_entry_point = CString::new(mesh.entry_point).unwrap();
-                let (stage, module) =
-                    create_stage(&self, p_next, vk::ShaderStageFlags::MESH_EXT, &mesh.code, &mesh_entry_point)?;
-                _mesh_module = module;
+                stages.push(make_stage!(
+                    mesh,
+                    vk::ShaderStageFlags::MESH_EXT,
+                    mesh_module,
+                    req_subgroup_size,
+                    mesh_entry_point
+                ));
                 stage_reflection.push((ShaderStage::Mesh, mesh.refl_params));
-                stages.push(stage);
             }
         };
 
-        fragment_entry_point = CString::new(create_info.fragment.shader.entry_point).unwrap();
-        let (stage, module) = create_stage(
-            &self,
-            p_next,
+        stages.push(make_stage!(
+            create_info.fragment.shader,
             vk::ShaderStageFlags::FRAGMENT,
-            &create_info.fragment.shader.code,
-            &fragment_entry_point,
-        )?;
-        _fragment_module = module;
+            fragment_module,
+            req_subgroup_size,
+            fragment_entry_point
+        ));
         stage_reflection.push((ShaderStage::Fragment, create_info.fragment.shader.refl_params));
-        stages.push(stage);
 
         let attachment_states: Vec<_> = create_info
             .fragment

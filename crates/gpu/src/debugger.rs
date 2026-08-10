@@ -63,7 +63,7 @@ pub(crate) fn bind_compute_pipeline(pipeline: &ComputePipeline) {
 }
 
 pub(crate) fn render_debugger(target: &Image) {
-    Debugger::instance().render(target);
+    //Debugger::instance().render(target);
 }
 
 

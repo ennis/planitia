@@ -40,6 +40,4 @@ hgeo = { path = "crates/hgeo" }
 
 [profile.release]
 debug = true
-# Required by vulkan-layer: panics must not cross FFI boundaries.
-panic = "abort"
 

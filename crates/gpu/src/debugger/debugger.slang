@@ -53,7 +53,6 @@ FragmentOutput text_fragment_main(VertexOutput v) {
     return o;
 }
 
-
 [shader("vertex")]
 VertexOutput fill_vertex_main(uint vertexId : SV_VertexID) {
     return vertex_common(vertexId);
