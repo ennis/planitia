@@ -952,3 +952,50 @@ Plugins only define behavior, and they don't call other plugins.
 Plugins gain access to a "World" object when they are invoked.
 They don't expose any internal data to the outside world.
 
+# Unsoundness in gpu submission tickets
+
+            FIXME: this isn't sound, it's possible to retire resources referenced by unsubmitted, but still live, command buffers:
+            
+            Example:
+            - create cmdbuf A, with ticket=8, referencing resource R
+            - drop(R) : queue R for deletion, with ticket=8
+            - create cmdbuf B, with ticket=9
+            - submit(B)
+            - after a while, B's completion sets the timeline to 9
+                 -> last_completed_submission_index=9
+                 -> set completed_ticket = 9
+            - queued drop(R) runs because ticket is 8 < 9
+            - submit(A)
+                 - A references R, but R has been deleted already
+            
+The main question is: when a resource drops, is it referenced by any live (submitted or not)
+command buffers?
+
+The problem: in poll, when running deferred deletion, we assume that all tickets numbers <= max_completed_ticket
+have completed, but that is not the case. 
+Completed submissions are retired in the order of their ticket numbers, so the above assumption is valid, but 
+only for **submitted** command buffer. Crucially, resources last visible by created but not submitted command buffers
+are also retired even though the cmdbuf that references them is not yet submitted.
+
+One way to view the problem is that command buffers can be submitted out-of-order, and ticket numbers are useless
+to figure out if a command buffer has been executed or not.
+
+Solution: have a separate timeline for tracking resources, 
+
+
+# Issue: command pools
+
+The current gospel says that there should be one command pool per thread, and each command buffer is allocated
+from the pool of the calling thread.
+Also, it says that command buffers should not be free individually, but rather the whole pool should be reset.
+
+This is annoying, because we reset pools in device::end_frame, and this is called from the main thread, so we don't
+have access to thread-local pools of other threads.
+This means that instead of thread_locals, command pools should be stored in a mutex-locked map (thread ID -> pool)
+inside the global device, which is ridiculous.
+
+Also, if command buffers are allocated in another thread, they should also be freed in that thread, which is annoying
+because currently they are moved in the global device queue on submission, then recycled on the thread that calls
+end_frame.
+
+# VK_EXT

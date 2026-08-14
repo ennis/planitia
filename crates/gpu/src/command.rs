@@ -1,12 +1,14 @@
 use crate::device::ActiveSubmission;
-use crate::{vk, Buffer, BufferRangeUntyped, BufferUntyped, ColorAttachment, CommandPool, ComputePipeline, DepthStencilAttachment, Descriptor, Device, Image, ImageCopyBuffer, ImageCopyView, ImageCreateInfo, Ptr, SwapChain, VulkanObject, MAX_TIMESTAMP_QUERY_COUNT, ShaderReflection};
+use crate::{
+    Buffer, BufferRangeUntyped, BufferUntyped, ColorAttachment, ComputePipeline, DepthStencilAttachment, Descriptor,
+    Device, Image, ImageCopyBuffer, ImageCopyView, ImageCreateInfo, MAX_TIMESTAMP_QUERY_COUNT, Ptr, ShaderReflection,
+    SwapChain, VulkanObject, command_pool, vk,
+};
 use arrayvec::ArrayVec;
 use ash::prelude::VkResult;
 use ash::vk::DeviceAddress;
 use bitflags::bitflags;
-use gpu_types::{
-    ClearColorValue, ImageAspect, ImageDataLayout, ImageSubresourceLayers, ImageUsage, Offset3D, Rect3D, Size3D,
-};
+use gpu_types::{ClearColorValue, Data, ImageAspect, ImageDataLayout, ImageSubresourceLayers, ImageUsage, Offset3D, Rect3D, Size3D};
 use log::{error, trace};
 pub use render::{DrawIndexedIndirectCommand, DrawIndirectCommand, RenderEncoder};
 use slotmap::new_key_type;
@@ -15,7 +17,7 @@ use std::ffi::{CString, c_void};
 use std::mem::ManuallyDrop;
 use std::sync::atomic::Ordering::Relaxed;
 use std::{mem, ptr, slice};
-use crate::debugger::render_debugger;
+use std::marker::PhantomData;
 
 mod blit;
 mod render;
@@ -25,17 +27,12 @@ union DescriptorBufferOrImage {
     buffer: vk::DescriptorBufferInfo,
 }
 
-
 bitflags! {
     /// Describes the memory types to invalidate during a barrier operation.
-    pub struct InvalidateFlags: u32 {
-        /// Invalidate any cache related to shader storage memory, in preparation for storage reads or writes.
+    pub struct BarrierFlags: u32 {
         const STORAGE = 1 << 0;
-        /// Invalidate any cache related to texture memory, in preparation for texture reads.
         const TEXTURE = 1 << 1;
-        /// Invalidate any cache related to indirect command data, in preparation for indirect draws or dispatches.
         const INDIRECT = 1 << 2;
-        /// Invalidate any cache related to uniform buffer memory, in preparation for uniform buffer reads.
         const UNIFORM = 1 << 3;
     }
 }
@@ -43,18 +40,18 @@ bitflags! {
 // non-associated consts look better in code
 
 /// Invalidate any cache related to shader storage memory, in preparation for storage reads or writes.
-pub const BARRIER_STORAGE: InvalidateFlags = InvalidateFlags::STORAGE;
+pub const BARRIER_STORAGE: BarrierFlags = BarrierFlags::STORAGE;
 
 /// Invalidate any cache related to texture memory, in preparation for texture reads.
-pub const BARRIER_TEXTURE: InvalidateFlags = InvalidateFlags::TEXTURE;
+pub const BARRIER_TEXTURE: BarrierFlags = BarrierFlags::TEXTURE;
 
 /// Invalidate any cache related to indirect command data, in preparation for indirect draws or dispatches.
-pub const BARRIER_INDIRECT: InvalidateFlags = InvalidateFlags::INDIRECT;
+pub const BARRIER_INDIRECT: BarrierFlags = BarrierFlags::INDIRECT;
 
 /// Invalidate any cache related to uniform buffer memory, in preparation for uniform buffer reads.
-pub const BARRIER_UNIFORM: InvalidateFlags = InvalidateFlags::UNIFORM;
+pub const BARRIER_UNIFORM: BarrierFlags = BarrierFlags::UNIFORM;
 
-impl InvalidateFlags {
+impl BarrierFlags {
     fn to_access_flags(self) -> vk::AccessFlags2 {
         let mut flags = vk::AccessFlags2::empty();
         if self.contains(Self::STORAGE) {
@@ -109,7 +106,6 @@ impl<'a, T: Copy + 'static> From<ImmediatePushData<'a, T>> for PushDataSource<'a
 ///
 /// These should be submitted to the GPU using [`submit`].
 pub struct CommandBuffer {
-    command_pool: ManuallyDrop<CommandPool>,
     // FIXME: the query pool should be created on-demand
     timestamp_query_pool: vk::QueryPool,
     timestamp_query_count: u32,
@@ -121,10 +117,14 @@ pub struct CommandBuffer {
     submitted: bool,
     /// Last bound compute pipeline layout.
     pipeline_layout: vk::PipelineLayout,
-
-    //barrier_source: BarrierFlags,
-    create_ticket: u64,
+    /// The index of the frame in which this command buffer was created (and should be recorded).
+    frame_index_created: u64,
+    // Make this type `!Send`, `!Sync`:
+    // * `!Send` because it allocates from the thread-local command pool, and the command buffers must be released to the same command pool
+    // * `!Sync` because the command methods allocate from the same thread-local command pool, which is not thread-safe
+    _unsync_unsend: PhantomData<*const ()>,
 }
+
 
 impl CommandBuffer {
     /// Creates a command stream used to submit commands to the GPU.
@@ -134,20 +134,11 @@ impl CommandBuffer {
     /// They should be submitted in the same order as they were created.
     pub fn new() -> CommandBuffer {
         let device = Device::instance();
-        let command_pool = device.get_or_create_command_pool(device.queue_family);
         let timestamp_query_pool = device.get_or_create_timestamp_query_pool();
-
-        // Each command stream gets a "creation ticket number" that tracks in which order they were
-        // *created*.
-        // When submitting, they also get a "submission ticket number" that tracks
-        // in which order they were *submitted* to the GPU.
-        // Eventually, when all created command streams have been submitted (i.e. there are no
-        // live CommandBuffer objects), we normally have next_creation_ticket == next_submission_ticket.
-        let create_ticket = device.next_create_ticket.fetch_add(1, Relaxed);
-        trace!("GPU: create CommandBuffer, create_ticket {}", create_ticket);
+        let frame_index_created = device.frame_index.load(Relaxed);
+        trace!("GPU: create CommandBuffer, frame_index_created={}", frame_index_created);
 
         CommandBuffer {
-            command_pool: ManuallyDrop::new(command_pool),
             timestamp_query_pool,
             timestamp_query_count: 0,
             timestamp_callbacks: vec![],
@@ -155,7 +146,59 @@ impl CommandBuffer {
             command_buffer: None,
             submitted: false,
             pipeline_layout: Default::default(),
-            create_ticket,
+            frame_index_created,
+            _unsync_unsend: PhantomData,
+        }
+    }
+
+    pub(crate) fn create_command_buffer_raw(&mut self) -> vk::CommandBuffer {
+        let raw_device = Device::instance().raw();
+        let cb = command_pool::allocate_command_buffer();
+
+        unsafe {
+            raw_device
+                .begin_command_buffer(
+                    cb,
+                    &vk::CommandBufferBeginInfo {
+                        flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            //Device::global().set_object_name(cb, &format!("submission_{}", self.submission_index));
+        }
+        cb
+    }
+
+    /// Returns the current command buffer, creating a new one if necessary.
+    ///
+    /// The returned command buffer is ready to record commands.
+    pub(crate) fn get_or_create_command_buffer(&mut self) -> vk::CommandBuffer {
+        if let Some(cb) = self.command_buffer {
+            cb
+        } else {
+            let cb = self.create_command_buffer_raw();
+
+            // setup default dynamic state so validation layers don't complain
+            unsafe {
+                let device = Device::instance();
+                device.raw.cmd_set_depth_bias_enable(cb, false);
+            }
+
+            self.command_buffer = Some(cb);
+            cb
+        }
+    }
+
+    /// Closes the current command buffer.
+    ///
+    /// This does nothing if there is no current command buffer.
+    pub(crate) fn close_command_buffer(&mut self) {
+        if let Some(cb) = self.command_buffer.take() {
+            unsafe {
+                Device::instance().raw().end_command_buffer(cb).unwrap();
+            }
+            self.command_buffers_to_submit.push(cb);
         }
     }
 
@@ -184,6 +227,8 @@ impl CommandBuffer {
         set: u32,
         bindings: &[(u32, Descriptor)],
     ) {
+        // It's important to set the capacity beforehand to avoid resizing the vector and
+        // invalidating the pointers in `descriptor_writes`.
         let mut descriptors = Vec::with_capacity(bindings.len());
         let mut descriptor_writes = Vec::with_capacity(bindings.len());
 
@@ -298,7 +343,7 @@ impl CommandBuffer {
         }
     }
 
-    fn set_push_data<T: Copy + 'static>(
+    fn set_push_data<T: Data>(
         &mut self,
         cb: vk::CommandBuffer,
         bind_point: vk::PipelineBindPoint,
@@ -325,7 +370,7 @@ impl CommandBuffer {
                     device.raw.cmd_push_constants(cb, pl, stages, 0, constants);
                 }
                 PushDataSource::IndirectUpload(data) => {
-                    let ptr = device.alloc_slice_temp(slice::from_ref(data)).raw;
+                    let ptr = gpu::alloc_temp_slice(slice::from_ref(data)).raw;
                     let constants = slice::from_raw_parts(&ptr as *const _ as *const u8, size_of::<DeviceAddress>());
                     device.raw.cmd_push_constants(cb, pl, stages, 0, constants);
                 }
@@ -349,24 +394,19 @@ impl CommandBuffer {
     ///
     /// The barrier makes all previous writes visible unconditionally (equivalent to
     /// src_access_mask = MEMORY_WRITE).
-    pub fn barrier(&mut self, flags: InvalidateFlags) {
+    pub fn barrier(&mut self, flags: BarrierFlags) {
         // This simplified barrier API just includes all previous stages and memory write types
         // in the source scope.
         // NVIDIA: stage execution dependencies seem to be ignored anyway.
         // AMD: this may affect performance, but I'm not sure.
-        let src_stage_mask = vk::PipelineStageFlags2::ALL_COMMANDS;
-        let src_access_mask = vk::AccessFlags2::MEMORY_WRITE;
-        let dst_stage_mask = vk::PipelineStageFlags2::ALL_COMMANDS;
         // TODO: add COLOR_ATTACHMENT & DEPTH_ATTACHMENT to InvalidateFlags
-        let dst_access_mask = flags.to_access_flags()
-            | vk::AccessFlags2::COLOR_ATTACHMENT_READ
-            | vk::AccessFlags2::DEPTH_STENCIL_ATTACHMENT_READ;
-
         let global_memory_barrier = vk::MemoryBarrier2 {
-            src_access_mask,
-            dst_access_mask,
-            src_stage_mask,
-            dst_stage_mask,
+            src_access_mask: vk::AccessFlags2::MEMORY_WRITE,
+            dst_access_mask: flags.to_access_flags()
+            | vk::AccessFlags2::COLOR_ATTACHMENT_READ
+            | vk::AccessFlags2::DEPTH_STENCIL_ATTACHMENT_READ,
+            src_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
+            dst_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
             ..Default::default()
         };
 
@@ -497,7 +537,6 @@ impl CommandBuffer {
         self.pop_debug_group();
     }
 
-
     /// TODO documentation
     pub fn write_timestamp(&mut self, callback: impl FnOnce(u64) + Send + 'static) {
         let cb = self.get_or_create_command_buffer();
@@ -556,71 +595,6 @@ impl CommandBuffer {
             Rect3D { min: Offset3D { x: 0, y: 0, z: 0 }, max: Offset3D { x: width, y: height, z: 1 } },
             vk::Filter::NEAREST,
         );
-    }
-
-    /// Allocates a temporary buffer holding the given data, and returns a GPU pointer to it.
-    ///
-    /// The allocated buffer is valid until the command buffer is submitted to the GPU.
-    pub fn alloc_temp<T: Copy>(&mut self, data: &T) -> Ptr<T> {
-        Device::instance().alloc_temp(data)
-    }
-
-    /// Allocates a temporary buffer holding the given data, and returns a GPU pointer to it.
-    ///
-    /// The allocated buffer is valid until the command buffer is submitted to the GPU.
-    pub fn alloc_slice_temp<T: Copy>(&mut self, data: &[T]) -> Ptr<T> {
-        Device::instance().alloc_slice_temp(data)
-    }
-
-    pub(crate) fn create_command_buffer_raw(&mut self) -> vk::CommandBuffer {
-        let raw_device = Device::instance().raw();
-        let cb = self.command_pool.alloc(raw_device);
-
-        unsafe {
-            raw_device
-                .begin_command_buffer(
-                    cb,
-                    &vk::CommandBufferBeginInfo {
-                        flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
-                        ..Default::default()
-                    },
-                )
-                .unwrap();
-            //Device::global().set_object_name(cb, &format!("submission_{}", self.submission_index));
-        }
-        cb
-    }
-
-    /// Returns the current command buffer, creating a new one if necessary.
-    ///
-    /// The returned command buffer is ready to record commands.
-    pub(crate) fn get_or_create_command_buffer(&mut self) -> vk::CommandBuffer {
-        if let Some(cb) = self.command_buffer {
-            cb
-        } else {
-            let cb = self.create_command_buffer_raw();
-
-            // setup default dynamic state so validation layers don't complain
-            unsafe {
-                let device = Device::instance();
-                device.raw.cmd_set_depth_bias_enable(cb, false);
-            }
-
-            self.command_buffer = Some(cb);
-            cb
-        }
-    }
-
-    /// Closes the current command buffer.
-    ///
-    /// This does nothing if there is no current command buffer.
-    pub(crate) fn close_command_buffer(&mut self) {
-        if let Some(cb) = self.command_buffer.take() {
-            unsafe {
-                Device::instance().raw().end_command_buffer(cb).unwrap();
-            }
-            self.command_buffers_to_submit.push(cb);
-        }
     }
 }
 
@@ -685,9 +659,9 @@ fn sync(waits: &[SyncWait], signals: &[SyncSignal]) {
     }
 
     let timeline_submit_info = vk::TimelineSemaphoreSubmitInfo {
-        wait_semaphore_value_count: wait_semaphore_values.len() as u32,
+        wait_semaphore_value_count: waits.len() as u32,
         p_wait_semaphore_values: wait_semaphore_values.as_ptr(),
-        signal_semaphore_value_count: signal_semaphore_values.len() as u32,
+        signal_semaphore_value_count: signals.len() as u32,
         p_signal_semaphore_values: signal_semaphore_values.as_ptr(),
         ..Default::default()
     };
@@ -716,12 +690,12 @@ fn sync(waits: &[SyncWait], signals: &[SyncSignal]) {
 }
 
 /// Waits on the given timeline semaphore until it reaches the given value.
-pub fn sync_wait(semaphore: vk::Semaphore, value: u64) {
+pub fn wait(semaphore: vk::Semaphore, value: u64) {
     sync(&[SyncWait { semaphore, value }], &[]);
 }
 
 /// Signals the given timeline semaphore with the given value.
-pub fn sync_signal(semaphore: vk::Semaphore, value: u64) {
+pub fn signal(semaphore: vk::Semaphore, value: u64) {
     sync(&[], &[SyncSignal { semaphore, value }]);
 }
 
@@ -745,21 +719,32 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
     // Timeline semaphore values depend on this.
     assert!(!cmd.submitted);
 
-    let timeline_value = device.next_timeline_value.fetch_add(1, Relaxed);
-    trace!("GPU: submit CommandStream, create_ticket={}, timeline_value={}", cmd.create_ticket, timeline_value);
+    let frame_index_submitted = device.frame_index.load(Relaxed);
+    assert_eq!(
+        cmd.frame_index_created, frame_index_submitted,
+        "a command buffer was submitted in a different frame than the one it was created in"
+    );
+
+    trace!(
+        "GPU: submit CommandStream, frame_index_created={}, frame_index_submitted={}",
+        cmd.frame_index_created, frame_index_submitted
+    );
 
     // flush pending writes
-    cmd.barrier(InvalidateFlags::empty());
+    cmd.barrier(BarrierFlags::empty());
 
     // finish recording the current command buffer if not already done
     cmd.close_command_buffer();
 
-    let command_buffers = mem::take(&mut cmd.command_buffers_to_submit);
+    // Put the command buffers up for deletion
+    for cmdbuf in cmd.command_buffers_to_submit.iter() {
+        command_pool::free_command_buffer(*cmdbuf, frame_index_submitted);
+    }
 
     //----------------------
     // submit
-    let signal_semaphores = vec![device.thread_safe.timeline];
-    let signal_semaphore_values = vec![timeline_value];
+    let signal_semaphores = vec![];
+    let signal_semaphore_values = vec![];
     let timeline_submit_info = vk::TimelineSemaphoreSubmitInfo {
         signal_semaphore_value_count: signal_semaphore_values.len() as u32,
         p_signal_semaphore_values: signal_semaphore_values.as_ptr(),
@@ -767,8 +752,8 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
     };
     let submit_info = vk::SubmitInfo {
         p_next: &timeline_submit_info as *const _ as *const c_void,
-        command_buffer_count: command_buffers.len() as u32,
-        p_command_buffers: command_buffers.as_ptr(),
+        command_buffer_count: cmd.command_buffers_to_submit.len() as u32,
+        p_command_buffers: cmd.command_buffers_to_submit.as_ptr(),
         signal_semaphore_count: signal_semaphores.len() as u32,
         p_signal_semaphores: signal_semaphores.as_ptr(),
         ..Default::default()
@@ -782,23 +767,12 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
         trace!("GPU: QueueSubmit");
         result = device.raw.queue_submit(submission_state.queue, &[submit_info], vk::Fence::null());
 
-        // active_submissions is sorted by ticket
-        let pos = submission_state
-            .active_submissions
-            .binary_search_by_key(&cmd.create_ticket, |s| s.create_ticket)
-            .unwrap_or_else(|p| p);
-        submission_state.active_submissions.insert(
-            pos,
-            ActiveSubmission {
-                create_ticket: cmd.create_ticket,
-                timeline_value,
-                // SAFETY: submitted = false so the command pool is valid
-                command_pools: vec![ManuallyDrop::take(&mut cmd.command_pool)],
-                timestamp_query_pool: cmd.timestamp_query_pool,
-                timestamp_query_count: cmd.timestamp_query_count,
-                timestamp_callbacks: mem::take(&mut cmd.timestamp_callbacks),
-            },
-        );
+        submission_state.active_submissions.push_front(ActiveSubmission {
+            frame_index: frame_index_submitted,
+            timestamp_query_pool: cmd.timestamp_query_pool,
+            timestamp_query_count: cmd.timestamp_query_count,
+            timestamp_callbacks: mem::take(&mut cmd.timestamp_callbacks),
+        });
     };
 
     cmd.submitted = true;
@@ -807,11 +781,7 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
 
 /// Presents the given swap chain image to the screen.
 pub fn present(swap_chain: &mut SwapChain, index: usize) -> VkResult<()> {
-
     let image = &swap_chain.images[index];
-
-    // Render debugger
-    render_debugger(&image.image);
 
     // Automatically flush the default command buffer before presenting.
     flush()?;
@@ -845,7 +815,7 @@ pub fn present(swap_chain: &mut SwapChain, index: usize) -> VkResult<()> {
 
     // set up semaphore to wait for rendering to finish
     let device = Device::instance();
-    sync_signal(image.render_finished, 0);
+    signal(image.render_finished, 0);
 
     unsafe {
         let submission_state = device.submission_state.lock().unwrap();
@@ -875,7 +845,7 @@ thread_local! {
 }
 
 #[inline]
-pub fn with_default_cb<R>(f: impl FnOnce(&mut CommandBuffer) -> R) -> R {
+pub fn with_cmdbuf<R>(f: impl FnOnce(&mut CommandBuffer) -> R) -> R {
     DEFAULT_COMMAND_BUFFER.with(|cb| {
         match cb.try_borrow_mut() {
             Ok(mut cb) => {
@@ -889,7 +859,7 @@ pub fn with_default_cb<R>(f: impl FnOnce(&mut CommandBuffer) -> R) -> R {
     })
 }
 
-pub(crate) fn take_default_cb() -> Option<CommandBuffer> {
+pub(crate) fn take_cmdbuf() -> Option<CommandBuffer> {
     DEFAULT_COMMAND_BUFFER.take()
 }
 
@@ -910,7 +880,7 @@ pub fn dispatch<'params, T: Copy + 'static>(
     group_count_z: u32,
     root_params: impl Into<PushDataSource<'params, T>>,
 ) {
-    with_default_cb(|cb| {
+    with_cmdbuf(|cb| {
         cb.bind_compute_pipeline(pipeline);
         cb.dispatch(group_count_x, group_count_y, group_count_z, root_params);
     });
@@ -922,7 +892,7 @@ pub fn render(
     depth_stencil_attachment: Option<DepthStencilAttachment>,
     encoder_fn: impl FnOnce(&mut RenderEncoder),
 ) {
-    with_default_cb(|cb| {
+    with_cmdbuf(|cb| {
         let mut encoder = cb.begin_rendering(color_attachments, depth_stencil_attachment);
         encoder_fn(&mut encoder);
         encoder.finish();
@@ -931,38 +901,37 @@ pub fn render(
 
 /// Starts a debug group on the default command buffer.
 pub fn push_debug_group(label: &str) {
-    with_default_cb(|cb| {
+    with_cmdbuf(|cb| {
         cb.push_debug_group(label);
     });
 }
 
 /// Ends a debug group on the default command buffer.
 pub fn pop_debug_group() {
-    with_default_cb(|cb| {
+    with_cmdbuf(|cb| {
         cb.pop_debug_group();
     });
 }
 
-/// Emits a pipeline barrier on the default command buffer.
+/// Defines a barrier ordering memory transactions.
 ///
-/// The barrier introduces an unconditional execution dependency between all previous
-/// and subsequent commands (equivalent to an ALL_COMMANDS -> ALL_COMMANDS execution dependency
-/// in Vulkan).
+/// `barrier` ensures that memory writes issued prior to this barrier
+/// are visible to operations of the kind specified in `flags` after this barrier.
 ///
-/// The `flags` specify the memory access types that should be made available to subsequent commands.
-/// You can think of it as a list of caches that should be invalidated as a result
-/// of previous commands.
+/// # Implementation details
 ///
-/// The barrier makes all previous writes visible unconditionally (equivalent to
-/// src_access_mask = MEMORY_WRITE).
-pub fn barrier(flags: InvalidateFlags) {
-    with_default_cb(|cb| {
+/// This calls `vkCmdPipelineBarrier`, with an `ALL_COMMANDS -> ALL_COMMANDS` execution dependency
+/// and a single memory barrier.
+/// All previous writes are made visible unconditionally (i.e. `srcAccessMask = MEMORY_WRITE`).
+/// `flags` define which memory access types are concerned for subsequent command (it determines `dstAccessMask`).
+pub fn barrier(flags: BarrierFlags) {
+    with_cmdbuf(|cb| {
         cb.barrier(flags);
     });
 }
 
 pub fn update_buffer(buffer: &BufferUntyped, offset: usize, data: &[u8]) {
-    with_default_cb(|cb| {
+    with_cmdbuf(|cb| {
         unsafe {
             // TODO figure out why we needed unsafe here
             cb.update_buffer(buffer, offset, data);
@@ -971,48 +940,48 @@ pub fn update_buffer(buffer: &BufferUntyped, offset: usize, data: &[u8]) {
 }
 
 pub fn upload_image_data(image: ImageCopyView, size: Size3D, data: &[u8]) {
-    with_default_cb(|cb| {
+    with_cmdbuf(|cb| {
         cb.upload_image_data(image, size, data);
     });
 }
 
 pub fn create_image_with_data(create_info: &ImageCreateInfo, aspect: ImageAspect, data: &[u8]) -> Image {
-    with_default_cb(|cb| cb.create_image_with_data(create_info, aspect, data))
+    with_cmdbuf(|cb| cb.create_image_with_data(create_info, aspect, data))
 }
 
 pub fn blit_full_image_top_mip_level(src: &Image, dst: &Image) {
-    with_default_cb(|cb| {
+    with_cmdbuf(|cb| {
         cb.blit_full_image_top_mip_level(src, dst);
     });
 }
 
 pub fn fill_buffer(range: &BufferRangeUntyped, data: u32) {
-    with_default_cb(|cb| {
+    with_cmdbuf(|cb| {
         cb.fill_buffer(range, data);
     });
 }
 
 pub fn clear_image(image: &Image, clear_color_value: ClearColorValue) {
-    with_default_cb(|cb| {
+    with_cmdbuf(|cb| {
         cb.clear_image(image, clear_color_value);
     });
 }
 
 pub fn clear_depth_image(image: &Image, depth: f32) {
-    with_default_cb(|cb| {
+    with_cmdbuf(|cb| {
         cb.clear_depth_image(image, depth);
     });
 }
 
 pub fn copy_image_to_image(source: ImageCopyView<'_>, destination: ImageCopyView<'_>, copy_size: vk::Extent3D) {
-    with_default_cb(|cb| {
+    with_cmdbuf(|cb| {
         cb.copy_image_to_image(source, destination, copy_size);
     });
 }
 
 /// Copies data from one buffer to another.
 pub fn copy_buffer(source: &BufferUntyped, src_offset: u64, destination: &BufferUntyped, dst_offset: u64, size: u64) {
-    with_default_cb(|cb| {
+    with_cmdbuf(|cb| {
         cb.copy_buffer(source, src_offset, destination, dst_offset, size);
     });
 }
@@ -1021,14 +990,14 @@ pub fn copy_buffer(source: &BufferUntyped, src_offset: u64, destination: &Buffer
 ///
 /// TODO copy to layer other than 0
 pub fn copy_buffer_to_image(source: ImageCopyBuffer<'_>, destination: ImageCopyView<'_>, copy_size: vk::Extent3D) {
-    with_default_cb(|cb| {
+    with_cmdbuf(|cb| {
         cb.copy_buffer_to_image(source, destination, copy_size);
     });
 }
 
 /// Copies data from an image to a buffer.
 pub fn copy_image_to_buffer(source: ImageCopyView<'_>, destination: ImageCopyBuffer<'_>, copy_size: Size3D) {
-    with_default_cb(|cb| {
+    with_cmdbuf(|cb| {
         cb.copy_image_to_buffer(source, destination, copy_size);
     });
 }
@@ -1042,41 +1011,15 @@ pub fn blit_image(
     dst_region: Rect3D,
     filter: vk::Filter,
 ) {
-    with_default_cb(|cb| {
+    with_cmdbuf(|cb| {
         cb.blit_image(src, src_subresource, src_region, dst, dst_subresource, dst_region, filter);
     });
 }
 
-/// Uploads data to the GPU and returns a device pointer to it.
-///
-/// # Validity
-///
-/// The pointer is valid for use in any command buffer recording commands at the time this function
-/// is called (i.e. any live instance of `CommandBuffer`), in the calling thread.
-/// In addition, the pointer is valid for use in commands using the default command buffer
-/// (of the calling thread), up until the next call to [`flush`] or [`present`].
-pub fn upload<T: Copy>(data: &T) -> Ptr<T> {
-    Device::instance().alloc_temp(data)
-}
-
-/// Uploads data to the GPU and returns a device pointer to it.
-///
-/// # Validity
-///
-/// The pointer is valid for use in any command buffer in the calling thread currently
-/// recording commands. See [upload] for details.
-pub fn upload_slice<T: Copy>(data: &[T]) -> Ptr<T> {
-    Device::instance().alloc_slice_temp(data)
-}
 
 /// Submits commands in the default command buffer for execution on the GPU.
-///
-/// # Upload invalidation
-///
-/// After this function is called, all pointers returned by prior calls to [`upload`] and [`upload_slice`]
-/// become invalid for use in subsequent commands using the default command buffer of this thread.
 pub fn flush() -> VkResult<()> {
-    if let Some(cb) = take_default_cb() {
+    if let Some(cb) = take_cmdbuf() {
         submit(cb)
     } else {
         // Nothing to submit.
@@ -1084,7 +1027,7 @@ pub fn flush() -> VkResult<()> {
     }
 }
 
-/// Writes a timestamp to
+/// Writes a timestamp.
 pub fn write_timestamp(callback: impl FnOnce(u64) + Send + 'static) {
-    with_default_cb(|cb| cb.write_timestamp(callback))
+    with_cmdbuf(|cb| cb.write_timestamp(callback))
 }

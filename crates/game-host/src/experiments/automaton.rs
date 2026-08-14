@@ -4,7 +4,7 @@ use gamelib::egui::DragValue;
 use gamelib::input::InputEvent;
 use gamelib::render::RenderTarget;
 use gamelib::{egui, static_assets, tweak};
-use gpu::{Buffer, BufferCreateInfo, Image, ImageUsage, InvalidateFlags, PrimitiveTopology};
+use gpu::{Buffer, BufferCreateInfo, Image, ImageUsage, BarrierFlags, PrimitiveTopology, BARRIER_STORAGE};
 use math::{IVec2, Vec3};
 use std::path::Path;
 use gamelib::error::ExcResult;
@@ -238,7 +238,7 @@ impl AutomatonExperiment {
         self.trails_0.setup(width, height);
         self.trails_1.setup(width, height);
 
-        let params = cmd.alloc_temp(&RootParams {
+        let params = gpu::alloc_temp(&RootParams {
             scene_info: scene_info.gpu,
             mesh: MeshData {
                 points: self.points.ptr(),
@@ -306,23 +306,23 @@ impl AutomatonExperiment {
             cmd.dispatch(trails_workgroup_count_x, trails_workgroup_count_y, 1, params);
 
             for _ in 0..self.max_sim_steps {
-                cmd.barrier(InvalidateFlags::STORAGE);
+                cmd.barrier(BARRIER_STORAGE);
 
                 cmd.bind_compute_pipeline(&*SIM_STEP_EMITTERS.read()?);
                 cmd.dispatch(emitter_workgroup_count, 1, 1, params);
 
-                cmd.barrier(InvalidateFlags::STORAGE);
+                cmd.barrier(BARRIER_STORAGE);
 
                 cmd.bind_compute_pipeline(&*SIM_STEP_TRAILS.read()?);
                 cmd.dispatch(trails_workgroup_count_x, trails_workgroup_count_y, 1, params);
 
-                cmd.barrier(InvalidateFlags::STORAGE);
+                cmd.barrier(BARRIER_STORAGE);
 
                 cmd.bind_compute_pipeline(&*SIM_STEP_NEXT.read()?);
                 cmd.dispatch(1, 1, 1, params);
             }
 
-            cmd.barrier(InvalidateFlags::STORAGE);
+            cmd.barrier(BARRIER_STORAGE);
 
             let mut encoder = cmd.begin_rendering(
                 &[gpu::ColorAttachment { image: &color_target, clear: None }],

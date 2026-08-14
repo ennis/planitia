@@ -21,9 +21,8 @@ impl<T: ?Sized> Drop for Buffer<T> {
 
         // skip this if no buffer was actually allocated
         if !handle.is_null() {
-            Device::instance().delete_resource_after_current_submission(move |device| unsafe {
+            Device::instance().delete_after_current_frame(move |device| unsafe {
                 trace!("GPU: deleting buffer: {:?}", handle);
-                device.unregister_address_range(handle);
                 device.raw.destroy_buffer(handle, None);
                 device.free_memory(&mut allocation);
             });
@@ -335,8 +334,6 @@ impl Device {
 
             let mapped_ptr = NonNull::<Align64>::dangling().cast::<c_void>();
 
-            // Don't output a warning for this
-            // Instead, we should simply not allocate anything in this case.
             return BufferUntyped {
                 allocation: ResourceAllocation::None,
                 handle: vk::Buffer::null(),
@@ -350,12 +347,7 @@ impl Device {
         }
         let byte_size = elem_size as u64 * create_info.len as u64;
 
-        // We support zero-sized buffers, but Vulkan doesn't, so we enforce a minimum size of 1 byte.
-        // The length exposed to the user is still zero.
-        const MINIMUM_BUFFER_SIZE: u64 = 1;
-        let nonzero_byte_size = byte_size.max(MINIMUM_BUFFER_SIZE);
-
-        // The following flags have no specific logic associated to them in Mesa drivers (at least for desktop GPUs):
+        // The following flags have no specific logic associated to them in Mesa drivers of desktop GPUs:
         // - VERTEX_BUFFER
         // - INDEX_BUFFER
         // - TRANSFER_SRC
@@ -383,7 +375,7 @@ impl Device {
                 .create_buffer(
                     &vk::BufferCreateInfo {
                         flags: Default::default(),
-                        size: nonzero_byte_size,
+                        size: byte_size,
                         usage: default_flags | create_info.usage.to_vk_buffer_usage_flags(),
                         sharing_mode: vk::SharingMode::EXCLUSIVE,
                         queue_family_index_count: 0,
@@ -410,7 +402,6 @@ impl Device {
             let device_address = self
                 .raw
                 .get_buffer_device_address(&vk::BufferDeviceAddressInfo { buffer: handle, ..Default::default() });
-            self.register_address_range(handle, device_address, nonzero_byte_size as usize);
 
             trace!("GPU: create_buffer {handle:?}");
 

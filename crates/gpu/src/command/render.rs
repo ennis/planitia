@@ -1,5 +1,8 @@
 //! Render command encoders
-use crate::{debugger, is_depth_and_stencil_format, Buffer, BufferUntyped, ClearColorValue, ColorAttachment, CommandBuffer, DepthBias, DepthStencilAttachment, Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, PushDataSource, Rect2D};
+use crate::{
+    Buffer, BufferUntyped, ClearColorValue, ColorAttachment, CommandBuffer, DepthBias, DepthStencilAttachment,
+    Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, PushDataSource, Rect2D, is_depth_and_stencil_format,
+};
 use ash::vk;
 use std::ops::Range;
 use std::ptr;
@@ -113,11 +116,9 @@ impl<'a> RenderEncoder<'a> {
         // Hopefully vkCmdBindDescriptorSets is cheap enough. I'm pretty sure it doesn't do much
         // if the sets are already bound
         // (for reference, see https://gitlab.freedesktop.org/mesa/mesa/-/blob/main/src/nouveau/vulkan/nvk_cmd_buffer.c?ref_type=heads#L648)
-        
-        debugger::bind_graphics_pipeline(pipeline);
 
         // SAFETY: TBD
-        // TODO: there's no way to ensure that the pipeline lives long enough
+        // TODO strong ref to pipeline
         unsafe {
             Device::instance().raw.cmd_bind_pipeline(
                 self.command_buffer,
@@ -132,80 +133,8 @@ impl<'a> RenderEncoder<'a> {
                 );
             }
             self.pipeline_layout = pipeline.pipeline_layout;
-            // TODO strong ref to pipeline
         }
     }
-
-    /*/// Binds a vertex buffer.
-    ///
-    /// # Arguments
-    /// * `binding` vertex buffer binding index
-    /// * `buffer_range` vertex buffer range
-    /// * `stride` size in bytes between vertices in the buffer
-    pub fn bind_vertex_buffer(&mut self, binding: u32, buffer_range: BufferRangeUntyped) {
-        self.reference_resource(buffer_range.buffer);
-        unsafe {
-            Device::global().raw.cmd_bind_vertex_buffers2(
-                self.command_buffer,
-                binding,
-                &[buffer_range.buffer.handle()],
-                &[buffer_range.byte_offset as vk::DeviceSize],
-                None,
-                None,
-            );
-        }
-    }
-
-    /// Binds an index buffer.
-    ///
-    /// # Arguments
-    /// * `index_type` type of indices in the index buffer
-    /// * `index_buffer` index buffer range
-    pub fn bind_index_buffer(&mut self, index_type: vk::IndexType, index_buffer: BufferRangeUntyped) {
-        self.reference_resource(index_buffer.buffer);
-        unsafe {
-            Device::global().raw.cmd_bind_index_buffer(
-                self.command_buffer,
-                index_buffer.buffer.handle(),
-                index_buffer.byte_offset as vk::DeviceSize,
-                index_type.into(),
-            );
-        }
-    }*/
-
-    /*/// Binds push constants.
-    ///
-    /// Push constants stay valid until the bound pipeline is changed.
-    pub fn push_constants<P>(&mut self, data: &P)
-    where
-        P: Copy,
-    {
-        unsafe {
-        }
-    }
-
-    /// Binds push constants.
-    ///
-    /// Push constants stay valid until the bound pipeline is changed.
-    pub fn push_constants_slice(&mut self, data: &[u8]) {
-        unsafe {
-            self.stream.do_cmd_push_constants(
-                self.command_buffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline_layout,
-                slice::from_raw_parts(data.as_ptr() as *const MaybeUninit<u8>, size_of_val(data)),
-            );
-        }
-    }*/
-
-    /*/// Sets the primitive topology.
-    pub fn set_primitive_topology(&mut self, topology: PrimitiveTopology) {
-        unsafe {
-            Device::global()
-                .raw
-                .cmd_set_primitive_topology(self.command_buffer, topology.to_vk_primitive_topology());
-        }
-    }*/
 
     /// Sets the viewport.
     pub fn set_viewport(&mut self, x: f32, y: f32, width: f32, height: f32, min_depth: f32, max_depth: f32) {
@@ -493,14 +422,6 @@ impl<'a> RenderEncoder<'a> {
                 group_count_z,
             );
         }
-    }
-
-    pub fn upload<T: Copy + 'static>(&mut self, data: &T) -> Ptr<T> {
-        self.stream.alloc_temp(data)
-    }
-
-    pub fn upload_slice<T: Copy + 'static>(&mut self, data: &[T]) -> Ptr<T> {
-        self.stream.alloc_slice_temp(data)
     }
 
     pub fn finish(self) {

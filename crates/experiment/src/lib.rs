@@ -102,7 +102,7 @@ impl AppHandler for ExperimentApp {
             frame: self.frames_rendered as u32,
             eye: camera.eye().as_vec3(),
         };
-        let scene_info_gpu = gpu::upload(&scene_info);
+        let scene_info_gpu = gpu::alloc_temp(&scene_info);
 
         self.frames_rendered += 1;
 

@@ -71,7 +71,7 @@ impl Drop for Image {
             let handle = self.handle;
             let descriptors = self.descriptors;
 
-            Device::instance().delete_resource_after_current_submission(move |device| unsafe {
+            Device::instance().delete_after_current_frame(move |device| unsafe {
                 //debug!("dropping image {:?} (handle: {:?})", id, handle);
                 device.free_resource_heap_index(descriptors.texture);
                 device.free_resource_heap_index(descriptors.storage);

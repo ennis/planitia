@@ -1,5 +1,5 @@
 use crate::paint::Srgba8;
-use gpu::{ImageAspect, ImageCopyView, ImageCreateInfo, InvalidateFlags, MemoryLocation, Size3D, vk};
+use gpu::{vk, ImageAspect, ImageCopyView, ImageCreateInfo, BarrierFlags, MemoryLocation, Size3D, BARRIER_TEXTURE};
 use log::debug;
 use math::{IRect, U16Vec2, irect_xywh, u16vec2};
 use std::cell::RefCell;
@@ -170,7 +170,7 @@ impl Atlas {
     /// The image is prepared for shader read access.
     pub(crate) fn prepare_texture(&mut self) -> gpu::TextureHandle {
         self.upload_to_gpu();
-        gpu::barrier(InvalidateFlags::TEXTURE);
+        gpu::barrier(BARRIER_TEXTURE);
         self.texture.texture_handle()
     }
 }

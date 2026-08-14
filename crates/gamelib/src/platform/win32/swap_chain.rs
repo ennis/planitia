@@ -234,7 +234,7 @@ impl DxgiVulkanInteropSwapChain {
             gfx.cmd_queue.ExecuteCommandLists(&[Some(image.dummy_cmd_list.cast().unwrap())]);
 
             gfx.cmd_queue.Signal(&self.fence, fence_value).unwrap();
-            gpu::sync_wait(self.fence_semaphore, fence_value);
+            gpu::wait(self.fence_semaphore, fence_value);
         }
 
         self.acquired.set(true);
@@ -251,7 +251,7 @@ impl DxgiVulkanInteropSwapChain {
         // Synchronization: Vulkan -> D3D12
         unsafe {
             // Synchronize with vulkan rendering before presenting
-            gpu::sync_signal(self.fence_semaphore, fence_value);
+            gpu::signal(self.fence_semaphore, fence_value);
             gfx.cmd_queue.Wait(&self.fence, fence_value).unwrap();
 
             // Present the image.

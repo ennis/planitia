@@ -211,7 +211,7 @@ impl CoatExperiment {
         cmd.fill_buffer(&gpu_data.expansion_vertices.as_bytes().slice(..), 0);
         cmd.fill_buffer(&gpu_data.expansion_indices.as_bytes().slice(..), 0);
 
-        let params = cmd.alloc_temp(&ExpandStrokesData {
+        let params = gpu::alloc_temp(&ExpandStrokesData {
             strokes: gpu_data.stroke_buffer.ptr(),
             vertices: gpu_data.stroke_vertex_buffer.ptr(),
             out_vertices: PushBuffer::new(&gpu_data.expansion_vertices),

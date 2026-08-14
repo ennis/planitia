@@ -18,8 +18,8 @@ members = [
     "crates/experiment",
     "crates/dummytool",
     "crates/vk-layer",
-    "planitia-workspace-hack"
-]
+    "planitia-workspace-hack",
+    "crates/sgpu"]
 resolver = "1"
 
 [workspace.dependencies]

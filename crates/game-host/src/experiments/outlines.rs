@@ -11,8 +11,8 @@ use gamelib::render::pipeline_cache::{get_compute_pipeline, get_graphics_pipelin
 use gamelib::{egui, static_assets, tweak};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::{
-    BARRIER_INDIRECT, BARRIER_STORAGE, BARRIER_TEXTURE, Buffer, BufferCreateInfo, DrawIndirectCommand, Image,
-    InvalidateFlags, MemoryLocation, Ptr, PushDataSource, Size3D,
+    BARRIER_INDIRECT, BARRIER_STORAGE, BARRIER_TEXTURE, BarrierFlags, Buffer, BufferCreateInfo, DrawIndirectCommand,
+    Image, MemoryLocation, Ptr, PushDataSource, Size3D,
 };
 use hgeo::util::polygons_to_triangle_mesh;
 use log::{info, warn};
@@ -342,13 +342,7 @@ impl OutlineExperiment {
         // nothing
     }
 
-    pub(crate) fn gui(&mut self, ctx: &egui::Context) {
-        //egui::CentralPanel::default().frame(egui::Frame::NONE).show(ctx,
-        //    |ui| {
-        //        self.worksheet.gui(ui)
-        //    }
-        //);
-    }
+    pub(crate) fn gui(&mut self, ctx: &egui::Context) {}
 
     pub(crate) fn render(
         &mut self,
@@ -374,7 +368,7 @@ impl OutlineExperiment {
             self.locked_eye = scene_info.eye;
         }
 
-        let root_params = gpu::upload(&ContoursRootParams {
+        let root_params = gpu::alloc_temp(&ContoursRootParams {
             mesh: self.mesh.gpu_data(),
             scene_info: scene_info.gpu,
 
@@ -520,7 +514,6 @@ impl OutlineExperiment {
             gpu::dispatch(&*EXPAND_INTERPOLATED_CONTOURS.read()?, groups_count, 1, 1, root_params);
         }
         gpu::barrier(BARRIER_STORAGE | BARRIER_INDIRECT);
-
 
         // render contours
         {

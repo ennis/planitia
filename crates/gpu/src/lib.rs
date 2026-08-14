@@ -1,3 +1,33 @@
+//! A streamlined GPU API layer (for desktop GPUs) on top of Vulkan.
+//!
+//! The goal is to reduce the amount of Vulkan boilerplate needed to get data on the GPU and dispatch
+//! commands. Stuff like device creation, command pools, descriptor set, layout, whatever, etc. are abstracted away.
+//!
+//! It makes use of somewhat recent Vulkan extensions. However, these should be available
+//! on reasonably recent desktop GPUs. Mobile GPUs are explicitly not a target of this library:
+//! if an extension exists that makes the API simpler, but is only available
+//! on desktop GPUs, the extension will be used unconditionally, even if it makes the library
+//! unusable on mobile.
+//!
+//! Safety is not a primary goal either. Notably, memory safety on the GPU domain is not guaranteed
+//! as this would compromise the ergonomics too much.
+//!
+//! # No resource usage tracking, manual synchronization
+//!
+//! Modern GPU APIs have pushed the responsibility of emitting synchronization commands to the user,
+//! for better or worse.
+//! Manually managing synchronization in a large application is typically seen as unmanageable,
+//! which led to the rise of higher-level APIs that automatically track resource usage, or "render graph"-
+//! style APIs that force the client to declare all passes up-front.
+//! These have a non-negligible cost, either in terms of performance (for resource tracking),
+//! or cognitive overhead (for render graphs). All of this to emit barriers with a degree of precision
+//! that is encouraged by the Vulkan API, but is often completely ignored by the underlying driver
+//! (see https://www.sebastianaaltonen.com/blog/no-graphics-api#barriers:~:text=Barriers%20and%20fences)
+//!
+//! This API layer intentionally refrains from doing any kind of automatic resource usage tracking.
+//! This means that barriers between commands need to be specified by the user, although they have been greatly
+//! simplified to a handful of invalidation flags, and are not specified per-resource anymore.
+
 #![feature(default_field_values)]
 #![allow(unsafe_op_in_unsafe_fn, reason = "too verbose, and my IDE already highlights unsafe call sites")]
 #![expect(unused, reason = "noisy")]
@@ -6,18 +36,19 @@ extern crate self as gpu;
 
 mod buffer;
 mod command;
-mod debugger;
+mod command_pool;
 mod device;
 mod image;
 mod instance;
 pub mod platform;
 mod surface;
 mod swapchain;
+mod temp;
 pub mod util;
 
+use gpu_types::reflection::ShaderReflection;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use gpu_types::reflection::{ShaderReflection};
 
 // Reexports
 
@@ -32,6 +63,7 @@ pub use image::*;
 pub use instance::*;
 pub use surface::*;
 pub use swapchain::*;
+pub use temp::{alloc_temp, alloc_temp_slice};
 
 // proc-macros
 pub use gpu_macros::{Vertex, shader_module};
@@ -72,6 +104,7 @@ pub const SUBGROUP_SIZE: u32 = 32;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+pub type FrameIndex = u64;
 
 /// Represents a graphics pipeline.
 #[derive(Clone)]
@@ -109,7 +142,7 @@ impl Drop for GraphicsPipeline {
         let pipeline = self.pipeline;
         let pipeline_layout = self.pipeline_layout;
         unsafe {
-            Device::instance().delete_after_current_submission(move |device| {
+            Device::instance().delete_after_current_frame(move |device| {
                 device.raw.destroy_pipeline(pipeline, None);
                 device.raw.destroy_pipeline_layout(pipeline_layout, None);
             })
@@ -155,7 +188,7 @@ impl Drop for ComputePipeline {
         unsafe {
             // Wait until the current submission has completed execution since it may be using
             // the pipeline.
-            Device::instance().delete_after_current_submission(move |device| {
+            Device::instance().delete_after_current_frame(move |device| {
                 device.raw.destroy_pipeline(pipeline, None);
                 device.raw.destroy_pipeline_layout(pipeline_layout, None);
             })
@@ -204,51 +237,6 @@ impl VulkanObject for Sampler {
 
     fn handle(&self) -> Self::Handle {
         self.sampler
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/// Allocates command buffers in a `vk::CommandPool` and allows re-use of freed command buffers.
-#[derive(Debug)]
-struct CommandPool {
-    queue_family: u32,
-    command_pool: vk::CommandPool,
-    free: Vec<vk::CommandBuffer>,
-    used: Vec<vk::CommandBuffer>,
-}
-
-impl CommandPool {
-    unsafe fn new(device: &ash::Device, queue_family_index: u32) -> CommandPool {
-        // create a new one
-        let create_info = vk::CommandPoolCreateInfo {
-            flags: vk::CommandPoolCreateFlags::TRANSIENT,
-            queue_family_index,
-            ..Default::default()
-        };
-        let command_pool = device.create_command_pool(&create_info, None).expect("failed to create a command pool");
-
-        CommandPool { queue_family: queue_family_index, command_pool, free: vec![], used: vec![] }
-    }
-
-    fn alloc(&mut self, device: &ash::Device) -> vk::CommandBuffer {
-        let cb = self.free.pop().unwrap_or_else(|| unsafe {
-            let allocate_info = vk::CommandBufferAllocateInfo {
-                command_pool: self.command_pool,
-                level: vk::CommandBufferLevel::PRIMARY,
-                command_buffer_count: 1,
-                ..Default::default()
-            };
-            let buffers = device.allocate_command_buffers(&allocate_info).expect("failed to allocate command buffers");
-            buffers[0]
-        });
-        self.used.push(cb);
-        cb
-    }
-
-    unsafe fn reset(&mut self, device: &ash::Device) {
-        device.reset_command_pool(self.command_pool, vk::CommandPoolResetFlags::empty()).unwrap();
-        self.free.append(&mut self.used)
     }
 }
 
@@ -347,31 +335,6 @@ impl<'a, T: Copy + 'static> BufferRange<'a, T> {
             byte_size: self.byte_size,
         }
     }
-
-    /*pub fn slice(&self, range: impl RangeBounds<usize>) -> BufferRange<'a, [T]> {
-        let elem_size = mem::size_of::<T>();
-        let start = match range.start_bound() {
-            Bound::Unbounded => 0,
-            Bound::Included(start) => *start,
-            Bound::Excluded(start) => *start + 1,
-        };
-        let end = match range.end_bound() {
-            Bound::Unbounded => self.len(),
-            Bound::Excluded(end) => *end,
-            Bound::Included(end) => *end + 1,
-        };
-        let start = (start * elem_size) as u64;
-        let end = (end * elem_size) as u64;
-
-        BufferRange {
-            untyped: BufferRangeAny {
-                buffer: self.untyped.buffer,
-                offset: self.untyped.offset + start,
-                size: end - start,
-            },
-            _phantom: PhantomData,
-        }
-    }*/
 }
 
 pub type BufferRangeUntyped<'a> = BufferRange<'a, u8>;

@@ -45,13 +45,21 @@ struct Buffer {
     ptr: *mut c_void,
 }
 
+#[derive(Copy, Clone, Default)]
+struct Pipeline {
+    pipeline: vk::Pipeline,
+    pipeline_layout: vk::PipelineLayout,
+    descriptor_set_layout: vk::DescriptorSetLayout,
+}
+
 unsafe impl Send for Buffer {}
 unsafe impl Sync for Buffer {}
 
 //#[derive(Default)]
-struct LayerDeviceInner {
+struct TrackedResources {
     pipelines: Vec<PipelineData>,
     swapchains: Vec<LayerSwapchain>,
+    present_image_copy: Option<Image>,
 }
 
 struct PipelineData {
@@ -116,9 +124,14 @@ impl Deref for DeviceHelper {
 struct StaticResources {
     font_tex: Image,
     font_sampler: vk::Sampler,
-    pipeline: vk::Pipeline,
-    pipeline_layout: vk::PipelineLayout,
-    descriptor_set_layout: vk::DescriptorSetLayout,
+    pipeline: Pipeline,
+}
+
+#[derive(Default)]
+struct OverlayResources {
+    tmp_image: Option<Image>,
+    last_width: u32,
+    last_height: u32,
 }
 
 struct FrameResources {
@@ -131,8 +144,9 @@ struct DeviceData {
     helper: DeviceHelper,
     static_resources: StaticResources,
     frame_resources: Mutex<FrameResources>,
+    overlay_resources: Mutex<OverlayResources>,
+    tracked_resources: Mutex<TrackedResources>,
     first_queue_family: u32,
-    inner: Mutex<LayerDeviceInner>,
 }
 
 impl Deref for DeviceData {
@@ -164,7 +178,7 @@ where
 
 static INSTANCE_MAP: LazyLock<DashMap<vk::Instance, LayerInstance>> = LazyLock::new(DashMap::new);
 static PHY_TO_INSTANCE: LazyLock<DashMap<vk::PhysicalDevice, vk::Instance>> = LazyLock::new(DashMap::new);
-static DEVICE_MAP: LazyLock<DashMap<vk::Device, DeviceData>> = LazyLock::new(DashMap::new);
+static DEVICE_DATA: LazyLock<DashMap<vk::Device, DeviceData>> = LazyLock::new(DashMap::new);
 
 //static SWAPCHAIN_MAP: LazyLock<DashMap<vk::SwapchainKHR, LayerSwapchain>> = LazyLock::new(DashMap::new);
 /*
@@ -186,29 +200,13 @@ unsafe fn next_layer_get_physical_device_proc_addr(
 }
 
 unsafe fn next_get_device_proc_addr(device: vk::Device, p_name: *const c_char) -> PFN_vkVoidFunction {
-    let d = DEVICE_MAP.get(&device).expect("unknown device");
+    let d = DEVICE_DATA.get(&device).expect("unknown device");
     (d.next_get_device_proc_addr)(device, p_name)
 }
 
-fn d_1_0(device: vk::Device) -> dashmap::mapref::one::MappedRef<'static, vk::Device, DeviceData, ash::DeviceFnV1_0> {
-    DEVICE_MAP.get(&device).expect("unknown device").map(|ld| ld.dispatch.device.fp_v1_0())
-}
-fn d_1_1(device: vk::Device) -> dashmap::mapref::one::MappedRef<'static, vk::Device, DeviceData, ash::DeviceFnV1_1> {
-    DEVICE_MAP.get(&device).expect("unknown device").map(|ld| ld.dispatch.device.fp_v1_1())
-}
-fn d_1_2(device: vk::Device) -> dashmap::mapref::one::MappedRef<'static, vk::Device, DeviceData, ash::DeviceFnV1_2> {
-    DEVICE_MAP.get(&device).expect("unknown device").map(|ld| ld.dispatch.device.fp_v1_2())
-}
-fn d_1_3(device: vk::Device) -> dashmap::mapref::one::MappedRef<'static, vk::Device, DeviceData, ash::DeviceFnV1_3> {
-    DEVICE_MAP.get(&device).expect("unknown device").map(|ld| ld.dispatch.device.fp_v1_3())
-}
-
 fn device_data(device: vk::Device) -> dashmap::mapref::one::Ref<'static, vk::Device, DeviceData> {
-    DEVICE_MAP.get(&device).expect("unknown device")
+    DEVICE_DATA.get(&device).expect("unknown device")
 }
-
-/// Per-pipeline data.
-static PIPELINE_MAP: LazyLock<DashMap<vk::Pipeline, PipelineData>> = LazyLock::new(DashMap::new);
 
 // ---------------------------------------------------------------------------
 // Negotiate loader interface (layer interface version 2)
@@ -225,7 +223,6 @@ pub unsafe extern "system" fn vkNegotiateLoaderLayerInterfaceVersion(
     v.pfn_get_physical_device_proc_addr = Some(layer_vk_layerGetPhysicalDeviceProcAddr);
     vk::Result::SUCCESS
 }
-const _: PFN_vkNegotiateLoaderLayerInterfaceVersion = vkNegotiateLoaderLayerInterfaceVersion;
 
 // ---------------------------------------------------------------------------
 // vkGetInstanceProcAddr
@@ -251,7 +248,6 @@ unsafe extern "system" fn layer_vkGetInstanceProcAddr(
     };
     mem::transmute(pfn)
 }
-const _: vk::PFN_vkGetInstanceProcAddr = layer_vkGetInstanceProcAddr;
 
 // ---------------------------------------------------------------------------
 // vkGetDeviceProcAddr
@@ -278,7 +274,6 @@ unsafe extern "system" fn layer_vkGetDeviceProcAddr(
     };
     mem::transmute(pfn)
 }
-const _: vk::PFN_vkGetDeviceProcAddr = layer_vkGetDeviceProcAddr;
 
 // ---------------------------------------------------------------------------
 // vk_layerGetPhysicalDeviceProcAddr
@@ -298,7 +293,6 @@ unsafe extern "system" fn layer_vk_layerGetPhysicalDeviceProcAddr(
     };
     mem::transmute(pfn)
 }
-const _: PFN_vk_layerGetPhysicalDeviceProcAddr = layer_vk_layerGetPhysicalDeviceProcAddr;
 
 // ---------------------------------------------------------------------------
 // vkCreateInstance / vkDestroyInstance
@@ -353,7 +347,6 @@ unsafe extern "system" fn layer_vkCreateInstance(
 
     vk::Result::SUCCESS
 }
-const _: vk::PFN_vkCreateInstance = layer_vkCreateInstance;
 
 #[no_mangle]
 unsafe extern "system" fn layer_vkDestroyInstance(instance: vk::Instance, p_allocator: *const vk::AllocationCallbacks) {
@@ -367,7 +360,6 @@ unsafe extern "system" fn layer_vkDestroyInstance(instance: vk::Instance, p_allo
         (layer_instance.d.fp_v1_0().destroy_instance)(instance, p_allocator);
     }
 }
-const _: vk::PFN_vkDestroyInstance = layer_vkDestroyInstance;
 
 // ---------------------------------------------------------------------------
 // vkCreateDevice / vkDestroyDevice
@@ -454,32 +446,31 @@ unsafe extern "system" fn layer_vkCreateDevice(
 
     let static_resources = overlay::initialize_static_resources(&device_helper);
     let frame_resources = overlay::initialize_frame_resources(&device_helper);
-    let inner = LayerDeviceInner { pipelines: Vec::new(), swapchains: Vec::new() };
+    let tracked_resources =
+        TrackedResources { pipelines: Vec::new(), swapchains: Vec::new(), present_image_copy: None };
+    let overlay_resources = OverlayResources::default();
 
     let device_data = DeviceData {
         helper: device_helper,
         static_resources,
         frame_resources: Mutex::new(frame_resources),
         first_queue_family,
-        inner: Mutex::new(inner),
+        tracked_resources: Mutex::new(tracked_resources),
+        overlay_resources: Mutex::new(overlay_resources),
     };
 
-    DEVICE_MAP.insert(device, device_data);
+    DEVICE_DATA.insert(device, device_data);
     eprintln!("[planitia-layer] vkCreateDevice {:?}", device);
     vk::Result::SUCCESS
 }
 
-const _: vk::PFN_vkCreateDevice = layer_vkCreateDevice;
-
 #[no_mangle]
 unsafe extern "system" fn layer_vkDestroyDevice(device: vk::Device, p_allocator: *const vk::AllocationCallbacks) {
-    if let Some((_, device_data)) = DEVICE_MAP.remove(&device) {
+    if let Some((_, device_data)) = DEVICE_DATA.remove(&device) {
         eprintln!("[planitia-layer] vkDestroyDevice {:?}", device);
         (device_data.fp_v1_0().destroy_device)(device, p_allocator);
     }
 }
-
-const _: vk::PFN_vkDestroyDevice = layer_vkDestroyDevice;
 
 // ---------------------------------------------------------------------------
 // Queue tracking (queue handle → queue family index)
@@ -502,8 +493,6 @@ unsafe extern "system" fn layer_vkGetDeviceQueue(
         }
     }
 }
-
-const _: vk::PFN_vkGetDeviceQueue = layer_vkGetDeviceQueue;
 
 // ---------------------------------------------------------------------------
 // vkCreateGraphicsPipelines
@@ -561,11 +550,21 @@ unsafe extern "system" fn layer_vkCreateGraphicsPipelines(
         let pipelines = slice::from_raw_parts(p_pipelines, create_info_count as usize);
         for i in 0..create_info_count {
             let dd = device_data(device);
-            dd.inner.lock().unwrap().pipelines.push(PipelineData { pipeline: pipelines[i as usize] });
+            dd.tracked_resources.lock().unwrap().pipelines.push(PipelineData { pipeline: pipelines[i as usize] });
         }
     }
 
     result
 }
 
+// Type checks
+const _: PFN_vkNegotiateLoaderLayerInterfaceVersion = vkNegotiateLoaderLayerInterfaceVersion;
+const _: vk::PFN_vkGetInstanceProcAddr = layer_vkGetInstanceProcAddr;
+const _: vk::PFN_vkGetDeviceProcAddr = layer_vkGetDeviceProcAddr;
+const _: PFN_vk_layerGetPhysicalDeviceProcAddr = layer_vk_layerGetPhysicalDeviceProcAddr;
+const _: vk::PFN_vkCreateInstance = layer_vkCreateInstance;
+const _: vk::PFN_vkDestroyInstance = layer_vkDestroyInstance;
+const _: vk::PFN_vkCreateDevice = layer_vkCreateDevice;
+const _: vk::PFN_vkDestroyDevice = layer_vkDestroyDevice;
+const _: vk::PFN_vkGetDeviceQueue = layer_vkGetDeviceQueue;
 const _: vk::PFN_vkCreateGraphicsPipelines = layer_vkCreateGraphicsPipelines;

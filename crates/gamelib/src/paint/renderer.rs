@@ -12,7 +12,7 @@ use crate::{gpu_span, static_assets};
 use crate::util::env_flag;
 use color::Srgba8;
 use gpu::PrimitiveTopology::TriangleList;
-use gpu::{ClearColorValue, CommandBuffer, InvalidateFlags, Ptr, root_params};
+use gpu::{ClearColorValue, CommandBuffer, BarrierFlags, Ptr, root_params};
 use math::{IVec2, Mat3, Rect, U8Vec4, UVec2, Vec2, Vec4, ivec2, uvec2};
 use std::ops::Range;
 use std::sync::Once;
@@ -325,12 +325,12 @@ pub(super) fn render_scene(
 
         // Upload scene data to GPU.
         let scene_data = {
-            let segments = gpu::upload_slice(&prep_scene.clip_segs[..]);
-            let covers = gpu::upload_slice(&prep_scene.covers[..]);
+            let segments = gpu::alloc_temp_slice(&prep_scene.clip_segs[..]);
+            let covers = gpu::alloc_temp_slice(&prep_scene.covers[..]);
             let cover_count = prep_scene.covers.len() as u32;
-            let cover_lists = gpu::upload_slice(&prep_scene.tiles[..]);
-            let fills = gpu::upload_slice(&scene.fills[..]);
-            let gradient_integral_segments = gpu::upload_slice(&scene.gradient_integral_segments);
+            let cover_lists = gpu::alloc_temp_slice(&prep_scene.tiles[..]);
+            let fills = gpu::alloc_temp_slice(&scene.fills[..]);
+            let gradient_integral_segments = gpu::alloc_temp_slice(&scene.gradient_integral_segments);
             SceneData { segments, covers, cover_count, tiles: cover_lists, gradient_integral_segments, fills }
         };
 
@@ -344,7 +344,7 @@ pub(super) fn render_scene(
                     let _span = gpu_span!("rasterize_tiles");
                     let output = painter.render_target.storage_handle();
                     let raster_tiles_params = RasterizeTilesParams { scene_data, output, start_cover_list: *start };
-                    gpu::barrier(InvalidateFlags::STORAGE);
+                    gpu::barrier(BarrierFlags::STORAGE);
                     gpu::dispatch(&*rasterize_tiles, *count, 1, 1, &raster_tiles_params);
                 }
             }
@@ -352,7 +352,7 @@ pub(super) fn render_scene(
     }
 
     // Copy internal render target to provided render target.
-    gpu::barrier(InvalidateFlags::TEXTURE);
+    gpu::barrier(BarrierFlags::TEXTURE);
 
     {
         let _span = gpu_span!("copy_to_screen");

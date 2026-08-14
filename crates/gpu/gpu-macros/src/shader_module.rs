@@ -247,12 +247,12 @@ fn generate_access_chain(entry_point: Option<&str>, s: &refl::AccessChain) -> To
         }
         AccessKind::ArrayIndex { count, stride } => {
             quote! {
-                refl::AccessKind::ArrayIndex { count,stride }
+                refl::AccessKind::ArrayIndex { #count, #stride }
             }
         }
         AccessKind::RuntimeArrayIndex { stride } => {
             quote! {
-                refl::AccessKind::RuntimeArrayIndex { stride }
+                refl::AccessKind::RuntimeArrayIndex { #stride }
             }
         }
         AccessKind::Load => {

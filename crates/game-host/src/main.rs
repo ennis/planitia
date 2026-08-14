@@ -62,7 +62,7 @@ impl SceneInfo {
             frame,
             eye: camera.eye().as_vec3(),
         };
-        let gpu_ptr = gpu::upload(&uniforms);
+        let gpu_ptr = gpu::alloc_temp(&uniforms);
         Self { info: uniforms, gpu: gpu_ptr }
     }
 }
@@ -333,7 +333,7 @@ impl AppHandler for Game {
         // Render GUI
         if self.cfg.show_imgui {
             let _span = gamelib::span!("render_imgui");
-            gpu::with_default_cb(|mut cmd| {
+            gpu::with_cmdbuf(|mut cmd| {
                 gamelib::render_imgui(&mut cmd, &target.image);
             });
         }

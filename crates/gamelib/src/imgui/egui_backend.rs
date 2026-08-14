@@ -7,7 +7,7 @@ use egui::epaint::Primitive;
 use egui::{ClippedPrimitive, ImageData};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::prelude::*;
-use gpu::{ColorAttachment, Device, ImageCopyView, InvalidateFlags, Offset3D, PushDataSource, Size3D, Vertex};
+use gpu::{ColorAttachment, Device, ImageCopyView, BarrierFlags, Offset3D, PushDataSource, Size3D, Vertex, BARRIER_TEXTURE};
 use log::debug;
 
 #[derive(Copy, Clone, Vertex)]
@@ -116,7 +116,7 @@ impl Renderer {
             );
         }
 
-        cmd.barrier(InvalidateFlags::TEXTURE);
+        cmd.barrier(BARRIER_TEXTURE);
     }
 
     pub fn render(
@@ -161,7 +161,7 @@ impl Renderer {
 
         let width = color_target.width();
         let height = color_target.height();
-        let params = cmd.alloc_temp(&EguiRootParams { screen_size: [width as f32, height as f32] });
+        let params = gpu::alloc_temp(&EguiRootParams { screen_size: [width as f32, height as f32] });
 
         // encode draw commands
         let mut enc = cmd.begin_rendering(&[ColorAttachment { image: color_target, .. }], None);

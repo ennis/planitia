@@ -9,12 +9,13 @@ use crate::device::upload_buffer::{UPLOAD_BUFFER_CHUNK_SIZE, UploadBuffer};
 use crate::instance::vk_khr_surface;
 use crate::platform::PlatformExtensions;
 use crate::{
-    BufferAddressRange, BufferUsage, CommandPool, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout,
-    Error, GraphicsPipeline, GraphicsPipelineCreateInfo, PreRasterizationShaders, Ptr, SUBGROUP_SIZE, Sampler,
+    BufferAddressRange, BufferUsage, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error,
+    FrameIndex, GraphicsPipeline, GraphicsPipelineCreateInfo, PreRasterizationShaders, Ptr, SUBGROUP_SIZE, Sampler,
     SamplerParams, SamplerParamsHashable, ShaderReflection, VulkanObject, get_vulkan_entry, get_vulkan_instance,
-    is_depth_and_stencil_format,
+    is_depth_and_stencil_format, signal,
 };
 use ash::vk;
+use gpu::flush;
 use gpu_allocator::vulkan::AllocationCreateDesc;
 use gpu_types::ShaderStage;
 use log::{debug, error, info, trace, warn};
@@ -104,8 +105,10 @@ pub(crate) struct DeviceThreadSafeState {
     _physical_device_descriptor_buffer_properties: vk::PhysicalDeviceDescriptorBufferPropertiesEXT<'static>,
     physical_device_properties: vk::PhysicalDeviceProperties,
 
+    /// Timeline used to track completion of frames.
+    /// It is incremented and signalled on each frame completion (see `poll`).
     // SAFETY: we're never using this as an externally-synchronized command parameter.
-    pub(crate) timeline: vk::Semaphore,
+    pub(crate) frame_timeline: vk::Semaphore,
     // SAFETY: we're never using this as an externally-synchronized command parameter.
     pub(crate) physical_device: vk::PhysicalDevice,
 }
@@ -130,14 +133,7 @@ pub struct Device {
     pub(crate) platform_extensions: PlatformExtensions,
     pub(crate) allocator: Mutex<gpu_allocator::vulkan::Allocator>,
 
-    /// Global upload buffer.
-    upload_buffer: Mutex<UploadBuffer>,
-
-    /// GPU VA -> buffer+offset map
-    /// For debugging
-    addr_map: Mutex<Vec<BufferAddressRange>>,
-
-    // main graphics queue
+    /// Queue family index of the main queue.
     pub(crate) queue_family: u32,
 
     pub(crate) thread_safe: DeviceThreadSafeState,
@@ -156,22 +152,12 @@ pub struct Device {
     /// semaphores ready for reuse.
     pub(crate) semaphores: Mutex<Vec<vk::Semaphore>>,
 
-    // Command pools per queue and thread.
-    free_command_pools: Mutex<Vec<CommandPool>>,
     free_timestamp_query_pools: Mutex<Vec<vk::QueryPool>>,
 
-    /// Index of the next submission not yet created.
-    pub(crate) next_create_ticket: AtomicU64,
-
-    /// Index of the next submission to be submitted.
-    pub(crate) next_timeline_value: AtomicU64,
-
-    /// All command buffers with create_index lower than or equal to this value have completed execution.
-    ///
-    /// There might be some command buffers with a higher create_index that have also completed,
-    /// but this is the highest value for which we can guarantee that all lower-indexed command
-    /// buffers have completed.
-    pub(crate) completed_tickets: AtomicU64,
+    // Index of the next submission not yet created.
+    //pub(crate) next_create_ticket: AtomicU64,
+    /// The index of the frame being recorded, or, equivalently, the next frame index to be signalled.
+    pub(crate) frame_index: AtomicU64,
 
     /// Destructors (or other function calls) that are delayed until associated command buffers
     /// have completed execution.
@@ -195,16 +181,16 @@ impl fmt::Debug for Device {
 
 /// Data and resources associated to a submission that was submitted to the GPU.
 pub(crate) struct ActiveSubmission {
-    pub(crate) create_ticket: u64,
-    pub(crate) timeline_value: u64,
-    pub(crate) command_pools: Vec<CommandPool>,
+    //pub(crate) create_ticket: u64,
+    pub(crate) frame_index: u64,
+    //pub(crate) command_pools: Vec<CommandPool>,
     pub(crate) timestamp_query_pool: vk::QueryPool,
     pub(crate) timestamp_query_count: u32,
     pub(crate) timestamp_callbacks: Vec<Box<dyn FnOnce(u64) + Send>>,
 }
 
 struct DeleteQueueEntry {
-    create_ticket: u64,
+    frame_index: u64,
     deleter: Option<Box<dyn FnOnce(&Device) + Send + Sync>>,
 }
 
@@ -251,7 +237,7 @@ impl SamplerDescriptorIndex {
 
 /// Describes how a resource got its memory.
 #[derive(Default, Debug)]
-pub enum ResourceAllocation {
+pub(crate) enum ResourceAllocation {
     /// We don't own the memory for this resource.
     #[default]
     External,
@@ -260,6 +246,9 @@ pub enum ResourceAllocation {
     /// The memory for this resource was imported or exported from/to an external handle.
     DeviceMemory { device_memory: vk::DeviceMemory },
     /// No memory is allocated for this resource.
+    ///
+    /// Currently, this is only used in zero-byte [`Buffer`s](crate::Buffer)
+    /// so that we have something to put in the `allocation` field.
     None,
 }
 
@@ -405,8 +394,8 @@ const DEVICE_EXTENSIONS: &[&str] = &[
     "VK_EXT_fragment_shader_interlock",
     "VK_EXT_shader_image_atomic_int64",
     "VK_KHR_calibrated_timestamps",
-    // "VK_EXT_descriptor_heap",
-    "VK_EXT_mutable_descriptor_type", //"VK_EXT_descriptor_buffer",
+    //"VK_EXT_descriptor_heap",
+    "VK_EXT_mutable_descriptor_type",
 ];
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -417,8 +406,20 @@ impl Device {
     /// Returns the global device instance.
     #[inline(never)]
     pub fn instance() -> &'static Device {
-        static DEVICE: LazyLock<&'static Device> =
-            LazyLock::new(|| Box::leak(Box::new(create_device().expect("failed to create the GPU device"))));
+        static DEVICE: LazyLock<&'static Device> = LazyLock::new(|| {
+            unsafe {
+                // SAFETY: this is safe when passing `None`.
+                // Technically we must choose a device that supports presentation for
+                // the user's surfaces. But we don't have a surface here and I don't want to complicate
+                // the API by requiring the user to somehow pass a surface handle before
+                // the device singleton is initialized.
+                // It should be easy to filter out devices that don't support presentation anyway.
+                // At worst, we can probably use OS APIs for that.
+                // Note that no such bullshit is necessary with D3D12.
+                let device = Device::with_surface(None).expect("failed to create the GPU device");
+                Box::leak(Box::new(device))
+            }
+        });
         &*DEVICE
     }
 
@@ -599,7 +600,7 @@ impl Device {
                 descriptor_heap_properties,
                 _physical_device_descriptor_buffer_properties: physical_device_descriptor_buffer_properties,
                 physical_device_properties: physical_device_properties.properties,
-                timeline,
+                frame_timeline: timeline,
                 physical_device,
             },
             submission_state: Mutex::new(DeviceSubmissionState { queue, active_submissions: VecDeque::new() }),
@@ -611,16 +612,11 @@ impl Device {
             }),
             descriptor_table,
             sampler_cache: Mutex::new(Default::default()),
-            free_command_pools: Mutex::new(Default::default()),
             free_timestamp_query_pools: Mutex::new(vec![]),
-            next_create_ticket: AtomicU64::new(1),
-            next_timeline_value: AtomicU64::new(1),
+            frame_index: AtomicU64::new(1),
             semaphores: Default::default(),
             deletion_queue: Mutex::new(Vec::new()),
-            upload_buffer: Mutex::new(UploadBuffer::new(BufferUsage::UNIFORM)),
-            completed_tickets: AtomicU64::new(0),
             descriptor_heaps,
-            addr_map: Mutex::new(vec![]),
         })
     }
 
@@ -850,42 +846,40 @@ impl Device {
         self.allocator.lock().unwrap().allocate(create_desc).expect("failed to allocate device memory")
     }
 
+    pub(crate) fn get_last_completed_frame_index(&self) -> u64 {
+        unsafe {
+            let value = self.raw.get_semaphore_counter_value(self.thread_safe.frame_timeline).unwrap();
+            if value == u64::MAX {
+                // We've likely lost the device.
+                panic!("GetSemaphoreCounterValue returned an invalid value, possible device lost");
+            }
+            value
+        }
+    }
+
     /// Schedules a function call.
     ///
     /// The function will be called once the GPU has finished processing commands up to and
-    /// including the specified submission index.
-    pub fn call_later(&self, ticket: u64, f: impl FnOnce(&Self) + Send + Sync + 'static) {
-        // if the command buffer has already completed execution, call the function right away
-        if ticket <= self.completed_tickets.load(Relaxed) {
-            trace!("GPU: immediate call_later for ticket={ticket}");
+    /// including the specified frame index.
+    pub fn call_later(&self, after_frame_completed_index: u64, f: impl FnOnce(&Self) + Send + Sync + 'static) {
+        if after_frame_completed_index <= self.get_last_completed_frame_index() {
+            trace!("GPU: immediate call_later for frame_index={after_frame_completed_index}");
             f(self);
         } else {
             // otherwise move it to the deferred deletion list
             let mut deletion_queue = self.deletion_queue.lock().unwrap();
-            let pos = deletion_queue.binary_search_by_key(&ticket, |e| e.create_ticket).unwrap_or_else(|p| p);
-            deletion_queue.insert(pos, DeleteQueueEntry { create_ticket: ticket, deleter: Some(Box::new(f)) });
+            let pos = deletion_queue
+                .binary_search_by_key(&after_frame_completed_index, |e| e.frame_index)
+                .unwrap_or_else(|p| p);
+            deletion_queue
+                .insert(pos, DeleteQueueEntry { frame_index: after_frame_completed_index, deleter: Some(Box::new(f)) });
         }
     }
 
-    /// Schedules a resource for deletion after the current submission is complete.
-    pub(crate) fn delete_resource_after_current_submission(
-        &self,
-        //resource_id: ResourceId,
-        deleter: impl FnOnce(&Self) + Send + Sync + 'static,
-    ) {
-        // See comments in `delete_after_current_submission`.
-        let last_create_ticket = self.next_create_ticket.load(Relaxed) - 1;
-        self.call_later(last_create_ticket, move |device| {
-            //trace!("GPU: deleting tracked resource {:?}", resource_id);
-            //Self::global().free_resource_id(resource_id);
-            deleter(device);
-        })
-    }
-
-    /// Schedules a function (destructor) to be called after the current submission is complete.
-    pub(crate) fn delete_after_current_submission(&self, deleter: impl FnOnce(&Self) + Send + Sync + 'static) {
-        let last_ticket = self.next_create_ticket.load(Relaxed) - 1;
-        self.call_later(last_ticket, move |device| {
+    /// Schedules a function (destructor) to be called after the current frame is complete.
+    pub(crate) fn delete_after_current_frame(&self, deleter: impl FnOnce(&Self) + Send + Sync + 'static) {
+        let current_frame_index = self.frame_index.load(Relaxed);
+        self.call_later(current_frame_index, move |device| {
             deleter(device);
         })
     }
@@ -907,54 +901,32 @@ impl Device {
         }
     }
 
-    /// Uploads data to GPU memory via this device's upload buffer.
-    ///
-    /// The returned pointer is guaranteed to be valid for the current submission.
-    pub fn alloc_temp<T: Copy>(&self, data: &T) -> Ptr<T> {
-        let mut upload_buffer = self.upload_buffer.lock().unwrap();
-        upload_buffer.alloc(data)
-    }
+    fn end_frame(&self) -> u64 {
+        // Terminate pending command buffers.
+        flush().unwrap();
 
-    /// Uploads data to GPU memory via this device's upload buffer.
-    ///
-    /// The returned pointer is guaranteed to be valid for the current submission.
-    pub fn alloc_slice_temp<T: Copy>(&self, data: &[T]) -> Ptr<T> {
-        let mut upload_buffer = self.upload_buffer.lock().unwrap();
-        upload_buffer.alloc_slice(data)
-    }
+        // /!\ we are in frame N /!\
+        // Fetch and increment frame index, and signal it in on the timeline.
+        let frame_index = self.frame_index.fetch_add(1, Relaxed);
+        signal(self.thread_safe.frame_timeline, frame_index);
 
-    /// Schedules deletion of full upload buffers.
-    fn retire_upload_buffers(&self) {
-        let mut upload_buffer = self.upload_buffer.lock().unwrap();
-        let full = mem::take(&mut upload_buffer.full);
-        if !full.is_empty() {
-            trace!(
-                "deleting {} full upload buffers ({} MB)",
-                full.len(),
-                full.len() * UPLOAD_BUFFER_CHUNK_SIZE / (1024 * 1024)
-            );
-            for _buffer in full {
-                // nothing to do, the drop impl does what we want
-                // TODO recycle them instead of destroying them
-            }
-        }
-    }
+        // /!\ we are now in frame N+1 /!\
+        // Reclaim resources of completed frames.
 
-    fn poll(&self) {
-        self.retire_upload_buffers();
-
-        let last_completed_submission_index = unsafe {
-            self.raw.get_semaphore_counter_value(self.thread_safe.timeline).expect("get_semaphore_counter_value failed")
+        let last_completed_frame_index = unsafe {
+            self.raw
+                .get_semaphore_counter_value(self.thread_safe.frame_timeline)
+                .expect("get_semaphore_counter_value failed")
         };
-        if last_completed_submission_index == u64::MAX {
-            error!("GetSemaphoreCounterValue returned UINT64_MAX");
-            return;
+        if last_completed_frame_index == u64::MAX {
+            // This means "device lost".
+            panic!("GetSemaphoreCounterValue returned an invalid value");
         }
 
         //trace!("GPU: cleaning up to submission {last_completed_submission_index}");
 
         // process all completed submissions
-        let mut free_command_pools = self.free_command_pools.lock().unwrap();
+        //let mut free_command_pools = self.free_command_pools.lock().unwrap();
         let mut free_timestamp_query_pools = self.free_timestamp_query_pools.lock().unwrap();
         let mut ss = self.submission_state.lock().unwrap();
         loop {
@@ -962,21 +934,11 @@ impl Device {
                 break;
             }
 
-            if ss.active_submissions.front().unwrap().timeline_value > last_completed_submission_index {
+            if ss.active_submissions.front().unwrap().frame_index > last_completed_frame_index {
                 break;
             };
 
             let sub = ss.active_submissions.pop_front().unwrap();
-            for mut cp in sub.command_pools {
-                // SAFETY: command buffers are not in use anymore
-                unsafe {
-                    cp.reset(&self.raw);
-                }
-                free_command_pools.push(cp);
-            }
-
-            // update completed tickets
-            self.completed_tickets.store(sub.create_ticket, Relaxed);
 
             // read timestamp query results
             unsafe {
@@ -1003,17 +965,18 @@ impl Device {
         }
 
         let mut deletion_queue = self.deletion_queue.lock().unwrap();
-        let completed_tickets = self.completed_tickets.load(Relaxed);
 
         // *** This invokes all delayed destructors for resources which are no longer in use by the GPU.
-        deletion_queue.retain_mut(|DeleteQueueEntry { create_ticket, deleter }| {
-            if *create_ticket > completed_tickets {
+        deletion_queue.retain_mut(|DeleteQueueEntry { frame_index, deleter }| {
+            if *frame_index > last_completed_frame_index {
                 return true;
             }
             let deleter = deleter.take().unwrap();
             deleter(self);
             false
         });
+
+        frame_index
     }
 
     /// Creates a new, or returns an existing, binary semaphore that is in the unsignaled state,
@@ -1069,16 +1032,6 @@ impl Device {
         let sampler = Sampler { descriptor_index, sampler };
         self.sampler_cache.lock().unwrap().insert(info_hashable, sampler.clone());
         sampler
-    }
-
-    pub(crate) fn get_or_create_command_pool(&self, queue_family: u32) -> CommandPool {
-        let free = &mut self.free_command_pools.lock().unwrap();
-        let index = free.iter().position(|pool| pool.queue_family == queue_family);
-        if let Some(index) = index {
-            free.swap_remove(index)
-        } else {
-            unsafe { CommandPool::new(&self.raw, queue_family) }
-        }
     }
 
     pub(crate) fn get_or_create_timestamp_query_pool(&self) -> vk::QueryPool {
@@ -1588,42 +1541,6 @@ impl Device {
             stage_reflection,
         })
     }
-
-    pub(crate) fn register_address_range(&self, buffer: vk::Buffer, base: vk::DeviceAddress, size: usize) {
-        let r = BufferAddressRange { base, size, buffer };
-        let mut addr_map = self.addr_map.lock().unwrap();
-        match addr_map.binary_search_by(|probe| probe.base.cmp(&r.base)) {
-            Ok(_) => {
-                warn!("register_address_range: {:016x}->{:016x} already registered", r.base, r.base + r.size as u64);
-            }
-            Err(pos) => {
-                addr_map.insert(pos, r);
-            }
-        }
-    }
-
-    pub(crate) fn unregister_address_range(&self, buffer: vk::Buffer) {
-        let mut addr_map = self.addr_map.lock().unwrap();
-        if let Some(pos) = addr_map.iter().position(|r| r.buffer == buffer) {
-            addr_map.remove(pos);
-        }
-    }
-
-    pub(crate) fn get_buffer_for_address(&self, address: vk::DeviceAddress) -> Option<(BufferAddressRange, usize)> {
-        let addr_map = self.addr_map.lock().unwrap();
-        match addr_map.binary_search_by(|probe| {
-            if address < probe.base {
-                std::cmp::Ordering::Greater
-            } else if address >= probe.base + probe.size as u64 {
-                std::cmp::Ordering::Less
-            } else {
-                std::cmp::Ordering::Equal
-            }
-        }) {
-            Ok(pos) => Some((addr_map[pos], (address - addr_map[pos].base) as usize)),
-            Err(_) => None,
-        }
-    }
 }
 
 /// Waits for the GPU to complete all submitted work.
@@ -1631,13 +1548,21 @@ pub fn wait_idle() {
     unsafe { Device::instance().raw.device_wait_idle().unwrap() }
 }
 
-/// Cleanup expired resources.
+/// Ends the frame.
 ///
-/// This should be called periodically (e.g. per-frame) to free resources that are no longer
-/// used by the GPU.
+/// The next frame starts automatically.
+/// This cleans up expired resources.
+///
+/// This doesn't need to correspond to actual VSync frames.
+/// However, it should be called periodically to free resources that are no longer
+/// used by the GPU, and per-frame is a good frequency.
 /// Otherwise, tasks scheduled with `call_later` or `delete_later` will never be executed.
-pub fn poll() {
-    Device::instance().poll()
+///
+/// # Return value
+///
+/// The index of the frame that was just ended.
+pub fn end_frame() -> u64 {
+    Device::instance().end_frame()
 }
 
 /// Assigns a debug name to an object represented by its raw vulkan handle
@@ -1680,6 +1605,22 @@ pub unsafe fn set_debug_name_raw<H: vk::Handle>(handle: H, name: impl AsRef<str>
 pub unsafe fn set_debug_name<Object: VulkanObject>(object: &Object, name: impl AsRef<str>) {
     unsafe {
         set_debug_name_raw(object.handle(), name);
+    }
+}
+
+/// Returns the current frame index.
+pub fn get_frame_index() -> FrameIndex {
+    Device::instance().frame_index.load(Relaxed)
+}
+
+/// Returns the index of the most recently completed frame.
+pub fn get_last_completed_frame_index() -> FrameIndex {
+    unsafe {
+        let device = Device::instance();
+        device
+            .raw
+            .get_semaphore_counter_value(device.thread_safe.frame_timeline)
+            .expect("get_semaphore_counter_value failed")
     }
 }
 

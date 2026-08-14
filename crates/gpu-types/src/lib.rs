@@ -1,5 +1,4 @@
 #![feature(default_field_values)]
-
 pub mod reflection;
 
 use bitflags::bitflags;
@@ -10,6 +9,14 @@ use std::{fmt, slice};
 // Reexports
 pub use ash::{self, vk};
 pub use vk::Format;
+
+/// Represents data that can be shared with the GPU and accessed in shaders.
+///
+/// This is a shorthand for `Copy + 'static`, and is blanket-implemented for all types
+/// satisfying this requirement.
+pub trait Data: Copy + 'static {}
+
+impl <T> Data for T where T: Copy + 'static {}
 
 /// 2D point with integer coordinates.
 #[derive(Copy, Clone, Debug, PartialEq)]

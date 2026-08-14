@@ -519,7 +519,7 @@ impl LoopHandler for &'static MainThreadContext {
         // cleanup expired GPU resources
         {
             let _span = span!("gpu_poll");
-            gpu::poll();
+            gpu::end_frame();
         }
 
         // ask for a re-render on the next vsync

@@ -114,7 +114,7 @@ impl Device {
         };
 
         // wait (GPU side) for the image to be ready
-        crate::sync_wait(ready, 0);
+        crate::wait(ready, 0);
         let img = &swap_chain.images[index as usize].image;
 
         // transition image to GENERAL
@@ -144,7 +144,7 @@ impl Device {
             crate::submit(cmd)?;
         }
 
-        self.delete_after_current_submission(move |this| {
+        self.delete_after_current_frame(move |this| {
             this.raw.destroy_semaphore(ready, None);
         });
 

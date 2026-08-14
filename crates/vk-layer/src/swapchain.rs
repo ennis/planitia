@@ -12,9 +12,12 @@ pub(crate) unsafe extern "system" fn layer_vkCreateSwapchainKHR(
     p_swapchain: *mut vk::SwapchainKHR,
 ) -> vk::Result {
     let d = device_data(device);
-    let mut inner = d.inner.lock().unwrap();
+    let mut inner = d.tracked_resources.lock().unwrap();
 
-    let create_info = *p_create_info;
+    let mut create_info = *p_create_info;
+
+    // The pan/zoom shader needs TRANSFER_SRC usage.
+    create_info.image_usage |= vk::ImageUsageFlags::TRANSFER_SRC;
 
     // If there's an old swapchain to be deleted, delete the resources that we have for it
     if !create_info.old_swapchain.is_null() {
@@ -36,7 +39,7 @@ pub(crate) unsafe extern "system" fn layer_vkCreateSwapchainKHR(
     }
 
     // Call next layer
-    let result = (d.dispatch.khr_swapchain.create_swapchain_khr)(device, p_create_info, p_allocator, p_swapchain);
+    let result = (d.dispatch.khr_swapchain.create_swapchain_khr)(device, &create_info, p_allocator, p_swapchain);
     if result != vk::Result::SUCCESS {
         return result;
     }
@@ -115,7 +118,7 @@ pub(crate) unsafe extern "system" fn layer_vkDestroySwapchainKHR(
     p_allocator: *const vk::AllocationCallbacks,
 ) {
     let d = device_data(device);
-    let mut inner = d.inner.lock().unwrap();
+    let mut inner = d.tracked_resources.lock().unwrap();
 
     if let Some(index) = inner.swapchains.iter().position(|sc| sc.swapchain == swapchain) {
         let sc = inner.swapchains.remove(index);

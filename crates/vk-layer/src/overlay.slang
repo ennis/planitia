@@ -12,6 +12,7 @@ struct FragmentOutput
 struct RootParams {
     int2 screen_size;
     int2 offset;
+    uint8_t4 shuffle;
     uint8_t4 color;
 };
 
@@ -19,10 +20,10 @@ struct RootParams {
 RootParams u;
 
 [vk::binding(0)]
-Texture2D<float4> font_tex;
+Texture2D<float4> texture;
 
 [vk::binding(1)]
-SamplerState font_sampler;
+SamplerState sampler;
 
 struct VertexInput {
     [[vk::location(0)]] float2 pos;
@@ -31,7 +32,7 @@ struct VertexInput {
 };
 
 [shader("vertex")]
-VertexOutput text_vertex_main(VertexInput vi) {
+VertexOutput overlay_vertex(VertexInput vi) {
     VertexOutput o;
     o.pos = float4(vi.pos, 0.0, 1.0);
     o.color = vi.color;
@@ -40,9 +41,14 @@ VertexOutput text_vertex_main(VertexInput vi) {
 }
 
 [shader("fragment")]
-FragmentOutput text_fragment_main(VertexOutput v) {
+FragmentOutput overlay_fragment(VertexOutput v) {
     FragmentOutput o;
-    float mask = font_tex.Sample(font_sampler, v.uv).r;
-    o.color = float4(v.color.rgb, v.color.a * mask);
+    float4 tex_color = texture.Sample(sampler, v.uv);
+    float4 tex_color_shuf;
+    tex_color_shuf.x = u.shuffle.x < 4 ? tex_color[u.shuffle.x] : float(u.shuffle.x - 4);
+    tex_color_shuf.y = u.shuffle.y < 4 ? tex_color[u.shuffle.y] : float(u.shuffle.y - 4);
+    tex_color_shuf.z = u.shuffle.z < 4 ? tex_color[u.shuffle.z] : float(u.shuffle.z - 4);
+    tex_color_shuf.w = u.shuffle.w < 4 ? tex_color[u.shuffle.w] : float(u.shuffle.w - 4);
+    o.color = v.color * tex_color_shuf;
     return o;
 }
