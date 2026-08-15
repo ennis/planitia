@@ -165,7 +165,7 @@ impl Providers {
                 }
             }
         }
-        Err(io::Error::new(io::ErrorKind::NotFound, format!("no provider found for path: {}", path.as_str())))
+        Err(io::Error::new(io::ErrorKind::NotFound, "no provider could resolve path"))
     }
 
     /// Returns the global instance of this registry.

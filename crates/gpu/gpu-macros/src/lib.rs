@@ -12,6 +12,7 @@ use syn::spanned::Spanned;
 mod attachments;
 mod vertex;
 mod shader_module;
+mod descriptor_mapping;
 
 //--------------------------------------------------------------------------------------------------
 struct CrateName;
@@ -47,6 +48,15 @@ pub fn attachments_derive(input: proc_macro::TokenStream) -> proc_macro::TokenSt
         Err(e) => e.into_compile_error().into(),
     }
 }
+
+/*
+#[proc_macro_derive(DescriptorMapping, attributes(descriptor))]
+pub fn descriptor_mapping_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    match descriptor_mapping::derive_descriptor_mapping(input) {
+        Ok(tokens) => tokens.into(),
+        Err(e) => e.into_compile_error().into(),
+    }
+}*/
 
 #[proc_macro_attribute]
 pub fn shader_module(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> proc_macro::TokenStream {

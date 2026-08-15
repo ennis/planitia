@@ -247,12 +247,12 @@ fn generate_access_chain(entry_point: Option<&str>, s: &refl::AccessChain) -> To
         }
         AccessKind::ArrayIndex { count, stride } => {
             quote! {
-                refl::AccessKind::ArrayIndex { #count, #stride }
+                refl::AccessKind::ArrayIndex { count: #count, stride: #stride }
             }
         }
         AccessKind::RuntimeArrayIndex { stride } => {
             quote! {
-                refl::AccessKind::RuntimeArrayIndex { #stride }
+                refl::AccessKind::RuntimeArrayIndex { stride: #stride }
             }
         }
         AccessKind::Load => {
@@ -617,6 +617,15 @@ pub(crate) fn shader_module_impl(
             #(#pipelines)*
         }
     };
+
+    // dump expansion to .txt file
+    if let Ok(out_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+        let dump_dir = std::path::Path::new(&out_dir).join("target").join("macro-expansions");
+        let _ = std::fs::create_dir_all(&dump_dir);
+        let dump_path = dump_dir.join(format!("{}.txt", mod_name));
+        let _ = std::fs::write(&dump_path, output.to_string());
+        eprintln!("macro expansion written to {}", dump_path.display());
+    }
 
     Ok(output)
 }

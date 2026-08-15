@@ -1,23 +1,20 @@
 //! Abstractions over a vulkan device & queues.
-mod bindless;
+//mod bindless;
 mod descriptor_heap;
-mod upload_buffer;
 
-use crate::device::bindless::BindlessDescriptorTable;
 use crate::device::descriptor_heap::{DescriptorHeaps, DeviceDescriptorIndexTable};
-use crate::device::upload_buffer::{UPLOAD_BUFFER_CHUNK_SIZE, UploadBuffer};
 use crate::instance::vk_khr_surface;
 use crate::platform::PlatformExtensions;
 use crate::{
     BufferAddressRange, BufferUsage, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error,
-    FrameIndex, GraphicsPipeline, GraphicsPipelineCreateInfo, PreRasterizationShaders, Ptr, SUBGROUP_SIZE, Sampler,
+    FrameIndex, GraphicsPipeline, GraphicsPipelineCreateInfo, PreRasterizationShaders, Ptr, SUBGROUP_SIZE,
     SamplerParams, SamplerParamsHashable, ShaderReflection, VulkanObject, get_vulkan_entry, get_vulkan_instance,
     is_depth_and_stencil_format, signal,
 };
 use ash::vk;
 use gpu::flush;
 use gpu_allocator::vulkan::AllocationCreateDesc;
-use gpu_types::ShaderStage;
+use gpu_types::{SamplerHandle, ShaderStage};
 use log::{debug, error, info, trace, warn};
 use slotmap::{SlotMap, new_key_type};
 use std::collections::{HashMap, VecDeque};
@@ -28,6 +25,9 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::{fmt, mem, ptr};
 use vulkan_headers::vulkan::vulkan as vk2;
+use vulkan_headers::vulkan::vulkan::{VkPhysicalDeviceDescriptorHeapFeaturesEXT, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_FEATURES_EXT, VkPhysicalDeviceShaderUntypedPointersFeaturesKHR, VK_TRUE, VK_FALSE};
+use vulkan_headers::vulkan::vulkan_core::VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT;
+use gpu::device::descriptor_heap::SamplerDescriptorHandle;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Size of the global descriptor heaps (in number of descriptors).
@@ -85,14 +85,14 @@ impl ExtDescriptorHeap {
 
 /// Device extensions.
 pub(crate) struct DeviceExtensions {
-    pub(crate) khr_swapchain: ash::khr::swapchain::Device,
+    pub(crate) swapchain: ash::khr::swapchain::Device,
     //pub(crate) ext_shader_object: ash::ext::,
-    pub(crate) khr_push_descriptor: ash::khr::push_descriptor::Device,
-    pub(crate) khr_calibrated_timestamps: ash::khr::calibrated_timestamps::Device,
-    pub(crate) ext_mesh_shader: ash::ext::mesh_shader::Device,
+    pub(crate) push_descriptor: ash::khr::push_descriptor::Device,
+    pub(crate) calibrated_timestamps: ash::khr::calibrated_timestamps::Device,
+    pub(crate) mesh_shader: ash::ext::mesh_shader::Device,
     pub(crate) _ext_extended_dynamic_state3: ash::ext::extended_dynamic_state3::Device,
-    pub(crate) ext_debug_utils: ash::ext::debug_utils::Device,
-    pub(crate) ext_descriptor_heap: ExtDescriptorHeap,
+    pub(crate) debug_utils: ash::ext::debug_utils::Device,
+    pub(crate) descriptor_heap: ExtDescriptorHeap,
 }
 
 /// Device state that is unconditionally safe to access from multiple threads, even though
@@ -128,7 +128,7 @@ pub struct Device {
     pub(crate) raw: ash::Device,
 
     /// Common device extensions.
-    pub(crate) extensions: DeviceExtensions,
+    pub(crate) ext: DeviceExtensions,
     /// Platform-specific extension functions
     pub(crate) platform_extensions: PlatformExtensions,
     pub(crate) allocator: Mutex<gpu_allocator::vulkan::Allocator>,
@@ -142,8 +142,8 @@ pub struct Device {
     // TODO: we don't track resources anymore, so this should go,
     //       unless we have a need for IDs somewhere
     //pub(crate) resources: Mutex<SlotMap<ResourceId, ResourceState>>,
-    pub(crate) descriptor_table: BindlessDescriptorTable,
-    pub(crate) descriptor_indices: Mutex<DeviceDescriptorIndexTable>,
+    //pub(crate) descriptor_table: BindlessDescriptorTable,
+    //pub(crate) descriptor_indices: Mutex<DeviceDescriptorIndexTable>,
 
     // WIP
     pub(crate) descriptor_heaps: DescriptorHeaps,
@@ -170,7 +170,7 @@ pub struct Device {
     /// by the GPU, due to command buffers being submitted out-of-order.
     deletion_queue: Mutex<Vec<DeleteQueueEntry>>,
 
-    pub(crate) sampler_cache: Mutex<HashMap<SamplerParamsHashable, Sampler>>,
+    pub(crate) sampler_cache: Mutex<HashMap<SamplerParamsHashable, SamplerDescriptorHandle>>,
 }
 
 impl fmt::Debug for Device {
@@ -387,6 +387,7 @@ unsafe fn find_queue_family(
 
 const DEVICE_EXTENSIONS: &[&str] = &[
     "VK_KHR_swapchain",
+    "VK_KHR_maintenance5",
     "VK_KHR_push_descriptor",
     "VK_EXT_extended_dynamic_state3",
     "VK_EXT_mesh_shader",
@@ -394,7 +395,8 @@ const DEVICE_EXTENSIONS: &[&str] = &[
     "VK_EXT_fragment_shader_interlock",
     "VK_EXT_shader_image_atomic_int64",
     "VK_KHR_calibrated_timestamps",
-    //"VK_EXT_descriptor_heap",
+    "VK_EXT_descriptor_heap",
+    "VK_KHR_shader_untyped_pointers",
     "VK_EXT_mutable_descriptor_type",
 ];
 
@@ -554,9 +556,6 @@ impl Device {
 
         instance.get_physical_device_properties2(physical_device, &mut physical_device_properties);
 
-        // Create global descriptor tables
-        let descriptor_table = BindlessDescriptorTable::new(&device, DESCRIPTOR_TABLE_SIZE);
-
         // Descriptor heap stuff (unused for now)
         let descriptor_heaps = DescriptorHeaps::new(&mut allocator, &device, &descriptor_heap_properties);
 
@@ -584,14 +583,14 @@ impl Device {
 
         Ok(Device {
             raw: device,
-            extensions: DeviceExtensions {
-                khr_swapchain,
-                khr_push_descriptor,
-                khr_calibrated_timestamps,
-                ext_mesh_shader,
+            ext: DeviceExtensions {
+                swapchain: khr_swapchain,
+                push_descriptor: khr_push_descriptor,
+                calibrated_timestamps: khr_calibrated_timestamps,
+                mesh_shader: ext_mesh_shader,
                 _ext_extended_dynamic_state3: ext_extended_dynamic_state3,
-                ext_debug_utils,
-                ext_descriptor_heap,
+                debug_utils: ext_debug_utils,
+                descriptor_heap: ext_descriptor_heap,
             },
             platform_extensions,
             thread_safe: DeviceThreadSafeState {
@@ -606,11 +605,11 @@ impl Device {
             submission_state: Mutex::new(DeviceSubmissionState { queue, active_submissions: VecDeque::new() }),
             queue_family: graphics_queue_family_index,
             allocator: Mutex::new(allocator),
-            descriptor_indices: Mutex::new(DeviceDescriptorIndexTable {
-                resource: Default::default(),
-                sampler: Default::default(),
-            }),
-            descriptor_table,
+            //descriptor_indices: Mutex::new(DeviceDescriptorIndexTable {
+            //    resource: Default::default(),
+            //    sampler: Default::default(),
+            //}),
+            //descriptor_table,
             sampler_cache: Mutex::new(Default::default()),
             free_timestamp_query_pools: Mutex::new(vec![]),
             frame_index: AtomicU64::new(1),
@@ -653,7 +652,6 @@ impl Device {
             present_surface,
         );
 
-        // ------ Setup device create info ------
         let queue_priorities = [1.0f32];
         let device_queue_create_infos = &[vk::DeviceQueueCreateInfo {
             flags: Default::default(),
@@ -663,7 +661,23 @@ impl Device {
             ..Default::default()
         }];
 
+        // ------ BEGIN SHOPPING LIST ------
+
+        let mut shader_untyped_pointers = VkPhysicalDeviceShaderUntypedPointersFeaturesKHR {
+            sType: vk2::VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_UNTYPED_POINTERS_FEATURES_KHR,
+            pNext: ptr::null_mut(),
+            shaderUntypedPointers: VK_TRUE,
+        };
+
+        let mut descriptor_heap_features = VkPhysicalDeviceDescriptorHeapFeaturesEXT {
+            sType: VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_FEATURES_EXT,
+            pNext: &mut shader_untyped_pointers as *mut _ as *mut c_void,
+            descriptorHeap: VK_TRUE,
+            descriptorHeapCaptureReplay: VK_FALSE,
+        };
+
         let mut fragment_shader_interlock_features = vk::PhysicalDeviceFragmentShaderInterlockFeaturesEXT {
+            p_next: &mut descriptor_heap_features as *mut _ as *mut c_void,
             fragment_shader_pixel_interlock: vk::TRUE,
             ..Default::default()
         };
@@ -799,6 +813,8 @@ impl Device {
             ..Default::default()
         };
 
+        // ------ END SHOPPING LIST ------
+
         // ------ Create device ------
 
         let device: ash::Device = instance
@@ -831,10 +847,10 @@ impl Device {
     //    self.resources.lock().unwrap().remove(resource_id);
     //}
 
-    /// Releases a resource heap index that is no longer used.
-    pub(crate) fn free_resource_heap_index(&self, index: ResourceDescriptorIndex) {
-        self.descriptor_indices.lock().unwrap().resource.remove(index);
-    }
+    // Releases a resource heap index that is no longer used.
+    //pub(crate) fn free_resource_heap_index(&self, index: ResourceDescriptorIndex) {
+    //    self.descriptor_indices.lock().unwrap().resource.remove(index);
+    //}
 
     /// Allocates memory, or panic trying.
     ///
@@ -1001,10 +1017,10 @@ impl Device {
         self.semaphores.lock().unwrap().push(binary_semaphore);
     }
 
-    pub(crate) fn create_sampler(&self, info: &SamplerParams) -> Sampler {
+    pub(crate) fn register_sampler(&self, info: &SamplerParams) -> SamplerHandle {
         let info_hashable = SamplerParamsHashable::from(*info);
         if let Some(sampler) = self.sampler_cache.lock().unwrap().get(&info_hashable) {
-            return sampler.clone();
+            return SamplerHandle::new(*sampler);
         }
 
         let create_info = vk::SamplerCreateInfo {
@@ -1026,12 +1042,9 @@ impl Device {
             ..Default::default()
         };
 
-        let sampler = unsafe { self.raw.create_sampler(&create_info, None).expect("failed to create sampler") };
-
-        let descriptor_index = unsafe { self.create_global_sampler_descriptor(sampler) };
-        let sampler = Sampler { descriptor_index, sampler };
-        self.sampler_cache.lock().unwrap().insert(info_hashable, sampler.clone());
-        sampler
+        let sampler = self.allocate_sampler_descriptor(&create_info);
+        self.sampler_cache.lock().unwrap().insert(info_hashable, sampler);
+        SamplerHandle::new(sampler)
     }
 
     pub(crate) fn get_or_create_timestamp_query_pool(&self) -> vk::QueryPool {
@@ -1124,7 +1137,7 @@ macro_rules! make_stage {
 }
 
 impl Device {
-    /// FIXME: this should be a constructor of `DescriptorSetLayout`, because now we have two
+    /*/// FIXME: this should be a constructor of `DescriptorSetLayout`, because now we have two
     ///        functions with very similar names (`create_descriptor_set_layout` and `create_descriptor_set_layout_from_handle`)
     ///        that have totally different semantics (one returns a raw vulkan handle, the other returns a RAII wrapper `DescriptorSetLayout`).
     pub fn create_descriptor_set_layout_from_handle(&self, handle: vk::DescriptorSetLayout) -> DescriptorSetLayout {
@@ -1194,7 +1207,7 @@ impl Device {
             unsafe { self.raw.create_pipeline_layout(&create_info, None).expect("failed to create pipeline layout") };
 
         pipeline_layout
-    }
+    }*/
 
     pub(crate) fn create_compute_pipeline(
         &self,
@@ -1203,10 +1216,10 @@ impl Device {
         let mut push_constants_size = create_info.push_constants_size;
         push_constants_size = push_constants_size.max(create_info.shader.push_constants_size);
 
-        let pipeline_layout =
-            self.create_pipeline_layout(vk::PipelineBindPoint::COMPUTE, create_info.set_layouts, push_constants_size);
+        //let pipeline_layout =
+        //    self.create_pipeline_layout(vk::PipelineBindPoint::COMPUTE, create_info.set_layouts, push_constants_size);
 
-        let is_bindless = create_info.set_layouts.is_empty();
+        //let is_bindless = create_info.set_layouts.is_empty();
 
         let req_subgroup_size = vk::PipelineShaderStageRequiredSubgroupSizeCreateInfo {
             required_subgroup_size: SUBGROUP_SIZE,
@@ -1224,10 +1237,16 @@ impl Device {
             _entry_point_name
         );
 
+        let pipeline_create_flags = vk::PipelineCreateFlags2CreateInfoKHR {
+            flags: vk::PipelineCreateFlags2KHR::from_raw(VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT),
+            ..Default::default()
+        };
+
         let cpci = vk::ComputePipelineCreateInfo {
+            p_next: &pipeline_create_flags as *const _ as *const c_void,
             flags: vk::PipelineCreateFlags::empty(),
             stage: compute_stage,
-            layout: pipeline_layout,
+            layout: Default::default(),
             ..Default::default()
         };
 
@@ -1242,9 +1261,9 @@ impl Device {
 
         Ok(ComputePipeline {
             pipeline,
-            pipeline_layout,
-            _descriptor_set_layouts: create_info.set_layouts.to_vec(),
-            bindless: is_bindless,
+            //pipeline_layout,
+            //_descriptor_set_layouts: create_info.set_layouts.to_vec(),
+            //bindless: is_bindless,
             reflection: create_info.shader.refl_params,
         })
     }
@@ -1267,11 +1286,6 @@ impl Device {
             }
         }
         push_constants_size = push_constants_size.max(create_info.fragment.shader.push_constants_size);
-
-        let pipeline_layout =
-            self.create_pipeline_layout(vk::PipelineBindPoint::GRAPHICS, create_info.set_layouts, push_constants_size);
-
-        let bindless = create_info.set_layouts.is_empty();
 
         // ------ Dynamic states ------
 
@@ -1498,8 +1512,14 @@ impl Device {
             ..Default::default()
         };
 
+        let pipeline_create_flags = vk::PipelineCreateFlags2CreateInfoKHR {
+            p_next: &rendering_info as *const _ as *const c_void,
+            flags: vk::PipelineCreateFlags2KHR::from_raw(vk2::VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT),
+            ..Default::default()
+        };
+
         let pipeline_create_info = vk::GraphicsPipelineCreateInfo {
-            p_next: &rendering_info as *const _ as *const _,
+            p_next: &pipeline_create_flags as *const _ as *const _,
             flags: vk::PipelineCreateFlags::empty(),
             stage_count: stages.len() as u32,
             p_stages: stages.as_ptr(),
@@ -1516,7 +1536,7 @@ impl Device {
             p_depth_stencil_state: &depth_stencil_state,
             p_color_blend_state: &color_blend_state,
             p_dynamic_state: &dynamic_state_create_info,
-            layout: pipeline_layout,
+            layout: Default::default(),
             render_pass: Default::default(),
             subpass: 0,
             base_pipeline_handle: Default::default(),
@@ -1535,9 +1555,6 @@ impl Device {
 
         Ok(GraphicsPipeline {
             pipeline,
-            pipeline_layout,
-            _descriptor_set_layouts: create_info.set_layouts.to_vec(),
-            bindless,
             stage_reflection,
         })
     }
@@ -1583,8 +1600,8 @@ pub unsafe fn set_debug_name_raw<H: vk::Handle>(handle: H, name: impl AsRef<str>
     unsafe {
         // SAFETY: TODO
         device
-            .extensions
-            .ext_debug_utils
+            .ext
+            .debug_utils
             .set_debug_utils_object_name(&vk::DebugUtilsObjectNameInfoEXT {
                 object_type: H::TYPE,
                 object_handle: handle.as_raw(),
@@ -1653,6 +1670,10 @@ pub fn get_timestamp_period() -> f32 {
     properties.limits.timestamp_period
 }
 
+pub fn register_sampler(params: &SamplerParams) -> SamplerHandle {
+    Device::instance().register_sampler(params)
+}
+
 /// Returns a pair (device, system) of calibrated timestamps.
 ///
 /// The first timestamp is a system-specific timestamp value, and the second is a closely corresponding
@@ -1667,8 +1688,8 @@ pub fn get_calibrated_timestamp_pair() -> (u64, u64) {
     // Create the query pool for timestamps.
     let (timestamps, _) = unsafe {
         device
-            .extensions
-            .khr_calibrated_timestamps
+            .ext
+            .calibrated_timestamps
             .get_calibrated_timestamps(&[
                 vk::CalibratedTimestampInfoKHR { time_domain: vk::TimeDomainKHR::DEVICE, ..Default::default() },
                 #[cfg(windows)]

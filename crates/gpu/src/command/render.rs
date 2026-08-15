@@ -1,7 +1,7 @@
 //! Render command encoders
 use crate::{
-    Buffer, BufferUntyped, ClearColorValue, ColorAttachment, CommandBuffer, DepthBias, DepthStencilAttachment,
-    Descriptor, Device, GraphicsPipeline, PrimitiveTopology, Ptr, PushDataSource, Rect2D, is_depth_and_stencil_format,
+    Buffer, BufferUntyped, ClearColorValue, ColorAttachment, CommandBuffer, DepthBias, DepthStencilAttachment, Device,
+    GraphicsPipeline, PrimitiveTopology, Ptr, PushDataSource, Rect2D, is_depth_and_stencil_format,
 };
 use ash::vk;
 use std::ops::Range;
@@ -13,7 +13,7 @@ use std::ptr;
 ///
 /// This is used in `RenderPass::bind_pipeline`.
 pub struct RenderEncoder<'a> {
-    stream: &'a mut CommandBuffer,
+    parent: &'a mut CommandBuffer,
     command_buffer: vk::CommandBuffer,
     render_area: vk::Rect2D,
     // TODO: this will be useless once all shaders have the same bindless layout
@@ -63,6 +63,7 @@ impl<'a> RenderEncoder<'a> {
         )
     }
 
+    /*
     /// Specifies descriptors for subsequent draw calls with `vkCmdPushDescriptorSetKHR`.
     pub fn push_descriptors(&mut self, set: u32, bindings: &[(u32, Descriptor)]) {
         assert!(
@@ -79,7 +80,7 @@ impl<'a> RenderEncoder<'a> {
                 bindings,
             );
         }
-    }
+    }*/
 
     pub fn set_depth_bias(&mut self, db: Option<DepthBias>) {
         let device = &Device::instance().raw;
@@ -125,14 +126,14 @@ impl<'a> RenderEncoder<'a> {
                 vk::PipelineBindPoint::GRAPHICS,
                 pipeline.pipeline,
             );
-            if pipeline.bindless {
+            /*if pipeline.bindless {
                 self.stream.bind_bindless_descriptor_sets(
                     self.command_buffer,
                     vk::PipelineBindPoint::GRAPHICS,
                     pipeline.pipeline_layout,
                 );
             }
-            self.pipeline_layout = pipeline.pipeline_layout;
+            self.pipeline_layout = pipeline.pipeline_layout;*/
         }
     }
 
@@ -283,12 +284,7 @@ impl<'a> RenderEncoder<'a> {
         root_params: impl Into<PushDataSource<'params, T>>,
     ) {
         unsafe {
-            self.stream.set_push_data(
-                self.command_buffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline_layout,
-                root_params.into(),
-            );
+            self.parent.set_push_data(self.command_buffer, root_params.into());
             let device = &Device::instance().raw;
             if let Some(vb) = vertex_buffer {
                 device.cmd_bind_vertex_buffers(self.command_buffer, 0, &[vb.handle()], &[0]);
@@ -315,12 +311,7 @@ impl<'a> RenderEncoder<'a> {
         root_params: impl Into<PushDataSource<'params, T>>,
     ) {
         unsafe {
-            self.stream.set_push_data(
-                self.command_buffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline_layout,
-                root_params.into(),
-            );
+            self.parent.set_push_data(self.command_buffer, root_params.into());
 
             let device = &Device::instance().raw;
             if let Some(vb) = vertex_buffer {
@@ -348,12 +339,7 @@ impl<'a> RenderEncoder<'a> {
         root_params: impl Into<PushDataSource<'params, T>>,
     ) {
         unsafe {
-            self.stream.set_push_data(
-                self.command_buffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline_layout,
-                root_params.into(),
-            );
+            self.parent.set_push_data(self.command_buffer, root_params.into());
             let device = &Device::instance().raw;
             if let Some(vb) = vertex_buffer {
                 device.cmd_bind_vertex_buffers(self.command_buffer, 0, &[vb.handle()], &[0]);
@@ -379,12 +365,7 @@ impl<'a> RenderEncoder<'a> {
         root_params: impl Into<PushDataSource<'params, T>>,
     ) {
         unsafe {
-            self.stream.set_push_data(
-                self.command_buffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline_layout,
-                root_params.into(),
-            );
+            self.parent.set_push_data(self.command_buffer, root_params.into());
             let device = &Device::instance().raw;
             if let Some(vb) = vertex_buffer {
                 device.cmd_bind_vertex_buffers(self.command_buffer, 0, &[vb.handle()], &[0]);
@@ -409,13 +390,8 @@ impl<'a> RenderEncoder<'a> {
         root_params: impl Into<PushDataSource<'params, T>>,
     ) {
         unsafe {
-            self.stream.set_push_data(
-                self.command_buffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline_layout,
-                root_params.into(),
-            );
-            Device::instance().extensions.ext_mesh_shader.cmd_draw_mesh_tasks(
+            self.parent.set_push_data(self.command_buffer, root_params.into());
+            Device::instance().ext.mesh_shader.cmd_draw_mesh_tasks(
                 self.command_buffer,
                 group_count_x,
                 group_count_y,
@@ -480,7 +456,7 @@ impl CommandBuffer {
             .iter()
             .map(|a| {
                 vk::RenderingAttachmentInfo {
-                    image_view: a.image.view_handle(),
+                    image_view: a.image.attachment_view,
                     image_layout: vk::ImageLayout::GENERAL,
                     resolve_mode: vk::ResolveModeFlags::NONE,
                     load_op: if a.clear.is_some() { vk::AttachmentLoadOp::CLEAR } else { vk::AttachmentLoadOp::LOAD },
@@ -498,7 +474,7 @@ impl CommandBuffer {
         let p_stencil_attachment;
         if let Some(ref depth) = depth_stencil_attachment {
             depth_attachment = vk::RenderingAttachmentInfo {
-                image_view: depth.image.view_handle(),
+                image_view: depth.image.attachment_view,
                 image_layout: vk::ImageLayout::GENERAL,
                 resolve_mode: vk::ResolveModeFlags::NONE,
                 load_op: if depth.depth_clear.is_some() {
@@ -515,7 +491,7 @@ impl CommandBuffer {
 
             if is_depth_and_stencil_format(depth.image.format()) {
                 stencil_attachment = vk::RenderingAttachmentInfo {
-                    image_view: depth.image.view_handle(),
+                    image_view: depth.image.attachment_view,
                     image_layout: vk::ImageLayout::GENERAL,
                     resolve_mode: vk::ResolveModeFlags::NONE,
                     load_op: if depth.stencil_clear.is_some() {
@@ -537,20 +513,6 @@ impl CommandBuffer {
             p_stencil_attachment = ptr::null();
         };
 
-        // Register resource uses.
-        // We could also do that after encoding the pass.
-        // It doesn't matter much except we can report usage conflicts earlier.
-        //let mut barrier = BarrierFlags::empty();
-        //for color in desc.color_attachments.iter() {
-        //    barrier |= BarrierFlags::COLOR_ATTACHMENT;
-        //}
-        //if let Some(ref depth) = desc.depth_stencil_attachment {
-        //    // TODO we don't know whether the depth attachment will be written to
-        //    barrier = barrier.depth_stencil_attachment_write(depth.image);
-        //}
-
-        //self.barrier(barrier);
-
         let rendering_info = vk::RenderingInfo {
             flags: Default::default(),
             render_area,
@@ -569,7 +531,7 @@ impl CommandBuffer {
         }
 
         let mut encoder =
-            RenderEncoder { stream: self, command_buffer, render_area, pipeline_layout: Default::default() };
+            RenderEncoder { parent: self, command_buffer, render_area, pipeline_layout: Default::default() };
 
         encoder.set_viewport(0.0, 0.0, render_area.extent.width as f32, render_area.extent.height as f32, 0.0, 1.0);
         encoder.set_scissor(0, 0, render_area.extent.width, render_area.extent.height);

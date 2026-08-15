@@ -5,6 +5,8 @@ use gpu_allocator::MemoryLocation;
 use std::ptr;
 use std::time::Duration;
 use log::info;
+use vulkan_headers::vulkan::vulkan::VkResourceDescriptorInfoEXT;
+use crate::image::ImageDescriptors;
 
 #[derive(Debug)]
 pub struct SwapchainImage {
@@ -58,20 +60,16 @@ impl Device {
         width: u32,
         height: u32,
     ) -> Image {
-        let descriptors = self.create_image_resource_descriptors(
-            handle,
-            ImageType::Image2D,
-            vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_DST,
-            format,
-            1,
-            1,
-        );
+        let attachment_view = unsafe {
+            self.create_attachment_image_view(handle, format)
+        };
         Image {
+            handle,
+            attachment_view,
             memory_location: MemoryLocation::Unknown,
             allocation: ResourceAllocation::External,
-            handle,
             swapchain_image: true,
-            descriptors,
+            descriptors: ImageDescriptors::default(),
             usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::TRANSFER_DST,
             type_: ImageType::Image2D,
             format,
@@ -99,7 +97,7 @@ impl Device {
             self.raw.create_semaphore(&create_info, None).unwrap()
         };
 
-        let (index, _suboptimal) = match self.extensions.khr_swapchain.acquire_next_image(
+        let (index, _suboptimal) = match self.ext.swapchain.acquire_next_image(
             swap_chain.handle,
             timeout.as_nanos() as u64,
             ready,
@@ -190,12 +188,12 @@ impl Device {
             ..Default::default()
         };
 
-        let new_handle = self.extensions.khr_swapchain.create_swapchain(&create_info, None).unwrap();
+        let new_handle = self.ext.swapchain.create_swapchain(&create_info, None).unwrap();
 
         // destroy the old swapchain if it exists
         if swapchain.handle != vk::SwapchainKHR::null() {
             // FIXME the images may be in use, we should wait for the device to be idle
-            self.extensions.khr_swapchain.destroy_swapchain(swapchain.handle, None);
+            self.ext.swapchain.destroy_swapchain(swapchain.handle, None);
         }
 
         swapchain.handle = new_handle;
@@ -208,7 +206,7 @@ impl Device {
         }
         swapchain.images = Vec::with_capacity(image_count as usize);
 
-        let images = self.extensions.khr_swapchain.get_swapchain_images(swapchain.handle).unwrap();
+        let images = self.ext.swapchain.get_swapchain_images(swapchain.handle).unwrap();
         for image in images {
             let render_finished = self.get_or_create_semaphore();
             swapchain.images.push(SwapchainImage {

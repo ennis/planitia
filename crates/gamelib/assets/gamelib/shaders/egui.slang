@@ -1,6 +1,8 @@
 // Manifest: shaders.toml
 struct RootParams {
     float2 screenSize;
+    Texture2D.Handle tex;
+    SamplerState.Handle sampler;
 };
 
 struct Vertex {
@@ -34,12 +36,9 @@ struct FragmentOutput
     [[vk::location(0)]] float4 color;
 };
 
-[[vk::binding(0,0)]] Texture2D tex;
-[[vk::binding(1,0)]] SamplerState sampler;
-
 [shader("fragment")]
-FragmentOutput egui_fragment(VertexOutput v) {
+FragmentOutput egui_fragment(VertexOutput v, uniform RootParams* u) {
     FragmentOutput o;
-    o.color = v.color * tex.Sample(sampler, v.uv);
+    o.color = v.color * u.tex.Sample(u.sampler, v.uv);
     return o;
 }

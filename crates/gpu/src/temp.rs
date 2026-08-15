@@ -9,6 +9,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::ptr;
+use log::trace;
 
 /// Alignment of temp buffer allocations.
 const ALLOC_ALIGNMENT: usize = 256;
@@ -60,26 +61,24 @@ impl ThreadLocalAllocator {
         // Retire the current chunk.
         if let Some(buf) = self.current.take() {
             let frame_index = crate::get_frame_index();
-            eprintln!("alloc_buffer: retire {:p} frame_index={}", buf.handle, frame_index);
+            trace!("alloc_buffer: retire {:p} frame_index={}", buf.handle, frame_index);
             self.retired.push_back((frame_index, buf));
         }
 
         let last_completed_frame = crate::get_last_completed_frame_index();
-        eprintln!("alloc_buffer: last_completed_frame={}", last_completed_frame);
         let mut free_buf = None;
         // Free all chunks older than the last completed frame, save for one, which we'll reuse.
         while let Some((retired_frame, _)) = self.retired.front() {
             if *retired_frame <= last_completed_frame {
-                let (r, buf) = self.retired.pop_front().unwrap();
+                let (_r, buf) = self.retired.pop_front().unwrap();
                 // This destroys the previously popped chunk.
-                eprintln!("alloc_buffer: destroy {:p} retired_frame={}, last_completed_frame={}", buf.handle, r, last_completed_frame);
                 free_buf = Some(buf);
             } else {
                 break
             }
         }
         if let Some(free_buf) = free_buf.as_ref() {
-            eprintln!("alloc_buffer: reusing {:p}", free_buf.handle);
+            trace!("alloc_buffer: reusing {:p}", free_buf.handle);
         }
 
         self.offset = 0;

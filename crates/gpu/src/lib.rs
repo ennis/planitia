@@ -9,7 +9,14 @@
 //! on desktop GPUs, the extension will be used unconditionally, even if it makes the library
 //! unusable on mobile.
 //!
-//! Safety is not a primary goal either. Notably, memory safety on the GPU domain is not guaranteed
+//! # Requirements
+//!
+//! Vulkan 1.4 is required. In addition, the following extensions are required:
+//! - TODO
+//!
+//! # Safety
+//!
+//! Safety is not a primary goal. Notably, memory safety on the GPU domain is not guaranteed
 //! as this would compromise the ergonomics too much.
 //!
 //! # No resource usage tracking, manual synchronization
@@ -73,7 +80,7 @@ pub mod prelude {
         Buffer, BufferUsage, ClearColorValue, ColorBlendEquation, ColorTargetState, CommandBuffer, DepthStencilState,
         Format, FragmentState, GraphicsPipeline, GraphicsPipelineCreateInfo, Image, ImageCreateInfo, ImageType,
         ImageUsage, MemoryLocation, Point2D, PreRasterizationShaders, RasterizationState, Rect2D, RenderEncoder,
-        Sampler, SamplerParams, ShaderCode, ShaderEntryPoint, ShaderSource, Size2D, StencilState, Vertex,
+        SamplerParams, ShaderCode, ShaderEntryPoint, ShaderSource, Size2D, StencilState, Vertex,
         VertexBufferLayoutDescription, VertexInputAttributeDescription, VertexInputState, vk,
     };
 }
@@ -110,18 +117,6 @@ pub type FrameIndex = u64;
 #[derive(Clone)]
 pub struct GraphicsPipeline {
     pub(crate) pipeline: vk::Pipeline,
-    pub(crate) pipeline_layout: vk::PipelineLayout,
-    // Push descriptors require live VkDescriptorSetLayouts
-    _descriptor_set_layouts: Vec<DescriptorSetLayout>,
-    /// Whether this pipeline uses the standard bindless descriptor set.
-    ///
-    /// The layout of the bindless descriptor set is as follows:
-    /// - set 0, binding 0: array of sampler descriptors
-    /// - set 0, binding 1: array of combined image sampler descriptors (unused)
-    /// - set 0, binding 2: array of storage image descriptors
-    ///
-    /// The descriptor arrays are kept up-to-date automatically as resources are created and destroyed.
-    pub(crate) bindless: bool,
     pub(crate) stage_reflection: Vec<(ShaderStage, ShaderReflection)>,
 }
 
@@ -140,11 +135,9 @@ impl GraphicsPipeline {
 impl Drop for GraphicsPipeline {
     fn drop(&mut self) {
         let pipeline = self.pipeline;
-        let pipeline_layout = self.pipeline_layout;
         unsafe {
             Device::instance().delete_after_current_frame(move |device| {
                 device.raw.destroy_pipeline(pipeline, None);
-                device.raw.destroy_pipeline_layout(pipeline_layout, None);
             })
         }
     }
@@ -161,10 +154,10 @@ impl VulkanObject for GraphicsPipeline {
 #[derive(Clone)]
 pub struct ComputePipeline {
     pub(crate) pipeline: vk::Pipeline,
-    pub(crate) pipeline_layout: vk::PipelineLayout,
-    _descriptor_set_layouts: Vec<DescriptorSetLayout>,
+    //pub(crate) pipeline_layout: vk::PipelineLayout,
+    //_descriptor_set_layouts: Vec<DescriptorSetLayout>,
     /// See `GraphicsPipeline::bindless` for details.
-    pub(crate) bindless: bool,
+    //pub(crate) bindless: bool,
     pub(crate) reflection: ShaderReflection,
 }
 
@@ -183,14 +176,14 @@ impl ComputePipeline {
 impl Drop for ComputePipeline {
     fn drop(&mut self) {
         let pipeline = self.pipeline;
-        let pipeline_layout = self.pipeline_layout;
+        //let pipeline_layout = self.pipeline_layout;
 
         unsafe {
             // Wait until the current submission has completed execution since it may be using
             // the pipeline.
             Device::instance().delete_after_current_frame(move |device| {
                 device.raw.destroy_pipeline(pipeline, None);
-                device.raw.destroy_pipeline_layout(pipeline_layout, None);
+                //device.raw.destroy_pipeline_layout(pipeline_layout, None);
             })
         }
     }
@@ -203,42 +196,6 @@ impl VulkanObject for ComputePipeline {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/// Represents a sampler object.
-#[derive(Clone, Debug)]
-pub struct Sampler {
-    descriptor_index: SamplerDescriptorIndex,
-    sampler: vk::Sampler,
-}
-
-impl Sampler {
-    /// Creates a new sampler object.
-    ///
-    /// Sampler objects are cached by creation parameters, so this function may return
-    /// the same underlying `VkSampler`, given the same [`SamplerParams`].
-    pub fn new(create_info: SamplerParams) -> Self {
-        Device::instance().create_sampler(&create_info)
-    }
-
-    /// Returns this sampler as a [`Descriptor`].
-    pub fn descriptor(&self) -> Descriptor<'_> {
-        Descriptor::Sampler { sampler: self.clone() }
-    }
-
-    /// Returns the sampler handle for use in shader parameters.
-    pub fn device_handle(&self) -> SamplerHandle {
-        SamplerHandle::new(self.descriptor_index.index())
-    }
-}
-
-impl VulkanObject for Sampler {
-    type Handle = vk::Sampler;
-
-    fn handle(&self) -> Self::Handle {
-        self.sampler
-    }
-}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -279,14 +236,14 @@ pub struct ImageCopyView<'a> {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Description of one argument in an argument block.
-pub enum Descriptor<'a> {
-    SampledImage { image: &'a Image, layout: vk::ImageLayout },
-    StorageImage { image: &'a Image, layout: vk::ImageLayout },
-    UniformBuffer { buffer: &'a BufferUntyped, offset: u64, size: u64 },
-    StorageBuffer { buffer: &'a BufferUntyped, offset: u64, size: u64 },
-    Sampler { sampler: Sampler },
-}
+///// Description of one argument in an argument block.
+//pub enum Descriptor<'a> {
+//    SampledImage { image: &'a Image, layout: vk::ImageLayout },
+//    StorageImage { image: &'a Image, layout: vk::ImageLayout },
+//    UniformBuffer { buffer: &'a BufferUntyped, offset: u64, size: u64 },
+//    StorageBuffer { buffer: &'a BufferUntyped, offset: u64, size: u64 },
+//    Sampler { sampler: Sampler },
+//}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -318,14 +275,6 @@ impl<'a, T> std::fmt::Debug for BufferRange<'a, T> {
 impl<'a, T: Copy + 'static> BufferRange<'a, T> {
     pub fn len(&self) -> usize {
         (self.byte_size / size_of::<T>() as u64) as usize
-    }
-
-    pub fn storage_descriptor(&self) -> Descriptor<'_> {
-        Descriptor::StorageBuffer { buffer: self.buffer.as_bytes(), offset: self.byte_offset, size: self.byte_size }
-    }
-
-    pub fn uniform_descriptor(&self) -> Descriptor<'_> {
-        Descriptor::UniformBuffer { buffer: self.buffer.as_bytes(), offset: self.byte_offset, size: self.byte_size }
     }
 
     pub fn as_bytes(&self) -> BufferRange<'a, u8> {

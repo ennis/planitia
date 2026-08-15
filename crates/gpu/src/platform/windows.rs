@@ -161,14 +161,8 @@ impl Device {
         );
         self.raw.bind_image_memory(handle, device_memory, 0).unwrap();
 
-        let descriptors = self.create_image_resource_descriptors(
-            handle,
-            image_info.type_,
-            create_info.usage,
-            image_info.format,
-            image_info.mip_levels,
-            image_info.array_layers,
-        );
+        let descriptors = self.register_image_descriptors(handle, &create_info);
+        let attachment_view = self.create_attachment_image_view(handle, image_info.format);
 
         // transition image to GENERAL
         {
@@ -197,6 +191,7 @@ impl Device {
 
         Image {
             handle,
+            attachment_view,
             memory_location: MemoryLocation::Unknown,
             allocation: ResourceAllocation::DeviceMemory { device_memory },
             swapchain_image: false,
@@ -302,17 +297,12 @@ impl Device {
         // bind memory
         self.raw.bind_image_memory(handle, device_memory, 0).unwrap();
 
-        let descriptors = self.create_image_resource_descriptors(
-            handle,
-            image_info.type_,
-            create_info.usage,
-            image_info.format,
-            image_info.mip_levels,
-            image_info.array_layers,
-        );
+        let descriptors = self.register_image_descriptors(handle, &create_info);
+        let attachment_view = self.create_attachment_image_view(handle, image_info.format);
 
         let image = Image {
             handle,
+            attachment_view,
             memory_location,
             allocation: ResourceAllocation::DeviceMemory { device_memory },
             swapchain_image: false,

@@ -4,6 +4,9 @@ use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::sync::LazyLock;
 
+/// We require vulkan 1.4.
+const VK_API_VERSION: u32 = vk::make_api_version(0, 1, 4, 0);
+
 #[cfg(windows)]
 const INSTANCE_EXTENSIONS: &[&str] =
     &["VK_KHR_get_surface_capabilities2", "VK_EXT_debug_utils", "VK_KHR_surface", "VK_KHR_win32_surface"];
@@ -135,8 +138,7 @@ fn create_vulkan_instance() -> ash::Instance {
             application_version: 0,
             p_engine_name: b"GRAAL\0".as_ptr() as *const c_char,
             engine_version: 0,
-            // require vulkan 1.3
-            api_version: vk::make_api_version(0, 1, 3, 0),
+            api_version: VK_API_VERSION,
             ..Default::default()
         };
 

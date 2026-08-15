@@ -1,23 +1,28 @@
 use crate::device::ActiveSubmission;
 use crate::{
-    Buffer, BufferRangeUntyped, BufferUntyped, ColorAttachment, ComputePipeline, DepthStencilAttachment, Descriptor,
-    Device, Image, ImageCopyBuffer, ImageCopyView, ImageCreateInfo, MAX_TIMESTAMP_QUERY_COUNT, Ptr, ShaderReflection,
-    SwapChain, VulkanObject, command_pool, vk,
+    Buffer, BufferRangeUntyped, BufferUntyped, ColorAttachment, ComputePipeline, DepthStencilAttachment, Device, Image,
+    ImageCopyBuffer, ImageCopyView, ImageCreateInfo, MAX_TIMESTAMP_QUERY_COUNT, Ptr, ShaderReflection, SwapChain,
+    VulkanObject, command_pool, vk,
 };
 use arrayvec::ArrayVec;
 use ash::prelude::VkResult;
-use ash::vk::DeviceAddress;
+use ash::vk::{DeviceAddress, Handle};
 use bitflags::bitflags;
-use gpu_types::{ClearColorValue, Data, ImageAspect, ImageDataLayout, ImageSubresourceLayers, ImageUsage, Offset3D, Rect3D, Size3D};
+use gpu_types::{
+    ClearColorValue, Data, ImageAspect, ImageDataLayout, ImageSubresourceLayers, ImageUsage, Offset3D, Rect3D, Size3D,
+};
 use log::{error, trace};
 pub use render::{DrawIndexedIndirectCommand, DrawIndirectCommand, RenderEncoder};
 use slotmap::new_key_type;
 use std::cell::{BorrowMutError, RefCell, RefMut};
 use std::ffi::{CString, c_void};
+use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
 use std::sync::atomic::Ordering::Relaxed;
 use std::{mem, ptr, slice};
-use std::marker::PhantomData;
+use vulkan_headers::vulkan::vulkan::{
+    VK_STRUCTURE_TYPE_PUSH_DATA_INFO_EXT, VkHostAddressRangeConstEXT, VkPushDataInfoEXT,
+};
 
 mod blit;
 mod render;
@@ -125,7 +130,6 @@ pub struct CommandBuffer {
     _unsync_unsend: PhantomData<*const ()>,
 }
 
-
 impl CommandBuffer {
     /// Creates a command stream used to submit commands to the GPU.
     ///
@@ -152,11 +156,12 @@ impl CommandBuffer {
     }
 
     pub(crate) fn create_command_buffer_raw(&mut self) -> vk::CommandBuffer {
-        let raw_device = Device::instance().raw();
+        let device = Device::instance();
         let cb = command_pool::allocate_command_buffer();
 
         unsafe {
-            raw_device
+            device
+                .raw()
                 .begin_command_buffer(
                     cb,
                     &vk::CommandBufferBeginInfo {
@@ -165,7 +170,7 @@ impl CommandBuffer {
                     },
                 )
                 .unwrap();
-            //Device::global().set_object_name(cb, &format!("submission_{}", self.submission_index));
+            device.bind_descriptor_heaps(cb);
         }
         cb
     }
@@ -202,7 +207,7 @@ impl CommandBuffer {
         }
     }
 
-    unsafe fn bind_bindless_descriptor_sets(
+    /*unsafe fn bind_bindless_descriptor_sets(
         &mut self,
         command_buffer: vk::CommandBuffer,
         bind_point: vk::PipelineBindPoint,
@@ -217,9 +222,9 @@ impl CommandBuffer {
             &[device.descriptor_table.set],
             &[],
         );
-    }
+    }*/
 
-    unsafe fn do_cmd_push_descriptor_set(
+    /*unsafe fn do_cmd_push_descriptor_set(
         &mut self,
         command_buffer: vk::CommandBuffer,
         bind_point: vk::PipelineBindPoint,
@@ -315,7 +320,7 @@ impl CommandBuffer {
         }
 
         unsafe {
-            Device::instance().extensions.khr_push_descriptor.cmd_push_descriptor_set(
+            Device::instance().ext.push_descriptor.cmd_push_descriptor_set(
                 command_buffer,
                 bind_point,
                 pipeline_layout,
@@ -323,7 +328,7 @@ impl CommandBuffer {
                 &descriptor_writes,
             );
         }
-    }
+    }*/
 
     /// Internal function to emit an image memory barrier.
     ///
@@ -343,42 +348,48 @@ impl CommandBuffer {
         }
     }
 
-    fn set_push_data<T: Data>(
-        &mut self,
-        cb: vk::CommandBuffer,
-        bind_point: vk::PipelineBindPoint,
-        pl: vk::PipelineLayout,
-        params: PushDataSource<T>,
-    ) {
+    fn set_push_data<T: Data>(&mut self, cb: vk::CommandBuffer, params: PushDataSource<T>) {
         // None of the relevant drivers on desktop care about the actual stages,
         // only if it's graphics, compute, or ray tracing.
-        let stages = match bind_point {
+        /*let stages = match bind_point {
             vk::PipelineBindPoint::GRAPHICS => {
                 vk::ShaderStageFlags::ALL_GRAPHICS | vk::ShaderStageFlags::MESH_EXT | vk::ShaderStageFlags::TASK_EXT
             }
             vk::PipelineBindPoint::COMPUTE => vk::ShaderStageFlags::COMPUTE,
             _ => panic!("unsupported bind point"),
-        };
+        };*/
 
         let device = Device::instance();
 
         unsafe {
+            let tmp;
+            let address: *const c_void;
+            let size: usize;
+
             match params {
                 PushDataSource::Indirect(p) => {
-                    let ptr = p.raw;
-                    let constants = slice::from_raw_parts(&ptr as *const _ as *const u8, size_of::<DeviceAddress>());
-                    device.raw.cmd_push_constants(cb, pl, stages, 0, constants);
+                    address = &p.raw as *const _ as *const c_void;
+                    size = size_of::<DeviceAddress>();
                 }
                 PushDataSource::IndirectUpload(data) => {
-                    let ptr = gpu::alloc_temp_slice(slice::from_ref(data)).raw;
-                    let constants = slice::from_raw_parts(&ptr as *const _ as *const u8, size_of::<DeviceAddress>());
-                    device.raw.cmd_push_constants(cb, pl, stages, 0, constants);
+                    tmp = gpu::alloc_temp_slice(slice::from_ref(data)).raw;
+                    address = &tmp as *const _ as *const c_void;
+                    size = size_of::<DeviceAddress>();
                 }
                 PushDataSource::Direct(data) => {
-                    let constants = slice::from_raw_parts(data as *const _ as *const u8, size_of::<T>());
-                    device.raw.cmd_push_constants(cb, pl, stages, 0, constants);
+                    address = &data as *const _ as *const c_void;
+                    size = size_of::<T>();
                 }
             };
+
+            let push_data_info = VkPushDataInfoEXT {
+                sType: VK_STRUCTURE_TYPE_PUSH_DATA_INFO_EXT,
+                pNext: ptr::null(),
+                offset: 0,
+                data: VkHostAddressRangeConstEXT { address, size },
+            };
+
+            (device.ext.descriptor_heap.cmd_push_data)(cb.as_raw() as *mut _, &push_data_info);
         }
     }
 
@@ -403,8 +414,8 @@ impl CommandBuffer {
         let global_memory_barrier = vk::MemoryBarrier2 {
             src_access_mask: vk::AccessFlags2::MEMORY_WRITE,
             dst_access_mask: flags.to_access_flags()
-            | vk::AccessFlags2::COLOR_ATTACHMENT_READ
-            | vk::AccessFlags2::DEPTH_STENCIL_ATTACHMENT_READ,
+                | vk::AccessFlags2::COLOR_ATTACHMENT_READ
+                | vk::AccessFlags2::DEPTH_STENCIL_ATTACHMENT_READ,
             src_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
             dst_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
             ..Default::default()
@@ -424,7 +435,7 @@ impl CommandBuffer {
         }
     }
 
-    #[deprecated(note = "use root params and bindless resources instead")]
+    /*#[deprecated(note = "use root params and bindless resources instead")]
     pub unsafe fn bind_descriptor_set(&mut self, index: u32, set: vk::DescriptorSet) {
         let cb = self.get_or_create_command_buffer();
         // FIXME: why is it COMPUTE?
@@ -436,9 +447,9 @@ impl CommandBuffer {
             &[set],
             &[],
         )
-    }
+    }*/
 
-    /// Sets push descriptors.
+    /*/// Sets push descriptors.
     #[deprecated(note = "use root params and bindless resources instead")]
     pub fn push_descriptors(&mut self, set: u32, bindings: &[(u32, Descriptor)]) {
         assert!(
@@ -451,7 +462,7 @@ impl CommandBuffer {
             // FIXME: why is it COMPUTE?
             self.do_cmd_push_descriptor_set(cb, vk::PipelineBindPoint::COMPUTE, self.pipeline_layout, set, bindings);
         }
-    }
+    }*/
 
     /// Writes values to a buffer.
     ///
@@ -459,25 +470,25 @@ impl CommandBuffer {
     ///
     /// TODO not sure why this was made unsafe?
     pub unsafe fn update_buffer(&mut self, buffer: &BufferUntyped, offset: usize, data: &[u8]) {
-        let device = Device::instance();
         let cb = self.get_or_create_command_buffer();
         unsafe {
-            device.raw.cmd_update_buffer(cb, buffer.handle(), offset as u64, data);
+            Device::instance().raw.cmd_update_buffer(cb, buffer.handle(), offset as u64, data);
         }
     }
 
     // SAFETY: TBD
     pub fn bind_compute_pipeline(&mut self, pipeline: &ComputePipeline) {
-        let device = Device::instance();
         let cb = self.get_or_create_command_buffer();
         unsafe {
-            device.raw.cmd_bind_pipeline(cb, vk::PipelineBindPoint::COMPUTE, pipeline.pipeline);
+            Device::instance().raw.cmd_bind_pipeline(cb, vk::PipelineBindPoint::COMPUTE, pipeline.pipeline);
+        }
+        /*unsafe {
             if pipeline.bindless {
                 self.bind_bindless_descriptor_sets(cb, vk::PipelineBindPoint::COMPUTE, pipeline.pipeline_layout);
             }
         }
         self.pipeline_layout = pipeline.pipeline_layout;
-        // TODO: we need to hold a reference to the pipeline until the command buffers are submitted
+        // TODO: we need to hold a reference to the pipeline until the command buffers are submitted*/
     }
 
     /// Dispatches compute work items.
@@ -500,7 +511,7 @@ impl CommandBuffer {
 
         let cb = self.get_or_create_command_buffer();
         unsafe {
-            self.set_push_data(cb, vk::PipelineBindPoint::COMPUTE, self.pipeline_layout, root_params.into());
+            self.set_push_data(cb, root_params.into());
             Device::instance().raw.cmd_dispatch(cb, group_count_x, group_count_y, group_count_z);
         }
     }
@@ -510,7 +521,7 @@ impl CommandBuffer {
         let command_buffer = self.get_or_create_command_buffer();
         unsafe {
             let label = CString::new(label).unwrap();
-            Device::instance().extensions.ext_debug_utils.cmd_begin_debug_utils_label(
+            Device::instance().ext.debug_utils.cmd_begin_debug_utils_label(
                 command_buffer,
                 &vk::DebugUtilsLabelEXT {
                     p_label_name: label.as_ptr(),
@@ -526,7 +537,7 @@ impl CommandBuffer {
         // TODO check that push/pop calls are balanced
         let command_buffer = self.get_or_create_command_buffer();
         unsafe {
-            Device::instance().extensions.ext_debug_utils.cmd_end_debug_utils_label(command_buffer);
+            Device::instance().ext.debug_utils.cmd_end_debug_utils_label(command_buffer);
         }
     }
 
@@ -820,8 +831,8 @@ pub fn present(swap_chain: &mut SwapChain, index: usize) -> VkResult<()> {
     unsafe {
         let submission_state = device.submission_state.lock().unwrap();
         let result = device
-            .extensions
-            .khr_swapchain
+            .ext
+            .swapchain
             .queue_present(
                 submission_state.queue,
                 &vk::PresentInfoKHR {
@@ -1015,7 +1026,6 @@ pub fn blit_image(
         cb.blit_image(src, src_subresource, src_region, dst, dst_subresource, dst_region, filter);
     });
 }
-
 
 /// Submits commands in the default command buffer for execution on the GPU.
 pub fn flush() -> VkResult<()> {

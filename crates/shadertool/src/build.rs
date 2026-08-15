@@ -103,10 +103,15 @@ pub(crate) fn create_slang_session(
 
     let search_path_ptrs: Vec<_> = search_paths_cstr.iter().map(|p| p.as_ptr()).collect();
 
+    let cap_descriptor_heap = global_session.find_capability("spvDescriptorHeapEXT");
+    let cap_spirv_1_6 = global_session.find_capability("SPIRV_1_4");
+
     let profile = global_session.find_profile(&manifest.compiler.profile);
     let mut compiler_options = slang::CompilerOptions::default()
         .glsl_force_scalar_layout(true)
         .matrix_layout_column(true)
+        .capability(cap_descriptor_heap)
+        .capability(cap_spirv_1_6)
         .optimization(slang::OptimizationLevel::Default)
         .vulkan_use_entry_point_name(true)
         .debug_information(if emit_debug_information { DebugInfoLevel::Maximal } else { DebugInfoLevel::None })

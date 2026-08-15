@@ -259,7 +259,7 @@ impl PaintScene {
                 quad,
                 TextureFill {
                     texture: painter.texture_atlas.texture_handle(),
-                    sampler: painter.sampler.device_handle(),
+                    sampler: painter.sampler,
                     local_to_uv: rect_transform(quad, Rect::from_min_max(entry.uv[0], entry.uv[1])),
                     color: options.color,
                 },

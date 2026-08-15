@@ -96,7 +96,7 @@ pub enum TypeDesc {
     Scalar(ScalarType),
     Vector(VectorType),
     Matrix(MatrixType),
-    Array { elem: Offset<TypeDesc>, len: u32 },
+    //Array { elem: Offset<TypeDesc>, len: u32 },
     RuntimeArray(Offset<TypeDesc>),
     Struct(StructType),
     ImageHandle(ImageHandleType),

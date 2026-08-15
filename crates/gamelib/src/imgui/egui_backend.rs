@@ -1,14 +1,20 @@
 use std::collections::HashMap;
 use std::slice;
 
-use crate::imgui::shaders::{EGUI_FRAG_MAIN, EGUI_VERTEX_MAIN};
+//use crate::imgui::shaders::{EGUI_FRAG_MAIN, EGUI_VERTEX_MAIN};
 use crate::static_assets;
 use egui::epaint::Primitive;
 use egui::{ClippedPrimitive, ImageData};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::prelude::*;
-use gpu::{ColorAttachment, Device, ImageCopyView, BarrierFlags, Offset3D, PushDataSource, Size3D, Vertex, BARRIER_TEXTURE};
+use gpu::{
+    BARRIER_TEXTURE, BarrierFlags, ColorAttachment, Device, ImageCopyView, Offset3D, PushDataSource, SamplerHandle,
+    Size3D, TextureHandle, Vertex,
+};
 use log::debug;
+
+#[gpu::shader_module("assets/gamelib/shaders/egui.slang")]
+mod shaders {}
 
 #[derive(Copy, Clone, Vertex)]
 #[repr(C)]
@@ -21,6 +27,8 @@ struct EguiVertex {
 #[derive(Copy, Clone)]
 struct EguiRootParams {
     screen_size: [f32; 2],
+    texture: TextureHandle,
+    sampler: SamplerHandle,
 }
 
 const _: () = assert!(size_of::<egui::epaint::Vertex>() == size_of::<EguiVertex>());
@@ -28,12 +36,12 @@ const _: () = assert!(align_of::<EguiVertex>() == align_of::<egui::epaint::Verte
 
 struct Texture {
     image: Image,
-    sampler: Sampler,
+    sampler: SamplerHandle,
 }
 
 pub struct Renderer {
     pipeline: GraphicsPipeline,
-    sampler: Sampler,
+    sampler: SamplerHandle,
     textures: HashMap<egui::TextureId, Texture>,
 }
 
@@ -41,7 +49,7 @@ impl Renderer {
     pub fn new() -> Renderer {
         let pipeline = create_pipeline();
 
-        let sampler = Sampler::new(SamplerParams {
+        let sampler = gpu::register_sampler(&SamplerParams {
             mag_filter: vk::Filter::LINEAR,
             min_filter: vk::Filter::LINEAR,
             mipmap_mode: vk::SamplerMipmapMode::NEAREST,
@@ -93,7 +101,7 @@ impl Renderer {
                     gpu::set_debug_name(&image, format!("egui_texture_{id:?}"));
                 }
 
-                let sampler = Sampler::new(SamplerParams {
+                let sampler = gpu::register_sampler(&SamplerParams {
                     mag_filter: convert_filter(tex.options.magnification),
                     min_filter: convert_filter(tex.options.minification),
                     mipmap_mode: vk::SamplerMipmapMode::NEAREST,
@@ -161,7 +169,7 @@ impl Renderer {
 
         let width = color_target.width();
         let height = color_target.height();
-        let params = gpu::alloc_temp(&EguiRootParams { screen_size: [width as f32, height as f32] });
+        //let params = gpu::alloc_temp(&EguiRootParams { screen_size: [width as f32, height as f32] });
 
         // encode draw commands
         let mut enc = cmd.begin_rendering(&[ColorAttachment { image: color_target, .. }], None);
@@ -189,10 +197,11 @@ impl Renderer {
             enc.set_viewport(0.0, 0.0, width as f32, height as f32, 0.0, 1.0);
 
             let texture = self.textures.get(&mesh.texture_id).expect("texture not found");
-            enc.push_descriptors(
-                0,
-                &[(0, texture.image.texture_descriptor(vk::ImageLayout::GENERAL)), (1, self.sampler.descriptor())],
-            );
+            let params = gpu::alloc_temp(&EguiRootParams {
+                screen_size: [width as f32, height as f32],
+                texture: texture.image.texture_handle(),
+                sampler: texture.sampler,
+            });
 
             enc.draw_indexed(
                 TriangleList,
@@ -210,25 +219,8 @@ impl Renderer {
 }
 
 fn create_pipeline() -> GraphicsPipeline {
-    let set_layout = Device::instance().create_push_descriptor_set_layout(&[
-        vk::DescriptorSetLayoutBinding {
-            binding: 0,
-            descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
-            descriptor_count: 1,
-            stage_flags: vk::ShaderStageFlags::FRAGMENT,
-            ..Default::default()
-        },
-        vk::DescriptorSetLayoutBinding {
-            binding: 1,
-            descriptor_type: vk::DescriptorType::SAMPLER,
-            descriptor_count: 1,
-            stage_flags: vk::ShaderStageFlags::FRAGMENT,
-            ..Default::default()
-        },
-    ]);
 
     let create_info = GraphicsPipelineCreateInfo {
-        set_layouts: &[set_layout],
         push_constants_size: size_of::<EguiRootParams>(),
         vertex_input: VertexInputState {
             buffers: &[VertexBufferLayoutDescription {
@@ -257,7 +249,9 @@ fn create_pipeline() -> GraphicsPipeline {
                 },
             ],
         },
-        pre_rasterization_shaders: PreRasterizationShaders::PrimitiveShading { vertex: EGUI_VERTEX_MAIN },
+        pre_rasterization_shaders: PreRasterizationShaders::PrimitiveShading {
+            vertex: shaders::entry_points::egui_vertex,
+        },
         rasterization: RasterizationState {
             polygon_mode: vk::PolygonMode::FILL,
             cull_mode: Default::default(),
@@ -266,7 +260,7 @@ fn create_pipeline() -> GraphicsPipeline {
         },
         depth_stencil: None,
         fragment: FragmentState {
-            shader: EGUI_FRAG_MAIN,
+            shader: shaders::entry_points::egui_fragment,
             multisample: Default::default(),
             color_targets: &[ColorTargetState {
                 format: Format::R8G8B8A8_UNORM,
@@ -282,6 +276,7 @@ fn create_pipeline() -> GraphicsPipeline {
             }],
             blend_constants: [0.0; 4],
         },
+        ..
     };
 
     GraphicsPipeline::new(create_info).expect("failed to create pipeline")

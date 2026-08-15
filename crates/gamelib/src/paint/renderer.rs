@@ -26,10 +26,13 @@ const TILE_SIZE: u32 = 16;
 // exceed the wave size.
 const _: () = assert!(TILE_SIZE <= 32, "TILE_SIZE must not exceed the minimum shader subgroup size (32)");
 
-static_assets! {
+/*static_assets! {
     static RASTERIZE_TILES: gpu::ComputePipeline = "/gamelib/shaders/paint.sharc#rasterize_tiles";
     static COPY_TO_SCREEN: gpu::GraphicsPipeline = "/gamelib/shaders/paint.sharc#copy_to_screen";
-}
+}*/
+
+#[gpu::shader_module("assets/gamelib/shaders/paint.slang#2")]
+mod shaders {}
 
 #[derive(thiserror::Error, Debug, Copy, Clone)]
 #[error("Scene render error")]
@@ -295,9 +298,10 @@ pub(super) fn render_scene(
 
     let width = render_target.width();
     let height = render_target.height();
+
     // Ensure shaders are loaded.
-    let rasterize_tiles = RASTERIZE_TILES.read().raise(RenderSceneError)?;
-    let copy_to_screen = COPY_TO_SCREEN.read().raise(RenderSceneError)?;
+    //let rasterize_tiles = RASTERIZE_TILES.read().raise(RenderSceneError)?;
+    //let copy_to_screen = COPY_TO_SCREEN.read().raise(RenderSceneError)?;
 
     // Resize and clear internal render target.
     painter.render_target.setup(width, height);
@@ -345,7 +349,7 @@ pub(super) fn render_scene(
                     let output = painter.render_target.storage_handle();
                     let raster_tiles_params = RasterizeTilesParams { scene_data, output, start_cover_list: *start };
                     gpu::barrier(BarrierFlags::STORAGE);
-                    gpu::dispatch(&*rasterize_tiles, *count, 1, 1, &raster_tiles_params);
+                    gpu::dispatch(&*shaders::rasterize_tiles, *count, 1, 1, &raster_tiles_params);
                 }
             }
         }
@@ -357,7 +361,7 @@ pub(super) fn render_scene(
     {
         let _span = gpu_span!("copy_to_screen");
         gpu::render(&[gpu::ColorAttachment { image: &render_target, clear: None }], None, |encoder| {
-            encoder.bind_graphics_pipeline(&*copy_to_screen);
+            encoder.bind_graphics_pipeline(&*shaders::copy_to_screen);
             encoder.draw(
                 TriangleList,
                 None,
@@ -365,7 +369,7 @@ pub(super) fn render_scene(
                 0..1,
                 root_params! {
                     texture: gpu::StorageImageHandle = painter.render_target.storage_handle(),
-                    sampler: gpu::SamplerHandle = painter.sampler.device_handle()
+                    sampler: gpu::SamplerHandle = painter.sampler
                 },
             );
         });

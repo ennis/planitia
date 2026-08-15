@@ -998,4 +998,7 @@ Also, if command buffers are allocated in another thread, they should also be fr
 because currently they are moved in the global device queue on submission, then recycled on the thread that calls
 end_frame.
 
-# VK_EXT
+# VK_EXT_descriptor_heap 
+
+How do we map global variables in slang to PushData?
+

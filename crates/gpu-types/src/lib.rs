@@ -9,6 +9,7 @@ use std::{fmt, slice};
 // Reexports
 pub use ash::{self, vk};
 pub use vk::Format;
+pub use vulkan_headers::vulkan::vulkan as vkh;
 
 /// Represents data that can be shared with the GPU and accessed in shaders.
 ///
@@ -1234,3 +1235,7 @@ pub mod shader_types {
 
 
 //--------------------------------------------------------------------------------------------------
+
+pub trait DescriptorMapping {
+    fn get_descriptor_mapping_info() -> &'static vkh::VkShaderDescriptorSetAndBindingMappingInfoEXT;
+}
