@@ -1,13 +1,39 @@
 use crate::font::{glyph_position, GLYPH_HEIGHT, GLYPH_WIDTH};
-use crate::helper::{Descriptor, GraphicsPipelineHelperCreateInfo};
-use crate::{
-    font, Buffer, DeviceData, DeviceHelper, FrameData, FrameResources, Image, Pipeline, StaticResources,
-    TrackedResources, FRAMES_IN_FLIGHT,
-};
+use crate::helper::{Buffer, Descriptor, GraphicsPipelineHelperCreateInfo, Image};
+use crate::{font, DeviceHelper, DeviceState, Pipeline, TrackedResources, FRAMES_IN_FLIGHT};
 use ash::vk;
 use ash::vk::Handle;
 use std::ffi::{c_void, CStr};
 use std::{mem, ptr};
+
+/// Static resources
+pub struct StaticResources {
+    font_tex: Image,
+    font_sampler: vk::Sampler,
+    pipeline: Pipeline,
+}
+
+#[derive(Copy, Clone, Default)]
+pub struct FrameData {
+    cmdbuf: vk::CommandBuffer,
+    fence: vk::Fence,
+    vtxbuf: Buffer,
+}
+
+pub struct FrameResources {
+    frame_index: usize,
+    frame_data: [FrameData; FRAMES_IN_FLIGHT],
+}
+
+///
+#[derive(Default)]
+pub struct OverlayResources {
+    tmp_image: Option<Image>,
+    last_width: u32,
+    last_height: u32,
+}
+
+//--------------------------------------------------------------------------------------------------
 
 const MAX_VERTICES: usize = 1024 * 1024;
 
@@ -118,15 +144,7 @@ unsafe fn create_font_texture(d: &DeviceHelper) -> Image {
 }
 
 pub(crate) unsafe fn initialize_frame_resources(d: &DeviceHelper) -> FrameResources {
-    let command_buffers = d
-        .device
-        .allocate_command_buffers(&vk::CommandBufferAllocateInfo {
-            command_pool: d.command_pool,
-            level: vk::CommandBufferLevel::PRIMARY,
-            command_buffer_count: FRAMES_IN_FLIGHT as u32,
-            ..Default::default()
-        })
-        .expect("allocate_command_buffers failed");
+    let command_buffers = d.allocate_command_buffers_helper(FRAMES_IN_FLIGHT);
     let mut frame_data = [FrameData::default(); FRAMES_IN_FLIGHT];
     for i in 0..FRAMES_IN_FLIGHT {
         let fence = d
@@ -141,7 +159,6 @@ pub(crate) unsafe fn initialize_frame_resources(d: &DeviceHelper) -> FrameResour
         frame_data[i].cmdbuf = command_buffers[i];
         frame_data[i].fence = fence;
         frame_data[i].vtxbuf = vertex_buffer;
-        d.set_device_loader_data(frame_data[i].cmdbuf);
     }
     FrameResources { frame_index: 0, frame_data }
 }
@@ -251,7 +268,7 @@ impl OverlayBuilder {
     }
 }
 
-fn draw_overlay(dd: &DeviceData, trk: &TrackedResources) -> OverlayBuilder {
+fn draw_overlay(dd: &DeviceState, trk: &TrackedResources) -> OverlayBuilder {
     let mut builder = OverlayBuilder::new();
     builder.print(10, 10, "Debug layer active");
     let mut y = 10 + GLYPH_HEIGHT as i32;
@@ -284,14 +301,14 @@ struct RenderData {
     image_copy_view: vk::ImageView,
 }
 
-unsafe fn render_zoom_overlay(dd: &DeviceData, rd: &RenderData, cmdbuf: vk::CommandBuffer) {
+unsafe fn render_zoom_overlay(dd: &DeviceState, rd: &RenderData, cmdbuf: vk::CommandBuffer) {
     dd.cmd_bind_pipeline(cmdbuf, vk::PipelineBindPoint::GRAPHICS, dd.static_resources.pipeline.pipeline);
     dd.cmd_set_viewport_helper(cmdbuf, 0, 0, rd.width, rd.height);
     dd.cmd_set_scissor_helper(cmdbuf, 0, 0, rd.width, rd.height);
 }
 
 unsafe fn render_overlay_text(
-    dd: &DeviceData,
+    dd: &DeviceState,
     rd: &RenderData,
     cmdbuf: vk::CommandBuffer,
     vtxbuf: &Buffer,
@@ -402,7 +419,7 @@ unsafe fn render_overlay_text(
 /// * swapchain - swapchain
 /// * image_index - index of the swapchain image to render to
 pub(crate) unsafe fn render_overlay(
-    dd: &DeviceData,
+    dd: &DeviceState,
     queue: vk::Queue,
     swapchain: vk::SwapchainKHR,
     image_index: u32,

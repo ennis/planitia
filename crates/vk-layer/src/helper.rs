@@ -1,26 +1,120 @@
-use crate::{font, Buffer, DeviceHelper, Image, Pipeline};
+//! Helper utilities.
+use crate::dispatch::DeviceDispatch;
 use ash::vk;
 use std::ffi::{c_void, CStr};
+use std::ops::Deref;
 use std::ptr;
 
-pub(crate) struct GraphicsPipelineHelperCreateInfo<'a> {
-    pub(crate) spirv: &'a [u8],
-    pub(crate) vertex_entry: &'a CStr,
-    pub(crate) fragment_entry: &'a CStr,
-    pub(crate) vertex_attributes: &'a [vk::VertexInputAttributeDescription],
-    pub(crate) vertex_stride: usize,
-    pub(crate) bindings: &'a [vk::DescriptorSetLayoutBinding<'a>],
-    pub(crate) push_constants_size: usize,
-    pub(crate) color_attachment_format: vk::Format,
+#[derive(Copy, Clone, Default)]
+pub struct Image {
+    pub image: vk::Image,
+    pub image_view: vk::ImageView,
+    pub memory: vk::DeviceMemory,
 }
 
-pub(crate) enum Descriptor {
+#[derive(Copy, Clone, Default)]
+pub struct Buffer {
+    pub buffer: vk::Buffer,
+    pub memory: vk::DeviceMemory,
+    pub ptr: *mut c_void,
+}
+
+unsafe impl Send for Buffer {}
+unsafe impl Sync for Buffer {}
+
+#[derive(Copy, Clone, Default)]
+pub struct Pipeline {
+    pub pipeline: vk::Pipeline,
+    pub pipeline_layout: vk::PipelineLayout,
+    pub descriptor_set_layout: vk::DescriptorSetLayout,
+}
+
+pub struct GraphicsPipelineHelperCreateInfo<'a> {
+    pub spirv: &'a [u8],
+    pub vertex_entry: &'a CStr,
+    pub fragment_entry: &'a CStr,
+    pub vertex_attributes: &'a [vk::VertexInputAttributeDescription],
+    pub vertex_stride: usize,
+    pub bindings: &'a [vk::DescriptorSetLayoutBinding<'a>],
+    pub push_constants_size: usize,
+    pub color_attachment_format: vk::Format,
+}
+
+pub enum Descriptor {
     Texture { binding: u32, image_view: vk::ImageView, image_layout: vk::ImageLayout },
     Sampler { binding: u32, sampler: vk::Sampler },
 }
 
+pub trait PrivateData: Copy + 'static {
+    type Handle: vk::Handle;
+}
+
+/// Device & command pool wrapper with useful utilities.
+pub struct DeviceHelper {
+    pub dispatch: DeviceDispatch,
+    pub mem_props: vk::PhysicalDeviceMemoryProperties,
+    pub command_pool: vk::CommandPool,
+    pub queue: vk::Queue,
+    pub private_data_slot: vk::PrivateDataSlot,
+}
+
+impl Deref for DeviceHelper {
+    type Target = DeviceDispatch;
+
+    fn deref(&self) -> &Self::Target {
+        &self.dispatch
+    }
+}
+
 impl DeviceHelper {
-    pub(crate) fn find_memory_type(&self, type_filter: u32, required_flags: vk::MemoryPropertyFlags) -> u32 {
+    pub unsafe fn new(
+        dispatch: DeviceDispatch,
+        mem_props: vk::PhysicalDeviceMemoryProperties,
+        queue_family_index: u32,
+    ) -> DeviceHelper {
+        let command_pool = dispatch
+            .create_command_pool(
+                &vk::CommandPoolCreateInfo {
+                    flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+                    queue_family_index,
+                    ..Default::default()
+                },
+                None,
+            )
+            .expect("create_command_pool failed");
+        let queue = dispatch.get_device_queue(queue_family_index, 0);
+        dispatch.set_device_loader_data(queue);
+        let private_data_slot = dispatch
+            .create_private_data_slot(&vk::PrivateDataSlotCreateInfo::default(), None)
+            .expect("create_private_data_slot failed");
+        DeviceHelper { dispatch, mem_props, command_pool, queue, private_data_slot }
+    }
+
+    pub unsafe fn set_private_data<T: PrivateData>(&self, handle: T::Handle, data: T) {
+        let data_ptr = Box::into_raw(Box::new(data)) as *mut c_void as u64;
+        self.dispatch.set_private_data(handle, self.private_data_slot, data_ptr).unwrap();
+    }
+
+    pub unsafe fn get_private_data<T: PrivateData>(&self, handle: T::Handle) -> Option<&T> {
+        let data_ptr = self.dispatch.get_private_data(handle, self.private_data_slot);
+        if data_ptr == 0 {
+            None
+        } else {
+            Some(&*(data_ptr as *const T))
+        }
+    }
+
+    pub unsafe fn take_private_data<T: PrivateData>(&self, handle: T::Handle) -> Option<Box<T>> {
+        let data_ptr = self.dispatch.get_private_data(handle, self.private_data_slot);
+        if data_ptr == 0 {
+            None
+        } else {
+            let data = Box::from_raw(data_ptr as *mut T);
+            Some(data)
+        }
+    }
+
+    pub fn find_memory_type(&self, type_filter: u32, required_flags: vk::MemoryPropertyFlags) -> u32 {
         (0..self.mem_props.memory_type_count)
             .find(|&i| {
                 (type_filter & (1 << i)) != 0
@@ -29,12 +123,27 @@ impl DeviceHelper {
             .expect("no compatible memory type found")
     }
 
-    pub(crate) unsafe fn wait_for_fence_and_reset(&self, fence: vk::Fence) {
+    pub unsafe fn allocate_command_buffers_helper(&self, count: usize) -> Vec<vk::CommandBuffer> {
+        let buffers = self
+            .allocate_command_buffers(&vk::CommandBufferAllocateInfo {
+                command_pool: self.command_pool,
+                level: vk::CommandBufferLevel::PRIMARY,
+                command_buffer_count: count as u32,
+                ..Default::default()
+            })
+            .unwrap();
+        for b in buffers.iter() {
+            self.set_device_loader_data(*b);
+        }
+        buffers
+    }
+
+    pub unsafe fn wait_for_fence_and_reset(&self, fence: vk::Fence) {
         self.wait_for_fences(&[fence], true, u64::MAX).unwrap();
         self.reset_fences(&[fence]).unwrap();
     }
 
-    pub(crate) unsafe fn reset_and_begin_command_buffer(&self, cmdbuf: vk::CommandBuffer) {
+    pub unsafe fn reset_and_begin_command_buffer(&self, cmdbuf: vk::CommandBuffer) {
         self.reset_command_buffer(cmdbuf, vk::CommandBufferResetFlags::empty()).unwrap();
         self.begin_command_buffer(
             cmdbuf,
@@ -43,7 +152,7 @@ impl DeviceHelper {
         .unwrap();
     }
 
-    pub(crate) unsafe fn cmd_push_descriptors_helper(
+    pub unsafe fn cmd_push_descriptors_helper(
         &self,
         cmdbuf: vk::CommandBuffer,
         pipeline_layout: vk::PipelineLayout,
@@ -241,14 +350,6 @@ impl DeviceHelper {
             topology: vk::PrimitiveTopology::TRIANGLE_LIST,
             ..Default::default()
         };
-        let vertex_input_state = vk::PipelineVertexInputStateCreateInfo {
-            vertex_binding_description_count: 1,
-            p_vertex_binding_descriptions: &vertex_binding,
-            vertex_attribute_description_count: create_info.vertex_attributes.len() as u32,
-            p_vertex_attribute_descriptions: create_info.vertex_attributes.as_ptr(),
-            ..Default::default()
-        };
-
         let viewport_state =
             vk::PipelineViewportStateCreateInfo { viewport_count: 1, scissor_count: 1, ..Default::default() };
 
@@ -276,8 +377,11 @@ impl DeviceHelper {
             alpha_blend_op: vk::BlendOp::ADD,
             color_write_mask: vk::ColorComponentFlags::RGBA,
         };
-        let color_blend_state =
-            vk::PipelineColorBlendStateCreateInfo { attachment_count: 1, p_attachments: &blend_attachment, ..Default::default() };
+        let color_blend_state = vk::PipelineColorBlendStateCreateInfo {
+            attachment_count: 1,
+            p_attachments: &blend_attachment,
+            ..Default::default()
+        };
         let dynamic_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
         let dynamic_state = vk::PipelineDynamicStateCreateInfo {
             dynamic_state_count: dynamic_states.len() as u32,
@@ -428,10 +532,6 @@ impl DeviceHelper {
     pub(crate) unsafe fn destroy_buffer_helper(&self, buffer: Buffer) {
         self.destroy_buffer(buffer.buffer, None);
         self.free_memory(buffer.memory, None);
-    }
-
-    pub(crate) unsafe fn set_device_loader_data(&self, handle: impl vk::Handle) {
-        let _ = (self.set_device_loader_data)(self.device.handle(), handle.as_raw() as *mut _);
     }
 
     pub(crate) unsafe fn submit_oneshot(&self, record_fn: impl FnOnce(&Self, vk::CommandBuffer)) {
