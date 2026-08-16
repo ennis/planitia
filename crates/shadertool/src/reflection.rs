@@ -409,6 +409,7 @@ impl<'a, 'ty> ParamCollector<'a, 'ty> {
             refl::TypeDesc::Matrix(..) => {}
             refl::TypeDesc::RuntimeArray(_) => {}
             refl::TypeDesc::ImageHandle(_) => {}
+            _ => {}
         }
     }
 

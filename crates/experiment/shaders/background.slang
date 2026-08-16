@@ -15,7 +15,7 @@ ScreenQuadVSOut background_vertex_main(uint vertex_id : SV_VertexID, uniform Roo
 }
 
 [shader("fragment")]
-float4 background_fragment_main(ScreenQuadVSOut v, uint2 frag_pos: SV_Position, uniform RootParams* u) {
+float4 background_fragment_main(ScreenQuadVSOut v, float2 frag_pos: SV_Position, uniform RootParams* u) {
     float t = v.uv.y;
     float4 color = lerp(
         srgba8_to_float4(u.top_color),

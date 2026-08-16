@@ -1,9 +1,11 @@
 //! Helper utilities.
 use crate::dispatch::DeviceDispatch;
+use ash::prelude::VkResult;
 use ash::vk;
 use std::ffi::{c_void, CStr};
 use std::ops::Deref;
 use std::ptr;
+use std::ptr::NonNull;
 
 #[derive(Copy, Clone, Default)]
 pub struct Image {
@@ -45,8 +47,8 @@ pub enum Descriptor {
     Sampler { binding: u32, sampler: vk::Sampler },
 }
 
-pub trait PrivateData: Copy + 'static {
-    type Handle: vk::Handle;
+pub trait PrivateData: 'static {
+    type Handle: vk::Handle + Copy;
 }
 
 /// Device & command pool wrapper with useful utilities.
@@ -90,17 +92,18 @@ impl DeviceHelper {
         DeviceHelper { dispatch, mem_props, command_pool, queue, private_data_slot }
     }
 
-    pub unsafe fn set_private_data<T: PrivateData>(&self, handle: T::Handle, data: T) {
+    pub unsafe fn set_private_data<T: PrivateData>(&self, handle: T::Handle, data: T) -> *mut T {
         let data_ptr = Box::into_raw(Box::new(data)) as *mut c_void as u64;
         self.dispatch.set_private_data(handle, self.private_data_slot, data_ptr).unwrap();
+        data_ptr as *mut T
     }
 
-    pub unsafe fn get_private_data<T: PrivateData>(&self, handle: T::Handle) -> Option<&T> {
+    pub unsafe fn get_private_data<T: PrivateData>(&self, handle: T::Handle) -> Option<NonNull<T>> {
         let data_ptr = self.dispatch.get_private_data(handle, self.private_data_slot);
         if data_ptr == 0 {
             None
         } else {
-            Some(&*(data_ptr as *const T))
+            Some(NonNull::new_unchecked(data_ptr as *mut T))
         }
     }
 
@@ -557,5 +560,62 @@ impl DeviceHelper {
             vk::Fence::null(),
         )
         .unwrap();
+    }
+
+    pub(crate) unsafe fn queue_submit_helper(
+        &self,
+        queue: vk::Queue,
+        cmd_buf: vk::CommandBuffer,
+        wait_semaphores: &[vk::Semaphore],
+        signal_semaphores: &[vk::Semaphore],
+        signal_fence: vk::Fence,
+    ) -> VkResult<()> {
+        // It's a sad thing that we have to allocate memory dynamically for something that is probably
+        // ignored by the driver, but here we are.
+        let wait_dst_stage_mask = vec![vk::PipelineStageFlags::ALL_COMMANDS; wait_semaphores.len()];
+        let submit_info = [vk::SubmitInfo {
+            wait_semaphore_count: wait_semaphores.len() as u32,
+            p_wait_semaphores: wait_semaphores.as_ptr(),
+            p_wait_dst_stage_mask: wait_dst_stage_mask.as_ptr(),
+            command_buffer_count: 1,
+            p_command_buffers: &cmd_buf,
+            signal_semaphore_count: signal_semaphores.len() as u32,
+            p_signal_semaphores: signal_semaphores.as_ptr(),
+            ..Default::default()
+        }];
+        self.queue_submit(queue, &submit_info, signal_fence)
+    }
+
+    pub(crate) unsafe fn queue_present_helper(
+        &self,
+        queue: vk::Queue,
+        swapchain: vk::SwapchainKHR,
+        image_index: u32,
+        wait_semaphore: vk::Semaphore,
+    ) -> VkResult<()> {
+        let present_info = vk::PresentInfoKHR {
+            wait_semaphore_count: 1,
+            p_wait_semaphores: &wait_semaphore,
+            swapchain_count: 1,
+            p_swapchains: &swapchain,
+            p_image_indices: &image_index,
+            ..Default::default()
+        };
+        (self.khr_swapchain.queue_present_khr)(queue, &present_info).result()
+    }
+
+    pub(crate) unsafe fn push_constants_helper<T: Copy+'static>(
+        &self,
+        cmd_buf: vk::CommandBuffer,
+        pipeline_layout: vk::PipelineLayout,
+        data: &T,
+    ) {
+        self.cmd_push_constants(
+            cmd_buf,
+            pipeline_layout,
+            vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+            0,
+            std::slice::from_raw_parts(data as *const _ as *const u8, size_of::<T>()),
+        );
     }
 }

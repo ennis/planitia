@@ -1,20 +1,18 @@
 //! Swapchain interception
-use crate::state_tracker::queue::get_device_for_queue;
-use crate::{layer_fn, state, LayerSwapchain};
+use crate::{DeviceState, LayerSwapchain};
 use ash::vk;
-use ash::vk::{Handle, PFN_vkCreateSwapchainKHR, PFN_vkDestroySwapchainKHR, PFN_vkQueuePresentKHR};
+use ash::vk::Handle;
 use std::{ptr, slice};
 
-layer_fn! {
-    #[proc(PFN_vkCreateSwapchainKHR)]
-        fn layer_vkCreateSwapchainKHR(
+impl DeviceState {
+    pub unsafe fn hook_create_swapchain_khr(
+        &self,
         device: vk::Device,
         p_create_info: *const vk::SwapchainCreateInfoKHR,
         p_allocator: *const vk::AllocationCallbacks,
         p_swapchain: *mut vk::SwapchainKHR,
     ) -> vk::Result {
-        let d = state(device);
-        let mut inner = d.tracked_resources.lock().unwrap();
+        let mut inner = self.tracked_resources.lock().unwrap();
 
         let mut create_info = *p_create_info;
 
@@ -26,34 +24,34 @@ layer_fn! {
             if let Some(index) = inner.swapchains.iter().position(|sc| sc.swapchain == create_info.old_swapchain) {
                 let sc = inner.swapchains.remove(index);
                 for view in sc.image_views {
-                    d.destroy_image_view(view, None);
+                    self.destroy_image_view(view, None);
                 }
                 // FIXME: we have no way to know whether the semaphore are still being waited on.
                 //        Technically waitForIdle isn't sufficient as it doesn't sync with presentation.
                 //        So it's basically impossible to do this correctly.
                 //        See https://stackoverflow.com/questions/75437792/how-to-synchronize-vulkan-swapchain-presentation-with-sempahore-destruction
                 //        As a best effort, wait for device idle first.
-                d.device_wait_idle().unwrap();
+                self.device_wait_idle().unwrap();
                 for sem in sc.render_to_present {
-                    d.destroy_semaphore(sem, None);
+                    self.destroy_semaphore(sem, None);
                 }
             }
         }
 
         // Call next layer
-        let result = (d.khr_swapchain.create_swapchain_khr)(device, &create_info, p_allocator, p_swapchain);
+        let result = (self.khr_swapchain.create_swapchain_khr)(device, &create_info, p_allocator, p_swapchain);
         if result != vk::Result::SUCCESS {
             return result;
         }
 
         // Retrieve the backing images and create image views for them.
         let mut image_count = 0;
-        let r = (d.khr_swapchain.get_swapchain_images_khr)(device, *p_swapchain, &mut image_count, ptr::null_mut());
+        let r = (self.khr_swapchain.get_swapchain_images_khr)(device, *p_swapchain, &mut image_count, ptr::null_mut());
 
         assert_eq!(r, vk::Result::SUCCESS);
         let images = {
             let mut images = Vec::with_capacity(image_count as usize);
-            let r = (d.khr_swapchain.get_swapchain_images_khr)(device, *p_swapchain, &mut image_count, images.as_mut_ptr());
+            let r = (self.khr_swapchain.get_swapchain_images_khr)(device, *p_swapchain, &mut image_count, images.as_mut_ptr());
             assert_eq!(r, vk::Result::SUCCESS);
             images.set_len(image_count as usize);
             images
@@ -62,7 +60,7 @@ layer_fn! {
         let image_views = images
             .iter()
             .map(|&image| {
-                d.create_image_view(
+                self.create_image_view(
                     &vk::ImageViewCreateInfo {
                         image,
                         view_type: vk::ImageViewType::TYPE_2D,
@@ -78,13 +76,13 @@ layer_fn! {
                     },
                     None,
                 )
-                .expect("create_image_view failed")
+                    .expect("create_image_view failed")
             })
             .collect::<Vec<_>>();
 
         let render_to_present_semaphores = (0..images.len())
             .map(|_| {
-                d.create_semaphore(&vk::SemaphoreCreateInfo { ..Default::default() }, None)
+                self.create_semaphore(&vk::SemaphoreCreateInfo { ..Default::default() }, None)
                     .expect("create_semaphore failed")
             })
             .collect();
@@ -101,36 +99,28 @@ layer_fn! {
         });
         result
     }
-}
 
-layer_fn! {
-    #[proc(PFN_vkDestroySwapchainKHR)]
-    fn layer_vkDestroySwapchainKHR(
+    pub unsafe fn hook_destroy_swapchain_khr(
+        &self,
         device: vk::Device,
         swapchain: vk::SwapchainKHR,
         p_allocator: *const vk::AllocationCallbacks,
     ) {
-        let d = state(device);
-        let mut inner = d.tracked_resources.lock().unwrap();
+        let mut inner = self.tracked_resources.lock().unwrap();
 
         if let Some(index) = inner.swapchains.iter().position(|sc| sc.swapchain == swapchain) {
             let sc = inner.swapchains.remove(index);
             for view in sc.image_views {
-                d.destroy_image_view(view, None);
+                self.destroy_image_view(view, None);
+            }
+            for sem in sc.render_to_present {
+                self.destroy_semaphore(sem, None);
             }
         }
-        (d.khr_swapchain.destroy_swapchain_khr)(device, swapchain, p_allocator);
+        (self.khr_swapchain.destroy_swapchain_khr)(device, swapchain, p_allocator);
     }
-}
 
-layer_fn! {
-    #[proc(PFN_vkQueuePresentKHR)]
-    fn layer_vkQueuePresentKHR(
-        queue: vk::Queue,
-        p_present_info: *const vk::PresentInfoKHR,
-    ) -> vk::Result {
-        let device = get_device_for_queue(queue).expect("unknown queue");
-        let s = state(device);
+    pub unsafe fn hook_queue_present_khr(&self, queue: vk::Queue, p_present_info: *const vk::PresentInfoKHR) -> vk::Result {
 
         // extract semaphores
         let present_info = *p_present_info;
@@ -143,9 +133,9 @@ layer_fn! {
         if present_info.swapchain_count > 0 {
             let swapchain = swapchains[0];
             let image_index = image_indices[0];
-            crate::overlay::render_overlay(&*s, queue, swapchain, image_index, wait_semaphores)
+            crate::overlay::render_overlay(self, queue, swapchain, image_index, wait_semaphores)
         } else {
-            (s.dispatch.khr_swapchain.queue_present_khr)(queue, p_present_info)
+            (self.khr_swapchain.queue_present_khr)(queue, p_present_info)
         }
     }
 }

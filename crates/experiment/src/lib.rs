@@ -15,10 +15,10 @@ use gpu::{self, Ptr, root_params};
 use std::time::Instant;
 use gpu::PrimitiveTopology::TriangleList;
 
-#[gpu::shader_module("shaders/background.slang#1511")]
+#[gpu::shader_module("shaders/background.slang#11")]
 mod background {}
 
-#[gpu::shader_module("shaders/grid.slang#487")]
+#[gpu::shader_module("shaders/grid.slang#437")]
 mod grid {}
 
 #[derive(serde::Serialize, serde::Deserialize)]

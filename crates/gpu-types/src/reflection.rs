@@ -1,7 +1,5 @@
 //! Shader reflection structures.
 
-use crate::{ShaderStage, reflection};
-
 /// Scalar value kinds.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -79,6 +77,8 @@ pub struct ImageHandleType {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub enum TypeDesc<'a> {
+    Void,
+    Bool,
     Scalar(ScalarType),
     /// Vector type (scalar type, component count).
     Vector(ScalarType, u8),
@@ -89,6 +89,9 @@ pub enum TypeDesc<'a> {
     Struct(&'a StructType<'a>),
     ImageHandle(ImageHandleType),
     Pointer(&'a TypeDesc<'a>),
+    Image,
+    SampledImage,
+    Sampler,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -134,9 +137,3 @@ pub struct AccessChain<'a> {
 }
 
 pub type ShaderReflection = &'static [&'static AccessChain<'static>];
-
-/*
-#[derive(Copy, Clone, Debug, Default)]
-pub struct PipelineReflection {
-    pub stages: &'static [(ShaderStage, ShaderReflection)],
-}*/

@@ -89,7 +89,7 @@ float4 grid(float2 uv, float line_width)
 
 [shader("fragment")]
 [pipeline("grid")]
-float4 grid_fragment_main(VSOut i, uint2 frag_pos: SV_Position, uniform RootParams* u)
+float4 grid_fragment_main(VSOut i, float2 frag_pos: SV_Position, uniform RootParams* u)
 {
     float2 frag_uv = frag_pos.xy / u.scene.screen_size;
     float2 scaled_uv = i.uv;

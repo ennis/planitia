@@ -92,6 +92,9 @@ fn generate_type(ty: &refl::TypeDesc) -> TokenStream {
             let pointee = generate_type(pointee);
             quote!(gpu::Ptr<#pointee>)
         }
+        _ => {
+            todo!("unsupported type in reflection information")
+        }
     }
 }
 
@@ -154,6 +157,9 @@ fn quote_type(ty: &refl::TypeDesc) -> TokenStream {
             quote! {
                 refl::TypeDesc::Pointer(&const { #pointee_quoted })
             }
+        }
+        _ => {
+            todo!("unsupported type in reflection information")
         }
     }
 }
