@@ -23,6 +23,9 @@ RootParams u;
 Texture2D<float4> texture;
 
 [vk::binding(1)]
+Texture2D<float4> texture1;
+
+[vk::binding(2)]
 SamplerState sampler;
 
 struct VertexInput {
@@ -40,15 +43,27 @@ VertexOutput overlay_vertex(VertexInput vi) {
     return o;
 }
 
+float shuffle(uint shuffle, float4 color0, float4 color1) {
+    if (shuffle < 4) {
+        return color0[shuffle];
+    } else if (shuffle < 8) {
+        return color1[shuffle - 4];
+    } else {
+        return float(shuffle - 8);
+    }
+}
+
 [shader("fragment")]
 FragmentOutput overlay_fragment(VertexOutput v) {
     FragmentOutput o;
     float4 tex_color = texture.Sample(sampler, v.uv);
-    float4 tex_color_shuf;
-    tex_color_shuf.x = u.shuffle.x < 4 ? tex_color[u.shuffle.x] : float(u.shuffle.x - 4);
-    tex_color_shuf.y = u.shuffle.y < 4 ? tex_color[u.shuffle.y] : float(u.shuffle.y - 4);
-    tex_color_shuf.z = u.shuffle.z < 4 ? tex_color[u.shuffle.z] : float(u.shuffle.z - 4);
-    tex_color_shuf.w = u.shuffle.w < 4 ? tex_color[u.shuffle.w] : float(u.shuffle.w - 4);
-    o.color = v.color * tex_color_shuf;
+    float4 tex1_color = texture1.Sample(sampler, v.uv);
+    float4 color_shuf = float4(
+        shuffle(u.shuffle.x, tex_color, tex1_color),
+        shuffle(u.shuffle.y, tex_color, tex1_color),
+        shuffle(u.shuffle.z, tex_color, tex1_color),
+        shuffle(u.shuffle.w, tex_color, tex1_color)
+    );
+    o.color = v.color * color_shuf;
     return o;
 }

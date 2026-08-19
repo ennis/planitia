@@ -12,7 +12,7 @@ impl DeviceState {
         p_allocator: *const vk::AllocationCallbacks,
         p_swapchain: *mut vk::SwapchainKHR,
     ) -> vk::Result {
-        let mut inner = self.tracked_resources.lock().unwrap();
+        let mut inner = self.tracked_resources.lock();
 
         let mut create_info = *p_create_info;
 
@@ -106,7 +106,7 @@ impl DeviceState {
         swapchain: vk::SwapchainKHR,
         p_allocator: *const vk::AllocationCallbacks,
     ) {
-        let mut inner = self.tracked_resources.lock().unwrap();
+        let mut inner = self.tracked_resources.lock();
 
         if let Some(index) = inner.swapchains.iter().position(|sc| sc.swapchain == swapchain) {
             let sc = inner.swapchains.remove(index);
@@ -120,7 +120,7 @@ impl DeviceState {
         (self.khr_swapchain.destroy_swapchain_khr)(device, swapchain, p_allocator);
     }
 
-    pub unsafe fn hook_queue_present_khr(&self, queue: vk::Queue, p_present_info: *const vk::PresentInfoKHR) -> vk::Result {
+    pub unsafe fn queue_present_impl(&self, queue: vk::Queue, p_present_info: *const vk::PresentInfoKHR) -> vk::Result {
 
         // extract semaphores
         let present_info = *p_present_info;
@@ -133,7 +133,7 @@ impl DeviceState {
         if present_info.swapchain_count > 0 {
             let swapchain = swapchains[0];
             let image_index = image_indices[0];
-            crate::overlay::render_overlay(self, queue, swapchain, image_index, wait_semaphores)
+            crate::overlay::renderer::render_overlay(self, queue, swapchain, image_index, wait_semaphores)
         } else {
             (self.khr_swapchain.queue_present_khr)(queue, p_present_info)
         }

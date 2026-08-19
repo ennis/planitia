@@ -5,38 +5,19 @@ use std::cell::{Cell, UnsafeCell};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::slice;
-
-pub type Arena = bumpalo::Bump;
+use std::{fmt, slice};
+use bumpalo::Bump;
+use crate::{thread_local_bump_alloc};
 
 #[derive(Debug, thiserror::Error)]
 #[error("SPIR-V parse error")]
 pub struct ParseError;
 
-pub struct ShaderReflection {
-    arena: Arena,
-    root: *const Shader<'static>,
-}
+pub type ShaderReflection = &'static Shader<'static>;
 
-impl ShaderReflection {
-    fn root<'a>(&'a self) -> &'a Shader<'a> {
-        unsafe {
-            // SAFETY: moving ShaderReflection doesn't invalidate pointers to data inside the arena
-            //         so root isn't invalidated.
-            //         The lifetime 'a is normally invariant because of interior mutability inside `Shader`,
-            //         but the interior mutability is only used during construction, and it's impossible
-            //         to mutate anything through the returned reference (outside this module).
-            &*(self.root as *const Shader<'a>)
-        }
-    }
-
-    pub fn entry_points(&self) -> &[EntryPoint<'_>] {
-        self.root().entry_points
-    }
-}
 
 #[derive(Copy, Clone, Default)]
-struct Shader<'a> {
+pub struct Shader<'a> {
     pub entry_points: &'a [EntryPoint<'a>],
 }
 
@@ -161,6 +142,11 @@ pub struct PointerType<'a> {
     pointee: UnsafeCell<Option<&'a TypeDesc<'a>>>,
 }
 
+// After the initial load, mutable access to the UnsafeCell is impossible (it's private, and
+// we don't access it anymore within this module)
+unsafe impl Send for PointerType<'_> {}
+unsafe impl Sync for PointerType<'_> {}
+
 impl<'a> Debug for PointerType<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PointerType")
@@ -171,7 +157,7 @@ impl<'a> Debug for PointerType<'a> {
 }
 
 impl<'a> PointerType<'a> {
-    pub fn new(storage_class: StorageClass, pointee: &'a TypeDesc<'a>) -> PointerType<'a> {
+    pub const fn new(storage_class: StorageClass, pointee: &'a TypeDesc<'a>) -> PointerType<'a> {
         PointerType { storage_class, pointee: UnsafeCell::new(Some(pointee)) }
     }
 
@@ -208,16 +194,16 @@ pub enum TypeDesc<'a> {
         scalar: ScalarType,
         rows: u8,
         cols: u8,
-        stride: Cell<Option<u32>>,
+        stride: Option<u32>,
     },
     Array {
         element: &'a TypeDesc<'a>,
         len: u32,
-        stride: Cell<Option<u32>>,
+        stride: Option<u32>,
     },
     RuntimeArray {
         element: &'a TypeDesc<'a>,
-        stride: Cell<Option<u32>>,
+        stride: Option<u32>,
     },
     Struct(&'a StructType<'a>),
     ImageHandle(ImageHandleType),
@@ -225,6 +211,85 @@ pub enum TypeDesc<'a> {
     Image,
     SampledImage,
     Sampler,
+}
+
+
+pub struct PrettyType<'a>(pub &'a TypeDesc<'a>);
+
+impl<'a> fmt::Debug for PrettyType<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            TypeDesc::Void => write!(f, "void"),
+            TypeDesc::Bool => write!(f, "bool"),
+            TypeDesc::Scalar(s) => write!(f, "{:?}", s),
+            TypeDesc::Vector(s, n) => write!(f, "vec{}<{:?}>", n, s),
+            TypeDesc::Matrix { scalar, rows, cols, .. } => write!(f, "mat{}x{}<{:?}>", rows, cols, scalar),
+            TypeDesc::Array { element, len, .. } => write!(f, "[{:?}; {}]", PrettyType(element), len),
+            TypeDesc::RuntimeArray { element, .. } => write!(f, "[{:?}]", PrettyType(element)),
+            TypeDesc::Struct(s) => {
+                writeln!(f, "struct {} {{ ", s.name)?;
+                for field in s.fields {
+                    writeln!(f, "{}: {:?}, ", field.name, PrettyType(field.ty))?;
+                }
+                write!(f, "}}")
+            }
+            TypeDesc::ImageHandle(_) => write!(f, "image_handle"),
+            TypeDesc::Pointer(p) => write!(f, "*{:?} {:?}", p.storage_class, PrettyType(p.pointee())),
+            TypeDesc::Image => write!(f, "image"),
+            TypeDesc::SampledImage => write!(f, "sampled_image"),
+            TypeDesc::Sampler => write!(f, "sampler"),
+        }
+    }
+}
+
+impl<'a> TypeDesc<'a> {
+    pub fn as_struct(&self) -> Option<&'a StructType<'a>> {
+        match self {
+            TypeDesc::Struct(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub fn as_array(&self) -> Option<(&'a TypeDesc<'a>, u32)> {
+        match self {
+            TypeDesc::Array { element, len, .. } => Some((element, *len)),
+            _ => None,
+        }
+    }
+
+    /// Returns the offset and type of a field or array element access by field or array index.
+    pub fn indexed(&self, index: usize) -> (usize, &'a TypeDesc<'a>) {
+        match self {
+            TypeDesc::Array { element, stride, .. } => (index * stride.unwrap() as usize, element),
+            TypeDesc::RuntimeArray { element, stride, .. } => (index * stride.unwrap() as usize, element),
+            TypeDesc::Struct(s) => {
+                let field = &s.fields[index];
+                (field.offset as usize, field.ty)
+            }
+            _ => panic!("TypeDesc::indexed called on non-array/struct type"),
+        }
+    }
+
+    pub fn stride(&self) -> Option<usize> {
+        match self {
+            TypeDesc::Array { stride, .. } => stride.map(|s| s as usize),
+            TypeDesc::RuntimeArray { stride, .. } => stride.map(|s| s as usize),
+            _ => None,
+        }
+    }
+
+    pub fn field_or_element_offset(&self, index: usize) -> Option<usize> {
+        match self {
+            TypeDesc::Array { stride, .. } => stride.map(|s| index * s as usize),
+            TypeDesc::RuntimeArray { stride, .. } => stride.map(|s| index * s as usize),
+            TypeDesc::Struct(s) => Some(s.fields[index].offset as usize),
+            _ => None,
+        }
+    }
+
+    pub fn pretty(&'a self) -> PrettyType<'a> {
+        PrettyType(self)
+    }
 }
 
 pub struct Variable<'a> {
@@ -299,7 +364,7 @@ fn find_member_decoration<'spv>(
     decorations.get(&(struct_ty, member)).and_then(|decos| decos.iter().find(|d| d.id == deco).map(|d| d.operands))
 }
 
-fn create_shader_reflection_inner<'a>(arena: &'a Arena, spv: &[u32]) -> Result<&'a Shader<'a>, ParseError> {
+fn create_shader_reflection_inner<'a>(bump: &'a Bump, spv: &[u32]) -> Result<&'a Shader<'a>, ParseError> {
     let mut header: Header = Default::default();
     let mut tymap: HashMap<u32, &'a TypeDesc<'a>> = Default::default();
     let mut strings: HashMap<u32, &'a str> = Default::default();
@@ -331,12 +396,12 @@ fn create_shader_reflection_inner<'a>(arena: &'a Arena, spv: &[u32]) -> Result<&
         use spv::Op::*;
         match (op, inst.operands) {
             (String, &[result_id, ref data @ ..]) => {
-                let s = arena.alloc_str(parse_string(data)?.0);
+                let s = bump.alloc_str(parse_string(data)?.0);
                 strings.insert(result_id, s);
             }
             (EntryPoint, &[execution_model, id, ref name_interface @ ..]) => {
                 let (name, interface) = parse_string(name_interface)?;
-                let name = arena.alloc_str(name);
+                let name = bump.alloc_str(name);
                 let Some(execution_model) = spv::ExecutionModel::from_u32(execution_model) else {
                     eprintln!("unknown execution model {execution_model}");
                     continue;
@@ -344,11 +409,11 @@ fn create_shader_reflection_inner<'a>(arena: &'a Arena, spv: &[u32]) -> Result<&
                 tmp_entry_points.insert(id, EntryPointIncomplete { execution_model, name, interface });
             }
             (Name, &[target, ref name @ ..]) => {
-                let str = arena.alloc_str(parse_string(name)?.0);
+                let str = bump.alloc_str(parse_string(name)?.0);
                 names.insert(target, str);
             }
             (MemberName, &[ty, member, ref name @ ..]) => {
-                let str = arena.alloc_str(parse_string(name)?.0);
+                let str = bump.alloc_str(parse_string(name)?.0);
                 member_names.insert((ty, member), str);
             }
             (String, &[ref operands @ ..]) => {}
@@ -380,15 +445,15 @@ fn create_shader_reflection_inner<'a>(arena: &'a Arena, spv: &[u32]) -> Result<&
             //    decorations.entry(target).or_default().push(deco);
             //}
             (TypeVoid, &[result_id]) => {
-                let ty = arena.alloc(TypeDesc::Void);
+                let ty = bump.alloc(TypeDesc::Void);
                 tymap.insert(result_id, ty);
             }
             (TypeBool, &[result_id]) => {
-                let ty = arena.alloc(TypeDesc::Bool);
+                let ty = bump.alloc(TypeDesc::Bool);
                 tymap.insert(result_id, ty);
             }
             (TypeInt, &[result_id, width, signedness]) => {
-                let ty = arena.alloc(match (width, signedness) {
+                let ty = bump.alloc(match (width, signedness) {
                     (8, 0) => TypeDesc::Scalar(ScalarType::U8),
                     (8, 1) => TypeDesc::Scalar(ScalarType::I8),
                     (16, 0) => TypeDesc::Scalar(ScalarType::U16),
@@ -406,7 +471,7 @@ fn create_shader_reflection_inner<'a>(arena: &'a Arena, spv: &[u32]) -> Result<&
             }
             (TypeFloat, &[result_id, width, ref fp_encoding @ ..]) => {
                 assert!(fp_encoding.is_empty());
-                let ty = arena.alloc(match width {
+                let ty = bump.alloc(match width {
                     32 => TypeDesc::Scalar(ScalarType::F32),
                     _ => {
                         eprintln!("invalid float type width {}", width);
@@ -423,7 +488,7 @@ fn create_shader_reflection_inner<'a>(arena: &'a Arena, spv: &[u32]) -> Result<&
                         return Err(ParseError);
                     }
                 };
-                let ty = arena.alloc(TypeDesc::Vector(comp_ty, count as u8));
+                let ty = bump.alloc(TypeDesc::Vector(comp_ty, count as u8));
                 tymap.insert(result_id, ty);
             }
             (TypeMatrix, &[result_id, column_ty, col_count]) => {
@@ -434,11 +499,11 @@ fn create_shader_reflection_inner<'a>(arena: &'a Arena, spv: &[u32]) -> Result<&
                         return Err(ParseError);
                     }
                 };
-                let ty = arena.alloc(TypeDesc::Matrix {
+                let ty = bump.alloc(TypeDesc::Matrix {
                     scalar: column_ty.0,
                     rows: column_ty.1,
                     cols: col_count as u8,
-                    stride: Cell::new(None),
+                    stride: None,
                 });
                 tymap.insert(result_id, ty);
             }
@@ -446,15 +511,15 @@ fn create_shader_reflection_inner<'a>(arena: &'a Arena, spv: &[u32]) -> Result<&
                 TypeImage,
                 &[result_id, sampled_type, dim, depth, arrayed, ms, sampled, format, ref access_qualifier @ ..],
             ) => {
-                let ty = arena.alloc(TypeDesc::Image);
+                let ty = bump.alloc(TypeDesc::Image);
                 tymap.insert(result_id, ty);
             }
             (TypeSampler, &[result_id]) => {
-                let ty = arena.alloc(TypeDesc::Sampler);
+                let ty = bump.alloc(TypeDesc::Sampler);
                 tymap.insert(result_id, ty);
             }
             (TypeSampledImage, &[result_id, ref rest @ ..]) => {
-                let ty = arena.alloc(TypeDesc::SampledImage);
+                let ty = bump.alloc(TypeDesc::SampledImage);
                 tymap.insert(result_id, ty);
             }
             (TypeArray, &[result_id, elem_type, length]) => {
@@ -462,10 +527,10 @@ fn create_shader_reflection_inner<'a>(arena: &'a Arena, spv: &[u32]) -> Result<&
                     eprintln!("unknown element type {}", elem_type);
                     continue;
                 };
-                let ty = arena.alloc(TypeDesc::Array {
+                let ty = bump.alloc(TypeDesc::Array {
                     element,
                     len: length,
-                    stride: Cell::new(None),
+                    stride: None,
                 });
                 tymap.insert(result_id, ty);
             }
@@ -474,9 +539,9 @@ fn create_shader_reflection_inner<'a>(arena: &'a Arena, spv: &[u32]) -> Result<&
                     eprintln!("unknown element type {}", elem_type);
                     continue;
                 };
-                let ty = arena.alloc(TypeDesc::RuntimeArray {
+                let ty = bump.alloc(TypeDesc::RuntimeArray {
                     element,
-                    stride: Cell::new(None),
+                    stride: None,
                 });
                 tymap.insert(result_id, ty);
             }
@@ -497,10 +562,10 @@ fn create_shader_reflection_inner<'a>(arena: &'a Arena, spv: &[u32]) -> Result<&
                     fields.push(StructField { name, ty, offset });
                 }
 
-                let fields = arena.alloc_slice_clone(&fields);
+                let fields = bump.alloc_slice_clone(&fields);
                 let name = names.get(&result_id).copied().unwrap_or_default();
-                let ty = arena.alloc(StructType { name, fields });
-                let ty = arena.alloc(TypeDesc::Struct(ty));
+                let ty = bump.alloc(StructType { name, fields });
+                let ty = bump.alloc(TypeDesc::Struct(ty));
                 tymap.insert(result_id, ty);
             }
             (TypeOpaque, &[ref operands @ ..]) => {
@@ -533,7 +598,7 @@ fn create_shader_reflection_inner<'a>(arena: &'a Arena, spv: &[u32]) -> Result<&
                         }
                     }
                     Entry::Vacant(entry) => {
-                        entry.insert(arena.alloc(TypeDesc::Pointer(PointerType::new(storage_class, pointee_ty))));
+                        entry.insert(bump.alloc(TypeDesc::Pointer(PointerType::new(storage_class, pointee_ty))));
                     }
                 }
             }
@@ -542,7 +607,7 @@ fn create_shader_reflection_inner<'a>(arena: &'a Arena, spv: &[u32]) -> Result<&
                     eprintln!("unknown storage class {}", storage_class);
                     continue;
                 };
-                let ty = arena.alloc(TypeDesc::Pointer(PointerType::new_forward(sc)));
+                let ty = bump.alloc(TypeDesc::Pointer(PointerType::new_forward(sc)));
                 tymap.insert(result_id, ty);
             }
             (TypeFunction, &[ref operands @ ..]) => {}
@@ -575,7 +640,7 @@ fn create_shader_reflection_inner<'a>(arena: &'a Arena, spv: &[u32]) -> Result<&
     }
 
     // Resolve entry point parameters
-    let entry_points: &mut [EntryPoint] = arena.alloc_slice_fill_default(tmp_entry_points.len());
+    let entry_points: &mut [EntryPoint] = bump.alloc_slice_fill_default(tmp_entry_points.len());
 
     for (i, (_, ep)) in tmp_entry_points.iter().enumerate() {
         let mut params = vec![];
@@ -613,17 +678,22 @@ fn create_shader_reflection_inner<'a>(arena: &'a Arena, spv: &[u32]) -> Result<&
         }
 
         entry_points[i].name = ep.name;
-        entry_points[i].params = arena.alloc_slice_clone(&params);
+        entry_points[i].params = bump.alloc_slice_clone(&params);
     }
 
-    let shader = arena.alloc(Shader { entry_points });
+    let shader = bump.alloc(Shader { entry_points });
     Ok(shader)
 }
 
-impl ShaderReflection {
-    pub fn new(spirv: &[u32]) -> Result<ShaderReflection, ParseError> {
-        let arena = Arena::new();
-        let root = create_shader_reflection_inner(&arena, spirv)? as *const Shader as *const Shader<'static>;
-        Ok(ShaderReflection { arena, root })
+
+pub fn generate_shader_entry_point_reflection(spirv: &[u32], entry_point: &str) -> Result<&'static EntryPoint<'static>, ParseError> {
+    let bump = thread_local_bump_alloc();
+    let root = create_shader_reflection_inner(bump, spirv)?;
+    for ep in root.entry_points {
+        if ep.name == entry_point {
+            return Ok(ep);
+        }
     }
+    Err(ParseError)
 }
+

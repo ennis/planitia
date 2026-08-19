@@ -709,15 +709,16 @@ impl Drop for TracyGpuSpanGuard {
 
 #[doc(hidden)]
 pub fn tracy_begin_gpu_span(location: &'static tracy_client::SpanLocation) {
-    with_app_ctx(|app| {
-        app.begin_gpu_span(location);
-    })
+    //with_app_ctx(|app| {
+    //    app.begin_gpu_span(location);
+    //})
 }
 
+#[doc(hidden)]
 pub fn tracy_end_gpu_span() {
-    with_app_ctx(|app| {
-        app.end_gpu_span();
-    })
+    //with_app_ctx(|app| {
+    //    app.end_gpu_span();
+    //})
 }
 
 #[macro_export]

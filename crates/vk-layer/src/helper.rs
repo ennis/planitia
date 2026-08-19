@@ -7,6 +7,26 @@ use std::ops::Deref;
 use std::ptr;
 use std::ptr::NonNull;
 
+// Implementation detail of shader_module
+#[doc(hidden)]
+macro_rules! include_bytes_as_u32 {
+    // https://docs.rs/resb/latest/src/resb/binary.rs.html#25-44
+    ($path:literal) => {
+        const {
+            #[repr(align(4))]
+            pub struct AlignedAs<Bytes: ?Sized> {
+                pub bytes: Bytes,
+            }
+
+            const B: &[u8] = &AlignedAs { bytes: *include_bytes!($path) }.bytes;
+            // SAFETY: B is statically borrowed, 4-aligned, and the length is within
+            // the static slice (truncated to a multiple of four).
+            unsafe { core::slice::from_raw_parts(B.as_ptr() as *const u32, B.len() / size_of::<u32>()) }
+        }
+    };
+}
+pub(crate) use include_bytes_as_u32;
+
 #[derive(Copy, Clone, Default)]
 pub struct Image {
     pub image: vk::Image,
@@ -19,6 +39,8 @@ pub struct Buffer {
     pub buffer: vk::Buffer,
     pub memory: vk::DeviceMemory,
     pub ptr: *mut c_void,
+    pub size: usize,
+    pub device_address: vk::DeviceAddress,
 }
 
 unsafe impl Send for Buffer {}
@@ -32,7 +54,7 @@ pub struct Pipeline {
 }
 
 pub struct GraphicsPipelineHelperCreateInfo<'a> {
-    pub spirv: &'a [u8],
+    pub spirv: &'a [u32],
     pub vertex_entry: &'a CStr,
     pub fragment_entry: &'a CStr,
     pub vertex_attributes: &'a [vk::VertexInputAttributeDescription],
@@ -47,8 +69,8 @@ pub enum Descriptor {
     Sampler { binding: u32, sampler: vk::Sampler },
 }
 
-pub trait PrivateData: 'static {
-    type Handle: vk::Handle + Copy;
+pub trait HasPrivateData: vk::Handle + Copy {
+    type PrivateData;
 }
 
 /// Device & command pool wrapper with useful utilities.
@@ -92,27 +114,35 @@ impl DeviceHelper {
         DeviceHelper { dispatch, mem_props, command_pool, queue, private_data_slot }
     }
 
-    pub unsafe fn set_private_data<T: PrivateData>(&self, handle: T::Handle, data: T) -> *mut T {
+    pub unsafe fn set_private_data<H: HasPrivateData>(&self, handle: H, data: H::PrivateData) -> *mut H::PrivateData {
         let data_ptr = Box::into_raw(Box::new(data)) as *mut c_void as u64;
         self.dispatch.set_private_data(handle, self.private_data_slot, data_ptr).unwrap();
-        data_ptr as *mut T
+        data_ptr as *mut H::PrivateData
     }
 
-    pub unsafe fn get_private_data<T: PrivateData>(&self, handle: T::Handle) -> Option<NonNull<T>> {
+    pub unsafe fn get_private_data<H: HasPrivateData>(&self, handle: H) -> Option<NonNull<H::PrivateData>> {
         let data_ptr = self.dispatch.get_private_data(handle, self.private_data_slot);
         if data_ptr == 0 {
             None
         } else {
-            Some(NonNull::new_unchecked(data_ptr as *mut T))
+            Some(NonNull::new_unchecked(data_ptr as *mut H::PrivateData))
         }
     }
 
-    pub unsafe fn take_private_data<T: PrivateData>(&self, handle: T::Handle) -> Option<Box<T>> {
+    pub unsafe fn get_private_data_ref<'a, H: HasPrivateData>(&self, handle: H) -> Option<&'a H::PrivateData> {
+        self.get_private_data(handle).map(|p| p.as_ref())
+    }
+
+    pub unsafe fn get_private_data_mut<'a, H: HasPrivateData>(&self, handle: H) -> Option<&'a mut H::PrivateData> {
+        self.get_private_data(handle).map(|mut p| p.as_mut())
+    }
+
+    pub unsafe fn take_private_data<H: HasPrivateData>(&self, handle: H) -> Option<Box<H::PrivateData>> {
         let data_ptr = self.dispatch.get_private_data(handle, self.private_data_slot);
         if data_ptr == 0 {
             None
         } else {
-            let data = Box::from_raw(data_ptr as *mut T);
+            let data = Box::from_raw(data_ptr as *mut H::PrivateData);
             Some(data)
         }
     }
@@ -284,12 +314,15 @@ impl DeviceHelper {
         &self,
         create_info: &GraphicsPipelineHelperCreateInfo,
     ) -> Pipeline {
-        assert_eq!(create_info.spirv.len() % 4, 0, "SPIR-V size must be a multiple of 4");
-        let spv_words: Vec<u32> =
-            create_info.spirv.chunks_exact(4).map(|c| u32::from_le_bytes(c.try_into().unwrap())).collect();
-
         let shader_module = self
-            .create_shader_module(&vk::ShaderModuleCreateInfo::default().code(&spv_words), None)
+            .create_shader_module(
+                &vk::ShaderModuleCreateInfo {
+                    code_size: create_info.spirv.len() * 4,
+                    p_code: create_info.spirv.as_ptr(),
+                    ..Default::default()
+                },
+                None,
+            )
             .expect("failed to create shader module");
 
         let push_constant_range = vk::PushConstantRange {
@@ -423,6 +456,78 @@ impl DeviceHelper {
         Pipeline { pipeline, pipeline_layout, descriptor_set_layout }
     }
 
+    pub(crate) unsafe fn create_compute_pipeline_helper(
+        &self,
+        spirv: &[u32],
+        entry_point: &CStr,
+        bindings: &[vk::DescriptorSetLayoutBinding],
+        push_constants_size: usize,
+    ) -> Pipeline {
+        let shader_module = self
+            .create_shader_module(
+                &vk::ShaderModuleCreateInfo {
+                    flags: Default::default(),
+                    code_size: spirv.len() * 4,
+                    p_code: spirv.as_ptr(),
+                    ..Default::default()
+                },
+                None,
+            )
+            .expect("failed to create shader module");
+
+        let push_constant_range = vk::PushConstantRange {
+            stage_flags: vk::ShaderStageFlags::COMPUTE,
+            offset: 0,
+            size: push_constants_size as u32,
+        };
+
+        let descriptor_set_layout = self
+            .create_descriptor_set_layout(
+                &vk::DescriptorSetLayoutCreateInfo {
+                    flags: vk::DescriptorSetLayoutCreateFlags::PUSH_DESCRIPTOR_KHR,
+                    binding_count: bindings.len() as u32,
+                    p_bindings: bindings.as_ptr(),
+                    ..Default::default()
+                },
+                None,
+            )
+            .unwrap();
+
+        let pipeline_layout = self
+            .create_pipeline_layout(
+                &vk::PipelineLayoutCreateInfo {
+                    set_layout_count: 1,
+                    p_set_layouts: &descriptor_set_layout,
+                    push_constant_range_count: 1,
+                    p_push_constant_ranges: &push_constant_range,
+                    ..Default::default()
+                },
+                None,
+            )
+            .unwrap();
+
+        let compute_pipeline_create_info = vk::ComputePipelineCreateInfo {
+            stage: vk::PipelineShaderStageCreateInfo {
+                stage: vk::ShaderStageFlags::COMPUTE,
+                module: shader_module,
+                p_name: entry_point.as_ptr(),
+                ..Default::default()
+            },
+            layout: pipeline_layout,
+            ..Default::default()
+        };
+
+        let pipeline = self
+            .create_compute_pipelines(
+                vk::PipelineCache::null(),
+                std::slice::from_ref(&compute_pipeline_create_info),
+                None,
+            )
+            .expect("failed to create compute pipeline")[0];
+        self.destroy_shader_module(shader_module, None);
+        Pipeline { pipeline_layout, descriptor_set_layout, pipeline }
+    }
+
     pub(crate) unsafe fn create_color_image_helper(
         &self,
         format: vk::Format,
@@ -506,7 +611,7 @@ impl DeviceHelper {
             size: byte_size as u64,
             // We may not need TRANSFER_DST if there's no initial data,
             // but adding it most likely doesn't have any perf impact whatsoever
-            usage: usage | vk::BufferUsageFlags::TRANSFER_DST,
+            usage: usage | vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
             sharing_mode: vk::SharingMode::EXCLUSIVE,
             ..Default::default()
         };
@@ -514,9 +619,14 @@ impl DeviceHelper {
         let buffer = self.create_buffer(&create_info, None).unwrap();
         let buf_req = self.get_buffer_memory_requirements(buffer);
         let buf_mem_type = self.find_memory_type(buf_req.memory_type_bits, required_flags);
+        let allocate_flags = vk::MemoryAllocateFlagsInfo {
+            flags: vk::MemoryAllocateFlags::DEVICE_ADDRESS,
+            ..Default::default()
+        };
         let buffer_memory = self
             .allocate_memory(
                 &vk::MemoryAllocateInfo {
+                    p_next: &allocate_flags as *const _ as *const c_void,
                     allocation_size: buf_req.size,
                     memory_type_index: buf_mem_type,
                     ..Default::default()
@@ -529,7 +639,10 @@ impl DeviceHelper {
         if let Some(initial_data) = initial_data {
             ptr::copy_nonoverlapping(initial_data.as_ptr(), ptr.cast::<u8>(), initial_data.len());
         }
-        Buffer { buffer, memory: buffer_memory, ptr }
+
+        let device_address =
+            self.get_buffer_device_address(&vk::BufferDeviceAddressInfo { buffer, ..Default::default() });
+        Buffer { buffer, memory: buffer_memory, ptr, size: byte_size, device_address }
     }
 
     pub(crate) unsafe fn destroy_buffer_helper(&self, buffer: Buffer) {
@@ -604,18 +717,25 @@ impl DeviceHelper {
         (self.khr_swapchain.queue_present_khr)(queue, &present_info).result()
     }
 
-    pub(crate) unsafe fn push_constants_helper<T: Copy+'static>(
+    pub(crate) unsafe fn push_constants_helper<T: Copy + 'static>(
         &self,
         cmd_buf: vk::CommandBuffer,
         pipeline_layout: vk::PipelineLayout,
+        stages: vk::ShaderStageFlags,
         data: &T,
     ) {
         self.cmd_push_constants(
             cmd_buf,
             pipeline_layout,
-            vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+            stages,
             0,
             std::slice::from_raw_parts(data as *const _ as *const u8, size_of::<T>()),
         );
     }
+}
+
+fn spirv_u8_to_u32(spv: &[u8]) -> Vec<u32> {
+    // It would be better if the input slice was al
+    assert_eq!(spv.len() % 4, 0, "SPIR-V size must be a multiple of 4");
+    spv.chunks_exact(4).map(|c| u32::from_le_bytes(c.try_into().unwrap())).collect()
 }

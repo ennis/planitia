@@ -417,6 +417,7 @@ pub(crate) fn shader_module_impl(
 
     // Write PipelineCreateInfos
     for pipeline in module.pipelines.iter() {
+        let pipeline_name = &pipeline.name;
         let mut vertex = None;
         let mut fragment = None;
         let mut mesh = None;
@@ -533,6 +534,9 @@ pub(crate) fn shader_module_impl(
                             ..
                         };
                         let pipeline = gpu::GraphicsPipeline::new(CREATE_INFO)?;
+                        unsafe {
+                            gpu::set_debug_name(&pipeline, #pipeline_name);
+                        }
                         Ok(pipeline)
                     }
                 };
@@ -551,6 +555,9 @@ pub(crate) fn shader_module_impl(
                             ..
                         };
                         let pipeline = gpu::ComputePipeline::new(CREATE_INFO)?;
+                        unsafe {
+                            gpu::set_debug_name(&pipeline, #pipeline_name);
+                        }
                         Ok(pipeline)
                     }
                 };
@@ -625,13 +632,13 @@ pub(crate) fn shader_module_impl(
     };
 
     // dump expansion to .txt file
-    if let Ok(out_dir) = std::env::var("CARGO_MANIFEST_DIR") {
-        let dump_dir = std::path::Path::new(&out_dir).join("target").join("macro-expansions");
-        let _ = std::fs::create_dir_all(&dump_dir);
-        let dump_path = dump_dir.join(format!("{}.txt", mod_name));
-        let _ = std::fs::write(&dump_path, output.to_string());
-        eprintln!("macro expansion written to {}", dump_path.display());
-    }
+    // if let Ok(out_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+    //     let dump_dir = std::path::Path::new(&out_dir).join("target").join("macro-expansions");
+    //     let _ = std::fs::create_dir_all(&dump_dir);
+    //     let dump_path = dump_dir.join(format!("{}.txt", mod_name));
+    //     let _ = std::fs::write(&dump_path, output.to_string());
+    //     eprintln!("macro expansion written to {}", dump_path.display());
+    // }
 
     Ok(output)
 }

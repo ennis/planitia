@@ -1,70 +1,78 @@
-use crate::helper::PrivateData;
-use crate::reflection::{EntryPoint, ShaderReflection};
+use crate::helper::HasPrivateData;
+use crate::reflection::{generate_shader_entry_point_reflection, EntryPoint, ShaderReflection};
 use crate::util::find_next;
-use crate::{device_state, DeviceState};
+use crate::DeviceState;
 use ash::vk;
-use std::slice;
+use std::ffi::CStr;
+use std::slice::from_raw_parts;
 
 #[derive(Default)]
 pub struct PipelineData {
-    // Shader reflection information
-    vertex_refl: Option<ShaderReflection>,
-    fragment_refl: Option<ShaderReflection>,
-    mesh_refl: Option<ShaderReflection>,
-    task_refl: Option<ShaderReflection>,
-    compute_refl: Option<ShaderReflection>,
+    pub name: String,
+    // Entry point reflection information
+    pub vertex: Option<&'static EntryPoint<'static>>,
+    pub fragment: Option<&'static EntryPoint<'static>>,
+    pub mesh: Option<&'static EntryPoint<'static>>,
+    pub task: Option<&'static EntryPoint<'static>>,
+    pub compute: Option<&'static EntryPoint<'static>>,
 }
 
-impl PrivateData for PipelineData {
-    type Handle = vk::Pipeline;
+unsafe fn create_graphics_pipeline_data(create_info: &vk::GraphicsPipelineCreateInfo) -> PipelineData {
+    let mut data = PipelineData::default();
+    let stages = from_raw_parts(create_info.p_stages, create_info.stage_count as usize);
+    for (i, stage) in stages.iter().enumerate() {
+        let ep_name = CStr::from_ptr(stage.p_name).to_string_lossy();
+        if let Some(smci) = find_next::<vk::ShaderModuleCreateInfo>(stage) {
+            // Generate shader reflection
+            let spirv = from_raw_parts((*smci).p_code, (*smci).code_size / 4);
+            let Ok(ep) = generate_shader_entry_point_reflection(spirv, &ep_name) else {
+                eprintln!("failed to generate reflection for shader");
+                continue;
+            };
+            match stage.stage {
+                vk::ShaderStageFlags::VERTEX => data.vertex = Some(ep),
+                vk::ShaderStageFlags::FRAGMENT => data.fragment = Some(ep),
+                vk::ShaderStageFlags::MESH_EXT => data.mesh = Some(ep),
+                vk::ShaderStageFlags::TASK_EXT => data.task = Some(ep),
+                vk::ShaderStageFlags::COMPUTE => data.compute = Some(ep),
+                _ => {
+                    // unsupported stage, drop the reflection and continue, but we should probably
+                    // emit a warning
+                }
+            }
+        }
+        if i != 0 {
+            data.name.push('/');
+        }
+        // Set a default name composed of all the entry point names (hopefully they are not all called "main").
+        // This may be later overridden by vkSetDebugUtilsObjectName.
+        data.name.push_str(&ep_name);
+    }
+    data
+}
+
+unsafe fn create_compute_pipeline_data(create_info: &vk::ComputePipelineCreateInfo) -> PipelineData {
+    let mut data = PipelineData::default();
+    let stage = &create_info.stage;
+    if let Some(smci) = find_next::<vk::ShaderModuleCreateInfo>(stage) {
+        let ep_name = CStr::from_ptr(stage.p_name).to_string_lossy();
+        let spirv = from_raw_parts((*smci).p_code, (*smci).code_size / 4);
+        let Ok(ep) = generate_shader_entry_point_reflection(spirv, &ep_name) else {
+            eprintln!("failed to generate reflection for shader");
+            return data;
+        };
+        data.compute = Some(ep);
+        // Same as for graphics pipelines, this may be overridden by vkSetDebugUtilsObjectName.
+        data.name = ep_name.into_owned();
+    }
+    data
+}
+
+impl HasPrivateData for vk::Pipeline {
+    type PrivateData = PipelineData;
 }
 
 impl DeviceState {
-    unsafe fn create_graphics_pipeline_state(&self, create_info: &vk::GraphicsPipelineCreateInfo) -> PipelineData {
-        let mut pipeline_state = PipelineData::default();
-        let stages = slice::from_raw_parts(create_info.p_stages, create_info.stage_count as usize);
-        for stage in stages {
-            if let Some(smci) = find_next::<vk::ShaderModuleCreateInfo>(stage) {
-                let refl = match stage.stage {
-                    vk::ShaderStageFlags::VERTEX => &mut pipeline_state.vertex_refl,
-                    vk::ShaderStageFlags::FRAGMENT => &mut pipeline_state.fragment_refl,
-                    vk::ShaderStageFlags::MESH_EXT => &mut pipeline_state.mesh_refl,
-                    vk::ShaderStageFlags::TASK_EXT => &mut pipeline_state.task_refl,
-                    vk::ShaderStageFlags::COMPUTE => &mut pipeline_state.compute_refl,
-                    _ => {
-                        // TODO warning unsupported stage
-                        continue;
-                    }
-                };
-
-                let spirv = slice::from_raw_parts((*smci).p_code, (*smci).code_size / 4);
-                let Ok(reflection) = ShaderReflection::new(spirv) else {
-                    eprintln!("failed to generate reflection for shader");
-                    continue;
-                };
-                for ep in reflection.entry_points() {
-                    dump_entry_point_reflection(ep);
-                }
-                *refl = Some(reflection);
-            }
-        }
-        pipeline_state
-    }
-
-    unsafe fn create_compute_pipeline_state(&self, create_info: &vk::ComputePipelineCreateInfo) -> PipelineData {
-        let mut pipeline_state = PipelineData::default();
-        let stage = &create_info.stage;
-        if let Some(smci) = find_next::<vk::ShaderModuleCreateInfo>(stage) {
-            let spirv = slice::from_raw_parts((*smci).p_code, (*smci).code_size / 4);
-            let Ok(reflection) = ShaderReflection::new(spirv) else {
-                eprintln!("failed to generate reflection for shader");
-                return pipeline_state;
-            };
-            pipeline_state.compute_refl = Some(reflection);
-        }
-        pipeline_state
-    }
-
     pub unsafe fn hook_create_graphics_pipelines(
         &self,
         device: vk::Device,
@@ -87,13 +95,13 @@ impl DeviceState {
             return r;
         }
 
-        let create_infos = slice::from_raw_parts(p_create_infos, create_info_count as usize);
-        let pipelines = slice::from_raw_parts(p_pipelines, create_info_count as usize);
+        let create_infos = from_raw_parts(p_create_infos, create_info_count as usize);
+        let pipelines = from_raw_parts(p_pipelines, create_info_count as usize);
 
         for (i, create_info) in create_infos.iter().enumerate() {
-            self.tracked_resources.lock().unwrap().pipelines.push(pipelines[i]);
-            let pipeline_state = self.create_graphics_pipeline_state(create_info);
-            self.set_private_data(pipelines[i], pipeline_state);
+            self.tracked_resources.lock().pipelines.push(pipelines[i]);
+            let data = create_graphics_pipeline_data(create_info);
+            self.set_private_data(pipelines[i], data);
         }
 
         vk::Result::SUCCESS
@@ -121,13 +129,13 @@ impl DeviceState {
             return r;
         }
 
-        let create_infos = slice::from_raw_parts(p_create_infos, create_info_count as usize);
-        let pipelines = slice::from_raw_parts(p_pipelines, create_info_count as usize);
+        let create_infos = from_raw_parts(p_create_infos, create_info_count as usize);
+        let pipelines = from_raw_parts(p_pipelines, create_info_count as usize);
 
         for (i, create_info) in create_infos.iter().enumerate() {
-            self.tracked_resources.lock().unwrap().pipelines.push(pipelines[i]);
-            let pipeline_state = self.create_compute_pipeline_state(create_info);
-            self.set_private_data(pipelines[i], pipeline_state);
+            self.tracked_resources.lock().pipelines.push(pipelines[i]);
+            let data = create_compute_pipeline_data(create_info);
+            self.set_private_data(pipelines[i], data);
         }
 
         vk::Result::SUCCESS
@@ -139,6 +147,7 @@ impl DeviceState {
         pipeline: vk::Pipeline,
         p_allocator: *const vk::AllocationCallbacks<'_>,
     ) {
+        let _ = self.take_private_data(pipeline);
         (self.fp_v1_0().destroy_pipeline)(device, pipeline, p_allocator);
     }
 }

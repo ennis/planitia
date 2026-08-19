@@ -3,7 +3,7 @@
 use std::ffi::CStr;
 use std::mem;
 use std::ops::Deref;
-use ash::{khr, vk};
+use ash::{ext, khr, vk};
 use ash::vk::{PFN_vkGetDeviceProcAddr, PFN_vkGetInstanceProcAddr};
 use ash_layer::{get_device_chain_info, LayerFunction, PFN_vkSetDeviceLoaderData, PFN_vk_layerGetPhysicalDeviceProcAddr};
 use vulkan_headers::vulkan::vulkan as vkh;
@@ -101,6 +101,7 @@ pub struct DeviceDispatch {
     pub next_get_device_proc_addr: vk::PFN_vkGetDeviceProcAddr,
     pub set_device_loader_data: PFN_vkSetDeviceLoaderData,
     pub khr_swapchain: khr::swapchain::DeviceFn,
+    pub ext_debug_utils: ext::debug_utils::DeviceFn,
     pub khr_dynamic_rendering: khr::dynamic_rendering::DeviceFn,
     pub khr_push_descriptors: khr::push_descriptor::DeviceFn,
     pub ext_descriptor_heap: ExtDescriptorHeapDevice,
@@ -140,6 +141,7 @@ impl DeviceDispatch {
         let khr_swapchain = khr::swapchain::DeviceFn::load(load_fn);
         let khr_dynamic_rendering = khr::dynamic_rendering::DeviceFn::load(load_fn);
         let khr_push_descriptors = khr::push_descriptor::DeviceFn::load(load_fn);
+        let ext_debug_utils = ext::debug_utils::DeviceFn::load(load_fn);
         let ext_descriptor_heap = ExtDescriptorHeapDevice::load(device, next_get_device_proc_addr);
 
         Ok(DeviceDispatch {
@@ -147,6 +149,7 @@ impl DeviceDispatch {
             next_get_device_proc_addr,
             set_device_loader_data,
             khr_swapchain,
+            ext_debug_utils,
             khr_dynamic_rendering,
             khr_push_descriptors,
             ext_descriptor_heap,

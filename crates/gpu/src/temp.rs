@@ -93,6 +93,23 @@ impl ThreadLocalAllocator {
         }));
     }
 
+    fn alloc_dedicated(&mut self, layout: Layout) -> TempAlloc {
+        let buf = BufferUntyped::new(BufferCreateInfo {
+            len: layout.size(),
+            usage: TEMP_BUFFER_USAGE,
+            memory_location: MemoryLocation::CpuToGpu,
+        });
+        let alloc =
+            TempAlloc { buffer: buf.handle(), offset: 0, host_addr: buf.as_mut_ptr_u8(), dev_addr: buf.ptr().raw };
+        // Schedule for deletion immediately since we're not going to allocate anything else in it.
+        // We don't recycle dedicated buffers.
+        drop(buf); // buf is dropped automatically on return, but spell it out for clarity
+
+        // `buf` is dropped, but the underlying resources are not destroyed until the current
+        // frame has completed, so this is OK.
+        alloc
+    }
+
     /// Allocates memory in a temporary buffer.
     pub(super) fn alloc_raw(&mut self, layout: Layout) -> TempAlloc {
         let size = layout.size();
@@ -100,20 +117,7 @@ impl ThreadLocalAllocator {
 
         // If the allocation size is bigger than the threshold, allocate a dedicated buffer for it.
         if size >= DEDICATED_BUFFER_THRESHOLD_SIZE {
-            let buf = BufferUntyped::new(BufferCreateInfo {
-                len: size,
-                usage: TEMP_BUFFER_USAGE,
-                memory_location: MemoryLocation::CpuToGpu,
-            });
-            let alloc =
-                TempAlloc { buffer: buf.handle(), offset: 0, host_addr: buf.as_mut_ptr_u8(), dev_addr: buf.ptr().raw };
-            // Schedule for deletion immediately since we're not going to allocate anything else in it.
-            // We don't recycle dedicated buffers.
-            drop(buf); // buf is dropped automatically on return, but spell it out for clarity
-
-            // `buf` is dropped, but the underlying resources are not destroyed until the current
-            // frame has completed, so this is OK.
-            return alloc;
+            return self.alloc_dedicated(layout);
         }
 
         // Ensure that there's enough space in the current chunk, otherwise retire the current chunk

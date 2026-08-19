@@ -21,7 +21,7 @@ threadbound = "0.1.8"
 mlua = { version = "0.11.1", features = ["luau", "async"], optional = true }
 log = "0.4.27"
 env_logger = "0.11.8"
-tracy-client = "0.18.4"
+tracy-client = { version = "0.18.4", default-features = false }
 bumpalo = "3.19.0"
 thiserror = "2.0.16"
 egui = { version = "0.32.1", features = ["persistence"] }
@@ -86,3 +86,4 @@ shadertool = { workspace = true }
 [features]
 hot_reload = ["dep:shadertool"]
 lua = ["dep:mlua"]
+tracy = ["tracy-client/default"]

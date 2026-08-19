@@ -207,128 +207,6 @@ impl CommandBuffer {
         }
     }
 
-    /*unsafe fn bind_bindless_descriptor_sets(
-        &mut self,
-        command_buffer: vk::CommandBuffer,
-        bind_point: vk::PipelineBindPoint,
-        pipeline_layout: vk::PipelineLayout,
-    ) {
-        let device = Device::instance();
-        device.raw.cmd_bind_descriptor_sets(
-            command_buffer,
-            bind_point,
-            pipeline_layout,
-            0,
-            &[device.descriptor_table.set],
-            &[],
-        );
-    }*/
-
-    /*unsafe fn do_cmd_push_descriptor_set(
-        &mut self,
-        command_buffer: vk::CommandBuffer,
-        bind_point: vk::PipelineBindPoint,
-        pipeline_layout: vk::PipelineLayout,
-        set: u32,
-        bindings: &[(u32, Descriptor)],
-    ) {
-        // It's important to set the capacity beforehand to avoid resizing the vector and
-        // invalidating the pointers in `descriptor_writes`.
-        let mut descriptors = Vec::with_capacity(bindings.len());
-        let mut descriptor_writes = Vec::with_capacity(bindings.len());
-
-        for (binding, descriptor) in bindings {
-            match *descriptor {
-                Descriptor::SampledImage { image: image_view, layout } => {
-                    descriptors.push(DescriptorBufferOrImage {
-                        image: vk::DescriptorImageInfo {
-                            sampler: Default::default(),
-                            image_view: image_view.view_handle(),
-                            image_layout: layout,
-                        },
-                    });
-                    descriptor_writes.push(vk::WriteDescriptorSet {
-                        dst_binding: *binding,
-                        dst_array_element: 0,
-                        descriptor_count: 1,
-                        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
-                        p_image_info: &descriptors.last().unwrap().image,
-                        ..Default::default()
-                    });
-                }
-                Descriptor::StorageImage { image: image_view, layout } => {
-                    descriptors.push(DescriptorBufferOrImage {
-                        image: vk::DescriptorImageInfo {
-                            sampler: Default::default(),
-                            image_view: image_view.view_handle(),
-                            image_layout: layout,
-                        },
-                    });
-                    descriptor_writes.push(vk::WriteDescriptorSet {
-                        dst_binding: *binding,
-                        dst_array_element: 0,
-                        descriptor_count: 1,
-                        descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
-                        p_image_info: &descriptors.last().unwrap().image,
-                        ..Default::default()
-                    });
-                }
-                Descriptor::UniformBuffer { buffer, offset, size } => {
-                    descriptors.push(DescriptorBufferOrImage {
-                        buffer: vk::DescriptorBufferInfo { buffer: buffer.handle(), offset, range: size },
-                    });
-                    descriptor_writes.push(vk::WriteDescriptorSet {
-                        dst_binding: *binding,
-                        dst_array_element: 0,
-                        descriptor_count: 1,
-                        descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-                        p_buffer_info: &descriptors.last().unwrap().buffer,
-                        ..Default::default()
-                    });
-                }
-                Descriptor::StorageBuffer { buffer, offset, size } => {
-                    descriptors.push(DescriptorBufferOrImage {
-                        buffer: vk::DescriptorBufferInfo { buffer: buffer.handle(), offset, range: size },
-                    });
-                    descriptor_writes.push(vk::WriteDescriptorSet {
-                        dst_binding: *binding,
-                        dst_array_element: 0,
-                        descriptor_count: 1,
-                        descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-                        p_buffer_info: &descriptors.last().unwrap().buffer,
-                        ..Default::default()
-                    });
-                }
-                Descriptor::Sampler { ref sampler } => {
-                    descriptors.push(DescriptorBufferOrImage {
-                        image: vk::DescriptorImageInfo {
-                            sampler: sampler.handle(),
-                            image_view: Default::default(),
-                            image_layout: Default::default(),
-                        },
-                    });
-                    descriptor_writes.push(vk::WriteDescriptorSet {
-                        dst_binding: *binding,
-                        dst_array_element: 0,
-                        descriptor_count: 1,
-                        descriptor_type: vk::DescriptorType::SAMPLER,
-                        p_image_info: &descriptors.last().unwrap().image,
-                        ..Default::default()
-                    });
-                }
-            }
-        }
-
-        unsafe {
-            Device::instance().ext.push_descriptor.cmd_push_descriptor_set(
-                command_buffer,
-                bind_point,
-                pipeline_layout,
-                set,
-                &descriptor_writes,
-            );
-        }
-    }*/
 
     /// Internal function to emit an image memory barrier.
     ///
@@ -351,14 +229,6 @@ impl CommandBuffer {
     fn set_push_data<T: Data>(&mut self, cb: vk::CommandBuffer, params: PushDataSource<T>) {
         // None of the relevant drivers on desktop care about the actual stages,
         // only if it's graphics, compute, or ray tracing.
-        /*let stages = match bind_point {
-            vk::PipelineBindPoint::GRAPHICS => {
-                vk::ShaderStageFlags::ALL_GRAPHICS | vk::ShaderStageFlags::MESH_EXT | vk::ShaderStageFlags::TASK_EXT
-            }
-            vk::PipelineBindPoint::COMPUTE => vk::ShaderStageFlags::COMPUTE,
-            _ => panic!("unsupported bind point"),
-        };*/
-
         let device = Device::instance();
 
         unsafe {
@@ -435,34 +305,6 @@ impl CommandBuffer {
         }
     }
 
-    /*#[deprecated(note = "use root params and bindless resources instead")]
-    pub unsafe fn bind_descriptor_set(&mut self, index: u32, set: vk::DescriptorSet) {
-        let cb = self.get_or_create_command_buffer();
-        // FIXME: why is it COMPUTE?
-        Device::instance().raw.cmd_bind_descriptor_sets(
-            cb,
-            vk::PipelineBindPoint::COMPUTE,
-            self.pipeline_layout,
-            index,
-            &[set],
-            &[],
-        )
-    }*/
-
-    /*/// Sets push descriptors.
-    #[deprecated(note = "use root params and bindless resources instead")]
-    pub fn push_descriptors(&mut self, set: u32, bindings: &[(u32, Descriptor)]) {
-        assert!(
-            self.pipeline_layout != vk::PipelineLayout::null(),
-            "must have a pipeline bound before binding arguments"
-        );
-
-        let cb = self.get_or_create_command_buffer();
-        unsafe {
-            // FIXME: why is it COMPUTE?
-            self.do_cmd_push_descriptor_set(cb, vk::PipelineBindPoint::COMPUTE, self.pipeline_layout, set, bindings);
-        }
-    }*/
 
     /// Writes values to a buffer.
     ///
@@ -482,13 +324,6 @@ impl CommandBuffer {
         unsafe {
             Device::instance().raw.cmd_bind_pipeline(cb, vk::PipelineBindPoint::COMPUTE, pipeline.pipeline);
         }
-        /*unsafe {
-            if pipeline.bindless {
-                self.bind_bindless_descriptor_sets(cb, vk::PipelineBindPoint::COMPUTE, pipeline.pipeline_layout);
-            }
-        }
-        self.pipeline_layout = pipeline.pipeline_layout;
-        // TODO: we need to hold a reference to the pipeline until the command buffers are submitted*/
     }
 
     /// Dispatches compute work items.

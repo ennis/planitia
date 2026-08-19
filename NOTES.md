@@ -1001,4 +1001,3 @@ end_frame.
 # VK_EXT_descriptor_heap 
 
 How do we map global variables in slang to PushData?
-
