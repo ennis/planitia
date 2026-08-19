@@ -19,5 +19,5 @@ num-traits = "0.2.19"
 ansi-parser = "0.9.1"
 color-print = "0.3.7"
 parking_lot = "0.12.5"
-windows = { version =  "0.62.2", features = ["Win32_UI_Input_KeyboardAndMouse"] }
+windows = { version =  "0.62.2", features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
 imgui = { git= "https://github.com/imgui-rs/imgui-rs.git",  rev = "e06b05c0f97062af4ea7856ecc5a7216feb3ace2" }

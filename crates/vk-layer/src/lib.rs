@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
 mod bump;
+mod debugger;
 mod dispatch;
 mod helper;
 mod init;
@@ -8,16 +9,17 @@ mod overlay;
 mod reflection;
 mod state_tracker;
 mod util;
-mod debugger;
 
 use crate::bump::BumpAllocator;
+use crate::debugger::Debugger;
 use crate::dispatch::{DeviceDispatch, InstanceDispatch};
-use crate::helper::{include_bytes_as_u32, Buffer, DeviceHelper, Pipeline};
+use crate::helper::{DeviceHelper, Pipeline};
 use crate::init::{layer_vkCreateDevice, layer_vkCreateInstance, layer_vkDestroyDevice, layer_vkDestroyInstance};
+use crate::overlay::gui::GuiState;
 use crate::overlay::input::InputState;
-use crate::overlay::renderer::{render_overlay, FrameResources, OverlayResources, StaticResources};
+use crate::overlay::renderer::OverlayResources;
 use crate::state_tracker::buffer::AddressMap;
-use crate::state_tracker::command::{CmdKey, Command};
+use crate::state_tracker::command::Command;
 use ash::vk;
 use ash::vk::{
     Handle, PFN_vkAllocateCommandBuffers, PFN_vkBeginCommandBuffer, PFN_vkBindBufferMemory, PFN_vkBindBufferMemory2,
@@ -45,9 +47,6 @@ use vulkan_headers::vulkan::vulkan::{
     VkCommandBuffer, VkDevice, VkHostAddressRangeEXT, VkPushDataInfoEXT, VkResourceDescriptorInfoEXT, VkResult,
     VkSamplerCreateInfo,
 };
-use crate::debugger::Debugger;
-use crate::overlay::gui::GuiState;
-use crate::overlay::imgui::ImGuiRenderer;
 // ---------------------------------------------------------------------------
 // Per-instance and per-device data
 // ---------------------------------------------------------------------------
@@ -98,19 +97,16 @@ pub struct CmdId {
     pub cmd: usize,
 }
 
-
 /// Per-device layer state
 ///
 /// This holds the state tracker and resources for rendering the overlay.
 pub struct DeviceState {
     pub helper: DeviceHelper,
-    pub frame_resources: Mutex<FrameResources>,
-    pub static_resources: StaticResources,
-    pub overlay_resources: Mutex<OverlayResources>,
     pub tracked_resources: Mutex<TrackedResources>,
     pub addrmap: Mutex<AddressMap>,
     pub submissions: Mutex<SubmissionState>,
     pub gui: Mutex<GuiState>,
+    pub overlay: OverlayResources,
     pub debugger: Mutex<Debugger>,
     pub input: Mutex<InputState>,
     pub bump: Mutex<BumpAllocator>,
@@ -142,25 +138,20 @@ impl DeviceState {
 
         let mem_props = instance_dispatch.d.get_physical_device_memory_properties(physical_device);
         let helper = DeviceHelper::new(dispatch, mem_props, first_queue_family);
-
-        let static_resources = overlay::renderer::initialize_static_resources(&helper);
-        let frame_resources = overlay::renderer::initialize_frame_resources(&helper);
         let tracked_resources = TrackedResources { pipelines: Vec::new(), swapchains: Vec::new() };
-        let overlay_resources = OverlayResources::default();
+        let overlay_resources = OverlayResources::new(&helper);
         let debugger = Debugger::new(&helper);
 
         DeviceState {
             helper,
-            static_resources,
-            frame_resources: Mutex::new(frame_resources),
             tracked_resources: Mutex::new(tracked_resources),
-            overlay_resources: Mutex::new(overlay_resources),
             addrmap: Mutex::new(AddressMap::new()),
             submissions: Mutex::new(SubmissionState::new()),
             debugger: Mutex::new(debugger),
             input: Mutex::new(InputState::new()),
             bump: Mutex::new(BumpAllocator::new()),
             gui: Mutex::new(GuiState::new()),
+            overlay: overlay_resources,
         }
     }
 

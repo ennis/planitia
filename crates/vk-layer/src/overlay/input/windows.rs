@@ -1,10 +1,11 @@
-use crate::overlay::imgui::with_imgui_context;
+use crate::overlay::renderer::with_imgui_context;
 use std::time::{Duration, Instant};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, VIRTUAL_KEY, VK_CONTROL, VK_DOWN, VK_ESCAPE, VK_LEFT, VK_RETURN, VK_RIGHT, VK_UP,
+    GetAsyncKeyState, VIRTUAL_KEY, VK_CONTROL, VK_DOWN, VK_ESCAPE, VK_LBUTTON, VK_LEFT, VK_MBUTTON, VK_RBUTTON,
+    VK_RETURN, VK_RIGHT, VK_UP,
 };
 
-#[derive(Copy,Clone,Debug, Eq,PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum KeyEventKind {
     Press,
     Repeat,
@@ -24,9 +25,9 @@ enum KeyCode {
     KeyMax,
 }
 
-
 const NKEYS: usize = KeyCode::KeyMax as usize;
-static KEYS: [VIRTUAL_KEY; NKEYS] = [VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN, VK_CONTROL, VK_RETURN, VK_ESCAPE];
+static KEYS: [VIRTUAL_KEY; NKEYS] =
+    [VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN, VK_CONTROL, VK_RETURN, VK_ESCAPE];
 static IMGUI_KEYS: [imgui::Key; NKEYS] = [
     imgui::Key::LeftArrow,
     imgui::Key::RightArrow,
@@ -34,7 +35,7 @@ static IMGUI_KEYS: [imgui::Key; NKEYS] = [
     imgui::Key::DownArrow,
     imgui::Key::LeftCtrl,
     imgui::Key::Enter,
-    imgui::Key::Escape,
+    imgui::Key::Escape
 ];
 
 static INITIAL_REPEAT_DELAY: Duration = Duration::from_millis(300);
@@ -91,8 +92,17 @@ impl InputState {
         }
         self.keyb = keyb;
 
+        //let mut cursor_pos = POINT { x: 0, y: 0 };
+        //unsafe {
+        //    GetCursorPos(&mut cursor_pos).unwrap();
+        //}
+
         with_imgui_context(|ctx| {
             let mut io = ctx.io_mut();
+            //io.mouse_pos = [cursor_pos.x as f32, cursor_pos.y as f32];
+            //io.mouse_down[0] = self.keyb[KeyCode::MouseLeft as usize];
+            //io.mouse_down[1] = self.keyb[KeyCode::MouseRight as usize];
+            //io.mouse_down[2] = self.keyb[KeyCode::MouseMiddle as usize];
             for i in 0..NKEYS {
                 if let Some(event) = self.events[i] {
                     match event {
