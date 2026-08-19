@@ -47,6 +47,7 @@ use vulkan_headers::vulkan::vulkan::{
 };
 use crate::debugger::Debugger;
 use crate::overlay::gui::GuiState;
+use crate::overlay::imgui::ImGuiRenderer;
 // ---------------------------------------------------------------------------
 // Per-instance and per-device data
 // ---------------------------------------------------------------------------

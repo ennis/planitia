@@ -1,4 +1,3 @@
-use crate::overlay::input::KeyCode::{KeyControl, KeyDown, KeyEnter, KeyLeft, KeyRight, KeyUp};
 use crate::overlay::renderer::{OverlayRenderer, SHUFFLE_ONE, SHUFFLE_TEX1_NOALPHA};
 use crate::{DeviceState, SubmissionState, TrackedResources};
 use color_print::{cwrite, cwriteln};
@@ -19,6 +18,18 @@ impl GuiState {
 }
 
 impl DeviceState {
+
+    pub fn draw_imgui(&self, ui: &mut imgui::Ui) {
+        ui.window("Debug Layer")
+            .size([400.0, 300.0], imgui::Condition::FirstUseEver)
+            .build(|| {
+                let sbs = self.submissions.lock();
+                let n_cmd = sbs.subs.iter().map(|sub| sub.commands.len()).sum::<usize>();
+                ui.text(format!("Debug layer active"));
+                ui.text(format!("Total commands: {}", n_cmd));
+            });
+    }
+
     pub unsafe fn draw_gui(&self, ovr: &mut OverlayRenderer, trk: &TrackedResources, sbs: &SubmissionState) {
         let mut gui = self.gui.lock();
         let input = self.input.lock();
@@ -40,26 +51,26 @@ impl DeviceState {
 
         let n_cmd = sbs.subs.iter().map(|sub| sub.commands.len()).sum::<usize>();
 
-        {
-            let ctrl = input.key_down(KeyControl);
-            if ctrl {
-                if input.pressed(KeyDown) {
-                    gui.lens_y += 1;
-                } else if input.pressed(KeyUp) {
-                    gui.lens_y -= 1;
-                } else if input.pressed(KeyLeft) {
-                    gui.lens_x -= 1;
-                } else if input.pressed(KeyRight) {
-                    gui.lens_x += 1;
-                }
-            } else {
-                if input.pressed(KeyDown) {
-                    gui.selected = (gui.selected + 1) % n_cmd;
-                } else if input.pressed(KeyUp) {
-                    gui.selected = (gui.selected + n_cmd - 1) % n_cmd;
-                }
-            }
-        }
+        //{
+        //    let ctrl = input.key_down(KeyControl);
+        //    if ctrl {
+        //        if input.pressed(KeyDown) {
+        //            gui.lens_y += 1;
+        //        } else if input.pressed(KeyUp) {
+        //            gui.lens_y -= 1;
+        //        } else if input.pressed(KeyLeft) {
+        //            gui.lens_x -= 1;
+        //        } else if input.pressed(KeyRight) {
+        //            gui.lens_x += 1;
+        //        }
+        //    } else {
+        //        if input.pressed(KeyDown) {
+        //            gui.selected = (gui.selected + 1) % n_cmd;
+        //        } else if input.pressed(KeyUp) {
+        //            gui.selected = (gui.selected + n_cmd - 1) % n_cmd;
+        //        }
+        //    }
+        //}
 
         cwriteln!(ovr, "<red>Debug layer active</>");
 

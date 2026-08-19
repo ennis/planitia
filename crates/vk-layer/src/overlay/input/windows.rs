@@ -1,11 +1,41 @@
-use crate::overlay::input::{KeyCode, KeyEventKind};
+use crate::overlay::imgui::with_imgui_context;
 use std::time::{Duration, Instant};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, VIRTUAL_KEY, VK_CONTROL, VK_DOWN, VK_ESCAPE, VK_LEFT, VK_RETURN, VK_RIGHT, VK_UP,
 };
 
+#[derive(Copy,Clone,Debug, Eq,PartialEq)]
+enum KeyEventKind {
+    Press,
+    Repeat,
+    Release,
+}
+
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum KeyCode {
+    KeyLeft = 0,
+    KeyRight,
+    KeyUp,
+    KeyDown,
+    KeyControl,
+    KeyEnter,
+    KeyEscape,
+    KeyMax,
+}
+
+
 const NKEYS: usize = KeyCode::KeyMax as usize;
 static KEYS: [VIRTUAL_KEY; NKEYS] = [VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN, VK_CONTROL, VK_RETURN, VK_ESCAPE];
+static IMGUI_KEYS: [imgui::Key; NKEYS] = [
+    imgui::Key::LeftArrow,
+    imgui::Key::RightArrow,
+    imgui::Key::UpArrow,
+    imgui::Key::DownArrow,
+    imgui::Key::LeftCtrl,
+    imgui::Key::Enter,
+    imgui::Key::Escape,
+];
 
 static INITIAL_REPEAT_DELAY: Duration = Duration::from_millis(300);
 static REPEAT_DELAY: Duration = Duration::from_millis(20);
@@ -60,6 +90,25 @@ impl InputState {
             }
         }
         self.keyb = keyb;
+
+        with_imgui_context(|ctx| {
+            let mut io = ctx.io_mut();
+            for i in 0..NKEYS {
+                if let Some(event) = self.events[i] {
+                    match event {
+                        KeyEventKind::Press => {
+                            io.add_key_event(IMGUI_KEYS[i], true);
+                        }
+                        KeyEventKind::Repeat => {
+                            io.add_key_event(IMGUI_KEYS[i], true);
+                        }
+                        KeyEventKind::Release => {
+                            io.add_key_event(IMGUI_KEYS[i], false);
+                        }
+                    }
+                }
+            }
+        });
     }
 
     pub fn pressed(&self, key: KeyCode) -> bool {

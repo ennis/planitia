@@ -732,6 +732,62 @@ impl DeviceHelper {
             std::slice::from_raw_parts(data as *const _ as *const u8, size_of::<T>()),
         );
     }
+
+    pub(crate) unsafe fn create_color_image_from_data(&self,
+                                               format: vk::Format,
+                                               width: u32,
+                                               height: u32,
+                                               usage: vk::ImageUsageFlags,
+                                                      data: &[u8]) -> Image
+    {
+
+        let image = self.create_color_image_helper(
+            format,
+            width,
+            height,
+            usage,
+        );
+
+        // Staging buffer: host-visible, coherent.
+        let staging_buf = self.create_buffer_from_data(vk::BufferUsageFlags::TRANSFER_SRC, data);
+
+        self.submit_oneshot(|device, upload_cmdbuf| {
+            self.layout_barrier(
+                upload_cmdbuf,
+                &[(image.image, vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL)],
+            );
+
+            device.cmd_copy_buffer_to_image(
+                upload_cmdbuf,
+                staging_buf.buffer,
+                image.image,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &[vk::BufferImageCopy {
+                    buffer_offset: 0,
+                    buffer_row_length: 0,
+                    buffer_image_height: 0,
+                    image_subresource: vk::ImageSubresourceLayers {
+                        aspect_mask: vk::ImageAspectFlags::COLOR,
+                        mip_level: 0,
+                        base_array_layer: 0,
+                        layer_count: 1,
+                    },
+                    image_offset: vk::Offset3D { x: 0, y: 0, z: 0 },
+                    image_extent: vk::Extent3D { width, height, depth: 1 },
+                }],
+            );
+
+            self.layout_barrier(
+                upload_cmdbuf,
+                &[(image.image, vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)],
+            );
+        });
+
+        // Cleanup transient resources.
+        self.device_wait_idle().unwrap();
+        self.destroy_buffer_helper(staging_buf);
+        image
+    }
 }
 
 fn spirv_u8_to_u32(spv: &[u8]) -> Vec<u32> {

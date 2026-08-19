@@ -11,7 +11,6 @@ name = "VkLayer_planitia"
 ash = { version = "0.38", default-features = false }
 ash-layer = "0.0.2"
 dashmap = "6"
-inventory = "0.3.24"
 vulkan-headers = "0.2.4"
 bumpalo = "3.20.3"
 spirv_headers = "1.5.0"
@@ -21,3 +20,4 @@ ansi-parser = "0.9.1"
 color-print = "0.3.7"
 parking_lot = "0.12.5"
 windows = { version =  "0.62.2", features = ["Win32_UI_Input_KeyboardAndMouse"] }
+imgui = { git= "https://github.com/imgui-rs/imgui-rs.git",  rev = "e06b05c0f97062af4ea7856ecc5a7216feb3ace2" }

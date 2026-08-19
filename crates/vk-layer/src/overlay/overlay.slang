@@ -10,6 +10,7 @@ struct FragmentOutput
 };
 
 struct RootParams {
+    float4x4 matrix;
     int2 screen_size;
     int2 offset;
     uint8_t4 shuffle;
@@ -37,7 +38,7 @@ struct VertexInput {
 [shader("vertex")]
 VertexOutput overlay_vertex(VertexInput vi) {
     VertexOutput o;
-    o.pos = float4(vi.pos, 0.0, 1.0);
+    o.pos = mul(u.matrix, float4(vi.pos, 0.0, 1.0));
     o.color = vi.color;
     o.uv = vi.uv;
     return o;

@@ -1,6 +1,7 @@
 use crate::helper::{include_bytes_as_u32, Buffer, Descriptor, GraphicsPipelineHelperCreateInfo, Image};
 use crate::overlay::font;
 use crate::overlay::font::{glyph_position, GLYPH_HEIGHT, GLYPH_WIDTH};
+use crate::overlay::imgui::{imgui_build, imgui_render};
 use crate::{DeviceHelper, DeviceState, Pipeline, FRAMES_IN_FLIGHT};
 use ansi_parser::{AnsiParser, AnsiSequence, Output};
 use ash::vk;
@@ -9,16 +10,17 @@ use std::{fmt, ptr};
 
 /// Static resources
 pub struct StaticResources {
-    font_tex: Image,
-    font_sampler: vk::Sampler,
-    pipeline: Pipeline,
+    pub font_tex: Image,
+    pub font_sampler: vk::Sampler,
+    pub pipeline: Pipeline,
 }
 
 #[derive(Copy, Clone, Default)]
 pub struct FrameData {
-    cmd_buf: vk::CommandBuffer,
-    fence: vk::Fence,
-    vtx_buf: Buffer,
+    pub cmd_buf: vk::CommandBuffer,
+    pub fence: vk::Fence,
+    pub vtx_buf: Buffer,
+    pub idx_buf: Buffer,
 }
 
 pub struct FrameResources {
@@ -33,14 +35,15 @@ pub struct OverlayResources {
     last_height: u32,
 }
 
-const MAX_VERTICES: usize = 1024 * 1024;
+pub const MAX_VERTICES: usize = 1024 * 1024;
+pub const MAX_INDICES: usize = 1024 * 1024;
 
 #[repr(C)]
 #[derive(Copy, Clone)]
-struct Vertex {
-    pos: [f32; 2],
-    texcoord: [f32; 2],
-    color: [u8; 4],
+pub struct Vertex {
+    pub pos: [f32; 2],
+    pub texcoord: [f32; 2],
+    pub color: [u8; 4],
 }
 
 #[repr(u8)]
@@ -68,6 +71,13 @@ pub const SHUFFLE_ONE: Shuffle = [ShuffleChannel::One, ShuffleChannel::One, Shuf
 
 pub type RGBA8 = [u8; 4];
 
+static IDENTITY: [[f32;4]; 4] = [
+    [1.0, 0.0, 0.0, 0.0],
+    [0.0, 1.0, 0.0, 0.0],
+    [0.0, 0.0, 1.0, 0.0],
+    [0.0, 0.0, 0.0, 1.0]
+];
+
 pub struct RenderData {
     pub width: i32,
     pub height: i32,
@@ -80,7 +90,9 @@ pub struct OverlayRenderer<'a> {
     pub rd: &'a RenderData,
     cmd_buf: vk::CommandBuffer,
     vtx_buf: *mut Vertex,
+    idx_buf: *mut u16,
     vtx_offset: usize,
+    idx_offset: usize,
     //texts: Vec<OverlayText>,
     cur_fg: RGBA8,
     cur_bg: RGBA8,
@@ -109,12 +121,15 @@ impl<'a> OverlayRenderer<'a> {
         rd: &'a RenderData,
         cmd_buf: vk::CommandBuffer,
         vtx_buf: &Buffer,
+        idx_buf: &Buffer,
     ) -> OverlayRenderer<'a> {
         OverlayRenderer {
             dd,
             cmd_buf,
             vtx_buf: vtx_buf.ptr as *mut Vertex,
+            idx_buf: idx_buf.ptr as *mut u16,
             vtx_offset: 0,
+            idx_offset: 0,
             cur_fg: [255, 255, 255, 255],
             cur_bg: [0, 0, 0, 0],
             tx: 0,
@@ -184,6 +199,7 @@ impl<'a> OverlayRenderer<'a> {
                 self.dd.static_resources.pipeline.pipeline_layout,
                 vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 &PushConstants {
+                    matrix: IDENTITY,
                     screen_size: [self.rd.width, self.rd.height],
                     offset: [0, 0],
                     shuffle: shuffle.map(|s| s as u8),
@@ -340,6 +356,7 @@ impl<'a> OverlayRenderer<'a> {
                 self.dd.static_resources.pipeline.pipeline_layout,
                 vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                 &PushConstants {
+                    matrix: [[1., 0., 0., 0.], [0., 1., 0., 0.], [0., 0., 1., 0.], [0., 0., 0., 1.]],
                     screen_size: [self.rd.width, self.rd.height],
                     offset: [0, 0],
                     shuffle: [
@@ -360,11 +377,12 @@ impl<'a> OverlayRenderer<'a> {
 /// Parameters passed to the font pipeline via push constants.
 #[repr(C)]
 #[derive(Copy, Clone)]
-struct PushConstants {
-    screen_size: [i32; 2],
-    offset: [i32; 2],
-    shuffle: [u8; 4],
-    color: [u8; 4],
+pub struct PushConstants {
+    pub matrix: [[f32; 4]; 4],
+    pub screen_size: [i32; 2],
+    pub offset: [i32; 2],
+    pub shuffle: [u8; 4],
+    pub color: [u8; 4],
 }
 
 // Creating a texture in Vulkan is fairly simple.
@@ -461,9 +479,15 @@ pub(crate) unsafe fn initialize_frame_resources(d: &DeviceHelper) -> FrameResour
             MAX_VERTICES * size_of::<Vertex>(),
             None,
         );
+        let index_buffer = d.create_buffer_helper(
+            vk::BufferUsageFlags::INDEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
+            MAX_INDICES * size_of::<u16>(),
+            None,
+        );
         frame_data[i].cmd_buf = command_buffers[i];
         frame_data[i].fence = fence;
         frame_data[i].vtx_buf = vertex_buffer;
+        frame_data[i].idx_buf = index_buffer;
     }
     FrameResources { frame_index: 0, frame_data }
 }
@@ -588,21 +612,6 @@ fn ansi_color(n: u8) -> RGBA8 {
     }
 }
 
-unsafe fn push_constants_helper<T: Copy + 'static>(
-    dd: &DeviceHelper,
-    cmdbuf: vk::CommandBuffer,
-    pipeline_layout: vk::PipelineLayout,
-    data: &T,
-) {
-    dd.cmd_push_constants(
-        cmdbuf,
-        pipeline_layout,
-        vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
-        0,
-        std::slice::from_raw_parts(data as *const _ as *const u8, size_of::<T>()),
-    );
-}
-
 /// Renders the overlay on a swapchain image.
 ///
 /// # Arguments
@@ -721,32 +730,37 @@ pub(crate) unsafe fn render_overlay(
         image_copy_view: image_copy.image_view,
     };
 
-    dd.cmd_bind_pipeline(fd.cmd_buf, vk::PipelineBindPoint::GRAPHICS, dd.static_resources.pipeline.pipeline);
-    dd.cmd_set_viewport_helper(fd.cmd_buf, 0, 0, rd.width, rd.height);
-    dd.cmd_set_scissor_helper(fd.cmd_buf, 0, 0, rd.width, rd.height);
-    dd.cmd_bind_vertex_buffers(fd.cmd_buf, 0, &[fd.vtx_buf.buffer], &[0]);
-    dd.cmd_push_descriptors_helper(
-        fd.cmd_buf,
-        dd.static_resources.pipeline.pipeline_layout,
-        &[
-            Descriptor::Texture {
-                binding: 0,
-                image_view: dd.static_resources.font_tex.image_view,
-                image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            },
-            Descriptor::Texture {
-                binding: 1,
-                image_view: rd.image_copy_view,
-                image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            },
-            Descriptor::Sampler { binding: 2, sampler: dd.static_resources.font_sampler },
-        ],
-    );
+    imgui_build(dd, &rd, |ui| {
+        dd.draw_imgui(ui);
+    });
+    imgui_render(dd, &fd, &rd);
+
+    //dd.cmd_bind_pipeline(fd.cmd_buf, vk::PipelineBindPoint::GRAPHICS, dd.static_resources.pipeline.pipeline);
+    //dd.cmd_set_viewport_helper(fd.cmd_buf, 0, 0, rd.width, rd.height);
+    //dd.cmd_set_scissor_helper(fd.cmd_buf, 0, 0, rd.width, rd.height);
+    //dd.cmd_bind_vertex_buffers(fd.cmd_buf, 0, &[fd.vtx_buf.buffer], &[0]);
+    //dd.cmd_push_descriptors_helper(
+    //    fd.cmd_buf,
+    //    dd.static_resources.pipeline.pipeline_layout,
+    //    &[
+    //        Descriptor::Texture {
+    //            binding: 0,
+    //            image_view: dd.static_resources.font_tex.image_view,
+    //            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+    //        },
+    //        Descriptor::Texture {
+    //            binding: 1,
+    //            image_view: rd.image_copy_view,
+    //            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+    //        },
+    //        Descriptor::Sampler { binding: 2, sampler: dd.static_resources.font_sampler },
+    //    ],
+    //);
 
     // Draw GUI
-    let mut or = OverlayRenderer::new(dd, &rd, fd.cmd_buf, &fd.vtx_buf);
-    let sub = dd.submissions.lock();
-    dd.draw_gui(&mut or, &*trk, &*sub);
+    //let mut or = OverlayRenderer::new(dd, &rd, fd.cmd_buf, &fd.vtx_buf);
+    //let sub = dd.submissions.lock();
+    //dd.draw_gui(&mut or, &*trk, &*sub);
 
     dd.cmd_end_rendering(fd.cmd_buf);
     // transition back to PRESENT
