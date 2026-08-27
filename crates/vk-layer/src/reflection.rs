@@ -63,7 +63,7 @@ struct Instruction<'a> {
 
 /// Scalar value kinds.
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ScalarType {
     /// Boolean.
     Bool,
@@ -85,6 +85,17 @@ pub enum ScalarType {
     U64,
     /// 32-bit floating point.
     F32,
+}
+
+impl ScalarType {
+    pub fn byte_size(self) -> usize {
+        match self {
+            ScalarType::Bool | ScalarType::I8 | ScalarType::U8 => 1,
+            ScalarType::I16 | ScalarType::U16 => 2,
+            ScalarType::I32 | ScalarType::U32 | ScalarType::F32 => 4,
+            ScalarType::I64 | ScalarType::U64 => 8,
+        }
+    }
 }
 
 /// Describes a field of a struct type.
@@ -114,7 +125,7 @@ pub struct VectorType {
 }
 
 #[repr(C)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MatrixType {
     pub scalar: ScalarType,
     pub rows: u8,
@@ -122,14 +133,14 @@ pub struct MatrixType {
 }
 
 #[repr(C)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SampledType {
     pub scalar: ScalarType,
     pub components: u8,
 }
 
 #[repr(C)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ImageHandleType {
     pub sampled: SampledType,
     pub read_write: bool,
@@ -167,7 +178,8 @@ impl<'a> PointerType<'a> {
 
     pub fn pointee(&self) -> &'a TypeDesc<'a> {
         // SAFETY: this is always safe since a mutable reference to
-        //         the value is never
+        //         the value is never held or created after creation.
+        //         `pointee()` isn't called during creation of the types.
         unsafe { *self.pointee.get() }.unwrap()
     }
 }
@@ -213,6 +225,7 @@ pub enum TypeDesc<'a> {
     Sampler,
 }
 
+pub type Type = &'static TypeDesc<'static>;
 
 pub struct PrettyType<'a>(pub &'a TypeDesc<'a>);
 
@@ -287,8 +300,38 @@ impl<'a> TypeDesc<'a> {
         }
     }
 
+    pub fn field_or_element_type(&self, index: usize) -> Option<&'a TypeDesc<'a>> {
+        match self {
+            TypeDesc::Array { element, .. } => Some(element),
+            TypeDesc::RuntimeArray { element, .. } => Some(element),
+            TypeDesc::Struct(s) => Some(s.fields[index].ty),
+            TypeDesc::Pointer(p) => Some(p.pointee()),
+            _ => None,
+        }
+    }
+
     pub fn pretty(&'a self) -> PrettyType<'a> {
         PrettyType(self)
+    }
+
+
+    pub fn byte_size(&self) -> Option<usize> {
+        match self {
+            TypeDesc::Void => Some(0),
+            TypeDesc::Bool => Some(4),
+            TypeDesc::Scalar(s) => Some(s.byte_size()),
+            TypeDesc::Vector(s, n) => Some(s.byte_size() * *n as usize),
+            TypeDesc::Matrix { scalar, rows, cols, stride } => {
+                let col_stride = stride.map(|s| s as usize).unwrap_or(scalar.byte_size() * *rows as usize);
+                Some(col_stride * *cols as usize)
+            }
+            TypeDesc::Array { element, len, stride } => {
+                let elem_stride = stride.map(|s| s as usize).or_else(|| element.byte_size())?;
+                Some(elem_stride * *len as usize)
+            }
+            TypeDesc::Struct(s) => s.fields.last().and_then(|f| f.ty.byte_size().map(|sz| f.offset as usize + sz)),
+            _ => None,
+        }
     }
 }
 

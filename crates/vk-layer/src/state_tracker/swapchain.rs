@@ -1,10 +1,12 @@
 //! Swapchain interception
-use crate::{DeviceState, LayerSwapchain};
+use crate::{Device, SwapchainInfo};
 use ash::vk;
 use ash::vk::Handle;
 use std::{ptr, slice};
+use crate::overlay::renderer::render_overlay;
+use crate::surface::get_hwnd_for_surface;
 
-impl DeviceState {
+impl Device {
     pub unsafe fn hook_create_swapchain_khr(
         &self,
         device: vk::Device,
@@ -87,8 +89,11 @@ impl DeviceState {
             })
             .collect();
 
+        let surface = (*p_create_info).surface;
+
         // Register the swapchain
-        inner.swapchains.push(LayerSwapchain {
+        inner.swapchains.push(SwapchainInfo {
+            surface,
             device,
             format: create_info.image_format,
             extent: create_info.image_extent,
@@ -120,22 +125,36 @@ impl DeviceState {
         (self.khr_swapchain.destroy_swapchain_khr)(device, swapchain, p_allocator);
     }
 
-    pub unsafe fn queue_present_impl(&self, queue: vk::Queue, p_present_info: *const vk::PresentInfoKHR) -> vk::Result {
+    pub unsafe fn hook_queue_present_khr(&self, queue: vk::Queue, p_present_info: *const vk::PresentInfoKHR) -> vk::Result {
+        // wait for our debugger probes to finish executing
+        // and for the rest as well, incidentally...
+        self.device_wait_idle().unwrap();
 
-        // extract semaphores
+
         let present_info = *p_present_info;
         let wait_semaphores =
             slice::from_raw_parts(present_info.p_wait_semaphores, present_info.wait_semaphore_count as usize);
         let swapchains = slice::from_raw_parts(present_info.p_swapchains, present_info.swapchain_count as usize);
         let image_indices = slice::from_raw_parts(present_info.p_image_indices, present_info.swapchain_count as usize);
 
-        // render overlay on the first swapchain
-        if present_info.swapchain_count > 0 {
+        let result = if present_info.swapchain_count == 1 {
+            // render our overlay on the first swapchain
+            // TODO: support multiple swapchains in vkQueuePresent
             let swapchain = swapchains[0];
             let image_index = image_indices[0];
-            crate::overlay::renderer::render_overlay(self, queue, swapchain, image_index, wait_semaphores)
+
+            // update inputs for the surface (and HWND) associated to the swapchain
+            let surface = self.tracked_resources.lock().swapchains.iter().find(|sc| sc.swapchain == swapchain).map(|sc| sc.surface);
+            if let Some(surface) = surface {
+                self.update_inputs_for_surface(surface);
+            }
+
+            render_overlay(self, queue, swapchain, image_index, wait_semaphores)
         } else {
             (self.khr_swapchain.queue_present_khr)(queue, p_present_info)
-        }
+        };
+
+        self.end_frame();
+        result
     }
 }

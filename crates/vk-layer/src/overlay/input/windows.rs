@@ -1,9 +1,15 @@
+use crate::Device;
 use crate::overlay::renderer::with_imgui_context;
+use crate::surface::get_hwnd_for_surface;
+use ash::vk;
 use std::time::{Duration, Instant};
+use windows::Win32::Foundation::{HWND, POINT};
+use windows::Win32::Graphics::Gdi::ScreenToClient;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, VIRTUAL_KEY, VK_CONTROL, VK_DOWN, VK_ESCAPE, VK_LBUTTON, VK_LEFT, VK_MBUTTON, VK_RBUTTON,
-    VK_RETURN, VK_RIGHT, VK_UP,
+    GetAsyncKeyState, VIRTUAL_KEY, VK_CONTROL, VK_DOWN, VK_ESCAPE, VK_LBUTTON, VK_LEFT, VK_MBUTTON, VK_MENU,
+    VK_RBUTTON, VK_RETURN, VK_RIGHT, VK_SHIFT, VK_SPACE, VK_TAB, VK_UP,
 };
+use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum KeyEventKind {
@@ -12,30 +18,23 @@ enum KeyEventKind {
     Release,
 }
 
-#[repr(u8)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-enum KeyCode {
-    KeyLeft = 0,
-    KeyRight,
-    KeyUp,
-    KeyDown,
-    KeyControl,
-    KeyEnter,
-    KeyEscape,
-    KeyMax,
-}
+const NKEYS: usize = 14;
 
-const NKEYS: usize = KeyCode::KeyMax as usize;
-static KEYS: [VIRTUAL_KEY; NKEYS] =
-    [VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN, VK_CONTROL, VK_RETURN, VK_ESCAPE];
-static IMGUI_KEYS: [imgui::Key; NKEYS] = [
-    imgui::Key::LeftArrow,
-    imgui::Key::RightArrow,
-    imgui::Key::UpArrow,
-    imgui::Key::DownArrow,
-    imgui::Key::LeftCtrl,
-    imgui::Key::Enter,
-    imgui::Key::Escape
+static KEY_MAP: [(imgui::Key, VIRTUAL_KEY); NKEYS] = [
+    (imgui::Key::LeftArrow, VK_LEFT),
+    (imgui::Key::RightArrow, VK_RIGHT),
+    (imgui::Key::UpArrow, VK_UP),
+    (imgui::Key::DownArrow, VK_DOWN),
+    (imgui::Key::Enter, VK_RETURN),
+    (imgui::Key::Escape, VK_ESCAPE),
+    (imgui::Key::Tab, VK_TAB),
+    (imgui::Key::Space, VK_SPACE),
+    (imgui::Key::LeftCtrl, VK_CONTROL),
+    (imgui::Key::LeftShift, VK_SHIFT),
+    (imgui::Key::LeftAlt, VK_MENU),
+    (imgui::Key::MouseLeft, VK_LBUTTON),
+    (imgui::Key::MouseRight, VK_RBUTTON),
+    (imgui::Key::MouseMiddle, VK_MBUTTON),
 ];
 
 static INITIAL_REPEAT_DELAY: Duration = Duration::from_millis(300);
@@ -60,17 +59,16 @@ impl InputState {
         }
     }
 
-    pub fn fetch_inputs(&mut self) {
+    fn fetch(&mut self, hwnd: HWND) {
         let now = Instant::now();
         let duration_since_last_key_press = now - self.last_key_press;
 
         let mut keyb = [false; NKEYS];
-        for i in 0..NKEYS {
+        for i in 0..KEY_MAP.len() {
             unsafe {
-                keyb[i] = GetAsyncKeyState(KEYS[i].0 as i32) < 0;
+                keyb[i] = GetAsyncKeyState(KEY_MAP[i].1.0 as i32) < 0;
             }
 
-            // duration since last key press
             match (self.keyb[i], keyb[i]) {
                 (false, true) => {
                     self.events[i] = Some(KeyEventKind::Press);
@@ -92,44 +90,52 @@ impl InputState {
         }
         self.keyb = keyb;
 
-        //let mut cursor_pos = POINT { x: 0, y: 0 };
-        //unsafe {
-        //    GetCursorPos(&mut cursor_pos).unwrap();
-        //}
+        // fetch cursor position relative to HWND
+        let (cursor_x, cursor_y) = unsafe {
+            let mut point = POINT::default();
+            GetCursorPos(&mut point).unwrap();
+            ScreenToClient(hwnd, &mut point).unwrap();
+            (point.x, point.y)
+        };
 
         with_imgui_context(|ctx| {
-            let mut io = ctx.io_mut();
-            //io.mouse_pos = [cursor_pos.x as f32, cursor_pos.y as f32];
-            //io.mouse_down[0] = self.keyb[KeyCode::MouseLeft as usize];
-            //io.mouse_down[1] = self.keyb[KeyCode::MouseRight as usize];
-            //io.mouse_down[2] = self.keyb[KeyCode::MouseMiddle as usize];
+            let io = ctx.io_mut();
+            io.mouse_pos = [cursor_x as f32, cursor_y as f32];
             for i in 0..NKEYS {
                 if let Some(event) = self.events[i] {
                     match event {
-                        KeyEventKind::Press => {
-                            io.add_key_event(IMGUI_KEYS[i], true);
-                        }
-                        KeyEventKind::Repeat => {
-                            io.add_key_event(IMGUI_KEYS[i], true);
+                        KeyEventKind::Press | KeyEventKind::Repeat => {
+                            io.add_key_event(KEY_MAP[i].0, true);
                         }
                         KeyEventKind::Release => {
-                            io.add_key_event(IMGUI_KEYS[i], false);
+                            io.add_key_event(KEY_MAP[i].0, false);
                         }
                     }
+                }
+
+                match KEY_MAP[i].0 {
+                    imgui::Key::LeftCtrl if self.keyb[i] => io.key_ctrl = true,
+                    imgui::Key::LeftShift if self.keyb[i] => io.key_shift = true,
+                    imgui::Key::LeftAlt if self.keyb[i] => io.key_alt = true,
+                    imgui::Key::MouseLeft => io.mouse_down[0] = self.keyb[i],
+                    imgui::Key::MouseRight => io.mouse_down[1] = self.keyb[i],
+                    imgui::Key::MouseMiddle => io.mouse_down[2] = self.keyb[i],
+                    _ => {}
                 }
             }
         });
     }
+}
 
-    pub fn pressed(&self, key: KeyCode) -> bool {
-        matches!(self.events[key as usize], Some(KeyEventKind::Press) | Some(KeyEventKind::Repeat))
-    }
+impl Device {
+    pub fn update_inputs_for_surface(&self, surface: vk::SurfaceKHR) {
+        let Some(hwnd) = get_hwnd_for_surface(surface) else {
+            eprintln!("Failed to get HWND for surface {:?}", surface);
+            return;
+        };
 
-    pub fn released(&self, key: KeyCode) -> bool {
-        self.events[key as usize] == Some(KeyEventKind::Release)
-    }
-
-    pub fn key_down(&self, key: KeyCode) -> bool {
-        self.keyb[key as usize]
+        // Update inputs
+        let mut inputs = self.input.lock();
+        inputs.fetch(hwnd);
     }
 }

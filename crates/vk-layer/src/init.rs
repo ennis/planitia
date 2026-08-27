@@ -1,6 +1,6 @@
 //! Instance & device initialization code.
 use crate::dispatch::InstanceDispatch;
-use crate::{DeviceDispatchableHandle, DeviceState, DEVICE_STATE, INSTANCE_MAP,
+use crate::{DeviceDispatchableHandle, Device, DEVICE_STATE, INSTANCE_MAP,
             PHY_TO_INSTANCE,
 };
 use ash::vk;
@@ -13,7 +13,7 @@ const _: PFN_vkDestroyInstance = layer_vkDestroyInstance;
 const _: PFN_vkCreateDevice = layer_vkCreateDevice;
 const _: PFN_vkDestroyDevice = layer_vkDestroyDevice;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub(crate) unsafe extern "system" fn layer_vkCreateInstance(
     p_create_info: *const vk::InstanceCreateInfo,
     p_allocator: *const vk::AllocationCallbacks,
@@ -61,7 +61,7 @@ pub(crate) unsafe extern "system" fn layer_vkCreateInstance(
     vk::Result::SUCCESS
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub(crate) unsafe extern "system" fn layer_vkDestroyInstance(
     instance: vk::Instance,
     p_allocator: *const vk::AllocationCallbacks,
@@ -83,7 +83,7 @@ pub(crate) unsafe extern "system" fn layer_vkDestroyInstance(
 // vkCreateDevice / vkDestroyDevice
 // ---------------------------------------------------------------------------
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub(crate) unsafe extern "system" fn layer_vkCreateDevice(
     physical_device: vk::PhysicalDevice,
     p_create_info: *const vk::DeviceCreateInfo,
@@ -117,7 +117,7 @@ pub(crate) unsafe extern "system" fn layer_vkCreateDevice(
 
     let device = *p_device;
     let create_info = &*p_create_info;
-    let device_state = DeviceState::new(
+    let device_state = Device::new(
         &instance_dispatch,
         device,
         create_info,
@@ -129,7 +129,8 @@ pub(crate) unsafe extern "system" fn layer_vkCreateDevice(
     //eprintln!("[planitia-layer] vkCreateDevice {:?}", device);
     vk::Result::SUCCESS
 }
-#[no_mangle]
+
+#[unsafe(no_mangle)]
 pub(crate) unsafe extern "system" fn layer_vkDestroyDevice(
     device: vk::Device,
     p_allocator: *const vk::AllocationCallbacks,

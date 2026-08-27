@@ -1,7 +1,7 @@
 use crate::helper::HasPrivateData;
 use crate::reflection::{generate_shader_entry_point_reflection, EntryPoint, ShaderReflection};
 use crate::util::find_next;
-use crate::DeviceState;
+use crate::Device;
 use ash::vk;
 use std::ffi::CStr;
 use std::slice::from_raw_parts;
@@ -72,7 +72,7 @@ impl HasPrivateData for vk::Pipeline {
     type PrivateData = PipelineData;
 }
 
-impl DeviceState {
+impl Device {
     pub unsafe fn hook_create_graphics_pipelines(
         &self,
         device: vk::Device,

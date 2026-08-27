@@ -1,5 +1,5 @@
 use crate::helper::HasPrivateData;
-use crate::DeviceState;
+use crate::Device;
 use ash::vk;
 use std::slice;
 
@@ -61,7 +61,7 @@ impl HasPrivateData for vk::Buffer {
     type PrivateData = BufferData;
 }
 
-impl DeviceState {
+impl Device {
     pub unsafe fn hook_create_buffer(
         &self,
         device: vk::Device,

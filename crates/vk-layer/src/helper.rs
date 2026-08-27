@@ -27,14 +27,14 @@ macro_rules! include_bytes_as_u32 {
 }
 pub(crate) use include_bytes_as_u32;
 
-#[derive(Copy, Clone, Default)]
+#[derive(Default)]
 pub struct Image {
     pub image: vk::Image,
     pub image_view: vk::ImageView,
     pub memory: vk::DeviceMemory,
 }
 
-#[derive(Copy, Clone, Default)]
+#[derive(Default)]
 pub struct Buffer {
     pub buffer: vk::Buffer,
     pub memory: vk::DeviceMemory,

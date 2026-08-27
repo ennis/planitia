@@ -1,4 +1,4 @@
-use crate::DeviceState;
+use crate::Device;
 use ash::vk;
 use ash::vk::Handle;
 use std::ffi::CStr;
@@ -8,8 +8,9 @@ pub mod command;
 pub mod pipeline;
 pub mod queue;
 pub mod swapchain;
+mod image;
 
-impl DeviceState {
+impl Device {
     pub unsafe fn hook_set_debug_utils_object_name(
         &self,
         device: vk::Device,

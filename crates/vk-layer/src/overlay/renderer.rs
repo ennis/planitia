@@ -1,17 +1,12 @@
 use crate::helper::{include_bytes_as_u32, Buffer, Descriptor, GraphicsPipelineHelperCreateInfo, Image};
-use crate::{DeviceHelper, DeviceState, Pipeline, FRAMES_IN_FLIGHT};
+use crate::{DeviceHelper, Device, Pipeline, FRAMES_IN_FLIGHT};
 use ash::vk;
-use imgui::TextureId;
 use parking_lot::Mutex;
 use std::cell::RefCell;
-use std::ptr;
+use std::{array, ptr};
 
-/// Static resources
-pub struct StaticResources {
-    pub font_tex: Image,
-}
 
-#[derive(Copy, Clone, Default)]
+#[derive(Default)]
 pub struct FrameData {
     pub cmd_buf: vk::CommandBuffer,
     pub fence: vk::Fence,
@@ -30,7 +25,7 @@ struct FrameResources {
 impl FrameResources {
     unsafe fn new(dh: &DeviceHelper) -> FrameResources {
         let command_buffers = dh.allocate_command_buffers_helper(FRAMES_IN_FLIGHT);
-        let mut frame_data = [FrameData::default(); FRAMES_IN_FLIGHT];
+        let mut frame_data = array::from_fn(|_| FrameData::default());
         for i in 0..FRAMES_IN_FLIGHT {
             let fence = dh
                 .create_fence(
@@ -56,9 +51,6 @@ impl FrameResources {
         FrameResources { frame_index: 0, frame_data, tmp_image: None, last_width: 0, last_height: 0 }
     }
 }
-
-#[derive(Default)]
-pub struct TmpOverlayResources {}
 
 pub const MAX_VERTICES: usize = 1024 * 1024;
 pub const MAX_INDICES: usize = 1024 * 1024;
@@ -246,7 +238,7 @@ impl OverlayResources {
         OverlayResources { font_texture, font_sampler, pipeline, frame_resources: Mutex::new(frame_resources) }
     }
 
-    pub fn render(&self, dd: &DeviceState, fd: &FrameData, rd: &RenderData, ctx: &mut imgui::Context) {
+    pub fn render(&self, dd: &Device, fd: &FrameData, rd: &RenderData, ctx: &mut imgui::Context) {
         let draw_data = ctx.render();
         let fb_width = draw_data.display_size[0] * draw_data.framebuffer_scale[0];
         let fb_height = draw_data.display_size[1] * draw_data.framebuffer_scale[1];
@@ -390,7 +382,7 @@ impl OverlayResources {
 /// * swapchain - swapchain
 /// * image_index - index of the swapchain image to render to
 pub(crate) unsafe fn render_overlay(
-    dd: &DeviceState,
+    dd: &Device,
     queue: vk::Queue,
     swapchain: vk::SwapchainKHR,
     image_index: u32,
@@ -429,7 +421,7 @@ pub(crate) unsafe fn render_overlay(
         fr.last_height = sc.extent.height;
     }
 
-    let image_copy = fr.tmp_image.unwrap();
+    let image_copy = fr.tmp_image.as_ref().unwrap();
 
     // The application should have transitioned the image to PRESENT before vkQueuePresent.
     dd.layout_barrier(
@@ -501,8 +493,13 @@ pub(crate) unsafe fn render_overlay(
     };
 
     with_imgui_context(|ctx| {
-        ctx.io_mut().display_size = [rd.width as f32, rd.height as f32];
-        ctx.io_mut().delta_time = 1.0 / 60.0;
+        let io = ctx.io_mut();
+        //io.config_nav_swap_gamepad_buttons
+        //io.nav_active = true;
+        //io.nav_visible = true;
+        io.config_flags |= imgui::ConfigFlags::NAV_ENABLE_KEYBOARD;
+        io.display_size = [rd.width as f32, rd.height as f32];
+        io.delta_time = 1.0 / 60.0;
         let mut ui = ctx.frame();
         dd.draw_imgui(&rd, &mut ui);
         dd.overlay.render(dd, fd, &rd, ctx);

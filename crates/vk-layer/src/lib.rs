@@ -1,18 +1,22 @@
 #![allow(non_snake_case)]
+#![allow(unsafe_op_in_unsafe_fn, reason = "too verbose")]
 
 mod bump;
 mod debugger;
 mod dispatch;
+mod event;
 mod helper;
 mod init;
 mod overlay;
 mod reflection;
 mod state_tracker;
+mod surface;
 mod util;
 
 use crate::bump::BumpAllocator;
-use crate::debugger::Debugger;
+use crate::debugger::{Debugger, DebuggerResources};
 use crate::dispatch::{DeviceDispatch, InstanceDispatch};
+use crate::event::EventTimeline;
 use crate::helper::{DeviceHelper, Pipeline};
 use crate::init::{layer_vkCreateDevice, layer_vkCreateInstance, layer_vkDestroyDevice, layer_vkDestroyInstance};
 use crate::overlay::gui::GuiState;
@@ -23,17 +27,18 @@ use crate::state_tracker::command::Command;
 use ash::vk;
 use ash::vk::{
     Handle, PFN_vkAllocateCommandBuffers, PFN_vkBeginCommandBuffer, PFN_vkBindBufferMemory, PFN_vkBindBufferMemory2,
-    PFN_vkCmdBeginRenderPass, PFN_vkCmdBeginRenderPass2, PFN_vkCmdBeginRendering, PFN_vkCmdBindPipeline,
-    PFN_vkCmdDispatch, PFN_vkCmdDraw, PFN_vkCmdDrawIndexed, PFN_vkCmdDrawIndirect, PFN_vkCmdEndRenderPass,
-    PFN_vkCmdEndRenderPass2, PFN_vkCmdEndRendering, PFN_vkCreateBuffer, PFN_vkCreateComputePipelines,
-    PFN_vkCreateGraphicsPipelines, PFN_vkCreateSwapchainKHR, PFN_vkDestroyBuffer, PFN_vkDestroyPipeline,
+    PFN_vkCmdBeginDebugUtilsLabelEXT, PFN_vkCmdBeginRenderPass, PFN_vkCmdBeginRenderPass2, PFN_vkCmdBeginRendering,
+    PFN_vkCmdBindPipeline, PFN_vkCmdDispatch, PFN_vkCmdDraw, PFN_vkCmdDrawIndexed, PFN_vkCmdDrawIndirect,
+    PFN_vkCmdEndDebugUtilsLabelEXT, PFN_vkCmdEndRenderPass, PFN_vkCmdEndRenderPass2, PFN_vkCmdEndRendering,
+    PFN_vkCreateBuffer, PFN_vkCreateComputePipelines, PFN_vkCreateGraphicsPipelines, PFN_vkCreateImageView,
+    PFN_vkCreateSwapchainKHR, PFN_vkDestroyBuffer, PFN_vkDestroyImageView, PFN_vkDestroyPipeline,
     PFN_vkDestroySwapchainKHR, PFN_vkEndCommandBuffer, PFN_vkFreeCommandBuffers, PFN_vkGetDeviceProcAddr,
     PFN_vkGetDeviceQueue, PFN_vkGetInstanceProcAddr, PFN_vkQueuePresentKHR, PFN_vkQueueSubmit,
     PFN_vkSetDebugUtilsObjectNameEXT,
 };
 use ash_layer::*;
 use bumpalo::Bump;
-use core::ffi::{c_char, CStr};
+use core::ffi::{CStr, c_char};
 use core::mem;
 use dashmap::DashMap;
 use parking_lot::Mutex;
@@ -41,24 +46,53 @@ use std::ffi::c_void;
 use std::ops::Deref;
 use std::slice;
 use std::sync::LazyLock;
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering::Relaxed;
 use vulkan_headers::vulkan::vulkan::{
     NonNullPFN_vkCmdBindResourceHeapEXT, NonNullPFN_vkCmdBindSamplerHeapEXT, NonNullPFN_vkCmdPushDataEXT,
     NonNullPFN_vkWriteResourceDescriptorsEXT, NonNullPFN_vkWriteSamplerDescriptorsEXT, VkBindHeapInfoEXT,
     VkCommandBuffer, VkDevice, VkHostAddressRangeEXT, VkPushDataInfoEXT, VkResourceDescriptorInfoEXT, VkResult,
     VkSamplerCreateInfo,
 };
+
 // ---------------------------------------------------------------------------
 // Per-instance and per-device data
 // ---------------------------------------------------------------------------
 
+/// Maximum number of frames in flight.
+///
+/// Used as an upper bound for the number of in-flight resources allocated for the overlay.
 const FRAMES_IN_FLIGHT: usize = 3;
 
-pub struct TrackedResources {
-    pipelines: Vec<vk::Pipeline>,
-    swapchains: Vec<LayerSwapchain>,
+/// Per-device layer state
+///
+/// This holds the state tracker and resources for rendering the overlay.
+pub struct Device {
+    pub helper: DeviceHelper,
+    pub tracked_resources: Mutex<TrackedResources>,
+    pub addrmap: Mutex<AddressMap>,
+    pub submissions: Mutex<SubmissionState>,
+    pub event_timeline: Mutex<EventTimeline>,
+    pub gui: Mutex<GuiState>,
+    pub overlay: OverlayResources,
+    pub debugger_resources: DebuggerResources,
+    pub debugger: Mutex<Debugger>,
+    pub input: Mutex<InputState>,
+    pub bump: Mutex<BumpAllocator>,
+    pub frame_index: AtomicU64,
 }
 
-struct LayerSwapchain {
+impl Deref for Device {
+    type Target = DeviceHelper;
+
+    fn deref(&self) -> &Self::Target {
+        &self.helper
+    }
+}
+
+/// Information about a swapchain.
+struct SwapchainInfo {
+    surface: vk::SurfaceKHR,
     device: vk::Device,
     format: vk::Format,
     extent: vk::Extent2D,
@@ -77,50 +111,24 @@ pub struct Submission {
 }
 
 pub struct SubmissionState {
-    arena: bumpalo::Bump,
+    arena: Bump,
     // Submitted command buffers, in order of submission
     subs: Vec<Submission>,
+    submission_count: usize,
 }
 
 impl SubmissionState {
     fn new() -> SubmissionState {
-        SubmissionState { arena: Default::default(), subs: vec![] }
+        SubmissionState { arena: Default::default(), subs: vec![], submission_count: 0 }
     }
 }
 
-/// Unique command identifier, used for tracking commands across frames.
-#[derive(Clone, Debug)]
-pub struct CmdId {
-    // Submitted command buffer index.
-    pub sub: usize,
-    // Index of the command inside the command buffer
-    pub cmd: usize,
+pub struct TrackedResources {
+    pipelines: Vec<vk::Pipeline>,
+    swapchains: Vec<SwapchainInfo>,
 }
 
-/// Per-device layer state
-///
-/// This holds the state tracker and resources for rendering the overlay.
-pub struct DeviceState {
-    pub helper: DeviceHelper,
-    pub tracked_resources: Mutex<TrackedResources>,
-    pub addrmap: Mutex<AddressMap>,
-    pub submissions: Mutex<SubmissionState>,
-    pub gui: Mutex<GuiState>,
-    pub overlay: OverlayResources,
-    pub debugger: Mutex<Debugger>,
-    pub input: Mutex<InputState>,
-    pub bump: Mutex<BumpAllocator>,
-}
-
-impl Deref for DeviceState {
-    type Target = DeviceHelper;
-
-    fn deref(&self) -> &Self::Target {
-        &self.helper
-    }
-}
-
-impl DeviceState {
+impl Device {
     unsafe fn new(
         instance_dispatch: &InstanceDispatch,
         device: vk::Device,
@@ -128,7 +136,7 @@ impl DeviceState {
         physical_device: vk::PhysicalDevice,
         next_get_device_proc_addr: PFN_vkGetDeviceProcAddr,
         set_device_loader_data: PFN_vkSetDeviceLoaderData,
-    ) -> DeviceState {
+    ) -> Device {
         let dispatch = DeviceDispatch::new(device, next_get_device_proc_addr, set_device_loader_data).unwrap();
         let first_queue_family = {
             let qcis =
@@ -140,37 +148,37 @@ impl DeviceState {
         let helper = DeviceHelper::new(dispatch, mem_props, first_queue_family);
         let tracked_resources = TrackedResources { pipelines: Vec::new(), swapchains: Vec::new() };
         let overlay_resources = OverlayResources::new(&helper);
-        let debugger = Debugger::new(&helper);
+        let debugger_resources = DebuggerResources::new(&helper);
+        let debugger = Debugger::new();
+        let event_timeline = EventTimeline::new();
 
-        DeviceState {
+        Device {
             helper,
             tracked_resources: Mutex::new(tracked_resources),
             addrmap: Mutex::new(AddressMap::new()),
             submissions: Mutex::new(SubmissionState::new()),
+            debugger_resources,
             debugger: Mutex::new(debugger),
             input: Mutex::new(InputState::new()),
             bump: Mutex::new(BumpAllocator::new()),
             gui: Mutex::new(GuiState::new()),
+            event_timeline: Mutex::new(event_timeline),
             overlay: overlay_resources,
+            frame_index: Default::default(),
         }
     }
 
-    unsafe fn hook_queue_present_khr(&self, queue: vk::Queue, p_present_info: *const vk::PresentInfoKHR) -> vk::Result {
-        // wait for our debugger probes to finish executing
-        // and for the rest as well, incidentally...
-        self.device_wait_idle().unwrap();
-        // now render the overlay
-        self.input.lock().fetch_inputs();
-        let result = self.queue_present_impl(queue, p_present_info);
-        self.end_frame();
-        result
-    }
-
     unsafe fn end_frame(&self) {
-        let mut cmd = self.submissions.lock();
-        cmd.subs.clear();
+        let mut sbs = self.submissions.lock();
+        sbs.subs.clear();
         let mut bump = self.bump.lock();
         bump.reset();
+        self.retire_transient_watches();
+        self.frame_index.fetch_add(1, Relaxed);
+    }
+
+    fn get_frame_index(&self) -> u64 {
+        self.frame_index.load(Relaxed)
     }
 }
 
@@ -215,12 +223,10 @@ unsafe impl DeviceDispatchableHandle for vk::Queue {
     }
 }
 
-static DEVICE_STATE: LazyLock<DashMap<DispatchKey, DeviceState>> = LazyLock::new(DashMap::new);
+static DEVICE_STATE: LazyLock<DashMap<DispatchKey, Device>> = LazyLock::new(DashMap::new);
 
-/// Returns the [`DeviceState`] object for the given `VkDevice`.
-fn device_state<T: DeviceDispatchableHandle>(
-    handle: T,
-) -> dashmap::mapref::one::Ref<'static, DispatchKey, DeviceState> {
+/// Returns the [`Device`] object for the given `VkDevice`.
+fn device_state<T: DeviceDispatchableHandle>(handle: T) -> dashmap::mapref::one::Ref<'static, DispatchKey, Device> {
     DEVICE_STATE.get(&unsafe { handle.key() }).expect("unknown device")
 }
 
@@ -246,7 +252,7 @@ pub fn thread_local_bump_alloc() -> &'static Bump {
 // Layer entry points
 // ---------------------------------------------------------------------------
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub(crate) unsafe extern "system" fn layer_vkGetInstanceProcAddr(
     instance: vk::Instance,
     p_name: *const c_char,
@@ -277,7 +283,7 @@ pub(crate) unsafe extern "system" fn layer_vkGetInstanceProcAddr(
 }
 const _: PFN_vkGetInstanceProcAddr = layer_vkGetInstanceProcAddr;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "system" fn layer_vkGetDeviceProcAddr(
     device: vk::Device,
     p_name: *const c_char,
@@ -293,7 +299,7 @@ unsafe extern "system" fn layer_vkGetDeviceProcAddr(
 }
 const _: PFN_vkGetDeviceProcAddr = layer_vkGetDeviceProcAddr;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub(crate) unsafe extern "system" fn layer_vk_layerGetPhysicalDeviceProcAddr(
     instance: vk::Instance,
     p_name: *const c_char,
@@ -310,7 +316,7 @@ pub(crate) unsafe extern "system" fn layer_vk_layerGetPhysicalDeviceProcAddr(
 }
 const _: PFN_vk_layerGetPhysicalDeviceProcAddr = layer_vk_layerGetPhysicalDeviceProcAddr;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "system" fn vkNegotiateLoaderLayerInterfaceVersion(
     p_version_struct: *mut NegotiateLayerInterface,
 ) -> vk::Result {
@@ -332,7 +338,7 @@ macro_rules! device_hooks {
         [$($ep_name:literal),*; $pfn:path] fn $name:ident ($dispatch_arg:ident : $dispatch_ty:ty $(, $arg:ident : $argty:ty)*) $(-> $rt:ty)? = $method:ident;
     )*) => {
         $(
-        #[no_mangle]
+        #[unsafe(no_mangle)]
         pub(crate) unsafe extern "system" fn $name(
             $dispatch_arg: $dispatch_ty
             $(, $arg: $argty)*
@@ -404,4 +410,10 @@ device_hooks! {
     [b"vkCmdEndRenderPass2"; PFN_vkCmdEndRenderPass2] fn layer_vkCmdEndRenderPass2(command_buffer: vk::CommandBuffer, p_subpass_end_info: *const vk::SubpassEndInfo<'_>) = hook_cmd_end_render_pass2;
     [b"vkCmdBeginRendering", b"vkCmdBeginRenderingKHR"; PFN_vkCmdBeginRendering] fn layer_vkCmdBeginRendering(commandBuffer: vk::CommandBuffer, pRenderingInfo: *const vk::RenderingInfo<'_>) = hook_cmd_begin_rendering;
     [b"vkCmdEndRendering", b"vkCmdEndRenderingKHR"; PFN_vkCmdEndRendering] fn layer_vkCmdEndRendering(commandBuffer: vk::CommandBuffer) = hook_cmd_end_rendering;
+
+    [b"vkCmdBeginDebugUtilsLabelEXT"; PFN_vkCmdBeginDebugUtilsLabelEXT] fn layer_vkCmdBeginDebugUtilsLabelEXT(commandBuffer: vk::CommandBuffer, pLabelInfo: *const vk::DebugUtilsLabelEXT<'_>) = hook_cmd_begin_debug_utils_label;
+    [b"vkCmdEndDebugUtilsLabelEXT"; PFN_vkCmdEndDebugUtilsLabelEXT] fn layer_vkCmdEndDebugUtilsLabelEXT(commandBuffer: vk::CommandBuffer) = hook_cmd_end_debug_utils_label;
+
+    [b"vkCreateImageView"; PFN_vkCreateImageView] fn layer_vkCreateImageView(device: vk::Device, pCreateInfo: *const vk::ImageViewCreateInfo<'_>, pAllocator: *const vk::AllocationCallbacks<'_>, pView: *mut vk::ImageView) -> vk::Result = hook_create_image_view;
+    [b"vkDestroyImageView"; PFN_vkDestroyImageView] fn layer_vkDestroyImageView(device: vk::Device, imageView: vk::ImageView, pAllocator: *const vk::AllocationCallbacks<'_>) = hook_destroy_image_view;
 }

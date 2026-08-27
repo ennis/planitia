@@ -1,9 +1,9 @@
-use crate::{DeviceState, Submission};
+use crate::{Device, Submission};
 use ash::vk;
-use std::slice::from_raw_parts;
 use std::mem;
+use std::slice::from_raw_parts;
 
-impl DeviceState {
+impl Device {
     pub unsafe fn hook_get_device_queue(
         &self,
         device: vk::Device,
@@ -20,20 +20,24 @@ impl DeviceState {
         submit_count: u32,
         p_submits: *const vk::SubmitInfo<'_>,
         fence: vk::Fence,
-    ) -> vk::Result
-    {
-
-        let mut cmd = self.submissions.lock();
+    ) -> vk::Result {
+        let mut sbs = self.submissions.lock();
         let submits = from_raw_parts(p_submits, submit_count as usize);
         for submit in submits {
-            if submit.command_buffer_count == 0 {
-                continue;
+            if submit.command_buffer_count != 0 {
+                let command_buffers = from_raw_parts(submit.p_command_buffers, submit.command_buffer_count as usize);
+                for (icb, &cmd_buf) in command_buffers.iter().enumerate() {
+                    let private_data = self.get_private_data_mut(cmd_buf).unwrap();
+                    let mut commands = mem::take(&mut private_data.commands);
+                    for (i, cmd) in commands.iter_mut().enumerate() {
+                        cmd.idx.sub = sbs.submission_count as u32;
+                        cmd.idx.cmd_buf = icb as u32;
+                        cmd.idx.cmd = i as u32;
+                    }
+                    sbs.subs.push(Submission { cmd_buf, commands })
+                }
             }
-            let command_buffers = from_raw_parts(submit.p_command_buffers, submit.command_buffer_count as usize);
-            for &cmd_buf in command_buffers {
-                let private_data = self.get_private_data_mut(cmd_buf).unwrap();
-                cmd.subs.push(Submission { cmd_buf, commands: mem::take(&mut private_data.commands) })
-            }
+            sbs.submission_count += 1;
         }
 
         (self.fp_v1_0().queue_submit)(queue, submit_count, p_submits, fence)
