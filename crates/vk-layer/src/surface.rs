@@ -15,7 +15,7 @@ unsafe impl Sync for SurfaceInfo {}
 static SURFACES: LazyLock<DashMap<vk::SurfaceKHR, SurfaceInfo>> = LazyLock::new(DashMap::new);
 
 #[unsafe(no_mangle)]
-unsafe extern "system" fn layer_vkCreateWin32SurfaceKHR(
+pub unsafe extern "system" fn layer_vkCreateWin32SurfaceKHR(
     instance: vk::Instance,
     p_create_info: *const vk::Win32SurfaceCreateInfoKHR<'_>,
     p_allocator: *const vk::AllocationCallbacks<'_>,
@@ -28,6 +28,7 @@ unsafe extern "system" fn layer_vkCreateWin32SurfaceKHR(
 
     let result = (dispatch.khr_win32_surface.create_win32_surface_khr)(instance, p_create_info, p_allocator, p_surface);
     if result == vk::Result::SUCCESS {
+        eprintln!("Registering HWND({}) for VkSurfaceKHR({:?})", hwnd.0 as usize, *p_surface);
         SURFACES.insert(*p_surface, surface_info);
     }
     result

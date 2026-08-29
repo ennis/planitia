@@ -13,13 +13,12 @@ ash-layer = "0.0.2"
 dashmap = "6"
 vulkan-headers = "0.2.4"
 bumpalo = "3.20.3"
-spirv_headers = "1.5.0"
+spirv = "0.4.0"
 thiserror = "2.0.20"
 num-traits = "0.2.19"
 slotmap = "1.1.1"
-ansi-parser = "0.9.1"
 color-print = "0.3.7"
 parking_lot = "0.12.5"
 windows = { version =  "0.62.2", features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi"] }
-imgui = { git= "https://github.com/imgui-rs/imgui-rs.git",  rev = "e06b05c0f97062af4ea7856ecc5a7216feb3ace2" }
+imgui = { git= "https://github.com/imgui-rs/imgui-rs.git",  rev = "e06b05c0f97062af4ea7856ecc5a7216feb3ace2", features = ["tables-api", "docking"] }
 rustc-hash = "2.1.3"

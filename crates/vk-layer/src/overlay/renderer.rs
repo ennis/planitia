@@ -4,7 +4,7 @@ use ash::vk;
 use parking_lot::Mutex;
 use std::cell::RefCell;
 use std::{array, ptr};
-
+use crate::overlay::gui::with_imgui_context;
 
 #[derive(Default)]
 pub struct FrameData {
@@ -116,17 +116,6 @@ pub struct PushConstants {
     pub offset: [i32; 2],
     pub shuffle: [u8; 4],
     pub color: [u8; 4],
-}
-
-thread_local! {
-    pub static IMGUI: RefCell<imgui::Context> = RefCell::new(imgui::Context::create());
-}
-
-pub fn with_imgui_context<R>(f: impl FnOnce(&mut imgui::Context) -> R) -> R {
-    IMGUI.with(|cell| {
-        let mut context = cell.borrow_mut();
-        f(&mut context)
-    })
 }
 
 pub enum DrawCommand {
@@ -388,7 +377,7 @@ pub(crate) unsafe fn render_overlay(
     image_index: u32,
     wait_semaphores: &[vk::Semaphore],
 ) -> vk::Result {
-    let trk = dd.tracked_resources.lock();
+    let trk = dd.tracked_objects.lock();
     let sc = trk.swapchains.iter().find(|sc| sc.swapchain == swapchain).expect("unknown swapchain");
     let image = sc.images[image_index as usize];
     let image_view = sc.image_views[image_index as usize];
@@ -492,18 +481,7 @@ pub(crate) unsafe fn render_overlay(
         image_copy_view: image_copy.image_view,
     };
 
-    with_imgui_context(|ctx| {
-        let io = ctx.io_mut();
-        //io.config_nav_swap_gamepad_buttons
-        //io.nav_active = true;
-        //io.nav_visible = true;
-        io.config_flags |= imgui::ConfigFlags::NAV_ENABLE_KEYBOARD;
-        io.display_size = [rd.width as f32, rd.height as f32];
-        io.delta_time = 1.0 / 60.0;
-        let mut ui = ctx.frame();
-        dd.draw_imgui(&rd, &mut ui);
-        dd.overlay.render(dd, fd, &rd, ctx);
-    });
+    dd.render_gui(&rd, fd);
 
     dd.cmd_end_rendering(fd.cmd_buf);
     // transition back to PRESENT

@@ -14,7 +14,7 @@ impl Device {
         p_allocator: *const vk::AllocationCallbacks,
         p_swapchain: *mut vk::SwapchainKHR,
     ) -> vk::Result {
-        let mut inner = self.tracked_resources.lock();
+        let mut inner = self.tracked_objects.lock();
 
         let mut create_info = *p_create_info;
 
@@ -111,7 +111,7 @@ impl Device {
         swapchain: vk::SwapchainKHR,
         p_allocator: *const vk::AllocationCallbacks,
     ) {
-        let mut inner = self.tracked_resources.lock();
+        let mut inner = self.tracked_objects.lock();
 
         if let Some(index) = inner.swapchains.iter().position(|sc| sc.swapchain == swapchain) {
             let sc = inner.swapchains.remove(index);
@@ -144,7 +144,7 @@ impl Device {
             let image_index = image_indices[0];
 
             // update inputs for the surface (and HWND) associated to the swapchain
-            let surface = self.tracked_resources.lock().swapchains.iter().find(|sc| sc.swapchain == swapchain).map(|sc| sc.surface);
+            let surface = self.tracked_objects.lock().swapchains.iter().find(|sc| sc.swapchain == swapchain).map(|sc| sc.surface);
             if let Some(surface) = surface {
                 self.update_inputs_for_surface(surface);
             }

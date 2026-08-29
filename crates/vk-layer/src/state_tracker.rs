@@ -19,7 +19,7 @@ impl Device {
         let handle = (*p_name_info).object_handle;
         let name = CStr::from_ptr((*p_name_info).p_object_name).to_string_lossy().into_owned();
 
-        eprintln!("setDebugUtilsObjectName {} {}", handle, name);
+        //eprintln!("setDebugUtilsObjectName {} {}", handle, name);
 
         match (*p_name_info).object_type {
             vk::ObjectType::COMMAND_BUFFER => {

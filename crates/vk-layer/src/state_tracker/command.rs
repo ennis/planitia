@@ -60,7 +60,7 @@ pub struct Command {
     pub cmd_buf: vk::CommandBuffer,
     pub key: CmdKey,
     pub push: Vec<u8>,
-    pub readback: Option<Alloc>,
+    //pub readback: Option<Alloc>,
 }
 
 pub struct CommandBufferData {
@@ -253,7 +253,7 @@ impl Device {
             cmd_buf,
             key: cmd_key,
             push: d.push.clone(),
-            readback: None,
+            //readback: None,
         });
         r
     }

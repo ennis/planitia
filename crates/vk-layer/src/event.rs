@@ -1,10 +1,11 @@
 //! Device events
 use crate::Device;
+use crate::state_tracker::command::CmdKind;
 use ash::vk;
 use rustc_hash::FxHasher;
 use std::ffi::CString;
+use std::fmt;
 use std::hash::{Hash, Hasher};
-use crate::state_tracker::command::CmdKind;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 enum DrawCommandKind {
@@ -40,6 +41,14 @@ fn hash_dispatch_command(regions: &[CString], group_count_x: u32, group_count_y:
 /// Uniquely identifies a device event within a frame, and (as much as possible) across frames.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct EId(pub u64);
+
+impl fmt::Display for EId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Write only the last 4 hex digits for the display impl. EIDs are supposed to be hashes,
+        // so the risk of collision is relatively small as long as the number of displayed events stay small.
+        write!(f, "EID:{:04X}", self.0 & 0xffff)
+    }
+}
 
 pub struct EventTimeline {
     events: Vec<EventInfo>,
@@ -94,6 +103,13 @@ struct EventInfo {
 //--------------------------------------------------------------------------------------------------
 
 impl Device {
+    /// Returns an event ID (EID) for the specified command.
+    ///
+    /// The EID is designed to uniquely identify a command within a frame, and be stable for the same command
+    /// across frames. Currently, it is a hash of:
+    /// - the debug region markers
+    /// - the currently bound pipeline
+    /// - command parameters
     pub fn get_command_eid(&self, debug_region_markers: &[CString], pipeline: vk::Pipeline, cmd: &CmdKind) -> EId {
         let mut h = FxHasher::default();
         debug_region_markers.hash(&mut h);

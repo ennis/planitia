@@ -1,5 +1,4 @@
 use crate::Device;
-use crate::overlay::renderer::with_imgui_context;
 use crate::surface::get_hwnd_for_surface;
 use ash::vk;
 use std::time::{Duration, Instant};
@@ -10,6 +9,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     VK_RBUTTON, VK_RETURN, VK_RIGHT, VK_SHIFT, VK_SPACE, VK_TAB, VK_UP,
 };
 use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
+use crate::overlay::gui::with_imgui_context;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum KeyEventKind {
@@ -18,7 +18,7 @@ enum KeyEventKind {
     Release,
 }
 
-const NKEYS: usize = 14;
+const NKEYS: usize = 11;
 
 static KEY_MAP: [(imgui::Key, VIRTUAL_KEY); NKEYS] = [
     (imgui::Key::LeftArrow, VK_LEFT),
@@ -32,9 +32,9 @@ static KEY_MAP: [(imgui::Key, VIRTUAL_KEY); NKEYS] = [
     (imgui::Key::LeftCtrl, VK_CONTROL),
     (imgui::Key::LeftShift, VK_SHIFT),
     (imgui::Key::LeftAlt, VK_MENU),
-    (imgui::Key::MouseLeft, VK_LBUTTON),
-    (imgui::Key::MouseRight, VK_RBUTTON),
-    (imgui::Key::MouseMiddle, VK_MBUTTON),
+    //(imgui::Key::MouseLeft, VK_LBUTTON),
+    //(imgui::Key::MouseRight, VK_RBUTTON),
+    //(imgui::Key::MouseMiddle, VK_MBUTTON),
 ];
 
 static INITIAL_REPEAT_DELAY: Duration = Duration::from_millis(300);
@@ -95,12 +95,26 @@ impl InputState {
             let mut point = POINT::default();
             GetCursorPos(&mut point).unwrap();
             ScreenToClient(hwnd, &mut point).unwrap();
+            eprintln!("Cursor position: ({}, {})", point.x, point.y);
             (point.x, point.y)
         };
+
+        // fetch mouse button states
+        let mouse_left;
+        let mouse_right;
+        let mouse_middle;
+        unsafe {
+            mouse_left = GetAsyncKeyState(VK_LBUTTON.0 as i32) < 0;
+            mouse_right = GetAsyncKeyState(VK_RBUTTON.0 as i32) < 0;
+            mouse_middle = GetAsyncKeyState(VK_MBUTTON.0 as i32) < 0;
+        }
 
         with_imgui_context(|ctx| {
             let io = ctx.io_mut();
             io.mouse_pos = [cursor_x as f32, cursor_y as f32];
+            io.mouse_down[0] = mouse_left;
+            io.mouse_down[1] = mouse_right;
+            io.mouse_down[2] = mouse_middle;
             for i in 0..NKEYS {
                 if let Some(event) = self.events[i] {
                     match event {
@@ -111,16 +125,6 @@ impl InputState {
                             io.add_key_event(KEY_MAP[i].0, false);
                         }
                     }
-                }
-
-                match KEY_MAP[i].0 {
-                    imgui::Key::LeftCtrl if self.keyb[i] => io.key_ctrl = true,
-                    imgui::Key::LeftShift if self.keyb[i] => io.key_shift = true,
-                    imgui::Key::LeftAlt if self.keyb[i] => io.key_alt = true,
-                    imgui::Key::MouseLeft => io.mouse_down[0] = self.keyb[i],
-                    imgui::Key::MouseRight => io.mouse_down[1] = self.keyb[i],
-                    imgui::Key::MouseMiddle => io.mouse_down[2] = self.keyb[i],
-                    _ => {}
                 }
             }
         });

@@ -1,5 +1,6 @@
 #![allow(non_snake_case)]
 #![allow(unsafe_op_in_unsafe_fn, reason = "too verbose")]
+extern crate core;
 
 mod bump;
 mod debugger;
@@ -8,13 +9,13 @@ mod event;
 mod helper;
 mod init;
 mod overlay;
-mod reflection;
+mod spirv;
 mod state_tracker;
 mod surface;
 mod util;
 
 use crate::bump::BumpAllocator;
-use crate::debugger::{Debugger, DebuggerResources};
+use crate::debugger::{Debugger, DebuggerResources, ModuleId};
 use crate::dispatch::{DeviceDispatch, InstanceDispatch};
 use crate::event::EventTimeline;
 use crate::helper::{DeviceHelper, Pipeline};
@@ -22,8 +23,10 @@ use crate::init::{layer_vkCreateDevice, layer_vkCreateInstance, layer_vkDestroyD
 use crate::overlay::gui::GuiState;
 use crate::overlay::input::InputState;
 use crate::overlay::renderer::OverlayResources;
+use crate::spirv::Module;
 use crate::state_tracker::buffer::AddressMap;
 use crate::state_tracker::command::Command;
+use crate::surface::layer_vkCreateWin32SurfaceKHR;
 use ash::vk;
 use ash::vk::{
     Handle, PFN_vkAllocateCommandBuffers, PFN_vkBeginCommandBuffer, PFN_vkBindBufferMemory, PFN_vkBindBufferMemory2,
@@ -42,6 +45,7 @@ use core::ffi::{CStr, c_char};
 use core::mem;
 use dashmap::DashMap;
 use parking_lot::Mutex;
+use slotmap::SlotMap;
 use std::ffi::c_void;
 use std::ops::Deref;
 use std::slice;
@@ -55,31 +59,28 @@ use vulkan_headers::vulkan::vulkan::{
     VkSamplerCreateInfo,
 };
 
-// ---------------------------------------------------------------------------
-// Per-instance and per-device data
-// ---------------------------------------------------------------------------
-
 /// Maximum number of frames in flight.
 ///
 /// Used as an upper bound for the number of in-flight resources allocated for the overlay.
 const FRAMES_IN_FLIGHT: usize = 3;
 
-/// Per-device layer state
+/// Device state.
 ///
 /// This holds the state tracker and resources for rendering the overlay.
 pub struct Device {
-    pub helper: DeviceHelper,
-    pub tracked_resources: Mutex<TrackedResources>,
-    pub addrmap: Mutex<AddressMap>,
+    pub helper: DeviceHelper,                      // device dispatch tables + vulkan helpers
+    pub tracked_objects: Mutex<TrackedObjects>,    // various tracked objects
+    pub addrmap: Mutex<AddressMap>,                // Map from device addresses to buffers
     pub submissions: Mutex<SubmissionState>,
-    pub event_timeline: Mutex<EventTimeline>,
-    pub gui: Mutex<GuiState>,
-    pub overlay: OverlayResources,
-    pub debugger_resources: DebuggerResources,
-    pub debugger: Mutex<Debugger>,
-    pub input: Mutex<InputState>,
-    pub bump: Mutex<BumpAllocator>,
-    pub frame_index: AtomicU64,
+    pub event_timeline: Mutex<EventTimeline>, // Used to generate event IDs (EIDs) that are coherent between frames.
+    pub gui: Mutex<GuiState>,                 // GUI state
+    pub overlay: OverlayResources,            // Overlay-related state and resources
+    pub debugger_resources: DebuggerResources, // Immutable debugger resources
+    pub debugger: Mutex<Debugger>,            // Debugger state
+    pub modules: Mutex<SlotMap<ModuleId, Module>>, // SPIR-V modules
+    pub input: Mutex<InputState>,             // Tracks inputs to the main window
+    pub bump: Mutex<BumpAllocator>,           // FIXME Not sure what this is for
+    pub frame_index: AtomicU64,               // Frame counter
 }
 
 impl Deref for Device {
@@ -111,7 +112,6 @@ pub struct Submission {
 }
 
 pub struct SubmissionState {
-    arena: Bump,
     // Submitted command buffers, in order of submission
     subs: Vec<Submission>,
     submission_count: usize,
@@ -119,11 +119,11 @@ pub struct SubmissionState {
 
 impl SubmissionState {
     fn new() -> SubmissionState {
-        SubmissionState { arena: Default::default(), subs: vec![], submission_count: 0 }
+        SubmissionState { subs: vec![], submission_count: 0 }
     }
 }
 
-pub struct TrackedResources {
+pub struct TrackedObjects {
     pipelines: Vec<vk::Pipeline>,
     swapchains: Vec<SwapchainInfo>,
 }
@@ -146,7 +146,7 @@ impl Device {
 
         let mem_props = instance_dispatch.d.get_physical_device_memory_properties(physical_device);
         let helper = DeviceHelper::new(dispatch, mem_props, first_queue_family);
-        let tracked_resources = TrackedResources { pipelines: Vec::new(), swapchains: Vec::new() };
+        let tracked_resources = TrackedObjects { pipelines: Vec::new(), swapchains: Vec::new() };
         let overlay_resources = OverlayResources::new(&helper);
         let debugger_resources = DebuggerResources::new(&helper);
         let debugger = Debugger::new();
@@ -154,11 +154,12 @@ impl Device {
 
         Device {
             helper,
-            tracked_resources: Mutex::new(tracked_resources),
+            tracked_objects: Mutex::new(tracked_resources),
             addrmap: Mutex::new(AddressMap::new()),
             submissions: Mutex::new(SubmissionState::new()),
             debugger_resources,
             debugger: Mutex::new(debugger),
+            modules: Mutex::new(SlotMap::with_key()),
             input: Mutex::new(InputState::new()),
             bump: Mutex::new(BumpAllocator::new()),
             gui: Mutex::new(GuiState::new()),
@@ -171,6 +172,7 @@ impl Device {
     unsafe fn end_frame(&self) {
         let mut sbs = self.submissions.lock();
         sbs.subs.clear();
+        sbs.submission_count = 0;
         let mut bump = self.bump.lock();
         bump.reset();
         self.retire_transient_watches();
@@ -225,7 +227,7 @@ unsafe impl DeviceDispatchableHandle for vk::Queue {
 
 static DEVICE_STATE: LazyLock<DashMap<DispatchKey, Device>> = LazyLock::new(DashMap::new);
 
-/// Returns the [`Device`] object for the given `VkDevice`.
+/// Returns the [`Device`] for the given `VkDevice`.
 fn device_state<T: DeviceDispatchableHandle>(handle: T) -> dashmap::mapref::one::Ref<'static, DispatchKey, Device> {
     DEVICE_STATE.get(&unsafe { handle.key() }).expect("unknown device")
 }
@@ -265,6 +267,7 @@ pub(crate) unsafe extern "system" fn layer_vkGetInstanceProcAddr(
         b"vkGetDeviceProcAddr" => layer_vkGetDeviceProcAddr as _,
         b"vkCreateDevice" => layer_vkCreateDevice as _,
         b"vkDestroyDevice" => layer_vkDestroyDevice as _,
+        b"vkCreateWin32SurfaceKHR" => layer_vkCreateWin32SurfaceKHR as _,
         b"vk_layerGetPhysicalDeviceProcAddr" => layer_vk_layerGetPhysicalDeviceProcAddr as _,
         _ => {
             // It's possible to call getInstanceProcAddr with a device function,
