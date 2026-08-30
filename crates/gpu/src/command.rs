@@ -238,7 +238,13 @@ impl CommandBuffer {
 
             match params {
                 PushDataSource::Indirect(p) => {
-                    address = &p.raw as *const _ as *const c_void;
+                    // XXX: move p into a stable variable (tmp), don't make the address point
+                    //      directly into `p` as it is a temporary.
+                    //      Previously this was `address = &p.raw as *const _` and this crashed
+                    //      in release because `params` became invalid after the match.
+                    //      We could also match `params` by reference, but I find this cleaner.
+                    tmp = p.raw;
+                    address = &tmp as *const _ as *const c_void;
                     size = size_of::<DeviceAddress>();
                 }
                 PushDataSource::IndirectUpload(data) => {
@@ -247,7 +253,7 @@ impl CommandBuffer {
                     size = size_of::<DeviceAddress>();
                 }
                 PushDataSource::Direct(data) => {
-                    address = &data as *const _ as *const c_void;
+                    address = data as *const _ as *const c_void;
                     size = size_of::<T>();
                 }
             };
@@ -613,7 +619,7 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
         trace!("GPU: QueueSubmit");
         result = device.raw.queue_submit(submission_state.queue, &[submit_info], vk::Fence::null());
 
-        submission_state.active_submissions.push_front(ActiveSubmission {
+        submission_state.active_submissions.push_back(ActiveSubmission {
             frame_index: frame_index_submitted,
             timestamp_query_pool: cmd.timestamp_query_pool,
             timestamp_query_count: cmd.timestamp_query_count,

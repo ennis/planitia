@@ -1,14 +1,15 @@
 //mod table;
 
-use ash::vk::{PFN_vkGetDeviceProcAddr, PFN_vkGetInstanceProcAddr};
+use ash::vk::{Handle, PFN_vkGetDeviceProcAddr, PFN_vkGetInstanceProcAddr};
 use ash::{ext, khr, vk};
 use ash_layer::{
     LayerFunction, PFN_vk_layerGetPhysicalDeviceProcAddr, PFN_vkSetDeviceLoaderData, get_device_chain_info,
 };
-use std::ffi::CStr;
+use std::ffi::{c_void, CStr};
 use std::mem;
 use std::ops::Deref;
 use vulkan_headers::vulkan::vulkan as vkh;
+use vulkan_headers::vulkan::vulkan::{VkCommandBuffer, VkDevice};
 
 pub(crate) struct ExtDescriptorHeapInstance {
     pub(crate) get_physical_descriptor_size: vkh::NonNullPFN_vkGetPhysicalDeviceDescriptorSizeEXT,
@@ -151,5 +152,48 @@ impl DeviceDispatch {
             khr_push_descriptors,
             ext_descriptor_heap,
         })
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct DispatchKey(*const c_void);
+unsafe impl Send for DispatchKey {}
+unsafe impl Sync for DispatchKey {}
+impl DispatchKey {
+    unsafe fn from_dispatchable_handle<T>(handle: *mut T) -> DispatchKey {
+        let ptr = handle as *const *const c_void;
+        DispatchKey(*ptr)
+    }
+}
+
+pub unsafe trait DeviceDispatchableHandle: Sized {
+    unsafe fn key(self) -> DispatchKey;
+}
+
+unsafe impl DeviceDispatchableHandle for VkDevice {
+    unsafe fn key(self) -> DispatchKey {
+        DispatchKey::from_dispatchable_handle(self)
+    }
+}
+unsafe impl DeviceDispatchableHandle for VkCommandBuffer {
+    unsafe fn key(self) -> DispatchKey {
+        DispatchKey::from_dispatchable_handle(self)
+    }
+}
+unsafe impl DeviceDispatchableHandle for vk::Device {
+    unsafe fn key(self) -> DispatchKey {
+        DispatchKey::from_dispatchable_handle(self.as_raw() as *mut c_void)
+    }
+}
+unsafe impl DeviceDispatchableHandle for vk::CommandBuffer {
+    unsafe fn key(self) -> DispatchKey {
+        DispatchKey::from_dispatchable_handle(self.as_raw() as *mut c_void)
+    }
+}
+unsafe impl DeviceDispatchableHandle for vk::Queue {
+    unsafe fn key(self) -> DispatchKey {
+        DispatchKey::from_dispatchable_handle(self.as_raw() as *mut c_void)
     }
 }

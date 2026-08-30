@@ -95,7 +95,7 @@ impl InputState {
             let mut point = POINT::default();
             GetCursorPos(&mut point).unwrap();
             ScreenToClient(hwnd, &mut point).unwrap();
-            eprintln!("Cursor position: ({}, {})", point.x, point.y);
+            //eprintln!("Cursor position: ({}, {})", point.x, point.y);
             (point.x, point.y)
         };
 

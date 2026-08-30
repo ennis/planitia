@@ -13,10 +13,11 @@ mod spirv;
 mod state_tracker;
 mod surface;
 mod util;
+mod format;
 
 use crate::bump::BumpAllocator;
-use crate::debugger::{Debugger, DebuggerResources, ModuleId};
-use crate::dispatch::{DeviceDispatch, InstanceDispatch};
+use crate::debugger::{Debugger, DebuggerResources};
+use crate::dispatch::{DeviceDispatch, DeviceDispatchableHandle, DispatchKey, InstanceDispatch};
 use crate::event::EventTimeline;
 use crate::helper::{DeviceHelper, Pipeline};
 use crate::init::{layer_vkCreateDevice, layer_vkCreateInstance, layer_vkDestroyDevice, layer_vkDestroyInstance};
@@ -24,20 +25,20 @@ use crate::overlay::gui::GuiState;
 use crate::overlay::input::InputState;
 use crate::overlay::renderer::OverlayResources;
 use crate::spirv::Module;
-use crate::state_tracker::buffer::AddressMap;
 use crate::state_tracker::command::Command;
+use crate::state_tracker::memory::AddressMap;
 use crate::surface::layer_vkCreateWin32SurfaceKHR;
 use ash::vk;
 use ash::vk::{
-    Handle, PFN_vkAllocateCommandBuffers, PFN_vkBeginCommandBuffer, PFN_vkBindBufferMemory, PFN_vkBindBufferMemory2,
-    PFN_vkCmdBeginDebugUtilsLabelEXT, PFN_vkCmdBeginRenderPass, PFN_vkCmdBeginRenderPass2, PFN_vkCmdBeginRendering,
-    PFN_vkCmdBindPipeline, PFN_vkCmdDispatch, PFN_vkCmdDraw, PFN_vkCmdDrawIndexed, PFN_vkCmdDrawIndirect,
-    PFN_vkCmdEndDebugUtilsLabelEXT, PFN_vkCmdEndRenderPass, PFN_vkCmdEndRenderPass2, PFN_vkCmdEndRendering,
-    PFN_vkCreateBuffer, PFN_vkCreateComputePipelines, PFN_vkCreateGraphicsPipelines, PFN_vkCreateImageView,
-    PFN_vkCreateSwapchainKHR, PFN_vkDestroyBuffer, PFN_vkDestroyImageView, PFN_vkDestroyPipeline,
-    PFN_vkDestroySwapchainKHR, PFN_vkEndCommandBuffer, PFN_vkFreeCommandBuffers, PFN_vkGetDeviceProcAddr,
-    PFN_vkGetDeviceQueue, PFN_vkGetInstanceProcAddr, PFN_vkQueuePresentKHR, PFN_vkQueueSubmit,
-    PFN_vkSetDebugUtilsObjectNameEXT,
+    PFN_vkAllocateCommandBuffers, PFN_vkBeginCommandBuffer, PFN_vkBindBufferMemory, PFN_vkBindBufferMemory2,
+    PFN_vkBindImageMemory, PFN_vkBindImageMemory2, PFN_vkCmdBeginDebugUtilsLabelEXT, PFN_vkCmdBeginRenderPass,
+    PFN_vkCmdBeginRenderPass2, PFN_vkCmdBeginRendering, PFN_vkCmdBindPipeline, PFN_vkCmdDispatch, PFN_vkCmdDraw,
+    PFN_vkCmdDrawIndexed, PFN_vkCmdDrawIndirect, PFN_vkCmdEndDebugUtilsLabelEXT, PFN_vkCmdEndRenderPass,
+    PFN_vkCmdEndRenderPass2, PFN_vkCmdEndRendering, PFN_vkCreateBuffer, PFN_vkCreateComputePipelines,
+    PFN_vkCreateGraphicsPipelines, PFN_vkCreateImage, PFN_vkCreateImageView, PFN_vkCreateSwapchainKHR,
+    PFN_vkDestroyBuffer, PFN_vkDestroyImage, PFN_vkDestroyImageView, PFN_vkDestroyPipeline, PFN_vkDestroySwapchainKHR,
+    PFN_vkEndCommandBuffer, PFN_vkFreeCommandBuffers, PFN_vkGetDeviceProcAddr, PFN_vkGetDeviceQueue,
+    PFN_vkGetInstanceProcAddr, PFN_vkQueuePresentKHR, PFN_vkQueueSubmit, PFN_vkSetDebugUtilsObjectNameEXT,
 };
 use ash_layer::*;
 use bumpalo::Bump;
@@ -45,8 +46,7 @@ use core::ffi::{CStr, c_char};
 use core::mem;
 use dashmap::DashMap;
 use parking_lot::Mutex;
-use slotmap::SlotMap;
-use std::ffi::c_void;
+use slotmap::{SlotMap, new_key_type};
 use std::ops::Deref;
 use std::slice;
 use std::sync::LazyLock;
@@ -68,9 +68,9 @@ const FRAMES_IN_FLIGHT: usize = 3;
 ///
 /// This holds the state tracker and resources for rendering the overlay.
 pub struct Device {
-    pub helper: DeviceHelper,                      // device dispatch tables + vulkan helpers
-    pub tracked_objects: Mutex<TrackedObjects>,    // various tracked objects
-    pub addrmap: Mutex<AddressMap>,                // Map from device addresses to buffers
+    pub helper: DeviceHelper,                   // device dispatch tables + vulkan helpers
+    pub tracked_objects: Mutex<TrackedObjects>, // various tracked objects
+    pub addrmap: Mutex<AddressMap>,             // Map from device addresses to buffers
     pub submissions: Mutex<SubmissionState>,
     pub event_timeline: Mutex<EventTimeline>, // Used to generate event IDs (EIDs) that are coherent between frames.
     pub gui: Mutex<GuiState>,                 // GUI state
@@ -89,43 +89,6 @@ impl Deref for Device {
     fn deref(&self) -> &Self::Target {
         &self.helper
     }
-}
-
-/// Information about a swapchain.
-struct SwapchainInfo {
-    surface: vk::SurfaceKHR,
-    device: vk::Device,
-    format: vk::Format,
-    extent: vk::Extent2D,
-    swapchain: vk::SwapchainKHR,
-    images: Vec<vk::Image>,
-    image_views: Vec<vk::ImageView>,
-    render_to_present: Vec<vk::Semaphore>,
-}
-
-/// Represents a submitted command buffer.
-///
-/// There's one per VkCommandBuffer, not vkQueueSubmit.
-pub struct Submission {
-    cmd_buf: vk::CommandBuffer,
-    commands: Vec<Command>,
-}
-
-pub struct SubmissionState {
-    // Submitted command buffers, in order of submission
-    subs: Vec<Submission>,
-    submission_count: usize,
-}
-
-impl SubmissionState {
-    fn new() -> SubmissionState {
-        SubmissionState { subs: vec![], submission_count: 0 }
-    }
-}
-
-pub struct TrackedObjects {
-    pipelines: Vec<vk::Pipeline>,
-    swapchains: Vec<SwapchainInfo>,
 }
 
 impl Device {
@@ -175,7 +138,8 @@ impl Device {
         sbs.submission_count = 0;
         let mut bump = self.bump.lock();
         bump.reset();
-        self.retire_transient_watches();
+        let mut dbg = self.debugger.lock();
+        dbg.end_frame(self);
         self.frame_index.fetch_add(1, Relaxed);
     }
 
@@ -184,45 +148,47 @@ impl Device {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct DispatchKey(*const c_void);
-unsafe impl Send for DispatchKey {}
-unsafe impl Sync for DispatchKey {}
-impl DispatchKey {
-    unsafe fn from_dispatchable_handle<T>(handle: *mut T) -> DispatchKey {
-        let ptr = handle as *const *const c_void;
-        DispatchKey(*ptr)
+new_key_type! {
+    pub struct ModuleId;
+}
+
+pub type ModuleMap = SlotMap<ModuleId, Module>;
+
+/// Information about a swapchain.
+struct SwapchainInfo {
+    surface: vk::SurfaceKHR,
+    device: vk::Device,
+    format: vk::Format,
+    extent: vk::Extent2D,
+    swapchain: vk::SwapchainKHR,
+    images: Vec<vk::Image>,
+    image_views: Vec<vk::ImageView>,
+    render_to_present: Vec<vk::Semaphore>,
+}
+
+/// Represents a submitted command buffer.
+///
+/// There's one per VkCommandBuffer, not vkQueueSubmit.
+pub struct Submission {
+    cmd_buf: vk::CommandBuffer,
+    commands: Vec<Command>,
+}
+
+pub struct SubmissionState {
+    // Submitted command buffers, in order of submission
+    subs: Vec<Submission>,
+    submission_count: usize,
+}
+
+impl SubmissionState {
+    fn new() -> SubmissionState {
+        SubmissionState { subs: vec![], submission_count: 0 }
     }
 }
 
-pub unsafe trait DeviceDispatchableHandle: Sized {
-    unsafe fn key(self) -> DispatchKey;
-}
-
-unsafe impl DeviceDispatchableHandle for VkDevice {
-    unsafe fn key(self) -> DispatchKey {
-        DispatchKey::from_dispatchable_handle(self)
-    }
-}
-unsafe impl DeviceDispatchableHandle for VkCommandBuffer {
-    unsafe fn key(self) -> DispatchKey {
-        DispatchKey::from_dispatchable_handle(self)
-    }
-}
-unsafe impl DeviceDispatchableHandle for vk::Device {
-    unsafe fn key(self) -> DispatchKey {
-        DispatchKey::from_dispatchable_handle(self.as_raw() as *mut c_void)
-    }
-}
-unsafe impl DeviceDispatchableHandle for vk::CommandBuffer {
-    unsafe fn key(self) -> DispatchKey {
-        DispatchKey::from_dispatchable_handle(self.as_raw() as *mut c_void)
-    }
-}
-unsafe impl DeviceDispatchableHandle for vk::Queue {
-    unsafe fn key(self) -> DispatchKey {
-        DispatchKey::from_dispatchable_handle(self.as_raw() as *mut c_void)
-    }
+pub struct TrackedObjects {
+    pipelines: Vec<vk::Pipeline>,
+    swapchains: Vec<SwapchainInfo>,
 }
 
 static DEVICE_STATE: LazyLock<DashMap<DispatchKey, Device>> = LazyLock::new(DashMap::new);
@@ -394,19 +360,7 @@ device_hooks! {
     [b"vkCmdDrawIndexed"; PFN_vkCmdDrawIndexed] fn layer_vkCmdDrawIndexed(commandBuffer: vk::CommandBuffer, indexCount: u32, instanceCount: u32, firstIndex: u32, vertexOffset: i32, firstInstance: u32) = hook_cmd_draw_indexed;
     [b"vkCmdDrawIndirect"; PFN_vkCmdDrawIndirect] fn layer_vkCmdDrawIndirect(commandBuffer: vk::CommandBuffer, buffer: vk::Buffer, offset: vk::DeviceSize, drawCount: u32, stride: u32) = hook_cmd_draw_indirect;
     [b"vkCmdDispatch"; PFN_vkCmdDispatch] fn layer_vkCmdDispatch(commandBuffer: vk::CommandBuffer, groupCountX: u32, groupCountY: u32, groupCountZ: u32) = hook_cmd_dispatch;
-
-    [b"vkCreateSwapchainKHR"; PFN_vkCreateSwapchainKHR] fn layer_vkCreateSwapchainKHR(device: vk::Device, pCreateInfo: *const vk::SwapchainCreateInfoKHR, pAllocator: *const vk::AllocationCallbacks, pSwapchain: *mut vk::SwapchainKHR) -> vk::Result = hook_create_swapchain_khr;
-    [b"vkDestroySwapchainKHR"; PFN_vkDestroySwapchainKHR] fn layer_vkDestroySwapchainKHR(device: vk::Device, swapchain: vk::SwapchainKHR, pAllocator: *const vk::AllocationCallbacks) = hook_destroy_swapchain_khr;
-    [b"vkQueuePresentKHR"; PFN_vkQueuePresentKHR] fn layer_vkQueuePresentKHR(queue: vk::Queue, p_present_info: *const vk::PresentInfoKHR) -> vk::Result = hook_queue_present_khr;
-
-    [b"vkCreateBuffer"; PFN_vkCreateBuffer] fn layer_vkCreateBuffer(device: vk::Device, pCreateInfo: *const vk::BufferCreateInfo, pAllocator: *const vk::AllocationCallbacks, pBuffer: *mut vk::Buffer) -> vk::Result = hook_create_buffer;
-    [b"vkDestroyBuffer"; PFN_vkDestroyBuffer] fn layer_vkDestroyBuffer(device: vk::Device, buffer: vk::Buffer, pAllocator: *const vk::AllocationCallbacks) = hook_destroy_buffer;
-    [b"vkBindBufferMemory"; PFN_vkBindBufferMemory] fn layer_vkBindBufferMemory(device: vk::Device, buffer: vk::Buffer, memory: vk::DeviceMemory, memoryOffset: vk::DeviceSize) -> vk::Result = hook_bind_buffer_memory;
-    [b"vkBindBufferMemory2"; PFN_vkBindBufferMemory2] fn layer_vkBindBufferMemory2(device: vk::Device, bind_info_count: u32, p_bind_infos: *const vk::BindBufferMemoryInfo<'_>) -> vk::Result = hook_bind_buffer_memory_2;
-    [b"vkQueueSubmit"; PFN_vkQueueSubmit] fn layer_vkQueueSubmit(queue: vk::Queue, submit_count: u32, p_submits: *const vk::SubmitInfo<'_>, fence: vk::Fence) -> vk::Result = hook_queue_submit;
-
-    [b"vkSetDebugUtilsObjectNameEXT"; PFN_vkSetDebugUtilsObjectNameEXT] fn layer_vkSetDebugUtilsObjectNameEXT(device: vk::Device, p_name_info: *const vk::DebugUtilsObjectNameInfoEXT<'_>) -> vk::Result = hook_set_debug_utils_object_name;
-
+    [b"vkCmdBeginDebugUtilsLabelEXT"; PFN_vkCmdBeginDebugUtilsLabelEXT] fn layer_vkCmdBeginDebugUtilsLabelEXT(commandBuffer: vk::CommandBuffer, pLabelInfo: *const vk::DebugUtilsLabelEXT<'_>) = hook_cmd_begin_debug_utils_label;
     [b"vkCmdBeginRenderPass"; PFN_vkCmdBeginRenderPass] fn layer_vkCmdBeginRenderPass(commandBuffer: vk::CommandBuffer, pRenderPassBegin: *const vk::RenderPassBeginInfo<'_>, contents: vk::SubpassContents) = hook_cmd_begin_render_pass;
     [b"vkCmdEndRenderPass"; PFN_vkCmdEndRenderPass] fn layer_vkCmdEndRenderPass(commandBuffer: vk::CommandBuffer) = hook_cmd_end_render_pass;
     [b"vkCmdBeginRenderPass2"; PFN_vkCmdBeginRenderPass2] fn layer_vkCmdBeginRenderPass2(command_buffer: vk::CommandBuffer, p_render_pass_begin: *const vk::RenderPassBeginInfo<'_>, p_subpass_begin_info: *const vk::SubpassBeginInfo<'_>) = hook_cmd_begin_render_pass2;
@@ -414,9 +368,26 @@ device_hooks! {
     [b"vkCmdBeginRendering", b"vkCmdBeginRenderingKHR"; PFN_vkCmdBeginRendering] fn layer_vkCmdBeginRendering(commandBuffer: vk::CommandBuffer, pRenderingInfo: *const vk::RenderingInfo<'_>) = hook_cmd_begin_rendering;
     [b"vkCmdEndRendering", b"vkCmdEndRenderingKHR"; PFN_vkCmdEndRendering] fn layer_vkCmdEndRendering(commandBuffer: vk::CommandBuffer) = hook_cmd_end_rendering;
 
-    [b"vkCmdBeginDebugUtilsLabelEXT"; PFN_vkCmdBeginDebugUtilsLabelEXT] fn layer_vkCmdBeginDebugUtilsLabelEXT(commandBuffer: vk::CommandBuffer, pLabelInfo: *const vk::DebugUtilsLabelEXT<'_>) = hook_cmd_begin_debug_utils_label;
+    [b"vkCreateSwapchainKHR"; PFN_vkCreateSwapchainKHR] fn layer_vkCreateSwapchainKHR(device: vk::Device, pCreateInfo: *const vk::SwapchainCreateInfoKHR, pAllocator: *const vk::AllocationCallbacks, pSwapchain: *mut vk::SwapchainKHR) -> vk::Result = hook_create_swapchain_khr;
+    [b"vkDestroySwapchainKHR"; PFN_vkDestroySwapchainKHR] fn layer_vkDestroySwapchainKHR(device: vk::Device, swapchain: vk::SwapchainKHR, pAllocator: *const vk::AllocationCallbacks) = hook_destroy_swapchain_khr;
+
+    [b"vkQueueSubmit"; PFN_vkQueueSubmit] fn layer_vkQueueSubmit(queue: vk::Queue, submit_count: u32, p_submits: *const vk::SubmitInfo<'_>, fence: vk::Fence) -> vk::Result = hook_queue_submit;
+    [b"vkQueuePresentKHR"; PFN_vkQueuePresentKHR] fn layer_vkQueuePresentKHR(queue: vk::Queue, p_present_info: *const vk::PresentInfoKHR) -> vk::Result = hook_queue_present_khr;
+
+    [b"vkCreateBuffer"; PFN_vkCreateBuffer] fn layer_vkCreateBuffer(device: vk::Device, pCreateInfo: *const vk::BufferCreateInfo, pAllocator: *const vk::AllocationCallbacks, pBuffer: *mut vk::Buffer) -> vk::Result = hook_create_buffer;
+    [b"vkDestroyBuffer"; PFN_vkDestroyBuffer] fn layer_vkDestroyBuffer(device: vk::Device, buffer: vk::Buffer, pAllocator: *const vk::AllocationCallbacks) = hook_destroy_buffer;
+    [b"vkBindBufferMemory"; PFN_vkBindBufferMemory] fn layer_vkBindBufferMemory(device: vk::Device, buffer: vk::Buffer, memory: vk::DeviceMemory, memoryOffset: vk::DeviceSize) -> vk::Result = hook_bind_buffer_memory;
+    [b"vkBindBufferMemory2"; PFN_vkBindBufferMemory2] fn layer_vkBindBufferMemory2(device: vk::Device, bind_info_count: u32, p_bind_infos: *const vk::BindBufferMemoryInfo<'_>) -> vk::Result = hook_bind_buffer_memory_2;
+
     [b"vkCmdEndDebugUtilsLabelEXT"; PFN_vkCmdEndDebugUtilsLabelEXT] fn layer_vkCmdEndDebugUtilsLabelEXT(commandBuffer: vk::CommandBuffer) = hook_cmd_end_debug_utils_label;
+    [b"vkSetDebugUtilsObjectNameEXT"; PFN_vkSetDebugUtilsObjectNameEXT] fn layer_vkSetDebugUtilsObjectNameEXT(device: vk::Device, p_name_info: *const vk::DebugUtilsObjectNameInfoEXT<'_>) -> vk::Result = hook_set_debug_utils_object_name;
 
     [b"vkCreateImageView"; PFN_vkCreateImageView] fn layer_vkCreateImageView(device: vk::Device, pCreateInfo: *const vk::ImageViewCreateInfo<'_>, pAllocator: *const vk::AllocationCallbacks<'_>, pView: *mut vk::ImageView) -> vk::Result = hook_create_image_view;
     [b"vkDestroyImageView"; PFN_vkDestroyImageView] fn layer_vkDestroyImageView(device: vk::Device, imageView: vk::ImageView, pAllocator: *const vk::AllocationCallbacks<'_>) = hook_destroy_image_view;
+
+    [b"vkCreateImage"; PFN_vkCreateImage] fn layer_vkCreateImage(device: vk::Device, pCreateInfo: *const vk::ImageCreateInfo<'_>, pAllocator: *const vk::AllocationCallbacks<'_>, pImage: *mut vk::Image) -> vk::Result = hook_create_image;
+    [b"vkDestroyImage"; PFN_vkDestroyImage] fn layer_vkDestroyImage(device: vk::Device, image: vk::Image, pAllocator: *const vk::AllocationCallbacks<'_>) = hook_destroy_image;
+    [b"vkBindImageMemory"; PFN_vkBindImageMemory] fn layer_vkBindImageMemory(device: vk::Device, image: vk::Image, memory: vk::DeviceMemory, memoryOffset: vk::DeviceSize) -> vk::Result = hook_bind_image_memory;
+    [b"vkBindImageMemory2"; PFN_vkBindImageMemory2] fn layer_vkBindImageMemory2(device: vk::Device, bind_info_count: u32, p_bind_infos: *const vk::BindImageMemoryInfo<'_>) -> vk::Result = hook_bind_image_memory_2;
+
 }

@@ -1,5 +1,4 @@
-use crate::Device;
-use crate::debugger::ModuleId;
+use crate::{Device, ModuleId};
 use crate::helper::HasPrivateData;
 use crate::spirv::{EntryPointId, EntryPointInfo, Module};
 use crate::util::find_next;

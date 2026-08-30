@@ -1,11 +1,11 @@
 [package]
-name = "vk-layer"
+name = "vk-debug-overlay"
 version = "0.1.0"
 edition = "2024"
 
 [lib]
 crate-type = ["cdylib"]
-name = "VkLayer_planitia"
+name = "VkLayer_planitia_debug_overlay"
 
 [dependencies]
 ash = { version = "0.38", default-features = false }

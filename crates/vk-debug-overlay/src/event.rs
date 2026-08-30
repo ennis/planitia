@@ -46,7 +46,7 @@ impl fmt::Display for EId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Write only the last 4 hex digits for the display impl. EIDs are supposed to be hashes,
         // so the risk of collision is relatively small as long as the number of displayed events stay small.
-        write!(f, "EID:{:04X}", self.0 & 0xffff)
+        write!(f, "{:04X}", self.0 & 0xffff)
     }
 }
 

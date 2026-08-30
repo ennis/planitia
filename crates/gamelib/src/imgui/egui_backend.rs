@@ -25,6 +25,7 @@ struct EguiVertex {
 }
 
 #[derive(Copy, Clone)]
+#[repr(C, align(16))]
 struct EguiRootParams {
     screen_size: [f32; 2],
     texture: TextureHandle,
@@ -219,7 +220,6 @@ impl Renderer {
 }
 
 fn create_pipeline() -> GraphicsPipeline {
-
     let create_info = GraphicsPipelineCreateInfo {
         push_constants_size: size_of::<EguiRootParams>(),
         vertex_input: VertexInputState {

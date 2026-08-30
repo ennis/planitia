@@ -1,12 +1,12 @@
 //! SPIR-V parser
 use crate::spirv::{
-    EntryPointInfo, Module, ParseError, PointerType, ScalarType, StructField, StructType, TypeId, TypeInfo, VariableId,
-    VariableInfo,
+    ConstantId, ConstantInfo, EntryPointInfo, Module, ParseError, PointerType, ScalarType, StructField, StructType,
+    TypeId, TypeInfo, VariableId, VariableInfo,
 };
 use num_traits::FromPrimitive;
 use spirv as spv;
 use std::collections::HashMap;
-use std::slice;
+use std::{array, slice};
 
 #[derive(Copy, Clone, Debug)]
 #[repr(C)]
@@ -238,8 +238,10 @@ fn create_shader_reflection_inner(spv: &[u32]) -> Result<Module, ParseError> {
                 module.insert_type(result_id, TypeInfo::SampledImage);
             }
             (TypeArray, &[result_id, elem_type, length]) => {
-                module
-                    .insert_type(result_id, TypeInfo::Array { element: TypeId(elem_type), len: length, stride: None });
+                module.insert_type(
+                    result_id,
+                    TypeInfo::Array { element: TypeId(elem_type), len: ConstantId(length), stride: None },
+                );
             }
             (TypeRuntimeArray, &[result_id, elem_type]) => {
                 let ty = TypeInfo::RuntimeArray { element: TypeId(elem_type), stride: None };
@@ -284,7 +286,12 @@ fn create_shader_reflection_inner(spv: &[u32]) -> Result<Module, ParseError> {
             (TypeFunction, &[ref operands @ ..]) => {}
             (ConstantTrue, &[ref operands @ ..]) => {}
             (ConstantFalse, &[ref operands @ ..]) => {}
-            (Constant, &[ref operands @ ..]) => {}
+            (Constant, &[result_type, result_id, ref value @ ..]) => {
+                let ty = module[TypeId(result_type)].as_scalar().unwrap();
+                let value_bytes = unsafe { slice::from_raw_parts(value.as_ptr() as *const u8, value.len() * 4) };
+                let value_bytes = array::from_fn(|i| value_bytes.get(i).cloned().unwrap_or(0));
+                module.insert_constant(result_id, ConstantInfo { ty, value_bytes: Some(value_bytes) });
+            }
             (ConstantComposite, &[ref operands @ ..]) => {}
             (ConstantSampler, &[ref operands @ ..]) => {}
             (ConstantNull, &[ref operands @ ..]) => {}

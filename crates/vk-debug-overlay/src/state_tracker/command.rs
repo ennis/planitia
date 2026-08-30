@@ -340,7 +340,7 @@ impl Device {
         });
         let d = self.get_private_data_mut(command_buffer).unwrap();
         let n = d.commands.len() - 1;
-        self.update_watches_for_command(&d.commands[n]);
+        self.after_command(&d.commands[n]);
     }
 
     pub unsafe fn hook_cmd_begin_render_pass(
@@ -395,7 +395,7 @@ impl Device {
     unsafe fn end_rendering_common(&self, cmd_buf: vk::CommandBuffer) {
         let d = self.get_private_data_mut(cmd_buf).unwrap();
         for cmd in &d.commands[d.render_pass_begin..] {
-            self.update_watches_for_command(cmd);
+            self.after_command(cmd);
         }
     }
 

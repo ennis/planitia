@@ -8,7 +8,8 @@ pub mod command;
 pub mod pipeline;
 pub mod queue;
 pub mod swapchain;
-mod image;
+pub mod image;
+pub mod memory;
 
 impl Device {
     pub unsafe fn hook_set_debug_utils_object_name(
@@ -33,6 +34,10 @@ impl Device {
             vk::ObjectType::BUFFER => {
                 let buffer = vk::Buffer::from_raw(handle);
                 self.get_private_data_mut(buffer).unwrap().name = name;
+            }
+            vk::ObjectType::IMAGE => {
+                let image = vk::Image::from_raw(handle);
+                self.get_private_data_mut(image).unwrap().name = name;
             }
             vk::ObjectType::QUEUE => {
                 // TODO

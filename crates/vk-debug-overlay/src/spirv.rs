@@ -29,10 +29,7 @@ pub struct Module {
 
 impl Module {
     pub fn new() -> Module {
-        Module {
-            r: vec![],
-            entry_points: vec![],
-        }
+        Module { r: vec![], entry_points: vec![] }
     }
 
     fn reserve(&mut self, result_id: u32) {
@@ -62,6 +59,12 @@ impl Module {
         self.reserve(result_id);
         self.r[result_id as usize] = InstResult::Variable(var.clone());
         VariableId(result_id)
+    }
+
+    pub fn insert_constant(&mut self, result_id: u32, c: ConstantInfo) -> ConstantId {
+        self.reserve(result_id);
+        self.r[result_id as usize] = InstResult::Constant(c.clone());
+        ConstantId(result_id)
     }
 
     pub fn insert_string(&mut self, result_id: u32, name: String) -> StringId {
@@ -136,6 +139,27 @@ impl IndexMut<VariableId> for Module {
     }
 }
 
+impl Index<ConstantId> for Module {
+    type Output = ConstantInfo;
+
+    fn index(&self, index: ConstantId) -> &Self::Output {
+        let InstResult::Constant(info) = &self.r[index.0 as usize] else {
+            panic!("invalid ConstantId {}", index.0);
+        };
+        info
+    }
+}
+
+impl IndexMut<ConstantId> for Module {
+    fn index_mut(&mut self, index: ConstantId) -> &mut Self::Output {
+        self.reserve(index.0);
+        let InstResult::Constant(info) = &mut self.r[index.0 as usize] else {
+            panic!("invalid ConstantId {}", index.0);
+        };
+        info
+    }
+}
+
 /// Entry point identifier.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 #[repr(transparent)]
@@ -183,12 +207,23 @@ pub enum AccessKind {
 pub struct StringId(pub u32 /* result_id */);
 
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub enum IntegerConstant {
+    SpecConstant(u32),
+    Constant(u64)
+}
+
 /// Type identifier.
 ///
 /// This wraps a SPIR-V `result_id` of a type declaration instruction.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 #[repr(transparent)]
 pub struct TypeId(pub u32 /* result_id */);
+
+/// Constant or spec constant result_id.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[repr(transparent)]
+pub struct ConstantId(pub u32 /* result_id */);
 
 /// Describes a type in a SPIR-V module.
 #[repr(C)]
@@ -205,7 +240,7 @@ pub enum TypeInfo {
     /// Matrix type (scalar type, rows, columns).
     Matrix { scalar: ScalarType, rows: u8, cols: u8, stride: Option<u32> },
     /// Array type (element type, length, stride).
-    Array { element: TypeId, len: u32, stride: Option<u32> },
+    Array { element: TypeId, len: ConstantId, stride: Option<u32> },
     /// Runtime array type (element type, stride).
     RuntimeArray { element: TypeId, stride: Option<u32> },
     /// Structure type.
@@ -232,9 +267,16 @@ impl TypeInfo {
     }
 
     /// Returns the element type and size if this represents an array type, or `None` otherwise.
-    pub fn as_array(&self) -> Option<(TypeId, u32)> {
+    pub fn as_array(&self) -> Option<(TypeId, ConstantId)> {
         match *self {
             TypeInfo::Array { element, len, .. } => Some((element, len)),
+            _ => None,
+        }
+    }
+
+    pub fn as_scalar(&self) -> Option<ScalarType> {
+        match *self {
+            TypeInfo::Scalar(s) => Some(s),
             _ => None,
         }
     }
@@ -334,6 +376,36 @@ impl ScalarType {
             ScalarType::I64 | ScalarType::U64 => 8,
         }
     }
+
+    pub fn pretty_name(self) -> &'static str {
+        match self {
+            ScalarType::Bool => "bool",
+            ScalarType::I8 => "i8",
+            ScalarType::I16 => "i16",
+            ScalarType::I32 => "i32",
+            ScalarType::I64 => "i64",
+            ScalarType::U8 => "u8",
+            ScalarType::U16 => "u16",
+            ScalarType::U32 => "u32",
+            ScalarType::U64 => "u64",
+            ScalarType::F32 => "f32",
+        }
+    }
+
+    pub fn suffix(self) -> &'static str {
+        match self {
+            ScalarType::Bool => "b",
+            ScalarType::I8 => "i8",
+            ScalarType::I16 => "i16",
+            ScalarType::I32 => "i",
+            ScalarType::I64 => "i64",
+            ScalarType::U8 => "u8",
+            ScalarType::U16 => "u16",
+            ScalarType::U32 => "u",
+            ScalarType::U64 => "u64",
+            ScalarType::F32 => "f",
+        }
+    }
 }
 
 #[repr(C)]
@@ -388,8 +460,9 @@ pub fn type_byte_size(m: &Module, ty: &TypeInfo) -> Option<usize> {
             Some(col_stride * cols as usize)
         }
         TypeInfo::Array { element, len, stride } => {
+            let len = m[len].as_usize().unwrap_or(0);
             let elem_stride = stride.map(|s| s as usize).or_else(|| type_byte_size(m, &m[element]))?;
-            Some(elem_stride * len as usize)
+            Some(elem_stride * len)
         }
         TypeInfo::Struct(ref s) => {
             s.fields.last().and_then(|f| type_byte_size(m, &m[f.ty]).map(|sz| f.offset as usize + sz))
@@ -415,21 +488,43 @@ impl<'a> fmt::Display for PrettyType<'a> {
         match *self.ty {
             TypeInfo::Void => write!(f, "void"),
             TypeInfo::Bool => write!(f, "bool"),
-            TypeInfo::Scalar(s) => write!(f, "{:?}", s),
-            TypeInfo::Vector(s, n) => write!(f, "vec{}<{:?}>", n, s),
-            TypeInfo::Matrix { scalar, rows, cols, .. } => write!(f, "mat{}x{}<{:?}>", rows, cols, scalar),
-            TypeInfo::Array { element, len, .. } => write!(f, "[{}; {}]", pretty_print_type(m, &m[element]), len),
-            TypeInfo::RuntimeArray { element, .. } => write!(f, "[{}]", pretty_print_type(m, &m[element])),
-            TypeInfo::Struct(ref s) => write!(f, "struct {}", s.name),
+            TypeInfo::Scalar(s) => write!(f, "{}", s.pretty_name()),
+            TypeInfo::Vector(s, n) => write!(f, "vec{}{}", n, s.suffix()),
+            TypeInfo::Matrix { scalar, rows, cols, .. } => write!(f, "mat{}x{}{}", rows, cols, scalar.suffix()),
+            TypeInfo::Array { element, len, .. } => {
+                let len = m[len].as_usize().unwrap_or(0);
+                write!(f, "{}[{}]", pretty_print_type(m, &m[element]), len)
+            },
+            TypeInfo::RuntimeArray { element, .. } => write!(f, "{}[]", pretty_print_type(m, &m[element])),
+            TypeInfo::Struct(ref s) => write!(f, "{}", s.name),
             TypeInfo::ImageHandle(_) => write!(f, "image_handle"),
             TypeInfo::Pointer(p) => match p.pointee {
-                Some(pointee) => write!(f, "*{:?} {}", p.storage_class, pretty_print_type(m, &m[pointee])),
-                None => write!(f, "*{:?} ?", p.storage_class),
+                Some(pointee) => write!(f, "*{} {}", pretty_storage_class(p.storage_class), pretty_print_type(m, &m[pointee])),
+                None => write!(f, "*{} <unknown>", pretty_storage_class(p.storage_class)),
             },
             TypeInfo::Image => write!(f, "image"),
             TypeInfo::SampledImage => write!(f, "sampled_image"),
             TypeInfo::Sampler => write!(f, "sampler"),
         }
+    }
+}
+
+fn pretty_storage_class(sc: spv::StorageClass) -> &'static str {
+    match sc {
+        spv::StorageClass::PhysicalStorageBuffer => "",
+        spv::StorageClass::UniformConstant => "[uniform_constant]",
+        spv::StorageClass::Input => "[input]",
+        spv::StorageClass::Uniform => "[uniform]",
+        spv::StorageClass::Output => "[output]",
+        spv::StorageClass::Workgroup => "[workgroup]",
+        spv::StorageClass::CrossWorkgroup => "[cross_workgroup]",
+        spv::StorageClass::Private => "[private]",
+        spv::StorageClass::Function => "[function]",
+        spv::StorageClass::Generic => "[generic]",
+        spv::StorageClass::PushConstant => "[push_constant]",
+        spv::StorageClass::AtomicCounter => "[atomic_counter]",
+        spv::StorageClass::Image => "[image]",
+        _ => "",
     }
 }
 
@@ -448,8 +543,24 @@ pub struct VariableInfo {
 }
 
 #[derive(Clone)]
+pub struct ConstantInfo {
+    pub ty: ScalarType,
+    pub value_bytes: Option<[u8; 8]>,
+}
+
+impl ConstantInfo {
+    pub fn as_usize(&self) -> Option<usize> {
+        let Some(bytes) = self.value_bytes else {
+            return None;
+        };
+        Some(usize::from_le_bytes(bytes))
+    }
+}
+
+#[derive(Clone)]
 enum InstResult {
     None,
+    Constant(ConstantInfo),
     Type(TypeInfo),
     Variable(VariableInfo),
     EntryPoint(EntryPointInfo),

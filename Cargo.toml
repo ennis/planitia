@@ -17,7 +17,7 @@ members = [
     "crates/hgeo",            # Reads houdini JSON-based .geo/.bgeo files
     "crates/experiment",
     "crates/dummytool",
-    "crates/vk-layer",
+    "crates/vk-debug-overlay",
     "planitia-workspace-hack",
     "crates/sgpu"]
 resolver = "1"
