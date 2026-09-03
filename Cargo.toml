@@ -19,7 +19,8 @@ members = [
     "crates/dummytool",
     "crates/vk-debug-overlay",
     "planitia-workspace-hack",
-    "crates/sgpu"]
+    "crates/sgpu",
+    "crates/vulkan-generator", "crates/vulkan"]
 resolver = "1"
 
 [workspace.dependencies]

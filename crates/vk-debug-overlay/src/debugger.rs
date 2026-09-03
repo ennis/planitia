@@ -10,8 +10,9 @@ use rustc_hash::FxHasher;
 use slotmap::{SlotMap, new_key_type};
 use std::hash::{Hash, Hasher};
 use std::ptr;
+use vulkan_headers::vulkan::vulkan::VkHostAddressRangeConstEXT;
 
-/// Represents a sequence of pointer indirections from a base address, (e.g. `base->field->field2 ...`).
+/// Represents a sequence of pointer indirections from push data at offset 0, (e.g. `base->field->field2 ...`).
 #[derive(Clone, Hash, Eq, PartialEq)]
 pub struct LoadChain {
     // Chain of offsets for each pointer indirection.
@@ -104,42 +105,90 @@ struct CopyIndirect1DParams {
 
 /// Manages the capture of data (buffer data & images) between commands.
 pub struct Debugger {
-    pub watches: SlotMap<WatchId, Watch>,
+    pub commands: Vec<CommandWatch>,
 }
 
 impl Debugger {
     pub fn new() -> Debugger {
-        Debugger { watches: SlotMap::with_key() }
+        Debugger { commands: Vec::new() }
     }
 
     pub fn end_frame(&mut self, d: &Device) {
-        // cleanup abandoned watches
-        self.watches.retain(|_id, watch| {
-            if watch.transient && watch.abandoned {
-                match watch.capture {
-                    CaptureKind::Buffer(ref mut c) => {
-                        if let Some(result_buffer) = c.result.take() {
-                            unsafe { d.destroy_buffer_helper(result_buffer) };
-                        }
+        // Iterate over all commands, and clean up any abandoned captures
+        // (those which were not requested during the last frame).
+        // At the same time, reset the `abandoned` flags to true for the coming frame.
+        for cmd in self.commands.iter_mut() {
+            cmd.access_chains.retain(|_id, cap| {
+                if cap.transient && cap.abandoned {
+                    if let Some(result_buffer) = cap.result.take() {
+                        unsafe { d.destroy_buffer_helper(result_buffer) };
                     }
-                    CaptureKind::Image(ref mut c) => {
-                        if let Some(result) = c.result.take() {
-                            unsafe {
-                                d.destroy_image_helper(result.image);
-                            }
-                        }
-                    }
+                    false
+                } else {
+                    cap.abandoned = true;
+                    true
                 }
-                false
-            } else {
-                true
+            });
+            cmd.image_capture.retain(|_id, cap| {
+                if cap.transient && cap.abandoned {
+                    if let Some(result) = cap.result.take() {
+                        unsafe { d.destroy_image_helper(result.image) };
+                    }
+                    false
+                } else {
+                    cap.abandoned = true;
+                    true
+                }
+            });
+            if let Some(ref mut cap) = cmd.resource_heap {
+                if cap.transient && cap.abandoned {
+                    if let Some(result_buffer) = cap.result.take() {
+                        unsafe { d.destroy_buffer_helper(result_buffer) };
+                    }
+                    cmd.resource_heap = None;
+                } else {
+                    cap.abandoned = true;
+                }
             }
-        });
+            if let Some(ref mut cap) = cmd.sampler_heap {
+                if cap.transient && cap.abandoned {
+                    if let Some(result_buffer) = cap.result.take() {
+                        unsafe { d.destroy_buffer_helper(result_buffer) };
+                    }
+                    cmd.sampler_heap = None;
+                } else {
+                    cap.abandoned = true;
+                }
+            }
 
-        // reset the abandoned flag
-        for watch in self.watches.values_mut() {
-            watch.abandoned = true;
-            watch.stale = true;
+            // stale for the coming frame
+            cmd.stale = true;
+        }
+    }
+
+    pub unsafe fn handle_command(&mut self, d: &Device, eid: EId, cb_state: &CommandBufferState) {
+        for cmd in self.commands.iter_mut() {
+            if cmd.eid == eid {
+                cmd.stale = false;
+                Self::do_capture_command(d, cmd, cb_state);
+            }
+        }
+    }
+
+    unsafe fn do_capture_command(d: &Device, watch: &mut CommandWatch, cb_state: &CommandBufferState) {
+        if let Some(ref mut cap) = watch.resource_heap {
+            // Copy resource heap
+            let buf = get_or_init_buffer(d, &mut cap.result, cb_state.resource_heap.size);
+            d.cmd_copy_buffer(
+                cb_state.cmd_buf,
+                cb_state.resource_heap.host_address as vk::Buffer,
+                buf.buffer,
+                &[vk::BufferCopy {
+                    src_offset: 0,
+                    dst_offset: 0,
+                    size: cb_state.resource_heap.size,
+                }],
+            );
         }
     }
 
@@ -158,7 +207,7 @@ impl Debugger {
         }
     }
 
-    unsafe fn do_capture(d: &Device, watch: &mut Watch, cmd_buf: vk::CommandBuffer, push_data: &[u8]) {
+    unsafe fn do_capture(d: &Device, watch: &mut CommandWatch, cmd_buf: vk::CommandBuffer, push_data: &[u8], resource_heap: VkHostAddressRangeConstEXT, sampler_heap: VkHostAddressRangeConstEXT) {
         match watch.capture {
             CaptureKind::Buffer(ref mut cap) => {
                 Self::do_capture_command_data(d, cmd_buf, push_data, cap);
@@ -176,7 +225,7 @@ impl Debugger {
         d: &Device,
         cmd_buf: vk::CommandBuffer,
         push_data: &[u8],
-        cap: &mut BufferCapture,
+        cap: &mut LoadChainCapture,
     ) {
         if cap.size == 0 {
             // nothing to copy.
@@ -240,7 +289,7 @@ impl Debugger {
 
 
     // Finds an existing watch by key.
-    fn get_or_insert_watch(&mut self, eid: EId, key: impl Hash, f: impl FnOnce() -> CaptureKind) -> (WatchId, &mut Watch) {
+    fn get_or_insert_watch(&mut self, eid: EId, key: impl Hash, f: impl FnOnce() -> CaptureKind) -> (WatchId, &mut CommandWatch) {
         let mut h = FxHasher::default();
         (eid, key).hash(&mut h);
         let hash = h.finish();
@@ -252,7 +301,7 @@ impl Debugger {
                 return (id, watch);
             }
         }
-        let id = self.watches.insert(Watch {
+        let id = self.watches.insert(CommandWatch {
             hash,
             eid,
             transient: true,
@@ -264,18 +313,21 @@ impl Debugger {
     }
 
     // Adds a debugger watch on command push data.
-    fn add_data_watch(&mut self, eid: EId, load_chain: &LoadChain, byte_size: usize) -> (WatchId, &mut Watch) {
+    fn add_load_chain_capture(&mut self, eid: EId, load_chain: &LoadChain, byte_size: usize) -> (WatchId, &mut CommandWatch) {
+
+
+
         self.get_or_insert_watch(eid, (0, load_chain, byte_size), || {
-            CaptureKind::Buffer(BufferCapture { load_chain: load_chain.clone(), size: byte_size, result: None })
+            CaptureKind::Buffer(LoadChainCapture { load_chain: load_chain.clone(), size: byte_size, result: None })
         })
     }
 
-    fn add_image_watch(&mut self, eid: EId, image: vk::Image) -> (WatchId, &mut Watch) {
+    fn add_image_watch(&mut self, eid: EId, image: vk::Image) -> (WatchId, &mut CommandWatch) {
         self.get_or_insert_watch(eid, (1, image), || CaptureKind::Image(ImageCapture { image, result: None }))
     }
 
     pub fn capture_load_chain(&mut self, eid: EId, load_chain: &LoadChain, byte_size: usize) -> Option<Vec<u8>> {
-        let (_watch_id, watch) = self.add_data_watch(eid, load_chain, byte_size);
+        let (_watch_id, watch) = self.add_load_chain_capture(eid, load_chain, byte_size);
         if watch.stale {
             // no data captured on this frame
             return None;
@@ -299,36 +351,53 @@ impl Debugger {
     }
 }
 
+/// Command buffer state.
+pub struct CommandBufferState<'a> {
+    pub cmd_buf: vk::CommandBuffer,
+    pub push_data: &'a [u8],
+    pub resource_heap: VkHostAddressRangeConstEXT,
+    pub sampler_heap: VkHostAddressRangeConstEXT,
+}
+
+/// A command for which we have capture requests.
+pub struct CommandWatch {
+    pub eid: EId,
+    /// If true, no data was captured for this command in the last frame.
+    pub stale: bool,
+    pub access_chains: SlotMap<LoadChainCaptureId, LoadChainCapture>,
+    pub image_capture: SlotMap<ImageCaptureId, ImageCapture>,
+    pub resource_heap: Option<DescriptorHeapCapture>,
+    pub sampler_heap: Option<DescriptorHeapCapture>,
+}
+
 /// Debugger watch: a query that should run before/after a specified command.
-pub struct BufferCapture {
+pub struct LoadChainCapture {
+    pub(crate) hash: u64,       // Unique hash
     pub(crate) load_chain: LoadChain,  // Load chain to the data being inspected
     pub(crate) size: usize,            // Size in bytes to load from the chain
     pub(crate) result: Option<Buffer>, // Result buffer for holding the result of the query
-}
-
-pub struct ImageCapture {
-    //
-
-    pub(crate) image: vk::Image,
-    pub(crate) result: Option<CapturedImage>,
-}
-
-pub enum CaptureKind {
-    Buffer(BufferCapture),
-    Image(ImageCapture),
-}
-
-pub struct Watch {
-    pub eid: EId,
-    pub(crate) hash: u64,       // Unique hash
     pub(crate) transient: bool, // Whether this watch is temporary (removed if not read in the last frame)
     pub(crate) abandoned: bool, //
     pub(crate) stale: bool,     // If true, no data was captured for this watch in the last frame
-    pub capture: CaptureKind,
+}
+
+pub struct ImageCapture {
+    pub(crate) hash: u64,       // Unique hash
+    pub(crate) image: vk::Image,
+    pub(crate) result: Option<CapturedImage>,
+    pub(crate) transient: bool, // Whether this watch is temporary (removed if not read in the last frame)
+    pub(crate) abandoned: bool,
+}
+
+pub struct DescriptorHeapCapture {
+    pub(crate) result: Option<Buffer>,
+    pub(crate) transient: bool,
+    pub(crate) abandoned: bool,
 }
 
 new_key_type! {
-    pub struct WatchId;
+    pub struct LoadChainCaptureId;
+    pub struct ImageCaptureId;
 }
 
 #[derive(Clone)]
@@ -355,4 +424,14 @@ fn image_buffer_size(image_info: &ImageInfo) -> usize {
         * image_info.size.depth as usize
         * format_info.block_size as usize;
     pixel_size
+}
+
+fn get_or_init_buffer(d: &DeviceHelper, buffer: &mut Option<Buffer>, size: usize) -> &Buffer {
+    buffer.get_or_insert_with(|| unsafe {
+        d.create_buffer_helper(
+            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::STORAGE_BUFFER,
+            size,
+            None,
+        )
+    })
 }

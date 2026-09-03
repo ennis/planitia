@@ -1,0 +1,950 @@
+//! Parses the Khronos `vk.xml` Vulkan API registry and emits raw Rust FFI
+//! bindings to stdout. This is a code generator: its own build correctness
+//! matters, but the *generated* Rust source is not required to compile.
+
+use roxmltree::{Document, Node};
+use std::collections::{HashMap, HashSet};
+use std::fmt::Write as _;
+
+const VK_XML: &str = include_str!("../vk.xml");
+
+fn main() {
+    let doc = Document::parse(VK_XML).expect("failed to parse vk.xml");
+    let root = doc.root_element();
+
+    let mut out = String::with_capacity(8 * 1024 * 1024);
+
+    gen_preamble(&mut out);
+
+    let types_node = find_child(root, "types").expect("registry has no <types>");
+
+    // Struct/union members can reference API constants as array sizes
+    // (e.g. `char x[VK_MAX_EXTENSION_NAME_SIZE]`). We need to know which
+    // constants are used this way so we can emit them as `usize`.
+    let mut array_size_consts: HashSet<String> = HashSet::new();
+    collect_array_size_consts(types_node, &mut array_size_consts);
+
+    gen_api_constants(root, &mut out, &array_size_consts);
+    gen_basetypes(types_node, &mut out);
+    gen_handles(types_node, &mut out);
+    gen_enum_type_decls(types_node, &mut out);
+    gen_bitmask_type_decls(types_node, &mut out);
+
+    let mut declared_consts: HashSet<String> = HashSet::new();
+    gen_enum_values(root, &mut out, &mut declared_consts);
+
+    gen_funcpointers(types_node, &mut out);
+    gen_structs_and_unions(types_node, &mut out);
+
+    let commands = gen_commands(root, &mut out);
+
+    let core_commands = collect_core_command_names(root);
+    gen_dispatch_tables(&mut out, &commands, &core_commands);
+    gen_extension_modules(root, &mut out, &commands);
+
+    print!("{out}");
+}
+
+// ---------------------------------------------------------------------
+// Small XML helpers
+// ---------------------------------------------------------------------
+
+fn find_child<'a, 'input>(node: Node<'a, 'input>, tag: &str) -> Option<Node<'a, 'input>> {
+    node.children().find(|n| n.has_tag_name(tag))
+}
+
+fn children_tagged<'a, 'input>(
+    node: Node<'a, 'input>,
+    tag: &'static str,
+) -> impl Iterator<Item = Node<'a, 'input>> {
+    node.children().filter(move |n| n.has_tag_name(tag))
+}
+
+fn attr_is_vulkansc(node: Node) -> bool {
+    matches!(node.attribute("api"), Some("vulkansc"))
+}
+
+/// Rust keywords that could otherwise collide with identifiers pulled
+/// straight out of the C API.
+fn sanitize_ident(name: &str) -> String {
+    match name {
+        "type" | "move" | "ref" | "box" | "fn" | "in" | "match" | "mod" | "override" | "unsized"
+        | "async" | "await" | "dyn" | "final" | "trait" => format!("r#{name}"),
+        _ => name.to_string(),
+    }
+}
+
+/// Maps a C primitive type name to its Rust equivalent. Any type name that
+/// isn't a known C primitive (i.e. all the `Vk*` types) is passed through
+/// unchanged.
+fn map_c_type(c: &str) -> String {
+    match c {
+        "void" => "c_void".to_string(),
+        "char" => "c_char".to_string(),
+        "float" => "f32".to_string(),
+        "double" => "f64".to_string(),
+        "uint8_t" => "u8".to_string(),
+        "uint16_t" => "u16".to_string(),
+        "uint32_t" => "u32".to_string(),
+        "uint64_t" => "u64".to_string(),
+        "int8_t" => "i8".to_string(),
+        "int16_t" => "i16".to_string(),
+        "int32_t" => "i32".to_string(),
+        "int64_t" => "i64".to_string(),
+        "size_t" => "usize".to_string(),
+        "int" => "c_int".to_string(),
+        other => other.to_string(),
+    }
+}
+
+// ---------------------------------------------------------------------
+// Declaration parsing shared by <member>, <param> and <proto> nodes
+// ---------------------------------------------------------------------
+
+#[derive(Default, Debug, Clone)]
+struct ParsedDecl {
+    base_type: String,
+    name: String,
+    pointer_stars: usize,
+    is_const: bool,
+    outer_const: bool,
+    array_sizes: Vec<String>,
+}
+
+/// Walks the mixed text/element children of a `<member>`, `<param>` or
+/// `<proto>` node and reconstructs the C declaration pieces.
+fn parse_decl(node: Node) -> ParsedDecl {
+    let mut prefix = String::new();
+    let mut middle = String::new();
+    let mut suffix = String::new();
+    let mut base_type = String::new();
+    let mut name = String::new();
+    let mut seen_type = false;
+    let mut seen_name = false;
+
+    for child in node.children() {
+        if child.is_text() {
+            let t = child.text().unwrap_or("");
+            if !seen_type {
+                prefix.push_str(t);
+            } else if !seen_name {
+                middle.push_str(t);
+            } else {
+                suffix.push_str(t);
+            }
+        } else if child.is_element() {
+            match child.tag_name().name() {
+                "type" => {
+                    base_type = child.text().unwrap_or("").trim().to_string();
+                    seen_type = true;
+                }
+                "name" => {
+                    name = child.text().unwrap_or("").trim().to_string();
+                    seen_name = true;
+                }
+                "enum" => {
+                    // Array size given as a named API constant, e.g.
+                    // `[<enum>VK_MAX_EXTENSION_NAME_SIZE</enum>]`.
+                    suffix.push('@');
+                    suffix.push_str(child.text().unwrap_or("").trim());
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let prefix_trim = prefix.trim();
+    let is_const = prefix_trim.contains("const");
+    let pointer_stars = middle.matches('*').count();
+    let outer_const = middle.contains("const");
+
+    let mut array_sizes = Vec::new();
+    let mut cur = String::new();
+    let mut in_brackets = false;
+    for c in suffix.chars() {
+        match c {
+            '[' => {
+                in_brackets = true;
+                cur.clear();
+            }
+            ']' => {
+                in_brackets = false;
+                array_sizes.push(cur.trim_start_matches('@').to_string());
+            }
+            _ => {
+                if in_brackets {
+                    cur.push(c);
+                }
+            }
+        }
+    }
+
+    ParsedDecl {
+        base_type,
+        name,
+        pointer_stars,
+        is_const,
+        outer_const,
+        array_sizes,
+    }
+}
+
+fn rust_type_for(decl: &ParsedDecl) -> String {
+    let base = map_c_type(&decl.base_type);
+    let mut ty = match decl.pointer_stars {
+        0 => base,
+        1 => {
+            if decl.is_const {
+                format!("*const {base}")
+            } else {
+                format!("*mut {base}")
+            }
+        }
+        _ => {
+            let outer = if decl.outer_const { "*const" } else { "*mut" };
+            let inner = if decl.is_const { "*const" } else { "*mut" };
+            format!("{outer} {inner} {base}")
+        }
+    };
+    if decl.pointer_stars == 0 {
+        for dim in decl.array_sizes.iter().rev() {
+            ty = format!("[{ty}; {dim}]");
+        }
+    }
+    ty
+}
+
+// ---------------------------------------------------------------------
+// Preamble
+// ---------------------------------------------------------------------
+
+fn gen_preamble(out: &mut String) {
+    out.push_str(
+        r##"#![allow(non_camel_case_types, non_snake_case, non_upper_case_globals, dead_code)]
+#![feature(default_field_values)]
+
+use std::ffi::{c_char, c_int, c_void};
+
+pub type PFN_vkVoidFunction = unsafe extern "system" fn();
+
+"##,
+    );
+}
+
+// ---------------------------------------------------------------------
+// API constants (`<enums name="API Constants">`)
+// ---------------------------------------------------------------------
+
+fn collect_array_size_consts(types_node: Node, out: &mut HashSet<String>) {
+    for ty in children_tagged(types_node, "type") {
+        let category = ty.attribute("category");
+        if category != Some("struct") && category != Some("union") {
+            continue;
+        }
+        for member in children_tagged(ty, "member") {
+            let decl = parse_decl(member);
+            for size in decl.array_sizes {
+                if size.chars().next().is_some_and(|c| c.is_ascii_alphabetic()) {
+                    out.insert(size);
+                }
+            }
+        }
+    }
+}
+
+fn resolve_api_constant(raw_type: Option<&str>, raw_value: &str, used_as_array_size: bool) -> (String, String) {
+    let v = raw_value.trim();
+    if v.starts_with('"') {
+        return ("&str".to_string(), v.to_string());
+    }
+    if let Some(rest) = v.strip_prefix("(~").and_then(|s| s.strip_suffix(')')) {
+        let is64 = rest.ends_with("ULL");
+        let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+        let n: u64 = digits.parse().unwrap_or(0);
+        return if is64 {
+            ("u64".to_string(), format!("{}", !n))
+        } else {
+            let ty = if used_as_array_size { "usize" } else { "u32" };
+            (ty.to_string(), format!("{}", !(n as u32)))
+        };
+    }
+    match raw_type {
+        Some("float") => {
+            let stripped = v.trim_end_matches(['F', 'f']);
+            ("f32".to_string(), stripped.to_string())
+        }
+        Some("uint64_t") => ("u64".to_string(), v.to_string()),
+        _ => {
+            let ty = if used_as_array_size { "usize" } else { "u32" };
+            (ty.to_string(), v.to_string())
+        }
+    }
+}
+
+fn gen_api_constants(root: Node, out: &mut String, array_size_consts: &HashSet<String>) {
+    out.push_str("// ---- API Constants ----\n");
+    for enums_node in children_tagged(root, "enums") {
+        if enums_node.attribute("name") != Some("API Constants") {
+            continue;
+        }
+        for e in children_tagged(enums_node, "enum") {
+            if attr_is_vulkansc(e) {
+                continue;
+            }
+            let Some(name) = e.attribute("name") else { continue };
+            if e.attribute("alias").is_some() {
+                continue;
+            }
+            let raw_value = e.attribute("value").unwrap_or("0");
+            let (ty, val) = resolve_api_constant(e.attribute("type"), raw_value, array_size_consts.contains(name));
+            let _ = writeln!(out, "pub const {name}: {ty} = {val};");
+        }
+    }
+    out.push('\n');
+}
+
+// ---------------------------------------------------------------------
+// Base types (`<type category="basetype">`)
+// ---------------------------------------------------------------------
+
+fn gen_basetypes(types_node: Node, out: &mut String) {
+    out.push_str("// ---- Base types ----\n");
+    for ty in children_tagged(types_node, "type") {
+        if ty.attribute("category") != Some("basetype") {
+            continue;
+        }
+        // Reconstruct the full raw text (including nested <type>/<name>
+        // elements) to detect #ifdef guarded / opaque platform types.
+        let full_text: String = ty.descendants().filter(|n| n.is_text()).filter_map(|n| n.text()).collect();
+        if full_text.contains("#ifdef") {
+            continue;
+        }
+
+        let name_node = find_child(ty, "name");
+        let Some(name) = name_node.and_then(|n| n.text()) else { continue };
+        let name = name.trim();
+        if !name.starts_with("Vk") {
+            continue;
+        }
+
+        match find_child(ty, "type") {
+            Some(inner_type) => {
+                let inner = inner_type.text().unwrap_or("").trim();
+                // Detect a pointer between </type> and <name>.
+                let mut middle = String::new();
+                let mut seen_type = false;
+                for child in ty.children() {
+                    if child.is_text() {
+                        if seen_type {
+                            middle.push_str(child.text().unwrap_or(""));
+                        }
+                    } else if child.has_tag_name("type") {
+                        seen_type = true;
+                    } else if child.has_tag_name("name") {
+                        break;
+                    }
+                }
+                let rust_inner = map_c_type(inner);
+                let rust_ty = if middle.contains('*') {
+                    format!("*mut {rust_inner}")
+                } else {
+                    rust_inner
+                };
+                let _ = writeln!(out, "pub type {name} = {rust_ty};");
+            }
+            None => {
+                // Opaque struct type (e.g. platform handles), no <type> child.
+                let _ = writeln!(out, "#[repr(C)]\npub enum {name} {{}}");
+            }
+        }
+    }
+    out.push('\n');
+}
+
+// ---------------------------------------------------------------------
+// Handles (`<type category="handle">`)
+// ---------------------------------------------------------------------
+
+fn gen_handles(types_node: Node, out: &mut String) {
+    out.push_str("// ---- Handles ----\n");
+    for ty in children_tagged(types_node, "type") {
+        if ty.attribute("category") != Some("handle") {
+            continue;
+        }
+        if let Some(alias) = ty.attribute("alias") {
+            let name = ty.attribute("name").unwrap_or_default();
+            let _ = writeln!(out, "pub type {name} = {alias};");
+            continue;
+        }
+        let Some(name_node) = find_child(ty, "name") else { continue };
+        let name = name_node.text().unwrap_or("").trim().to_string();
+        let Some(kind_node) = find_child(ty, "type") else { continue };
+        let kind = kind_node.text().unwrap_or("").trim();
+        match kind {
+            "VK_DEFINE_HANDLE" => {
+                let _ = writeln!(
+                    out,
+                    "#[repr(C)]\npub struct {name}_T {{ _priv: [u8; 0] }}\npub type {name} = *mut {name}_T;"
+                );
+            }
+            "VK_DEFINE_NON_DISPATCHABLE_HANDLE" => {
+                let _ = writeln!(out, "pub type {name} = u64;");
+            }
+            _ => {}
+        }
+    }
+    out.push('\n');
+}
+
+// ---------------------------------------------------------------------
+// Enum type declarations (`<type category="enum">`)
+// ---------------------------------------------------------------------
+
+fn gen_enum_type_decls(types_node: Node, out: &mut String) {
+    out.push_str("// ---- Enum type declarations ----\n");
+    for ty in children_tagged(types_node, "type") {
+        if ty.attribute("category") != Some("enum") {
+            continue;
+        }
+        let Some(name) = ty.attribute("name") else { continue };
+        if let Some(alias) = ty.attribute("alias") {
+            let _ = writeln!(out, "pub type {name} = {alias};");
+        } else {
+            let _ = writeln!(out, "pub type {name} = i32;");
+        }
+    }
+    out.push('\n');
+}
+
+// ---------------------------------------------------------------------
+// Bitmask type declarations (`<type category="bitmask">`)
+// ---------------------------------------------------------------------
+
+fn gen_bitmask_type_decls(types_node: Node, out: &mut String) {
+    out.push_str("// ---- Bitmask types ----\n");
+    for ty in children_tagged(types_node, "type") {
+        if ty.attribute("category") != Some("bitmask") {
+            continue;
+        }
+        let Some(name) = ty.attribute("name") else { continue };
+        if let Some(alias) = ty.attribute("alias") {
+            let _ = writeln!(out, "pub type {name} = {alias};");
+            continue;
+        }
+        let Some(name_node) = find_child(ty, "name") else { continue };
+        let name = name_node.text().unwrap_or(name).trim();
+        let Some(inner) = find_child(ty, "type").and_then(|n| n.text()) else { continue };
+        let _ = writeln!(out, "pub type {name} = {};", inner.trim());
+    }
+    out.push('\n');
+}
+
+// ---------------------------------------------------------------------
+// Enum + bitmask constant values, including extension additions
+// ---------------------------------------------------------------------
+
+#[derive(Clone)]
+enum ValueKind {
+    Value(String),
+    Bitpos(u32),
+    Alias(String),
+}
+
+struct RawConst {
+    name: String,
+    ty: String,
+    kind: ValueKind,
+}
+
+fn bitpos_literal(bp: u32) -> String {
+    if bp < 32 {
+        format!("0x{:08X}", 1u32 << bp)
+    } else {
+        format!("0x{:016X}", 1u64 << bp.min(63))
+    }
+}
+
+fn gen_enum_values(root: Node, out: &mut String, declared: &mut HashSet<String>) {
+    out.push_str("// ---- Enum and bitmask constants ----\n");
+    let mut raws: Vec<RawConst> = Vec::new();
+
+    // 1) Values declared inside named <enums> groups.
+    for enums_node in children_tagged(root, "enums") {
+        let Some(group_name) = enums_node.attribute("name") else { continue };
+        if group_name == "API Constants" {
+            continue;
+        }
+        for e in children_tagged(enums_node, "enum") {
+            if attr_is_vulkansc(e) {
+                continue;
+            }
+            let Some(name) = e.attribute("name") else { continue };
+            let kind = if let Some(alias) = e.attribute("alias") {
+                ValueKind::Alias(alias.to_string())
+            } else if let Some(bp) = e.attribute("bitpos") {
+                ValueKind::Bitpos(bp.parse().unwrap_or(0))
+            } else if let Some(v) = e.attribute("value") {
+                ValueKind::Value(v.to_string())
+            } else {
+                continue;
+            };
+            raws.push(RawConst { name: name.to_string(), ty: group_name.to_string(), kind });
+        }
+    }
+
+    // 2) Values added by <feature>/<extension> <require><enum extends=.../>.
+    for feature in children_tagged(root, "feature") {
+        collect_extends_raws(feature, None, &mut raws);
+    }
+    if let Some(extensions_node) = find_child(root, "extensions") {
+        for extension in children_tagged(extensions_node, "extension") {
+            let ext_num: Option<i64> = extension.attribute("number").and_then(|s| s.parse().ok());
+            collect_extends_raws(extension, ext_num, &mut raws);
+        }
+    }
+
+    resolve_and_emit(&raws, out, declared);
+    out.push('\n');
+}
+
+fn collect_extends_raws(container: Node, ext_num: Option<i64>, raws: &mut Vec<RawConst>) {
+    for require in children_tagged(container, "require") {
+        for e in children_tagged(require, "enum") {
+            if attr_is_vulkansc(e) {
+                continue;
+            }
+            let Some(extends) = e.attribute("extends") else { continue };
+            let Some(name) = e.attribute("name") else { continue };
+            let kind = if let Some(alias) = e.attribute("alias") {
+                ValueKind::Alias(alias.to_string())
+            } else if let Some(bp) = e.attribute("bitpos") {
+                ValueKind::Bitpos(bp.parse().unwrap_or(0))
+            } else if let Some(v) = e.attribute("value") {
+                ValueKind::Value(v.to_string())
+            } else if let Some(offset) = e.attribute("offset").and_then(|s| s.parse::<i64>().ok()) {
+                let num = e
+                    .attribute("extnumber")
+                    .and_then(|s| s.parse::<i64>().ok())
+                    .or(ext_num)
+                    .unwrap_or(1);
+                let mut value = 1_000_000_000i64 + (num - 1) * 1000 + offset;
+                if e.attribute("dir") == Some("-") {
+                    value = -value;
+                }
+                ValueKind::Value(value.to_string())
+            } else {
+                continue;
+            };
+            raws.push(RawConst { name: name.to_string(), ty: extends.to_string(), kind });
+        }
+    }
+}
+
+fn resolve_and_emit(raws: &[RawConst], out: &mut String, declared: &mut HashSet<String>) {
+    let mut resolved: HashMap<String, (String, String)> = HashMap::new();
+    for _ in 0..8 {
+        let mut progressed = false;
+        for raw in raws {
+            if resolved.contains_key(&raw.name) {
+                continue;
+            }
+            match &raw.kind {
+                ValueKind::Bitpos(bp) => {
+                    resolved.insert(raw.name.clone(), (raw.ty.clone(), bitpos_literal(*bp)));
+                    progressed = true;
+                }
+                ValueKind::Value(v) => {
+                    resolved.insert(raw.name.clone(), (raw.ty.clone(), v.clone()));
+                    progressed = true;
+                }
+                ValueKind::Alias(target) => {
+                    if let Some((_, lit)) = resolved.get(target) {
+                        let lit = lit.clone();
+                        resolved.insert(raw.name.clone(), (raw.ty.clone(), lit));
+                        progressed = true;
+                    }
+                }
+            }
+        }
+        if !progressed {
+            break;
+        }
+    }
+
+    for raw in raws {
+        if declared.contains(&raw.name) {
+            continue;
+        }
+        if let Some((ty, lit)) = resolved.get(&raw.name) {
+            let _ = writeln!(out, "pub const {}: {} = {};", raw.name, ty, lit);
+            declared.insert(raw.name.clone());
+        } else if let ValueKind::Alias(target) = &raw.kind {
+            // Unresolved forward alias: fall back to referencing the other
+            // constant by name directly.
+            let _ = writeln!(out, "pub const {}: {} = {};", raw.name, raw.ty, target);
+            declared.insert(raw.name.clone());
+        }
+    }
+}
+
+// ---------------------------------------------------------------------
+// Function pointer callbacks (`<type category="funcpointer">`)
+// ---------------------------------------------------------------------
+
+fn gen_funcpointers(types_node: Node, out: &mut String) {
+    out.push_str("// ---- Function pointer callbacks ----\n");
+    for ty in children_tagged(types_node, "type") {
+        if ty.attribute("category") != Some("funcpointer") {
+            continue;
+        }
+        let Some(proto) = find_child(ty, "proto") else { continue };
+        let decl = parse_decl(proto);
+        if decl.name == "PFN_vkVoidFunction" {
+            // Already declared in the preamble.
+            continue;
+        }
+        let ret = rust_type_for(&decl);
+
+        let params: Vec<String> = children_tagged(ty, "param")
+            .map(|p| {
+                let pdecl = parse_decl(p);
+                format!("{}: {}", sanitize_ident(&pdecl.name), rust_type_for(&pdecl))
+            })
+            .collect();
+
+        if ret == "c_void" || ret == "()" {
+            let _ = writeln!(out, "pub type {} = unsafe extern \"system\" fn({});", decl.name, params.join(", "));
+        } else {
+            let _ = writeln!(
+                out,
+                "pub type {} = unsafe extern \"system\" fn({}) -> {};",
+                decl.name,
+                params.join(", "),
+                ret
+            );
+        }
+    }
+    out.push('\n');
+}
+
+// ---------------------------------------------------------------------
+// Structs and unions (`<type category="struct"|"union">`)
+// ---------------------------------------------------------------------
+
+fn gen_structs_and_unions(types_node: Node, out: &mut String) {
+    out.push_str("// ---- Structs and unions ----\n");
+    for ty in children_tagged(types_node, "type") {
+        let category = ty.attribute("category");
+        if category != Some("struct") && category != Some("union") {
+            continue;
+        }
+        let Some(name) = ty.attribute("name") else { continue };
+
+        if let Some(alias) = ty.attribute("alias") {
+            let _ = writeln!(out, "pub type {name} = {alias};");
+            continue;
+        }
+
+        let is_union = category == Some("union");
+        let returned_only = ty.attribute("returnedonly") == Some("true");
+
+        let _ = writeln!(out, "#[repr(C)]");
+        let _ = writeln!(out, "pub {} {name} {{", if is_union { "union" } else { "struct" });
+
+        for member in children_tagged(ty, "member") {
+            if attr_is_vulkansc(member) {
+                continue;
+            }
+            let decl = parse_decl(member);
+            let field_name = sanitize_ident(&decl.name);
+            let field_ty = rust_type_for(&decl);
+
+            if !is_union && decl.name == "sType" {
+                if let Some(values) = member.attribute("values") {
+                    let first = values.split(',').next().unwrap_or(values);
+                    let _ = writeln!(out, "    pub {field_name}: {field_ty} = {first},");
+                    continue;
+                }
+                let _ = writeln!(out, "    pub {field_name}: {field_ty} = 0,");
+                continue;
+            }
+
+            if !is_union && decl.name == "pNext" {
+                let default = if decl.is_const {
+                    "std::ptr::null()"
+                } else if returned_only {
+                    "std::ptr::null_mut()"
+                } else {
+                    "std::ptr::null_mut()"
+                };
+                let _ = writeln!(out, "    pub {field_name}: {field_ty} = {default},");
+                continue;
+            }
+
+            let _ = writeln!(out, "    pub {field_name}: {field_ty},");
+        }
+
+        let _ = writeln!(out, "}}");
+    }
+    out.push('\n');
+}
+
+// ---------------------------------------------------------------------
+// Commands (`<commands>`)
+// ---------------------------------------------------------------------
+
+#[derive(Clone)]
+struct CommandInfo {
+    /// Full name, e.g. "vkCreateInstance".
+    name: String,
+    /// First parameter's raw type name (e.g. "VkInstance"), if any.
+    first_param_type: String,
+    /// Name of the PFN_ type this command uses (itself, or the aliased
+    /// command's PFN_ type when this command is an alias).
+    pfn_name: String,
+}
+
+fn gen_commands(root: Node, out: &mut String) -> Vec<CommandInfo> {
+    out.push_str("// ---- Commands ----\n");
+    let Some(commands_node) = find_child(root, "commands") else { return Vec::new() };
+
+    let mut infos = Vec::new();
+
+    for command in children_tagged(commands_node, "command") {
+        if let Some(alias) = command.attribute("alias") {
+            let Some(name) = command.attribute("name") else { continue };
+            let _ = writeln!(out, "pub type PFN_{name} = PFN_{alias};");
+            // Look up the first param type of the aliased command later; for
+            // now we just record the alias target's PFN name and resolve the
+            // first-param type in a second pass below.
+            infos.push(CommandInfo {
+                name: name.to_string(),
+                first_param_type: format!("@alias:{alias}"),
+                pfn_name: format!("PFN_{alias}"),
+            });
+            continue;
+        }
+
+        let Some(proto) = find_child(command, "proto") else { continue };
+        let decl = parse_decl(proto);
+        let ret = rust_type_for(&decl);
+
+        let params: Vec<(String, String)> = children_tagged(command, "param")
+            .map(|p| {
+                let pdecl = parse_decl(p);
+                (pdecl.base_type.clone(), format!("{}: {}", sanitize_ident(&pdecl.name), rust_type_for(&pdecl)))
+            })
+            .collect();
+
+        let first_param_type = params.first().map(|(t, _)| t.clone()).unwrap_or_default();
+        let param_strs: Vec<String> = params.into_iter().map(|(_, s)| s).collect();
+
+        if ret == "c_void" {
+            let _ = writeln!(out, "pub type PFN_{} = unsafe extern \"system\" fn({});", decl.name, param_strs.join(", "));
+        } else {
+            let _ = writeln!(
+                out,
+                "pub type PFN_{} = unsafe extern \"system\" fn({}) -> {};",
+                decl.name,
+                param_strs.join(", "),
+                ret
+            );
+        }
+
+        infos.push(CommandInfo {
+            name: decl.name.clone(),
+            first_param_type,
+            pfn_name: format!("PFN_{}", decl.name),
+        });
+    }
+    out.push('\n');
+
+    // Resolve alias first-param types now that all real commands are known.
+    let lookup: HashMap<String, String> =
+        infos.iter().filter(|i| !i.first_param_type.starts_with("@alias:")).map(|i| (i.name.clone(), i.first_param_type.clone())).collect();
+    for info in &mut infos {
+        if let Some(target) = info.first_param_type.strip_prefix("@alias:") {
+            if let Some(ty) = lookup.get(target) {
+                info.first_param_type = ty.clone();
+            } else {
+                info.first_param_type = String::new();
+            }
+        }
+    }
+
+    infos
+}
+
+// ---------------------------------------------------------------------
+// Core dispatch tables
+// ---------------------------------------------------------------------
+
+const STATIC_COMMANDS: &[&str] = &[
+    "vkCreateInstance",
+    "vkEnumerateInstanceExtensionProperties",
+    "vkEnumerateInstanceLayerProperties",
+    "vkGetInstanceProcAddr",
+    "vkEnumerateInstanceVersion",
+];
+
+fn command_category(cmd: &CommandInfo) -> &'static str {
+    if STATIC_COMMANDS.contains(&cmd.name.as_str()) {
+        return "static";
+    }
+    match cmd.first_param_type.as_str() {
+        "VkInstance" | "VkPhysicalDevice" => "instance",
+        "VkDevice" | "VkQueue" | "VkCommandBuffer" => "device",
+        _ => "static",
+    }
+}
+
+fn field_name(cmd_name: &str) -> &str {
+    cmd_name.strip_prefix("vk").unwrap_or(cmd_name)
+}
+
+fn collect_core_command_names(root: Node) -> HashSet<String> {
+    let mut names = HashSet::new();
+    for feature in children_tagged(root, "feature") {
+        let api = feature.attribute("api").unwrap_or("");
+        if !api.split(',').any(|a| a == "vulkan") {
+            continue;
+        }
+        for require in children_tagged(feature, "require") {
+            for cmd in children_tagged(require, "command") {
+                if let Some(name) = cmd.attribute("name") {
+                    names.insert(name.to_string());
+                }
+            }
+        }
+    }
+    names
+}
+
+fn write_dispatch_table(out: &mut String, table_name: &str, commands: &[&CommandInfo]) {
+    let _ = writeln!(out, "pub struct {table_name} {{");
+    let mut seen = HashSet::new();
+    for cmd in commands {
+        if !seen.insert(cmd.name.clone()) {
+            continue;
+        }
+        let _ = writeln!(out, "    pub {}: {},", field_name(&cmd.name), cmd.pfn_name);
+    }
+    let _ = writeln!(out, "}}");
+}
+
+fn gen_dispatch_tables(out: &mut String, commands: &[CommandInfo], core_commands: &HashSet<String>) {
+    out.push_str("// ---- Core dispatch tables ----\n");
+
+    let core: Vec<&CommandInfo> = commands.iter().filter(|c| core_commands.contains(&c.name)).collect();
+
+    let statics: Vec<&CommandInfo> = core.iter().copied().filter(|c| command_category(c) == "static").collect();
+    let instances: Vec<&CommandInfo> = core.iter().copied().filter(|c| command_category(c) == "instance").collect();
+    let devices: Vec<&CommandInfo> = core.iter().copied().filter(|c| command_category(c) == "device").collect();
+
+    write_dispatch_table(out, "StaticDispatchTable", &statics);
+    out.push('\n');
+    write_dispatch_table(out, "InstanceDispatchTable", &instances);
+    out.push('\n');
+    write_dispatch_table(out, "DeviceDispatchTable", &devices);
+    out.push('\n');
+}
+
+// ---------------------------------------------------------------------
+// Extension modules
+// ---------------------------------------------------------------------
+
+fn extension_module_name(ext_name: &str) -> String {
+    // "VK_KHR_swapchain" -> "khr_swapchain"
+    let rest = ext_name.strip_prefix("VK_").unwrap_or(ext_name);
+    rest.to_lowercase()
+}
+
+fn gen_extension_modules(root: Node, out: &mut String, commands: &[CommandInfo]) {
+    out.push_str("// ---- Extension modules ----\n");
+    let command_lookup: HashMap<&str, &CommandInfo> = commands.iter().map(|c| (c.name.as_str(), c)).collect();
+
+    let Some(extensions_node) = find_child(root, "extensions") else { return };
+
+    for extension in children_tagged(extensions_node, "extension") {
+        let Some(ext_name) = extension.attribute("name") else { continue };
+        if extension.attribute("supported") == Some("disabled") {
+            continue;
+        }
+
+        let module = extension_module_name(ext_name);
+        let mut body = String::new();
+        let mut declared = HashSet::new();
+
+        // Module-local constants: standalone <enum> entries in <require>
+        // blocks that do not extend another type (spec version, extension
+        // name, ...).
+        let mut local_raws: Vec<RawConst> = Vec::new();
+        for require in children_tagged(extension, "require") {
+            for e in children_tagged(require, "enum") {
+                if e.attribute("extends").is_some() || attr_is_vulkansc(e) {
+                    continue;
+                }
+                let Some(name) = e.attribute("name") else { continue };
+                let kind = if let Some(alias) = e.attribute("alias") {
+                    ValueKind::Alias(alias.to_string())
+                } else if let Some(v) = e.attribute("value") {
+                    ValueKind::Value(v.to_string())
+                } else {
+                    continue;
+                };
+                let ty = if let ValueKind::Value(v) = &kind {
+                    if v.starts_with('"') { "&str".to_string() } else { "u32".to_string() }
+                } else {
+                    "u32".to_string()
+                };
+                local_raws.push(RawConst { name: name.to_string(), ty, kind });
+            }
+        }
+        resolve_and_emit(&local_raws, &mut body, &mut declared);
+
+        // Commands introduced by this extension, split by dispatch table.
+        let mut instance_cmds: Vec<&CommandInfo> = Vec::new();
+        let mut device_cmds: Vec<&CommandInfo> = Vec::new();
+        let mut seen_cmds = HashSet::new();
+        for require in children_tagged(extension, "require") {
+            for cmd_ref in children_tagged(require, "command") {
+                let Some(name) = cmd_ref.attribute("name") else { continue };
+                if !seen_cmds.insert(name.to_string()) {
+                    continue;
+                }
+                if let Some(info) = command_lookup.get(name) {
+                    match command_category(info) {
+                        "device" => device_cmds.push(info),
+                        _ => instance_cmds.push(info),
+                    }
+                }
+            }
+        }
+
+        if !instance_cmds.is_empty() {
+            write_dispatch_table(&mut body, "InstanceDispatchTable", &instance_cmds);
+            body.push('\n');
+        }
+        if !device_cmds.is_empty() {
+            write_dispatch_table(&mut body, "DeviceDispatchTable", &device_cmds);
+            body.push('\n');
+        }
+
+        if body.trim().is_empty() {
+            continue;
+        }
+
+        let _ = writeln!(out, "pub mod {module} {{");
+        let _ = writeln!(out, "    use super::*;");
+        out.push('\n');
+        for line in body.lines() {
+            if line.is_empty() {
+                out.push('\n');
+            } else {
+                let _ = writeln!(out, "    {line}");
+            }
+        }
+        let _ = writeln!(out, "}}");
+        out.push('\n');
+    }
+}

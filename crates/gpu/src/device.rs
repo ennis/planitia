@@ -2,7 +2,7 @@
 //mod bindless;
 mod descriptor_heap;
 
-use crate::device::descriptor_heap::{DescriptorHeaps, DeviceDescriptorIndexTable};
+use crate::device::descriptor_heap::DescriptorHeaps;
 use crate::instance::vk_khr_surface;
 use crate::platform::PlatformExtensions;
 use crate::{
@@ -12,6 +12,7 @@ use crate::{
     is_depth_and_stencil_format, signal,
 };
 use ash::vk;
+use gpu::device::descriptor_heap::SamplerDescriptorHandle;
 use gpu::flush;
 use gpu_allocator::vulkan::AllocationCreateDesc;
 use gpu_types::{SamplerHandle, ShaderStage};
@@ -25,9 +26,11 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::{fmt, mem, ptr};
 use vulkan_headers::vulkan::vulkan as vk2;
-use vulkan_headers::vulkan::vulkan::{VkPhysicalDeviceDescriptorHeapFeaturesEXT, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_FEATURES_EXT, VkPhysicalDeviceShaderUntypedPointersFeaturesKHR, VK_TRUE, VK_FALSE};
+use vulkan_headers::vulkan::vulkan::{
+    VK_FALSE, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_FEATURES_EXT, VK_TRUE,
+    VkPhysicalDeviceDescriptorHeapFeaturesEXT, VkPhysicalDeviceShaderUntypedPointersFeaturesKHR,
+};
 use vulkan_headers::vulkan::vulkan_core::VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT;
-use gpu::device::descriptor_heap::SamplerDescriptorHandle;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Size of the global descriptor heaps (in number of descriptors).
@@ -1553,10 +1556,7 @@ impl Device {
             }
         };
 
-        Ok(GraphicsPipeline {
-            pipeline,
-            stage_reflection,
-        })
+        Ok(GraphicsPipeline { pipeline, stage_reflection })
     }
 }
 

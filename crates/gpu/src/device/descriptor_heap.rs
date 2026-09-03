@@ -1,9 +1,8 @@
-use crate::device::{RESOURCE_DESCRIPTOR_HEAP_SIZE, ResourceDescriptorIndex, SAMPLER_DESCRIPTOR_HEAP_SIZE};
-use crate::{Device, SamplerDescriptorIndex};
+use crate::device::{RESOURCE_DESCRIPTOR_HEAP_SIZE, SAMPLER_DESCRIPTOR_HEAP_SIZE};
+use crate::Device;
 use ash::vk;
 use ash::vk::Handle;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme, Allocator};
-use slotmap::SlotMap;
 use std::ffi::c_void;
 use std::ptr;
 use std::sync::Mutex;
@@ -58,18 +57,19 @@ impl FreeList {
     }
 }
 
+///
 struct DescriptorHeapInfo {
     alloc: Allocation,
     buffer: vk::Buffer,
     ptr: *mut c_void,
     device_addr: vk::DeviceAddress,
-    /// Offset to the beginning of descriptors in the resource heap.
+    /// Offset to the beginning of descriptors (skips the reserved range).
     start_offset: usize,
-    /// Stride between consecutive descriptors in the heap.
+    /// Stride between consecutive descriptors.
     stride: usize,
-    /// Alignment of descriptors in the heap.
+    /// Alignment of descriptors.
     alignment: usize,
-    /// Size of the heap.
+    /// Size in bytes of the heap.
     size: usize,
     /// Index of the first valid descriptor, skipping the reserved range
     /// (`start_offset / stride`).
@@ -196,11 +196,6 @@ fn allocate_descriptor_heap_memory(
     DescriptorHeapInfo { alloc, buffer, ptr, device_addr, start_offset, stride, alignment, index_offset, size: byte_size }
 }
 
-pub(crate) struct DeviceDescriptorIndexTable {
-    pub(crate) resource: SlotMap<ResourceDescriptorIndex, ()>,
-    pub(crate) sampler: SlotMap<SamplerDescriptorIndex, ()>,
-}
-
 /// Device state related to resource and sampler descriptor heaps.
 pub(crate) struct DescriptorHeaps {
     /// Descriptor writes must be externally synchronized, but we don't want to
@@ -251,13 +246,6 @@ impl DescriptorHeaps {
 
 pub type ResourceDescriptorHandle = u32;
 pub type SamplerDescriptorHandle = u32;
-
-
-
-pub(crate) struct DescriptorSlot {
-    /// Pointer to the descriptor slot in host memory.
-    pub(crate) ptr: *mut c_void,
-}
 
 impl Device {
 

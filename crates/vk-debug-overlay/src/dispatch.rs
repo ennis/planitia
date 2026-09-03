@@ -2,14 +2,52 @@
 
 use ash::vk::{Handle, PFN_vkGetDeviceProcAddr, PFN_vkGetInstanceProcAddr};
 use ash::{ext, khr, vk};
-use ash_layer::{
-    LayerFunction, PFN_vk_layerGetPhysicalDeviceProcAddr, PFN_vkSetDeviceLoaderData, get_device_chain_info,
+use ash_layer::{PFN_vkSetDeviceLoaderData, PFN_vk_layerGetPhysicalDeviceProcAddr,
 };
-use std::ffi::{c_void, CStr};
+use std::ffi::{CStr, c_void};
 use std::mem;
 use std::ops::Deref;
 use vulkan_headers::vulkan::vulkan as vkh;
-use vulkan_headers::vulkan::vulkan::{VkCommandBuffer, VkDevice};
+use vulkan_headers::vulkan::vulkan::{VkCommandBuffer, VkDevice, VkStructureType};
+
+/*
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct VkDeviceMemoryCopyKHR {
+    /*
+    VkStructureType             sType;
+    const void*                 pNext;
+    VkDeviceAddressRangeKHR     srcRange;
+    VkAddressCommandFlagsKHR    srcFlags;
+    VkDeviceAddressRangeKHR     dstRange;
+    VkAddressCommandFlagsKHR    dstFlags;
+     */
+    sType: VkStructureType,
+    pNext: *const c_void,
+    srcRange: VkDeviceAddressRangeKHR,
+    srcFlags: u32, // VkAddressCommandFlagsKHR
+    dstRange: VkDeviceAddressRangeKHR,
+    dstFlags: u32, // VkAddressCommandFlagsKHR
+
+}
+
+#[repr(C)]
+#[derive(Copy,Clone)]
+pub struct VkCopyDeviceMemoryInfoKHR {
+    /*
+    VkStructureType                 sType;
+    const void*                     pNext;
+    uint32_t                        regionCount;
+    const VkDeviceMemoryCopyKHR*    pRegions;
+     */
+}
+
+pub type NonNullPFN_vkCmdCopyMemoryKHR = unsafe extern "system" fn(commandBuffer: VkCommandBuffer, pCopyMemoryInfo: *const VkCopyDeviceMemoryInfoKHR);
+*/
+
+pub struct KhrDeviceAddressCommandsDevice {
+    pub cmd_copy_memory: vkh::NonNullPFN_vkCmdCopyMemoryToMicromapEXT,
+}
 
 pub(crate) struct ExtDescriptorHeapInstance {
     pub(crate) get_physical_descriptor_size: vkh::NonNullPFN_vkGetPhysicalDeviceDescriptorSizeEXT,
@@ -32,6 +70,7 @@ impl ExtDescriptorHeapInstance {
         }
     }
 }
+
 
 pub struct ExtDescriptorHeapDevice {
     pub cmd_bind_resource_heap: vkh::NonNullPFN_vkCmdBindResourceHeapEXT,
@@ -121,7 +160,6 @@ impl DeviceDispatch {
 
 impl Deref for DeviceDispatch {
     type Target = ash::Device;
-
     fn deref(&self) -> &Self::Target {
         &self.device
     }

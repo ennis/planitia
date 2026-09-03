@@ -60,7 +60,6 @@ pub struct Command {
     pub cmd_buf: vk::CommandBuffer,
     pub key: CmdKey,
     pub push: Vec<u8>,
-    //pub readback: Option<Alloc>,
 }
 
 pub struct CommandBufferData {
