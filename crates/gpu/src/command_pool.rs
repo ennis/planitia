@@ -89,7 +89,7 @@ pub(crate) fn allocate_command_buffer() -> vk::CommandBuffer {
     })
 }
 
-pub(crate) fn free_command_buffer(cmdbuf: vk::CommandBuffer, defer_until_frame_completed: u64) {
+pub(crate) fn defer_free_command_buffer(cmdbuf: vk::CommandBuffer, defer_until_frame_completed: u64) {
     COMMAND_POOL.with(|pool| {
         let mut pool = pool.borrow_mut();
         pool.as_mut().expect("thread-local command pool not initialized").defer_free(cmdbuf, defer_until_frame_completed);

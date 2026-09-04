@@ -4,12 +4,12 @@ use crate::{BufferCreateInfo, BufferUntyped, BufferUsage, Device, FrameIndex, Pt
 use ash::vk;
 use gpu_allocator::MemoryLocation;
 use gpu_types::Data;
+use log::trace;
 use std::alloc::Layout;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::ptr;
-use log::trace;
 
 /// Alignment of temp buffer allocations.
 const ALLOC_ALIGNMENT: usize = 256;
@@ -74,7 +74,7 @@ impl ThreadLocalAllocator {
                 // This destroys the previously popped chunk.
                 free_buf = Some(buf);
             } else {
-                break
+                break;
             }
         }
         if let Some(free_buf) = free_buf.as_ref() {
@@ -142,6 +142,11 @@ thread_local! {
     static TEMP_ALLOCATOR: RefCell<ThreadLocalAllocator> = const { RefCell::new(ThreadLocalAllocator::new()) };
 }
 
+#[inline(never)]
+pub fn alloc_temp_layout(layout: Layout) -> TempAlloc {
+    TEMP_ALLOCATOR.with(|alloc| alloc.borrow_mut().alloc_raw(layout))
+}
+
 /// Uploads data to a temporary GPU buffer.
 ///
 /// # Validity
@@ -151,13 +156,11 @@ thread_local! {
 /// the validity of the pointer is unspecified. It is the caller's responsibility to synchronize
 /// calls to this function with `end_frame`.
 pub fn alloc_temp<T: Data>(data: &T) -> Ptr<T> {
-    TEMP_ALLOCATOR.with(|alloc| {
-        let TempAlloc { dev_addr, host_addr, .. } = alloc.borrow_mut().alloc_raw(Layout::new::<T>());
-        unsafe {
-            ptr::copy_nonoverlapping(data as *const T, host_addr as *mut T, 1);
-        }
-        Ptr { raw: dev_addr, _phantom: PhantomData }
-    })
+    let TempAlloc { dev_addr, host_addr, .. } = alloc_temp_layout(Layout::new::<T>());
+    unsafe {
+        ptr::copy_nonoverlapping(data as *const T, host_addr as *mut T, 1);
+    }
+    Ptr { raw: dev_addr, _phantom: PhantomData }
 }
 
 /// Uploads a slice of data to a temporary GPU buffer.
@@ -169,11 +172,9 @@ pub fn alloc_temp<T: Data>(data: &T) -> Ptr<T> {
 /// the validity of the pointer is unspecified. It is the caller's responsibility to synchronize
 /// calls to this function with `end_frame`.
 pub fn alloc_temp_slice<T: Data>(data: &[T]) -> Ptr<T> {
-    TEMP_ALLOCATOR.with(|alloc| {
-        let TempAlloc { dev_addr, host_addr, .. } = alloc.borrow_mut().alloc_raw(Layout::for_value(data));
-        unsafe {
-            ptr::copy_nonoverlapping(data.as_ptr(), host_addr as *mut T, data.len());
-        }
-        Ptr { raw: dev_addr, _phantom: PhantomData }
-    })
+    let TempAlloc { dev_addr, host_addr, .. } = alloc_temp_layout(Layout::for_value(data));
+    unsafe {
+        ptr::copy_nonoverlapping(data.as_ptr(), host_addr as *mut T, data.len());
+    }
+    Ptr { raw: dev_addr, _phantom: PhantomData }
 }

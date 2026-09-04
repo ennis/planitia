@@ -1,4 +1,4 @@
-use crate::debugger::{CaptureKind, Debugger, LoadChain};
+use crate::debugger::{Debugger, LoadChain};
 use crate::event::EId;
 use crate::overlay::renderer::{FrameData, RenderData};
 use crate::spirv::{Module, ScalarType, StructType, TypeId, TypeInfo, pretty_print_type, type_byte_size};

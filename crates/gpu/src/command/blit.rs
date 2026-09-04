@@ -8,54 +8,60 @@ use crate::{
     ImageSubresourceLayers, Rect3D, Size3D,
 };
 
-fn full_subresource_range(aspects: vk::ImageAspectFlags) -> vk::ImageSubresourceRange {
-    vk::ImageSubresourceRange {
-        aspect_mask: aspects,
-        base_mip_level: 0,
-        level_count: vk::REMAINING_MIP_LEVELS,
-        base_array_layer: 0,
-        layer_count: vk::REMAINING_ARRAY_LAYERS,
-    }
-}
-
 impl CommandBuffer {
     pub fn fill_buffer(&mut self, range: &BufferRangeUntyped, data: u32) {
-        let cb = self.get_or_create_command_buffer();
         unsafe {
             // SAFETY: FFI call and parameters are valid
-            Device::instance().raw.cmd_fill_buffer(cb, range.buffer.handle(), range.byte_offset, range.byte_size, data);
+            Device::instance().raw.cmd_fill_buffer(
+                self.cmdbuf,
+                range.buffer.handle(),
+                range.byte_offset,
+                range.byte_size,
+                data,
+            );
         }
     }
 
     // TODO specify subresources
     pub fn clear_image(&mut self, image: &Image, clear_color_value: ClearColorValue) {
-        let cb = self.get_or_create_command_buffer();
+        static COLOR_SUBRESOURCES: &[vk::ImageSubresourceRange] = &[vk::ImageSubresourceRange {
+            aspect_mask: vk::ImageAspectFlags::COLOR,
+            base_mip_level: 0,
+            level_count: vk::REMAINING_MIP_LEVELS,
+            base_array_layer: 0,
+            layer_count: vk::REMAINING_ARRAY_LAYERS,
+        }];
         unsafe {
             // SAFETY: FFI call and parameters are valid
             Device::instance().raw.cmd_clear_color_image(
-                cb,
+                self.cmdbuf,
                 image.handle(),
                 vk::ImageLayout::GENERAL,
                 &clear_color_value.into(),
-                &[full_subresource_range(vk::ImageAspectFlags::COLOR)],
+                COLOR_SUBRESOURCES,
             );
         }
     }
 
     pub fn clear_depth_image(&mut self, image: &Image, depth: f32) {
-        let cb = self.get_or_create_command_buffer();
+        static DEPTH_SUBRESOURCES: &[vk::ImageSubresourceRange] = &[vk::ImageSubresourceRange {
+            aspect_mask: vk::ImageAspectFlags::DEPTH,
+            base_mip_level: 0,
+            level_count: vk::REMAINING_MIP_LEVELS,
+            base_array_layer: 0,
+            layer_count: vk::REMAINING_ARRAY_LAYERS,
+        }];
         unsafe {
             // SAFETY: FFI call and parameters are valid
             Device::instance().raw.cmd_clear_depth_stencil_image(
-                cb,
+                self.cmdbuf,
                 image.handle(),
                 vk::ImageLayout::GENERAL,
                 &vk::ClearDepthStencilValue { depth, stencil: 0 },
-                &[full_subresource_range(vk::ImageAspectFlags::DEPTH)],
+                DEPTH_SUBRESOURCES,
             );
         }
     }
-
 
     pub fn copy_image_to_image(
         &mut self,
@@ -85,10 +91,9 @@ impl CommandBuffer {
         }];
 
         // SAFETY: FFI call and parameters are valid
-        let cb = self.get_or_create_command_buffer();
         unsafe {
             Device::instance().raw.cmd_copy_image(
-                cb,
+                self.cmdbuf,
                 source.image.handle(),
                 vk::ImageLayout::GENERAL,
                 destination.image.handle(),
@@ -111,10 +116,9 @@ impl CommandBuffer {
         assert!(dst_offset + size <= destination.byte_size());
 
         // SAFETY: FFI call and parameters are valid
-        let cb = self.get_or_create_command_buffer();
         unsafe {
             Device::instance().raw.cmd_copy_buffer(
-                cb,
+                self.cmdbuf,
                 source.handle(),
                 destination.handle(),
                 &[vk::BufferCopy { src_offset, dst_offset, size }],
@@ -146,10 +150,9 @@ impl CommandBuffer {
         }];
 
         // SAFETY: FFI call and parameters are valid
-        let cb = self.get_or_create_command_buffer();
         unsafe {
             Device::instance().raw.cmd_copy_buffer_to_image(
-                cb,
+                self.cmdbuf,
                 source.buffer.handle(),
                 destination.image.handle(),
                 vk::ImageLayout::GENERAL,
@@ -180,10 +183,9 @@ impl CommandBuffer {
         }];
 
         // SAFETY: FFI call and parameters are valid
-        let cb = self.get_or_create_command_buffer();
         unsafe {
             Device::instance().raw.cmd_copy_image_to_buffer(
-                cb,
+                self.cmdbuf,
                 source.image.handle(),
                 vk::ImageLayout::GENERAL,
                 destination.buffer.handle(),
@@ -220,10 +222,9 @@ impl CommandBuffer {
         }];
 
         // SAFETY: command buffer is OK, params OK
-        let cb = self.get_or_create_command_buffer();
         unsafe {
             Device::instance().raw.cmd_blit_image(
-                cb,
+                self.cmdbuf,
                 src.handle(),
                 vk::ImageLayout::GENERAL,
                 dst.handle(),

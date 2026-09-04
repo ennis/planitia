@@ -34,11 +34,12 @@ union DescriptorBufferOrImage {
 
 bitflags! {
     /// Describes the memory types to invalidate during a barrier operation.
-    pub struct BarrierFlags: u32 {
-        const STORAGE = 1 << 0;
-        const TEXTURE = 1 << 1;
-        const INDIRECT = 1 << 2;
-        const UNIFORM = 1 << 3;
+    // Under the hood, these are just VkAccessFlags2 bits
+    pub struct BarrierFlags: u64 {
+        const STORAGE = vk::AccessFlags2::SHADER_STORAGE_READ.as_raw();
+        const TEXTURE = vk::AccessFlags2::SHADER_SAMPLED_READ.as_raw();
+        const INDIRECT = vk::AccessFlags2::INDIRECT_COMMAND_READ.as_raw();
+        const UNIFORM = vk::AccessFlags2::UNIFORM_READ.as_raw();
     }
 }
 
@@ -55,25 +56,6 @@ pub const BARRIER_INDIRECT: BarrierFlags = BarrierFlags::INDIRECT;
 
 /// Invalidate any cache related to uniform buffer memory, in preparation for uniform buffer reads.
 pub const BARRIER_UNIFORM: BarrierFlags = BarrierFlags::UNIFORM;
-
-impl BarrierFlags {
-    fn to_access_flags(self) -> vk::AccessFlags2 {
-        let mut flags = vk::AccessFlags2::empty();
-        if self.contains(Self::STORAGE) {
-            flags |= vk::AccessFlags2::SHADER_STORAGE_READ;
-        }
-        if self.contains(Self::TEXTURE) {
-            flags |= vk::AccessFlags2::SHADER_SAMPLED_READ;
-        }
-        if self.contains(Self::INDIRECT) {
-            flags |= vk::AccessFlags2::INDIRECT_COMMAND_READ;
-        }
-        if self.contains(Self::UNIFORM) {
-            flags |= vk::AccessFlags2::UNIFORM_READ;
-        }
-        flags
-    }
-}
 
 /// Describes root parameters for a command.
 #[derive(Clone, Copy)]
@@ -115,13 +97,9 @@ pub struct CommandBuffer {
     timestamp_query_pool: vk::QueryPool,
     timestamp_query_count: u32,
     timestamp_callbacks: Vec<Box<dyn FnOnce(u64) + Send>>,
-    /// Command buffers waiting to be submitted.
-    command_buffers_to_submit: Vec<vk::CommandBuffer>,
     /// Current command buffer.
-    command_buffer: Option<vk::CommandBuffer>,
+    cmdbuf: vk::CommandBuffer,
     submitted: bool,
-    /// Last bound compute pipeline layout.
-    pipeline_layout: vk::PipelineLayout,
     /// The index of the frame in which this command buffer was created (and should be recorded).
     frame_index_created: u64,
     // Make this type `!Send`, `!Sync`:
@@ -136,50 +114,40 @@ impl CommandBuffer {
     /// Once finished, the command stream should be submitted to the GPU using
     /// `CommandStream::flush`.
     /// They should be submitted in the same order as they were created.
+    #[inline(never)]
     pub fn new() -> CommandBuffer {
         let device = Device::instance();
         let timestamp_query_pool = device.get_or_create_timestamp_query_pool();
         let frame_index_created = device.frame_index.load(Relaxed);
         trace!("GPU: create CommandBuffer, frame_index_created={}", frame_index_created);
-
+        let cmdbuf = command_pool::allocate_command_buffer();
+        unsafe {
+            let info = vk::CommandBufferBeginInfo {
+                flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
+                ..Default::default()
+            };
+            device.raw.begin_command_buffer(cmdbuf, &info).unwrap();
+            // setup default dynamic state so validation layers don't complain
+            device.raw.cmd_set_depth_bias_enable(cmdbuf, false);
+            device.bind_descriptor_heaps(cmdbuf);
+        }
         CommandBuffer {
             timestamp_query_pool,
             timestamp_query_count: 0,
             timestamp_callbacks: vec![],
-            command_buffers_to_submit: vec![],
-            command_buffer: None,
+            cmdbuf,
             submitted: false,
-            pipeline_layout: Default::default(),
             frame_index_created,
             _unsync_unsend: PhantomData,
         }
     }
 
-    pub(crate) fn create_command_buffer_raw(&mut self) -> vk::CommandBuffer {
-        let device = Device::instance();
-        let cb = command_pool::allocate_command_buffer();
-
-        unsafe {
-            device
-                .raw()
-                .begin_command_buffer(
-                    cb,
-                    &vk::CommandBufferBeginInfo {
-                        flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
-                        ..Default::default()
-                    },
-                )
-                .unwrap();
-            device.bind_descriptor_heaps(cb);
-        }
-        cb
-    }
-
+    /*
     /// Returns the current command buffer, creating a new one if necessary.
     ///
     /// The returned command buffer is ready to record commands.
     pub(crate) fn get_or_create_command_buffer(&mut self) -> vk::CommandBuffer {
-        if let Some(cb) = self.command_buffer {
+        if let Some(cb) = self.cmdbuf {
             cb
         } else {
             let cb = self.create_command_buffer_raw();
@@ -187,35 +155,33 @@ impl CommandBuffer {
             // setup default dynamic state so validation layers don't complain
             unsafe {
                 let device = Device::instance();
-                device.raw.cmd_set_depth_bias_enable(cb, false);
             }
 
-            self.command_buffer = Some(cb);
+            self.cmdbuf = Some(cb);
             cb
         }
-    }
+    }*/
 
+    /*
     /// Closes the current command buffer.
     ///
     /// This does nothing if there is no current command buffer.
     pub(crate) fn close_command_buffer(&mut self) {
-        if let Some(cb) = self.command_buffer.take() {
+        Device::instance().raw().end_command_buffer(cb).unwrap();
+        if let Some(cb) = self.cmdbuf.take() {
             unsafe {
-                Device::instance().raw().end_command_buffer(cb).unwrap();
             }
             self.command_buffers_to_submit.push(cb);
         }
-    }
-
+    }*/
 
     /// Internal function to emit an image memory barrier.
     ///
     /// Mostly used for image layout transitions.
     pub(crate) unsafe fn image_barrier(&mut self, barrier: &vk::ImageMemoryBarrier2) {
         unsafe {
-            let cb = self.get_or_create_command_buffer();
             Device::instance().raw.cmd_pipeline_barrier2(
-                cb,
+                self.cmdbuf,
                 &vk::DependencyInfo {
                     dependency_flags: Default::default(),
                     image_memory_barrier_count: 1,
@@ -235,7 +201,6 @@ impl CommandBuffer {
             let tmp;
             let address: *const c_void;
             let size: usize;
-
             match params {
                 PushDataSource::Indirect(p) => {
                     // XXX: move p into a stable variable (tmp), don't make the address point
@@ -257,14 +222,12 @@ impl CommandBuffer {
                     size = size_of::<T>();
                 }
             };
-
             let push_data_info = VkPushDataInfoEXT {
                 sType: VK_STRUCTURE_TYPE_PUSH_DATA_INFO_EXT,
                 pNext: ptr::null(),
                 offset: 0,
                 data: VkHostAddressRangeConstEXT { address, size },
             };
-
             (device.ext.descriptor_heap.cmd_push_data)(cb.as_raw() as *mut _, &push_data_info);
         }
     }
@@ -289,18 +252,16 @@ impl CommandBuffer {
         // TODO: add COLOR_ATTACHMENT & DEPTH_ATTACHMENT to InvalidateFlags
         let global_memory_barrier = vk::MemoryBarrier2 {
             src_access_mask: vk::AccessFlags2::MEMORY_WRITE,
-            dst_access_mask: flags.to_access_flags()
+            dst_access_mask: vk::AccessFlags2::from_raw(flags.bits())
                 | vk::AccessFlags2::COLOR_ATTACHMENT_READ
                 | vk::AccessFlags2::DEPTH_STENCIL_ATTACHMENT_READ,
             src_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
             dst_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
             ..Default::default()
         };
-
-        let command_buffer = self.get_or_create_command_buffer();
         unsafe {
             Device::instance().raw.cmd_pipeline_barrier2(
-                command_buffer,
+                self.cmdbuf,
                 &vk::DependencyInfo {
                     dependency_flags: Default::default(),
                     memory_barrier_count: 1,
@@ -311,24 +272,21 @@ impl CommandBuffer {
         }
     }
 
-
     /// Writes values to a buffer.
     ///
     /// # Safety
     ///
     /// TODO not sure why this was made unsafe?
     pub unsafe fn update_buffer(&mut self, buffer: &BufferUntyped, offset: usize, data: &[u8]) {
-        let cb = self.get_or_create_command_buffer();
         unsafe {
-            Device::instance().raw.cmd_update_buffer(cb, buffer.handle(), offset as u64, data);
+            Device::instance().raw.cmd_update_buffer(self.cmdbuf, buffer.handle(), offset as u64, data);
         }
     }
 
     // SAFETY: TBD
     pub fn bind_compute_pipeline(&mut self, pipeline: &ComputePipeline) {
-        let cb = self.get_or_create_command_buffer();
         unsafe {
-            Device::instance().raw.cmd_bind_pipeline(cb, vk::PipelineBindPoint::COMPUTE, pipeline.pipeline);
+            Device::instance().raw.cmd_bind_pipeline(self.cmdbuf, vk::PipelineBindPoint::COMPUTE, pipeline.pipeline);
         }
     }
 
@@ -348,22 +306,18 @@ impl CommandBuffer {
         group_count_z: u32,
         root_params: impl Into<PushDataSource<'params, T>>,
     ) {
-        //crate::debugger::pre_dispatch_hook(self.pipe)
-
-        let cb = self.get_or_create_command_buffer();
         unsafe {
-            self.set_push_data(cb, root_params.into());
-            Device::instance().raw.cmd_dispatch(cb, group_count_x, group_count_y, group_count_z);
+            self.set_push_data(self.cmdbuf, root_params.into());
+            Device::instance().raw.cmd_dispatch(self.cmdbuf, group_count_x, group_count_y, group_count_z);
         }
     }
 
     /// TODO documentation
     pub fn push_debug_group(&mut self, label: &str) {
-        let command_buffer = self.get_or_create_command_buffer();
         unsafe {
             let label = CString::new(label).unwrap();
             Device::instance().ext.debug_utils.cmd_begin_debug_utils_label(
-                command_buffer,
+                self.cmdbuf,
                 &vk::DebugUtilsLabelEXT {
                     p_label_name: label.as_ptr(),
                     color: [0.0, 0.0, 0.0, 0.0],
@@ -376,9 +330,8 @@ impl CommandBuffer {
     /// TODO documentation
     pub fn pop_debug_group(&mut self) {
         // TODO check that push/pop calls are balanced
-        let command_buffer = self.get_or_create_command_buffer();
         unsafe {
-            Device::instance().ext.debug_utils.cmd_end_debug_utils_label(command_buffer);
+            Device::instance().ext.debug_utils.cmd_end_debug_utils_label(self.cmdbuf);
         }
     }
 
@@ -391,7 +344,7 @@ impl CommandBuffer {
 
     /// TODO documentation
     pub fn write_timestamp(&mut self, callback: impl FnOnce(u64) + Send + 'static) {
-        let cb = self.get_or_create_command_buffer();
+        let cb = self.cmdbuf;
         let index = self.timestamp_query_count;
         assert!(index < MAX_TIMESTAMP_QUERY_COUNT, "maximum number of timestamp queries reached");
         self.timestamp_query_count += 1;
@@ -450,10 +403,15 @@ impl CommandBuffer {
     }
 }
 
+#[cold]
+fn panic_command_buffer_not_submitted() {
+    panic!("CommandBuffer was not submitted before being dropped");
+}
+
 impl Drop for CommandBuffer {
     fn drop(&mut self) {
         if !self.submitted {
-            panic!("CommandStream was not submitted before being dropped");
+            panic_command_buffer_not_submitted();
         }
     }
 }
@@ -547,6 +505,8 @@ pub fn wait(semaphore: vk::Semaphore, value: u64) {
 }
 
 /// Signals the given timeline semaphore with the given value.
+///
+/// The value is ignored if `semaphore` is a binary semaphore.
 pub fn signal(semaphore: vk::Semaphore, value: u64) {
     sync(&[], &[SyncSignal { semaphore, value }]);
 }
@@ -555,6 +515,7 @@ pub fn signal(semaphore: vk::Semaphore, value: u64) {
 ///
 /// This implicitly calls [`flush`](flush) to ensure that all pending commands on the default
 /// command buffer are submitted before this command buffer.
+#[inline(never)]
 pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
     // Submit the default command buffer.
     flush()?;
@@ -585,13 +546,13 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
     // flush pending writes
     cmd.barrier(BarrierFlags::empty());
 
-    // finish recording the current command buffer if not already done
-    cmd.close_command_buffer();
-
-    // Put the command buffers up for deletion
-    for cmdbuf in cmd.command_buffers_to_submit.iter() {
-        command_pool::free_command_buffer(*cmdbuf, frame_index_submitted);
+    // finish recording the command buffer
+    unsafe {
+        device.raw.end_command_buffer(cmd.cmdbuf).unwrap();
     }
+
+    // Put the command buffer up for deletion
+    command_pool::defer_free_command_buffer(cmd.cmdbuf, frame_index_submitted);
 
     //----------------------
     // submit
@@ -604,8 +565,8 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
     };
     let submit_info = vk::SubmitInfo {
         p_next: &timeline_submit_info as *const _ as *const c_void,
-        command_buffer_count: cmd.command_buffers_to_submit.len() as u32,
-        p_command_buffers: cmd.command_buffers_to_submit.as_ptr(),
+        command_buffer_count: 1,
+        p_command_buffers: &cmd.cmdbuf,
         signal_semaphore_count: signal_semaphores.len() as u32,
         p_signal_semaphores: signal_semaphores.as_ptr(),
         ..Default::default()
@@ -665,50 +626,38 @@ pub fn present(swap_chain: &mut SwapChain, index: usize) -> VkResult<()> {
     //       commands to the image that was transitioned to PRESENT layout before we present it.
     //       This is up to the caller to avoid doing that.
 
-    // set up semaphore to wait for rendering to finish
     let device = Device::instance();
     signal(image.render_finished, 0);
-
     unsafe {
         let submission_state = device.submission_state.lock().unwrap();
-        let result = device
-            .ext
-            .swapchain
-            .queue_present(
-                submission_state.queue,
-                &vk::PresentInfoKHR {
-                    wait_semaphore_count: 1,
-                    p_wait_semaphores: &image.render_finished,
-                    swapchain_count: 1,
-                    p_swapchains: &swap_chain.handle,
-                    p_image_indices: &[index as u32] as *const u32,
-                    p_results: ptr::null_mut(),
-                    ..Default::default()
-                },
-            )
-            .map(|_| ());
-        result
+        let present_info = vk::PresentInfoKHR {
+            wait_semaphore_count: 1,
+            p_wait_semaphores: &image.render_finished,
+            swapchain_count: 1,
+            p_swapchains: &swap_chain.handle,
+            p_image_indices: &[index as u32] as *const u32,
+            p_results: ptr::null_mut(),
+            ..Default::default()
+        };
+        device.ext.swapchain.queue_present(submission_state.queue, &present_info).map(|_| ())
     }
 }
 
 // TODO is this safe with multiple threads?
 thread_local! {
-    static DEFAULT_COMMAND_BUFFER: RefCell<Option<CommandBuffer>> = RefCell::new(None);
+    static DEFAULT_COMMAND_BUFFER: RefCell<Option<CommandBuffer>> = const { RefCell::new(None) };
 }
 
 #[inline]
 pub fn with_cmdbuf<R>(f: impl FnOnce(&mut CommandBuffer) -> R) -> R {
-    DEFAULT_COMMAND_BUFFER.with(|cb| {
-        match cb.try_borrow_mut() {
-            Ok(mut cb) => {
-                let cb = cb.get_or_insert_with(|| CommandBuffer::new());
-                f(cb)
-            }
-            Err(_) => {
-                panic!("the default GPU command buffer is already borrowed (maybe a command was called inside a `gpu::render` callback?)")
-            }
-        }
-    })
+    // This has better codegen than calling `f` inside `with`.
+    let cmdbuf = DEFAULT_COMMAND_BUFFER.with(|cmdbuf| cmdbuf as *const RefCell<Option<CommandBuffer>>);
+    // SAFETY: `cmdbuf` has 'static lifetime (at least within this thread), and we keep it in this thread.
+    unsafe {
+        let mut cb = (*cmdbuf).borrow_mut();
+        let cb = cb.get_or_insert_with(|| CommandBuffer::new());
+        f(cb)
+    }
 }
 
 pub(crate) fn take_cmdbuf() -> Option<CommandBuffer> {
@@ -752,6 +701,7 @@ pub fn render(
 }
 
 /// Starts a debug group on the default command buffer.
+#[inline(never)]
 pub fn push_debug_group(label: &str) {
     with_cmdbuf(|cb| {
         cb.push_debug_group(label);
@@ -759,6 +709,7 @@ pub fn push_debug_group(label: &str) {
 }
 
 /// Ends a debug group on the default command buffer.
+#[inline(never)]
 pub fn pop_debug_group() {
     with_cmdbuf(|cb| {
         cb.pop_debug_group();
@@ -776,12 +727,14 @@ pub fn pop_debug_group() {
 /// and a single memory barrier.
 /// All previous writes are made visible unconditionally (i.e. `srcAccessMask = MEMORY_WRITE`).
 /// `flags` define which memory access types are concerned for subsequent command (it determines `dstAccessMask`).
+#[inline(never)]
 pub fn barrier(flags: BarrierFlags) {
     with_cmdbuf(|cb| {
         cb.barrier(flags);
     });
 }
 
+#[inline(never)]
 pub fn update_buffer(buffer: &BufferUntyped, offset: usize, data: &[u8]) {
     with_cmdbuf(|cb| {
         unsafe {
@@ -791,40 +744,47 @@ pub fn update_buffer(buffer: &BufferUntyped, offset: usize, data: &[u8]) {
     });
 }
 
+#[inline(never)]
 pub fn upload_image_data(image: ImageCopyView, size: Size3D, data: &[u8]) {
     with_cmdbuf(|cb| {
         cb.upload_image_data(image, size, data);
     });
 }
 
+#[inline(never)]
 pub fn create_image_with_data(create_info: &ImageCreateInfo, aspect: ImageAspect, data: &[u8]) -> Image {
     with_cmdbuf(|cb| cb.create_image_with_data(create_info, aspect, data))
 }
 
+#[inline(never)]
 pub fn blit_full_image_top_mip_level(src: &Image, dst: &Image) {
     with_cmdbuf(|cb| {
         cb.blit_full_image_top_mip_level(src, dst);
     });
 }
 
+#[inline(never)]
 pub fn fill_buffer(range: &BufferRangeUntyped, data: u32) {
     with_cmdbuf(|cb| {
         cb.fill_buffer(range, data);
     });
 }
 
+#[inline(never)]
 pub fn clear_image(image: &Image, clear_color_value: ClearColorValue) {
     with_cmdbuf(|cb| {
         cb.clear_image(image, clear_color_value);
     });
 }
 
+#[inline(never)]
 pub fn clear_depth_image(image: &Image, depth: f32) {
     with_cmdbuf(|cb| {
         cb.clear_depth_image(image, depth);
     });
 }
 
+#[inline(never)]
 pub fn copy_image_to_image(source: ImageCopyView<'_>, destination: ImageCopyView<'_>, copy_size: vk::Extent3D) {
     with_cmdbuf(|cb| {
         cb.copy_image_to_image(source, destination, copy_size);
@@ -832,6 +792,7 @@ pub fn copy_image_to_image(source: ImageCopyView<'_>, destination: ImageCopyView
 }
 
 /// Copies data from one buffer to another.
+#[inline(never)]
 pub fn copy_buffer(source: &BufferUntyped, src_offset: u64, destination: &BufferUntyped, dst_offset: u64, size: u64) {
     with_cmdbuf(|cb| {
         cb.copy_buffer(source, src_offset, destination, dst_offset, size);
@@ -841,6 +802,7 @@ pub fn copy_buffer(source: &BufferUntyped, src_offset: u64, destination: &Buffer
 /// Copies data from a buffer to an image.
 ///
 /// TODO copy to layer other than 0
+#[inline(never)]
 pub fn copy_buffer_to_image(source: ImageCopyBuffer<'_>, destination: ImageCopyView<'_>, copy_size: vk::Extent3D) {
     with_cmdbuf(|cb| {
         cb.copy_buffer_to_image(source, destination, copy_size);
@@ -848,12 +810,14 @@ pub fn copy_buffer_to_image(source: ImageCopyBuffer<'_>, destination: ImageCopyV
 }
 
 /// Copies data from an image to a buffer.
+#[inline(never)]
 pub fn copy_image_to_buffer(source: ImageCopyView<'_>, destination: ImageCopyBuffer<'_>, copy_size: Size3D) {
     with_cmdbuf(|cb| {
         cb.copy_image_to_buffer(source, destination, copy_size);
     });
 }
 
+#[inline(never)]
 pub fn blit_image(
     src: &Image,
     src_subresource: ImageSubresourceLayers,
@@ -869,6 +833,7 @@ pub fn blit_image(
 }
 
 /// Submits commands in the default command buffer for execution on the GPU.
+#[inline(never)]
 pub fn flush() -> VkResult<()> {
     if let Some(cb) = take_cmdbuf() {
         submit(cb)
@@ -879,6 +844,7 @@ pub fn flush() -> VkResult<()> {
 }
 
 /// Writes a timestamp.
+#[inline(never)]
 pub fn write_timestamp(callback: impl FnOnce(u64) + Send + 'static) {
     with_cmdbuf(|cb| cb.write_timestamp(callback))
 }

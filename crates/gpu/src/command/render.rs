@@ -14,10 +14,7 @@ use std::ptr;
 /// This is used in `RenderPass::bind_pipeline`.
 pub struct RenderEncoder<'a> {
     parent: &'a mut CommandBuffer,
-    command_buffer: vk::CommandBuffer,
     render_area: vk::Rect2D,
-    // TODO: this will be useless once all shaders have the same bindless layout
-    pipeline_layout: vk::PipelineLayout,
 }
 
 /// Represents an indirect draw command.
@@ -45,23 +42,24 @@ pub struct DrawIndexedIndirectCommand {
 const _: () = assert!(size_of::<DrawIndexedIndirectCommand>() == size_of::<vk::DrawIndexedIndirectCommand>());
 
 impl<'a> RenderEncoder<'a> {
-    /// Binds a descriptor set (`vkCmdBindDescriptorSets`).
+    /*/// Binds a descriptor set (`vkCmdBindDescriptorSets`).
     ///
     /// # Safety
     ///
     /// The caller is responsible for ensuring that the descriptor set is compatible with the
     /// currently bound pipeline, and that the descriptor set is not destroyed while it is still
     /// in use by the GPU.
+    #[deprecated = "use descriptor heaps and push data instead"]
     pub unsafe fn bind_descriptor_set(&mut self, index: u32, set: vk::DescriptorSet) {
         Device::instance().raw.cmd_bind_descriptor_sets(
-            self.command_buffer,
+            self.parent.cmdbuf,
             vk::PipelineBindPoint::GRAPHICS,
             self.pipeline_layout,
             index,
             &[set],
             &[],
         )
-    }
+    }*/
 
     /*
     /// Specifies descriptors for subsequent draw calls with `vkCmdPushDescriptorSetKHR`.
@@ -82,16 +80,17 @@ impl<'a> RenderEncoder<'a> {
         }
     }*/
 
+    #[inline]
     pub fn set_depth_bias(&mut self, db: Option<DepthBias>) {
         let device = &Device::instance().raw;
         unsafe {
             match db {
                 Some(db) => {
-                    device.cmd_set_depth_bias_enable(self.command_buffer, true);
-                    device.cmd_set_depth_bias(self.command_buffer, db.constant_factor, db.clamp, db.slope_factor);
+                    device.cmd_set_depth_bias_enable(self.parent.cmdbuf, true);
+                    device.cmd_set_depth_bias(self.parent.cmdbuf, db.constant_factor, db.clamp, db.slope_factor);
                 }
                 None => {
-                    device.cmd_set_depth_bias_enable(self.command_buffer, false);
+                    device.cmd_set_depth_bias_enable(self.parent.cmdbuf, false);
                 }
             }
         }
@@ -101,6 +100,7 @@ impl<'a> RenderEncoder<'a> {
     ///
     /// Calling this function invalidates all descriptor & push constant state set by previous calls
     /// to `push_descriptors`, `bind_descriptor_set`, and `push_constants`.
+    #[inline]
     pub fn bind_graphics_pipeline(&mut self, pipeline: &GraphicsPipeline) {
         // Note about pipeline compatibility:
         //
@@ -122,13 +122,13 @@ impl<'a> RenderEncoder<'a> {
         // TODO strong ref to pipeline
         unsafe {
             Device::instance().raw.cmd_bind_pipeline(
-                self.command_buffer,
+                self.parent.cmdbuf,
                 vk::PipelineBindPoint::GRAPHICS,
                 pipeline.pipeline,
             );
             /*if pipeline.bindless {
                 self.stream.bind_bindless_descriptor_sets(
-                    self.command_buffer,
+                    self.parent.cmdbuf,
                     vk::PipelineBindPoint::GRAPHICS,
                     pipeline.pipeline_layout,
                 );
@@ -138,16 +138,18 @@ impl<'a> RenderEncoder<'a> {
     }
 
     /// Sets the viewport.
+    #[inline]
     pub fn set_viewport(&mut self, x: f32, y: f32, width: f32, height: f32, min_depth: f32, max_depth: f32) {
         unsafe {
             Device::instance().raw.cmd_set_viewport(
-                self.command_buffer,
+                self.parent.cmdbuf,
                 0,
                 &[vk::Viewport { x, y, width, height, min_depth, max_depth }],
             );
         }
     }
 
+    #[inline]
     pub fn set_viewport_to_render_area(&mut self) {
         self.set_viewport(
             self.render_area.offset.x as f32,
@@ -160,16 +162,18 @@ impl<'a> RenderEncoder<'a> {
     }
 
     /// Sets the scissor rectangle.
+    #[inline]
     pub fn set_scissor(&mut self, x: i32, y: i32, width: u32, height: u32) {
         unsafe {
             Device::instance().raw.cmd_set_scissor(
-                self.command_buffer,
+                self.parent.cmdbuf,
                 0,
                 &[vk::Rect2D { offset: vk::Offset2D { x, y }, extent: vk::Extent2D { width, height } }],
             );
         }
     }
 
+    #[inline]
     pub fn set_scissor_to_render_area(&mut self) {
         self.set_scissor(
             self.render_area.offset.x,
@@ -179,6 +183,7 @@ impl<'a> RenderEncoder<'a> {
         );
     }
 
+    #[inline]
     pub fn clear_color(&mut self, attachment: u32, color: ClearColorValue) {
         self.clear_color_rect(
             attachment,
@@ -187,6 +192,7 @@ impl<'a> RenderEncoder<'a> {
         );
     }
 
+    #[inline]
     pub fn clear_depth(&mut self, depth: f32) {
         self.clear_depth_rect(
             depth,
@@ -194,10 +200,11 @@ impl<'a> RenderEncoder<'a> {
         );
     }
 
+    #[inline]
     pub fn clear_color_rect(&mut self, attachment: u32, color: ClearColorValue, rect: Rect2D) {
         unsafe {
             Device::instance().raw.cmd_clear_attachments(
-                self.command_buffer,
+                self.parent.cmdbuf,
                 &[vk::ClearAttachment {
                     aspect_mask: vk::ImageAspectFlags::COLOR,
                     color_attachment: attachment,
@@ -215,10 +222,11 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
+    #[inline]
     pub fn clear_depth_rect(&mut self, depth: f32, rect: Rect2D) {
         unsafe {
             Device::instance().raw.cmd_clear_attachments(
-                self.command_buffer,
+                self.parent.cmdbuf,
                 &[vk::ClearAttachment {
                     aspect_mask: vk::ImageAspectFlags::DEPTH,
                     color_attachment: 0,
@@ -254,6 +262,7 @@ impl<'a> RenderEncoder<'a> {
     ///     return o;
     /// }
     /// ```
+    #[inline]
     pub fn draw_screen_quad<'params, T: Copy + 'static>(&mut self, root_params: impl Into<PushDataSource<'params, T>>) {
         self.draw(PrimitiveTopology::TriangleList, None, 0..6, 0..1, root_params);
     }
@@ -284,14 +293,14 @@ impl<'a> RenderEncoder<'a> {
         root_params: impl Into<PushDataSource<'params, T>>,
     ) {
         unsafe {
-            self.parent.set_push_data(self.command_buffer, root_params.into());
+            self.parent.set_push_data(self.parent.cmdbuf, root_params.into());
             let device = &Device::instance().raw;
             if let Some(vb) = vertex_buffer {
-                device.cmd_bind_vertex_buffers(self.command_buffer, 0, &[vb.handle()], &[0]);
+                device.cmd_bind_vertex_buffers(self.parent.cmdbuf, 0, &[vb.handle()], &[0]);
             }
-            device.cmd_set_primitive_topology(self.command_buffer, topology.to_vk_primitive_topology());
+            device.cmd_set_primitive_topology(self.parent.cmdbuf, topology.to_vk_primitive_topology());
             device.cmd_draw(
-                self.command_buffer,
+                self.parent.cmdbuf,
                 vertices.len() as u32,
                 instances.len() as u32,
                 vertices.start,
@@ -311,16 +320,16 @@ impl<'a> RenderEncoder<'a> {
         root_params: impl Into<PushDataSource<'params, T>>,
     ) {
         unsafe {
-            self.parent.set_push_data(self.command_buffer, root_params.into());
+            self.parent.set_push_data(self.parent.cmdbuf, root_params.into());
 
             let device = &Device::instance().raw;
             if let Some(vb) = vertex_buffer {
-                device.cmd_bind_vertex_buffers(self.command_buffer, 0, &[vb.handle()], &[0]);
+                device.cmd_bind_vertex_buffers(self.parent.cmdbuf, 0, &[vb.handle()], &[0]);
             }
-            device.cmd_bind_index_buffer(self.command_buffer, index_buffer.handle(), 0, vk::IndexType::UINT32);
-            device.cmd_set_primitive_topology(self.command_buffer, topology.to_vk_primitive_topology());
+            device.cmd_bind_index_buffer(self.parent.cmdbuf, index_buffer.handle(), 0, vk::IndexType::UINT32);
+            device.cmd_set_primitive_topology(self.parent.cmdbuf, topology.to_vk_primitive_topology());
             device.cmd_draw_indexed(
-                self.command_buffer,
+                self.parent.cmdbuf,
                 index_range.len() as u32,
                 instances.len() as u32,
                 index_range.start,
@@ -339,14 +348,14 @@ impl<'a> RenderEncoder<'a> {
         root_params: impl Into<PushDataSource<'params, T>>,
     ) {
         unsafe {
-            self.parent.set_push_data(self.command_buffer, root_params.into());
+            self.parent.set_push_data(self.parent.cmdbuf, root_params.into());
             let device = &Device::instance().raw;
             if let Some(vb) = vertex_buffer {
-                device.cmd_bind_vertex_buffers(self.command_buffer, 0, &[vb.handle()], &[0]);
+                device.cmd_bind_vertex_buffers(self.parent.cmdbuf, 0, &[vb.handle()], &[0]);
             }
-            device.cmd_set_primitive_topology(self.command_buffer, topology.to_vk_primitive_topology());
+            device.cmd_set_primitive_topology(self.parent.cmdbuf, topology.to_vk_primitive_topology());
             device.cmd_draw_indirect(
-                self.command_buffer,
+                self.parent.cmdbuf,
                 commands.handle(),
                 draw_range.start as u64 * size_of::<DrawIndirectCommand>() as u64,
                 draw_range.len() as u32,
@@ -365,15 +374,15 @@ impl<'a> RenderEncoder<'a> {
         root_params: impl Into<PushDataSource<'params, T>>,
     ) {
         unsafe {
-            self.parent.set_push_data(self.command_buffer, root_params.into());
+            self.parent.set_push_data(self.parent.cmdbuf, root_params.into());
             let device = &Device::instance().raw;
             if let Some(vb) = vertex_buffer {
-                device.cmd_bind_vertex_buffers(self.command_buffer, 0, &[vb.handle()], &[0]);
+                device.cmd_bind_vertex_buffers(self.parent.cmdbuf, 0, &[vb.handle()], &[0]);
             }
-            device.cmd_bind_index_buffer(self.command_buffer, index_buffer.handle(), 0, vk::IndexType::UINT32);
-            device.cmd_set_primitive_topology(self.command_buffer, topology.to_vk_primitive_topology());
+            device.cmd_bind_index_buffer(self.parent.cmdbuf, index_buffer.handle(), 0, vk::IndexType::UINT32);
+            device.cmd_set_primitive_topology(self.parent.cmdbuf, topology.to_vk_primitive_topology());
             device.cmd_draw_indexed_indirect(
-                self.command_buffer,
+                self.parent.cmdbuf,
                 commands.handle(),
                 draw_range.start as u64 * size_of::<vk::DrawIndexedIndirectCommand>() as u64,
                 draw_range.len() as u32,
@@ -382,6 +391,7 @@ impl<'a> RenderEncoder<'a> {
         }
     }
 
+    #[inline]
     pub fn draw_mesh_tasks<'params, T: Copy + 'static>(
         &mut self,
         group_count_x: u32,
@@ -390,9 +400,9 @@ impl<'a> RenderEncoder<'a> {
         root_params: impl Into<PushDataSource<'params, T>>,
     ) {
         unsafe {
-            self.parent.set_push_data(self.command_buffer, root_params.into());
+            self.parent.set_push_data(self.parent.cmdbuf, root_params.into());
             Device::instance().ext.mesh_shader.cmd_draw_mesh_tasks(
-                self.command_buffer,
+                self.parent.cmdbuf,
                 group_count_x,
                 group_count_y,
                 group_count_z,
@@ -404,9 +414,10 @@ impl<'a> RenderEncoder<'a> {
         // Nothing to do. Drop impl does the work (and calls `do_finish`).
     }
 
+    #[inline]
     fn do_finish(&mut self) {
         unsafe {
-            Device::instance().raw.cmd_end_rendering(self.command_buffer);
+            Device::instance().raw.cmd_end_rendering(self.parent.cmdbuf);
         }
     }
 }
@@ -444,7 +455,6 @@ impl CommandBuffer {
             } else {
                 panic!("render_area must be specified if no attachments are specified");
             }
-
             vk::Rect2D {
                 offset: vk::Offset2D { x: 0, y: 0 },
                 extent: vk::Extent2D { width: extent.width, height: extent.height },
@@ -467,7 +477,6 @@ impl CommandBuffer {
                 }
             })
             .collect();
-
         let depth_attachment;
         let stencil_attachment;
         let p_depth_attachment;
@@ -488,7 +497,6 @@ impl CommandBuffer {
                 ..Default::default()
             };
             p_depth_attachment = &depth_attachment as *const _;
-
             if is_depth_and_stencil_format(depth.image.format()) {
                 stencil_attachment = vk::RenderingAttachmentInfo {
                     image_view: depth.image.attachment_view,
@@ -524,18 +532,13 @@ impl CommandBuffer {
             p_stencil_attachment,
             ..Default::default()
         };
-
-        let command_buffer = self.get_or_create_command_buffer();
         unsafe {
-            Device::instance().raw.cmd_begin_rendering(command_buffer, &rendering_info);
+            Device::instance().raw.cmd_begin_rendering(self.cmdbuf, &rendering_info);
         }
 
-        let mut encoder =
-            RenderEncoder { parent: self, command_buffer, render_area, pipeline_layout: Default::default() };
-
+        let mut encoder = RenderEncoder { parent: self, render_area };
         encoder.set_viewport(0.0, 0.0, render_area.extent.width as f32, render_area.extent.height as f32, 0.0, 1.0);
         encoder.set_scissor(0, 0, render_area.extent.width, render_area.extent.height);
-
         encoder
     }
 }
