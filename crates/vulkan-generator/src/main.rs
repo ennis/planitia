@@ -522,12 +522,10 @@ fn parse_commands<'a, 'input>(registry: Node<'a, 'input>) -> CommandMap<'a, 'inp
 
 fn gen_func_sig(out: &mut Writer, func_info: &FuncInfo) -> io::Result<()> {
     write!(out, "(")?;
-    let mut first = true;
-    for param in func_info.params.iter() {
-        if !first {
+    for (i, param) in func_info.params.iter().enumerate() {
+        if i > 0 {
             write!(out, ", ")?;
         }
-        first = false;
         write!(out, "{}: {}", sanitize_ident(&param.name), param.rust_type(false))?;
     }
     write!(out, ") -> {}", func_info.proto.rust_type(true))?;
@@ -695,6 +693,56 @@ fn gen_require(
     Ok(())
 }
 
+fn gen_vk_dispatch_table(
+    out: &mut Writer,
+    version: &str,
+    dispatch_kind: &str,
+    inherits: Option<&str>,
+    funcs: Vec<&CommandInfo>,
+) -> io::Result<()> {
+    if !funcs.is_empty() {
+        writeln!(out, "dispatch_table! {{ Vulkan_{version}_{dispatch_kind};")?;
+        indent(out);
+        if let Some(ver) = inherits {
+            writeln!(out, "[vk_{ver}: Vulkan_{ver}_{dispatch_kind}]")?;
+        }
+        for cmd in funcs.iter() {
+            let vk_cmd_name = &cmd.name;
+            let cmd_name = vk_cmd_name.strip_prefix("vk").unwrap();
+            writeln!(out, "{cmd_name},PFN_{vk_cmd_name},c\"{vk_cmd_name}\";")?;
+        }
+        dedent(out);
+        writeln!(out, "}}")?;
+        // write function wrappers
+        writeln!(out, "impl Vulkan_{version}_{dispatch_kind} {{")?;
+        indent(out);
+        for cmd in funcs.iter() {
+            let vk_cmd_name = &cmd.name;
+            let cmd_name = vk_cmd_name.strip_prefix("vk").unwrap();
+            writeln!(out, "#[inline(always)]")?;
+            write!(out, "pub unsafe fn {cmd_name}(&self")?;
+            for param in cmd.func.params.iter() {
+                write!(out, ", {}: {}", sanitize_ident(&param.name), param.rust_type(false))?;
+            }
+            writeln!(out, ") -> {} {{", cmd.func.proto.rust_type(true))?;
+            indent(out);
+            write!(out, "(self.{cmd_name})(")?;
+            for (i, param) in cmd.func.params.iter().enumerate() {
+                if i > 0 {
+                    write!(out, ", ")?;
+                }
+                write!(out, "{}", sanitize_ident(&param.name))?;
+            }
+            writeln!(out, ")")?;
+            dedent(out);
+            writeln!(out, "}}")?;
+        }
+        dedent(out);
+        writeln!(out, "}}")?;
+    }
+    Ok(())
+}
+
 fn gen_core_dispatch_tables(out: &mut Writer, registry: Node, cmds: &CommandMap) -> io::Result<()> {
     // PAIN: Within vk.xml, Vulkan API versions are divided in smaller features (VK_{BASE,GRAPHICS,COMPUTE}_VERSION_*_*),
     //       and form a dependency tree via the "depends" attribute. However, this is useless for
@@ -740,45 +788,9 @@ fn gen_core_dispatch_tables(out: &mut Writer, registry: Node, cmds: &CommandMap)
             _ => None,
         };
         writeln!(out, "// Vulkan {api_version}")?;
-        if !entry_fns.is_empty() {
-            writeln!(out, "#[derive(Copy, Clone)]")?;
-            writeln!(out, "#[repr(C)]")?; // make the dispatch tables repr(C), it costs nothing and might be useful to someone
-            writeln!(out, "pub struct Vulkan_{api_version}_EntryDispatch {{")?;
-            for cmd in entry_fns.iter() {
-                let vk_cmd_name = &cmd.name;
-                let cmd_name = vk_cmd_name.strip_prefix("vk").unwrap();
-                writeln!(out, "    pub {cmd_name}: PFN_{vk_cmd_name},")?;
-            }
-            writeln!(out, "}}")?;
-        }
-        if !instance_fns.is_empty() {
-            writeln!(out, "dispatch_table! {{ Vulkan_{api_version}_InstanceDispatch;")?;
-            indent(out);
-            if let Some(ver) = instance_previous_version {
-                writeln!(out, "[vk_{ver}: Vulkan_{ver}_InstanceDispatch]")?;
-            }
-            for cmd in instance_fns.iter() {
-                let vk_cmd_name = &cmd.name;
-                let cmd_name = vk_cmd_name.strip_prefix("vk").unwrap();
-                writeln!(out, "{cmd_name},PFN_{vk_cmd_name},c\"{vk_cmd_name}\";")?;
-            }
-            dedent(out);
-            writeln!(out, "}}")?;
-        }
-        if !device_fns.is_empty() {
-            writeln!(out, "dispatch_table! {{ Vulkan_{api_version}_DeviceDispatch;")?;
-            indent(out);
-            if let Some(ver) = device_previous_version {
-                writeln!(out, "[vk_{ver}: Vulkan_{ver}_DeviceDispatch]")?;
-            }
-            for cmd in device_fns.iter() {
-                let vk_cmd_name = &cmd.name;
-                let cmd_name = vk_cmd_name.strip_prefix("vk").unwrap();
-                writeln!(out, "{cmd_name},PFN_{vk_cmd_name},c\"{vk_cmd_name}\";")?;
-            }
-            dedent(out);
-            writeln!(out, "}}")?;
-        }
+        gen_vk_dispatch_table(out, &api_version, "EntryDispatch", None, entry_fns)?;
+        gen_vk_dispatch_table(out, &api_version, "InstanceDispatch", instance_previous_version, instance_fns)?;
+        gen_vk_dispatch_table(out, &api_version, "DeviceDispatch", device_previous_version, device_fns)?;
     }
     Ok(())
 }
