@@ -38,6 +38,7 @@ geomtool = { path = "crates/geomtool" }
 terrain-file = { path = "crates/terrain-file" }
 geom = { path = "crates/geom" }
 hgeo = { path = "crates/hgeo" }
+vulkan = { path = "crates/vulkan" }
 
 [profile.release]
 debug = true

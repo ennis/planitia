@@ -10,3 +10,11 @@ mod vk;
 
 pub use platform_types::*;
 pub use vk::*;
+
+use std::ffi::CStr;
+
+#[cold]
+pub(crate) fn proc_not_found(procname: &CStr) -> ! {
+    panic!("vulkan entry point not found: `{}`", procname.to_string_lossy());
+}
+

@@ -2,7 +2,8 @@ use clap::Parser;
 use regex::Regex;
 use roxmltree::Node;
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::cell::Cell;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io;
 use std::io::{BufWriter, LineWriter, Write};
@@ -39,28 +40,6 @@ fn main() {
     generate(&args.output_dir, &xml).unwrap();
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
-enum DispatchType {
-    Entry,
-    Instance,
-    Device,
-}
-type CommandDispatchTypes = HashMap<String, DispatchType>;
-type EnumTypeMap = HashMap<String, String>;
-#[derive(Copy, Clone, Eq, PartialEq)]
-enum HandleType {
-    Dispatchable,
-    NonDispatchable,
-}
-#[derive(Copy, Clone)]
-struct TypeInfo<'a, 'input> {
-    type_node: Node<'a, 'input>,
-    is_handle: bool,
-    generated: bool,
-    //handle_type: HandleType,
-}
-type TypeMap<'a, 'input> = HashMap<String, TypeInfo<'a, 'input>>;
-
 fn generate(out_dir: &Path, document: &roxmltree::Document) -> io::Result<()> {
     let root = document.root();
     let registry = child_tagged(root, "registry").unwrap();
@@ -69,7 +48,6 @@ fn generate(out_dir: &Path, document: &roxmltree::Document) -> io::Result<()> {
     // necessary for <enum> entries in vk.xml which have only an alias, with no way to deduce the
     // type
     let mut enum_types = EnumTypeMap::new();
-    let mut dispatch_types = CommandDispatchTypes::new();
     //let mut type_map = TypeMap::new();
 
     // src/vk.rs
@@ -86,23 +64,69 @@ fn generate(out_dir: &Path, document: &roxmltree::Document) -> io::Result<()> {
         //       (either through a "name" attribute, or in different child elements for structs and
         //       function pointers), so we build this "type map" beforehand to accelerate the lookup.
         //       I don't see why the api information couldn't be specified in the <type> element.
-        let mut type_map = gen_type_map(registry)?;
+        let mut tymap = parse_types(registry);
+        let mut cmdmap = parse_commands(registry);
         gen_preamble(&mut line_writer)?;
-        //gen_types(&mut line_writer, registry, &vulkan_apis, &mut handle_types)?;
         gen_enums(&mut line_writer, registry, &mut enum_types)?;
-        gen_features(&mut line_writer, registry, &mut enum_types, &mut type_map)?;
-        gen_extensions(&mut line_writer, registry, &mut enum_types, &mut type_map)?;
-        gen_commands(&mut line_writer, registry, &mut dispatch_types)?;
-        gen_core_dispatch_tables(&mut line_writer, registry, &mut dispatch_types)?;
+        gen_features(&mut line_writer, registry, &mut enum_types, &mut tymap, &mut cmdmap)?;
+        gen_extensions(&mut line_writer, registry, &mut enum_types, &mut tymap, &mut cmdmap)?;
+        gen_core_dispatch_tables(&mut line_writer, registry, &cmdmap)?;
     }
-
     Ok(())
 }
+
+#[derive(Copy, Clone, Eq, PartialEq)]
+enum DispatchType {
+    Entry,
+    Instance,
+    Device,
+}
+type EnumTypeMap = HashMap<String, String>;
+#[derive(Copy, Clone, Eq, PartialEq)]
+enum HandleType {
+    Dispatchable,
+    NonDispatchable,
+}
+#[derive(Clone)]
+enum Category {
+    Enum,
+    Bitmask(String),
+    Handle(HandleType),
+    FuncPointer(FuncInfo),
+    Struct,
+    Union,
+    Trash,
+}
+#[derive(Clone)]
+struct TypeInfo<'a, 'input> {
+    node: Node<'a, 'input>,
+    name: String,
+    alias: Option<String>,
+    category: Category,
+    generated: Cell<bool>,
+}
+type TypeMap<'a, 'input> = HashMap<String, TypeInfo<'a, 'input>>;
+
+#[derive(Clone, Default)]
+struct FuncInfo {
+    proto: CDecl,
+    params: Vec<CDecl>,
+}
+
+struct CommandInfo<'a, 'input> {
+    node: Node<'a, 'input>,
+    name: String,
+    alias: Option<String>,
+    func: FuncInfo,
+    dispatch: DispatchType,
+    generated: Cell<bool>,
+}
+type CommandMap<'a, 'input> = HashMap<String, CommandInfo<'a, 'input>>;
 
 static PREAMBLE: &str = r#"use crate::macros::*;   // handle, nondispatchable_handle
 use crate::platform_types::*;
 use crate::video::*;
-use std::ffi::{c_void, c_char};
+use std::ffi::*;
 use std::ptr;
 
 pub type VkSampleMask = u32;
@@ -135,6 +159,7 @@ fn collect_vulkan_apis(registry: Node) -> HashSet<String> {
     vulkan_apis
 }*/
 
+/*
 fn gen_type_map<'a, 'input>(registry: Node<'a, 'input>) -> io::Result<TypeMap<'a, 'input>> {
     let mut type_map = TypeMap::new();
     for types in children_tagged(registry, "types") {
@@ -142,79 +167,166 @@ fn gen_type_map<'a, 'input>(registry: Node<'a, 'input>) -> io::Result<TypeMap<'a
             if !api_check(node) {
                 continue;
             }
+
+            let category = match node.attribute("category") {
+                Some("enum") => Category::Enum,
+                Some("bitmask") => Category::Bitmask,
+                Some("handle") => Category::Handle,
+                Some("funcpointer") => Category::FuncPointer,
+                Some("struct") => Category::Struct,
+                Some("union") => Category::Union,
+                _ => Category::Trash, // whatever
+            };
+            type_map.insert(name.to_string(), TypeInfo { node, category, generated: false });
+        }
+    }
+    Ok(type_map)
+}*/
+
+fn parse_types<'a, 'input>(registry: Node<'a, 'input>) -> TypeMap<'a, 'input> {
+    let mut type_map = TypeMap::new();
+    for types in children_tagged(registry, "types") {
+        for node in children_tagged(types, "type") {
+            if !api_check(node) {
+                continue;
+            }
+            if let Some(tyinfo) = parse_type(node, &type_map) {
+                type_map.insert(tyinfo.name.clone(), tyinfo);
+            }
+        }
+    }
+    type_map
+}
+
+fn parse_type<'a, 'input>(node: Node<'a, 'input>, tymap: &TypeMap<'a, 'input>) -> Option<TypeInfo<'a, 'input>> {
+    let Some(category) = node.attribute("category") else {
+        return None;
+    };
+    let alias = node.attribute("alias").map(sanitize_ident).map(|s| s.to_string());
+
+    let name;
+    let cat;
+
+    match category {
+        "funcpointer" => {
+            let func_info = parse_command_or_funcptr(node).unwrap();
+            name = func_info.proto.name.clone();
+            cat = Category::FuncPointer(func_info);
+        }
+        "enum" => {
+            // PAIN: Enum <type> records don't actually specify their type, so we can't generate them here.
+            name = node.attribute("name").unwrap().to_string();
+            cat = Category::Enum;
+        }
+        "bitmask" => {
+            name = node
+                .attribute("name")
+                .or_else(|| child_tagged(node, "name").map(|n| n.text().unwrap()))
+                .unwrap()
+                .to_string();
+            let ty = child_tagged(node, "type").map(|n| n.text().unwrap()).or_else(|| alias.as_deref()).unwrap();
+            let rust_ty = c_type_to_rust(ty, false).to_string();
+            cat = Category::Bitmask(rust_ty);
+        }
+        "handle" => {
+            // For handles
+            name = child_tagged(node, "name")
+                .map(|n| n.text().unwrap())
+                .or_else(|| node.attribute("name"))
+                .unwrap()
+                .to_string();
+            let ty = child_tagged(node, "type").map(|n| n.text().unwrap()).or_else(|| alias.as_deref()).unwrap();
+            let handle_type = match ty {
+                "VK_DEFINE_HANDLE" => {
+                    HandleType::Dispatchable
+                    //write!(out, "handle!({name}, {name}_T);\n")?;
+                }
+                "VK_DEFINE_NON_DISPATCHABLE_HANDLE" => {
+                    HandleType::NonDispatchable
+                    //write!(out, "non_dispatchable_handle!({name});\n")?;
+                }
+                _ => {
+                    let alias = tymap.get(ty).unwrap();
+                    match alias.category {
+                        Category::Handle(handle_type) => handle_type,
+                        _ => panic!("unexpected handle type"),
+                    }
+                }
+            };
+            cat = Category::Handle(handle_type);
+        }
+        "struct" => {
+            name = node.attribute("name").unwrap().to_string();
+            cat = Category::Struct;
+        }
+        "union" => {
+            name = node.attribute("name").unwrap().to_string();
+            cat = Category::Union;
+        }
+        _ => {
+            // Trash that we don't want to parse, like basetypes, etc.
+            //
+            // PAIN: "basetype" entries (e.g. `VkBool32`, `VkFlags`, etc.) are not generated there because
+            //       generating them from vk.xml is intractable in general (some of them contain preprocessor directives...)
             // PAIN:
             // For bitmasks, the name is in a child tag
             //      unless it's an alias.
             // For enums, the name is in the "name" attribute.
             // For handles, it's usually in a child tag.
             // For <funcpointer>, it's within a <name> tag inside <proto>
-            let name = sanitize_ident(
-                node.attribute("name")
-                    .or_else(|| child_tagged(node, "name").map(|n| n.text().unwrap()))
-                    .or_else(|| {
-                        child_tagged(node, "proto").and_then(|p| child_tagged(p, "name")).map(|n| n.text().unwrap())
-                    })
-                    .unwrap(),
-            );
-            let is_handle = match node.attribute("category") {
-                Some("handle") => true,
-                _ => false,
-            };
-            type_map.insert(name.to_string(), TypeInfo { type_node: node, is_handle, generated: false });
+            name = node
+                .attribute("name")
+                .or_else(|| child_tagged(node, "name").map(|n| n.text().unwrap()))
+                .or_else(|| {
+                    child_tagged(node, "proto").and_then(|p| child_tagged(p, "name")).map(|n| n.text().unwrap())
+                })
+                .unwrap()
+                .to_string();
+            cat = Category::Trash;
         }
     }
-    Ok(type_map)
+    Some(TypeInfo { node, name, alias, category: cat, generated: Cell::new(false) })
 }
 
-fn gen_type(out: &mut Writer, name: &str, node: Node, type_map: &mut TypeMap) -> io::Result<()> {
-    let Some(category) = node.attribute("category") else {
-        return Ok(());
-    };
-    if category == "funcpointer" {
-        return gen_command_or_funcpointer(out, node, &mut HashMap::new(), false);
-    }
-    type_map.get_mut(name).unwrap().generated = true;
-    if let Some(alias) = node.attribute("alias").map(sanitize_ident) {
-        write!(out, "pub type {name} = {alias};\n")?;
+fn gen_type(out: &mut Writer, tyinfo: &TypeInfo, tymap: &TypeMap) -> io::Result<()> {
+    if let Some(ref alias) = tyinfo.alias {
+        writeln!(out, "pub type {} = {};", tyinfo.name, alias)?;
         return Ok(());
     }
-    match category {
-        "basetype" => {
-            // PAIN: base types (e.g. `VkBool32`, `VkFlags`, etc.) are not generated there because
-            //       generating them from vk.xml is intractable (some of them contain preprocessor directives...)
-        }
-        "enum" => {
+    match &tyinfo.category {
+        Category::Enum => {
             // PAIN: Enum <type> records don't actually specify their type, so we can't generate them here.
         }
-        "bitmask" => {
-            let ty = child_tagged(node, "type").map(|n| n.text().unwrap()).unwrap();
-            let rust_ty = c_type_to_rust(ty);
-            write!(out, "pub type {name} = {rust_ty};\n")?;
+        Category::Bitmask(rust_ty) => {
+            writeln!(out, "pub type {} = {};", tyinfo.name, rust_ty)?;
         }
-        "handle" => {
-            // For handles
-            let ty = child_tagged(node, "type").map(|n| n.text().unwrap()).unwrap();
-            match ty {
-                "VK_DEFINE_HANDLE" => {
-                    write!(out, "handle!({name}, {name}_T);\n")?;
-                }
-                "VK_DEFINE_NON_DISPATCHABLE_HANDLE" => {
-                    write!(out, "non_dispatchable_handle!({name});\n")?;
-                }
-                _ => {
-                    panic!("unexpected handle type");
-                }
+        Category::Handle(handle_type) => {
+            let name = &tyinfo.name;
+            match handle_type {
+                HandleType::Dispatchable => writeln!(out, "handle!({name}, {name}_T);")?,
+                HandleType::NonDispatchable => writeln!(out, "non_dispatchable_handle!({name});")?,
             }
         }
-        "struct" | "union" => {
+        Category::FuncPointer(func_info) => {
+            write!(out, "pub type {} = Option<unsafe extern \"system\" fn", tyinfo.name)?;
+            gen_func_sig(out, func_info)?;
+            writeln!(out, ">;")?;
+        }
+        Category::Struct | Category::Union => {
+            let name = &tyinfo.name;
             writeln!(out, "/// <https://docs.vulkan.org/refpages/latest/refpages/source/{name}.html>")?;
             writeln!(out, "#[repr(C)]")?;
             writeln!(out, "#[cfg_attr(feature = \"debug\", derive(Debug))]")?;
             writeln!(out, "#[derive(Copy, Clone)]")?;
-            write!(out, "pub {category} {name} {{\n")?; // category is, conveniently, "struct" or "union"
-            let is_union = category == "union";
+            let is_union = matches!(tyinfo.category, Category::Union);
+            let kind = match tyinfo.category {
+                Category::Struct => "struct",
+                Category::Union => "union",
+                _ => unreachable!(),
+            };
+            write!(out, "pub {kind} {name} {{\n")?;
             indent(out);
-            for member in children_tagged(node, "member") {
+            for member in children_tagged(tyinfo.node, "member") {
                 if !api_check(member) {
                     continue;
                 }
@@ -222,45 +334,59 @@ fn gen_type(out: &mut Writer, name: &str, node: Node, type_map: &mut TypeMap) ->
                 //       There is markup for the <name> and <type> but the cv-qualifiers, pointer & array declarators
                 //       are not marked up, so they are basically useless and we ignore them.
                 //       Parse the C syntax directly instead.
-                let text = node_text(&member);
                 let values = member.attribute("values");
                 let optional = member.attribute("optional").unwrap_or("false").split(',').collect::<Vec<_>>();
                 let last_opt = optional.last().map(|&s| s == "true").unwrap_or(false);
                 let len = member.attribute("len");
                 write!(out, "pub ")?;
-                let decl = convert_c_declarator(out, &text)?;
+                let text = node_text(&member);
+                let decl = parse_c_declarator(&text).unwrap();
+                let name = sanitize_ident(decl.name.as_str());
+                let ty = decl.rust_type(false);
+                write!(out, "{name}: {ty}")?;
                 // Write default field values.
                 if !is_union {
-                    match decl.name {
+                    match decl.name.as_str() {
                         // sType field
                         "sType" if values.is_some() => write!(out, " = {}", values.unwrap())?,
                         // pNext is always defaultable to null
                         "pNext" => {
-                            write!(out, " = {}", if decl.const_ptr { "ptr::null()" } else { "ptr::null_mut()" })?
+                            write!(out, " = {}", if decl.is_const_ptr() { "ptr::null()" } else { "ptr::null_mut()" })?
                         }
                         // pointers with len attributes are defaultable to null (if len == 0)
-                        _ if len.is_some() && decl.ptr => {
-                            write!(out, " = {}", if decl.const_ptr { "ptr::null()" } else { "ptr::null_mut()" })?
+                        _ if len.is_some() && decl.is_ptr() => {
+                            write!(out, " = {}", if decl.is_const_ptr() { "ptr::null()" } else { "ptr::null_mut()" })?
                         }
                         // otherwise, decide based on the "optional" field and whether the field is a
                         // pointer, and also some heuristics
                         _other if last_opt => {
-                            if decl.const_ptr {
+                            if decl.is_const_ptr() {
                                 write!(out, " = ptr::null()")?;
-                            } else if decl.ptr {
+                            } else if decl.is_ptr() {
                                 write!(out, " = ptr::null_mut()")?;
-                            } else if decl.ty.starts_with("PFN_") {
-                                // This is a function pointer, modeled as `Option<fn()>` in rust.
-                                // The NULL pointer is `None`.
-                                write!(out, " = None")?;
-                            } else if let Some(info) = type_map.get(decl.ty.as_str())
-                                && info.is_handle
-                            {
-                                // Nullable vulkan handles
-                                let ty = &decl.ty;
-                                write!(out, " = {ty}::null()")?;
-                            } else if !decl.array {
-                                write!(out, " = 0")?;
+                            } else if let Some(info) = tymap.get(&decl.inner_ty) {
+                                match info.category {
+                                    Category::Handle(_) => {
+                                        let ty = decl.inner_ty;
+                                        write!(out, " = {ty}::null()")?;
+                                    }
+                                    Category::FuncPointer(_) => {
+                                        // This is a function pointer, modeled as `Option<fn()>` in rust.
+                                        // The NULL pointer is `None`.
+                                        write!(out, " = None")?;
+                                    }
+                                    Category::Bitmask(_) | Category::Enum => {
+                                        // Bitmasks and enums are just integers, so we can default to 0.
+                                        write!(out, " = 0")?;
+                                    }
+                                    _ => {}
+                                }
+                            } else {
+                                // heuristics
+                                match decl.inner_ty.as_str() {
+                                    "LPCWSTR" => write!(out, " = ptr::null()")?, // *const u16
+                                    _ => {}
+                                }
                             }
                         }
                         _ => {}
@@ -321,12 +447,8 @@ fn gen_enum(out: &mut Writer, node: Node, enum_types: &mut EnumTypeMap) -> io::R
         let value = en.attribute("value").map(c_constant_to_rust);
         let alias = en.attribute("alias");
         maybe_write_deprecated_attr(out, en.attribute("deprecated"), alias)?;
-        let ty = en.attribute("type").map(c_type_to_rust);
         write!(out, "pub const {}: ", name)?;
-        let ty = match ty {
-            Some(ty) => c_type_to_rust(ty),
-            None => ty_name.as_ref().unwrap().as_ref(),
-        };
+        let ty = en.attribute("type").map(|ty| c_type_to_rust(ty, false)).unwrap_or(ty_name.as_ref().unwrap().as_ref());
         write!(out, "{ty}")?;
         write!(out, " = ")?;
         if let Some(bitpos) = bitpos {
@@ -342,97 +464,112 @@ fn gen_enum(out: &mut Writer, node: Node, enum_types: &mut EnumTypeMap) -> io::R
     Ok(())
 }
 
-fn gen_command_or_funcpointer(
-    out: &mut Writer,
-    cmd: Node,
-    cmd_dispatch_types: &mut CommandDispatchTypes,
-    command: bool,
-) -> io::Result<()> {
-    if !api_check(cmd) {
-        return Ok(());
+fn parse_command_or_funcptr<'a, 'input>(node: Node<'a, 'input>) -> Option<FuncInfo> {
+    let proto = child_tagged(node, "proto").unwrap();
+    let proto = node_text(&proto);
+    let proto = parse_c_declarator(&proto).unwrap();
+    let mut params = vec![];
+    for param in children_tagged(node, "param") {
+        let text = node_text(&param);
+        let decl = parse_c_declarator(&text).unwrap();
+        params.push(decl);
     }
-    let prefix = if command { "PFN_" } else { "" }; // funcpointers already have the PFN_ prefix in their name
-    if let Some(alias) = cmd.attribute("alias") {
-        let name = cmd.attribute("name").unwrap();
-        write!(out, "pub type {prefix}{name} = {prefix}{alias};\n")?;
-        cmd_dispatch_types.insert(name.to_string(), *cmd_dispatch_types.get(alias).unwrap());
-        return Ok(());
+    Some(FuncInfo { proto, params })
+}
+
+fn parse_command<'a, 'input>(
+    node: Node<'a, 'input>,
+    command_infos: &CommandMap<'a, 'input>,
+) -> Option<CommandInfo<'a, 'input>> {
+    if let Some(alias) = node.attribute("alias") {
+        let name = node.attribute("name").unwrap();
+        let alias_info = command_infos.get(alias).unwrap().clone();
+        Some(CommandInfo {
+            node,
+            name: name.to_string(),
+            alias: Some(alias.to_string()),
+            func: alias_info.func.clone(),
+            dispatch: alias_info.dispatch,
+            generated: Cell::new(false),
+        })
+    } else {
+        let func_info = parse_command_or_funcptr(node).unwrap();
+        let dispatch = dispatch_type_from_first_param(func_info.params.first().map(|p| p.name.as_str()));
+        Some(CommandInfo {
+            node,
+            name: func_info.proto.name.clone(),
+            alias: None,
+            func: func_info,
+            dispatch,
+            generated: Cell::new(false),
+        })
     }
-    let proto = child_tagged(cmd, "proto").unwrap();
-    let ret_type = c_type_to_rust(child_tagged(proto, "type").unwrap().text().unwrap());
-    let name = sanitize_ident(child_tagged(proto, "name").unwrap().text().unwrap());
-    write!(out, "pub type {prefix}{name} = ");
-    if !command {
-        // contrary to dispatch table pointers, vulkan-defined function pointers are nullable,
-        // and so they need to be wrapped in Option
-        write!(out, "Option<")?;
+}
+
+fn parse_commands<'a, 'input>(registry: Node<'a, 'input>) -> CommandMap<'a, 'input> {
+    let mut command_map = CommandMap::new();
+    let commands = child_tagged(registry, "commands").unwrap();
+    for cmd in children_tagged(commands, "command") {
+        if !api_check(cmd) {
+            continue;
+        }
+        if let Some(info) = parse_command(cmd, &command_map) {
+            command_map.insert(info.name.clone(), info);
+        }
     }
-    write!(out, "unsafe extern \"system\" fn(")?;
+    command_map
+}
+
+fn gen_func_sig(out: &mut Writer, func_info: &FuncInfo) -> io::Result<()> {
+    write!(out, "(")?;
     let mut first = true;
-    let mut first_param = None;
-    for param in children_tagged(cmd, "param") {
+    for param in func_info.params.iter() {
         if !first {
             write!(out, ", ")?;
         }
-        if first {
-            first_param = Some(param.clone());
-        }
         first = false;
-        let decl = node_text(&param);
-        convert_c_declarator(out, &decl)?;
+        write!(out, "{}: {}", sanitize_ident(&param.name), param.rust_type(false))?;
     }
-    write!(out, ") -> {ret_type}")?;
-    if !command {
-        write!(out, ">")?;
-    }
-    writeln!(out, ";")?;
-    // Infer command type from first param
-    let first_param_ty = first_param.and_then(|param| child_tagged(param, "type")).and_then(|n| n.text());
-    cmd_dispatch_types.insert(name.to_string(), dispatch_type_from_first_param(first_param_ty));
+    write!(out, ") -> {}", func_info.proto.rust_type(true))?;
     Ok(())
 }
 
-fn gen_commands(out: &mut Writer, registry: Node, cmd_type_map: &mut CommandDispatchTypes) -> io::Result<()> {
-    let commands = child_tagged(registry, "commands").unwrap();
-    for cmd in children_tagged(commands, "command") {
-        gen_command_or_funcpointer(out, cmd, cmd_type_map, true)?;
+fn gen_command_pfn(out: &mut Writer, cmd: &CommandInfo) -> io::Result<()> {
+    let name = &cmd.name;
+    if let Some(ref alias) = cmd.alias {
+        write!(out, "pub type PFN_{name} = PFN_{alias};\n")?;
+        return Ok(());
     }
+    write!(out, "pub type PFN_{name} = unsafe extern \"system\" fn")?;
+    gen_func_sig(out, &cmd.func)?;
+    writeln!(out, ";")?;
     Ok(())
 }
 
 /*
-fn feature_commands<'a, 'input>(features: &Node<'a, 'input>, feature: &Node<'a, 'input>) -> Vec<Node<'a, 'input>> {
-    // PAIN: "depends" is defined by the spec to be a boolean expression with AND, OR and arbitrary groups;
-    //       this would make it very difficult to build the set of supported commands
-    //       fortunately, vk.xml seems to only use '+' in core features, so we don't have to
-    //
-    let depnames = feature.attribute("depends").map(|s| s.split('+').collect::<Vec<_>>()).unwrap_or_default();
-    let deps = depnames
-        .iter()
-        .map(|&dep| {
-            children_tagged(*features, "feature")
-                .find(|f| f.attribute("name").unwrap() == dep)
-                .unwrap_or_else(|| panic!("feature {dep} not found"))
-        })
-        .collect::<Vec<_>>();
-    let mut recdeps = deps.iter().map(|dep| feature_commands(features, dep)).flatten().collect::<Vec<_>>();
-    recdeps.push(feature.clone());
-    recdeps.dedup_by_key(|f| f.attribute("name").unwrap());
-    recdeps
+fn gen_funcpointer_ty(out: &mut Writer, func_info: &FuncInfo) -> io::Result<()> {
+    write!(out, "Option<unsafe extern \"system\" fn")?;
+    gen_func_sig(out, func_info)?;
+    write!(out, ">")?;
+    Ok(())
 }*/
 
 fn gen_features(
     out: &mut Writer,
     registry: Node,
     enum_types: &mut EnumTypeMap,
-    type_map: &mut TypeMap,
+    tymap: &mut TypeMap,
+    cmdmap: &mut CommandMap,
 ) -> io::Result<()> {
     for feature in children_tagged(registry, "feature") {
+        if !api_check(feature) {
+            continue;
+        }
         let name = feature.attribute("name").unwrap();
         //let number = int_attr(feature, "number").unwrap();
         writeln!(out, "// Feature: {name}")?;
         for require in children_tagged(feature, "require") {
-            gen_require(out, require, None, enum_types, type_map)?;
+            gen_require(out, require, None, enum_types, tymap, cmdmap)?;
         }
     }
     Ok(())
@@ -442,7 +579,8 @@ fn gen_extensions(
     out: &mut Writer,
     registry: Node,
     enum_types: &mut EnumTypeMap,
-    type_map: &mut TypeMap,
+    tymap: &mut TypeMap,
+    cmdmap: &mut CommandMap,
 ) -> io::Result<()> {
     let extensions = child_tagged(registry, "extensions").unwrap();
     for ext in children_tagged(extensions, "extension") {
@@ -453,7 +591,7 @@ fn gen_extensions(
         let number = int_attr(ext, "number").unwrap();
         writeln!(out, "// Extension: {name} ({number})")?;
         for require in children_tagged(ext, "require") {
-            gen_require(out, require, Some(number), enum_types, type_map)?;
+            gen_require(out, require, Some(number), enum_types, tymap, cmdmap)?;
         }
     }
     Ok(())
@@ -464,7 +602,8 @@ fn gen_require(
     require: Node,
     extnumber: Option<i64>,
     enum_types: &mut EnumTypeMap,
-    type_map: &mut TypeMap,
+    tymap: &mut TypeMap,
+    cmdmap: &mut CommandMap,
 ) -> io::Result<()> {
     for en in children_tagged(require, "enum") {
         let name = en.attribute("name").unwrap();
@@ -532,20 +671,31 @@ fn gen_require(
     }
     for ty in children_tagged(require, "type") {
         let name = ty.attribute("name").unwrap();
-        let info = type_map.get_mut(name).unwrap();
-        if info.generated {
-            // PAIN: types can be defined by multiple extensions.
+        eprintln!("generating  {name}");
+        let info = tymap.get(name).expect("type not found");
+        if info.generated.get() {
+            // PAIN: types,commands,etc. can be defined by multiple extensions.
             continue;
         }
         // PAIN: vk.xml contains video extensions which reference types in another header
         //       not described by vk.xml (video.xml).
         //       For now, vk_video/*.h are bindgen-ed separately, I've had enough with vk.xml already.
-        gen_type(out, name, info.type_node, type_map)?;
+        gen_type(out, &info, tymap)?;
+        info.generated.set(true)
+    }
+    for cmd in children_tagged(require, "command") {
+        let name = cmd.attribute("name").unwrap();
+        let info = cmdmap.get(name).expect("command not found");
+        if info.generated.get() {
+            continue;
+        }
+        gen_command_pfn(out, info)?;
+        info.generated.set(true);
     }
     Ok(())
 }
 
-fn gen_core_dispatch_tables(out: &mut Writer, registry: Node, dispatch_types: &CommandDispatchTypes) -> io::Result<()> {
+fn gen_core_dispatch_tables(out: &mut Writer, registry: Node, cmds: &CommandMap) -> io::Result<()> {
     // PAIN: Within vk.xml, Vulkan API versions are divided in smaller features (VK_{BASE,GRAPHICS,COMPUTE}_VERSION_*_*),
     //       and form a dependency tree via the "depends" attribute. However, this is useless for
     //       grouping commands by API version, so rely on "number" instead.
@@ -562,46 +712,71 @@ fn gen_core_dispatch_tables(out: &mut Writer, registry: Node, dispatch_types: &C
         for feature in features.iter() {
             for req in children_tagged(*feature, "require") {
                 for cmd in children_tagged(req, "command") {
-                    match &dispatch_types[cmd.attribute("name").unwrap()] {
-                        DispatchType::Entry => entry_fns.push(cmd),
-                        DispatchType::Instance => instance_fns.push(cmd),
-                        DispatchType::Device => device_fns.push(cmd),
+                    let info = &cmds[cmd.attribute("name").unwrap()];
+                    if !info.generated.get() {
+                        continue;
+                    }
+                    match &info.dispatch {
+                        DispatchType::Entry => entry_fns.push(info),
+                        DispatchType::Instance => instance_fns.push(info),
+                        DispatchType::Device => device_fns.push(info),
                     }
                 }
             }
         }
+        // shamelessly hardcode previous version dependencies
+        let instance_previous_version = match &*api_version {
+            //"1_5" => Some("1_4"), // not there yet!
+            "1_3" => Some("1_1"),
+            "1_1" => Some("1_0"),
+            _ => None,
+        };
+        let device_previous_version = match &*api_version {
+            //"1_5" => Some("1_4"), // not there yet!
+            "1_4" => Some("1_3"),
+            "1_3" => Some("1_2"),
+            "1_2" => Some("1_1"),
+            "1_1" => Some("1_0"),
+            _ => None,
+        };
         writeln!(out, "// Vulkan {api_version}")?;
         if !entry_fns.is_empty() {
             writeln!(out, "#[derive(Copy, Clone)]")?;
             writeln!(out, "#[repr(C)]")?; // make the dispatch tables repr(C), it costs nothing and might be useful to someone
             writeln!(out, "pub struct Vulkan_{api_version}_EntryDispatch {{")?;
             for cmd in entry_fns.iter() {
-                let vk_cmd_name = cmd.attribute("name").unwrap();
+                let vk_cmd_name = &cmd.name;
                 let cmd_name = vk_cmd_name.strip_prefix("vk").unwrap();
                 writeln!(out, "    pub {cmd_name}: PFN_{vk_cmd_name},")?;
             }
             writeln!(out, "}}")?;
         }
         if !instance_fns.is_empty() {
-            writeln!(out, "#[derive(Copy, Clone)]")?;
-            writeln!(out, "#[repr(C)]")?;
-            writeln!(out, "pub struct Vulkan_{api_version}_InstanceDispatch {{")?;
-            for cmd in instance_fns.iter() {
-                let vk_cmd_name = cmd.attribute("name").unwrap();
-                let cmd_name = vk_cmd_name.strip_prefix("vk").unwrap();
-                writeln!(out, "    pub {cmd_name}: PFN_{vk_cmd_name},")?;
+            writeln!(out, "dispatch_table! {{ Vulkan_{api_version}_InstanceDispatch;")?;
+            indent(out);
+            if let Some(ver) = instance_previous_version {
+                writeln!(out, "[vk_{ver}: Vulkan_{ver}_InstanceDispatch]")?;
             }
+            for cmd in instance_fns.iter() {
+                let vk_cmd_name = &cmd.name;
+                let cmd_name = vk_cmd_name.strip_prefix("vk").unwrap();
+                writeln!(out, "{cmd_name},PFN_{vk_cmd_name},c\"{vk_cmd_name}\";")?;
+            }
+            dedent(out);
             writeln!(out, "}}")?;
         }
         if !device_fns.is_empty() {
-            writeln!(out, "#[derive(Copy, Clone)]")?;
-            writeln!(out, "#[repr(C)]")?;
-            writeln!(out, "pub struct Vulkan_{api_version}_DeviceDispatch {{")?;
-            for cmd in device_fns.iter() {
-                let vk_cmd_name = cmd.attribute("name").unwrap();
-                let cmd_name = vk_cmd_name.strip_prefix("vk").unwrap();
-                writeln!(out, "    pub {cmd_name}: PFN_{vk_cmd_name},")?;
+            writeln!(out, "dispatch_table! {{ Vulkan_{api_version}_DeviceDispatch;")?;
+            indent(out);
+            if let Some(ver) = device_previous_version {
+                writeln!(out, "[vk_{ver}: Vulkan_{ver}_DeviceDispatch]")?;
             }
+            for cmd in device_fns.iter() {
+                let vk_cmd_name = &cmd.name;
+                let cmd_name = vk_cmd_name.strip_prefix("vk").unwrap();
+                writeln!(out, "{cmd_name},PFN_{vk_cmd_name},c\"{vk_cmd_name}\";")?;
+            }
+            dedent(out);
             writeln!(out, "}}")?;
         }
     }
@@ -642,16 +817,53 @@ fn maybe_write_deprecated_attr(out: &mut Writer, deprecated: Option<&str>, alias
 }
 
 /// Info about a C declarator.
-struct CDecl<'a> {
+#[derive(Clone, Default)]
+struct CDecl {
     /// Name (e.g. `name` in `const char* name[10]`)
-    name: &'a str,
-    /// True if this is a const-qualified pointer.
-    const_ptr: bool,
-    /// True if this is a pointer.
-    ptr: bool,
-    /// True if this is an array.
-    array: bool,
-    ty: String,
+    name: String,
+    inner_ty: String,
+    inner_const: bool,
+    outer_const: bool,
+    array_len_inner: Option<String>,
+    array_len_outer: Option<String>,
+    inner_ptr: bool,
+    outer_ptr: bool,
+    bitfield: Option<String>,
+}
+
+impl CDecl {
+    fn rust_type(&self, return_type: bool) -> String {
+        let mut ty = c_type_to_rust(&self.inner_ty, return_type).to_string();
+        if self.inner_ptr {
+            if self.inner_const {
+                ty = format!("*const {ty}");
+            } else {
+                ty = format!("*mut {ty}");
+            }
+        }
+        if self.outer_ptr {
+            if self.outer_const {
+                ty = format!("*const {ty}");
+            } else {
+                ty = format!("*mut {ty}");
+            }
+        }
+        if let Some(ref array_len) = self.array_len_inner {
+            ty = format!("[{ty}; {} as usize]", array_len);
+        }
+        if let Some(ref array_len) = self.array_len_outer {
+            ty = format!("[{ty}; {} as usize]", array_len);
+        }
+        ty
+    }
+
+    fn is_const_ptr(&self) -> bool {
+        (self.outer_ptr && self.outer_const) || (!self.outer_const && self.inner_ptr && self.inner_const)
+    }
+
+    fn is_ptr(&self) -> bool {
+        self.outer_ptr || self.inner_ptr
+    }
 }
 
 /// Converts a C declarator to its Rust equivalent and writes it to `out`.
@@ -661,7 +873,7 @@ struct CDecl<'a> {
 /// # Example
 /// `const char* name[10]` -> `name: [*const c_char; 10]`, returns (`name`, false)
 /// `struct VkBaseInStructure* pNext` -> `pNext: *mut VkBaseInStructure`, returns (`pNext`, false)
-fn convert_c_declarator<'a>(out: &mut Writer, member: &'a str) -> io::Result<CDecl<'a>> {
+fn parse_c_declarator<'a>(member: &'a str) -> io::Result<CDecl> {
     // [const] [struct] <type> [*|const *] <name> [ [<array_len>] ] [: bitfield]
     // https://regex101.com/?regex=%5E%5Cs*%28const%5Cs%2B%29%3F%28struct%5Cs%2B%29%3F%28%5Cw%2B%29%5Cs*%28%5C*%29%3F%5Cs*%28const%29%3F%5Cs*%28%5C*%29%3F%5Cs*%28%5Cw%2B%29%5Cs*%28%3F%3A%5C%5B%5Cs*%28%5Cw%2B%29%5Cs*%5C%5D%29%3F%24&testString=const++char32*+const*+ppEnabledExtensionNames+%5B4%5D%0Aconst+++struct+++VkBaseInStructure*+pNext%0AVkStructureType+sType%0Auint8_t+pipelineCacheUUID%5BVK_UUID_SIZE%5D%0Avoid**+ppData%0A&flags=gmu&flavor=rust&delimiter=%22
     static DECL_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -670,7 +882,7 @@ fn convert_c_declarator<'a>(out: &mut Writer, member: &'a str) -> io::Result<CDe
     });
     // 1 inner const
     // 2 struct
-    // 3 type
+    // 3 inner type
     // 4 inner ptr
     // 5 outer const
     // 6 outer ptr
@@ -680,50 +892,26 @@ fn convert_c_declarator<'a>(out: &mut Writer, member: &'a str) -> io::Result<CDe
     let caps = DECL_RE.captures(member).unwrap();
     let inner_const = caps.get(1).map(|m| m.as_str()).is_some();
     //let struct_ = caps.get(2).map(|m| m.as_str());
-    let ty = caps.get(3).map(|m| m.as_str()).unwrap();
+    let inner_ty = caps.get(3).map(|m| m.as_str().to_string()).unwrap();
     let inner_ptr = caps.get(4).map(|m| m.as_str()).is_some();
     let outer_const = caps.get(5).map(|m| m.as_str()).is_some();
     let outer_ptr = caps.get(6).map(|m| m.as_str()).is_some();
-    let name = caps.get(7).map(|m| m.as_str()).unwrap();
-    let array_len_outer = caps.get(8).map(|m| m.as_str());
-    let array_len_inner = caps.get(9).map(|m| m.as_str());
-    let bitfield = caps.get(10).map(|m| m.as_str());
-    let mut ty = c_type_to_rust(ty).to_string();
-    if inner_ptr {
-        if inner_const {
-            ty = format!("*const {ty}");
-        } else {
-            ty = format!("*mut {ty}");
-        }
-    }
-    if outer_ptr {
-        if outer_const {
-            ty = format!("*const {ty}");
-        } else {
-            ty = format!("*mut {ty}");
-        }
-    }
-    if let Some(array_len) = array_len_inner {
-        ty = format!("[{ty}; {} as usize]", array_len);
-    }
-    if let Some(array_len) = array_len_outer {
-        ty = format!("[{ty}; {} as usize]", array_len);
-    }
-    let sane_name = sanitize_ident(name);
-    write!(out, "{sane_name}: {ty}")?;
-    // PAIN: Quoting vk.xml:
-    //
-    //  > "The bitfields in this structure are non-normative since bitfield ordering is
-    //     implementation-defined in C. The specification defines the normative layout."
-    //
-    // I'm not sure what this means. The vulkan headers are supposed to be generated from vk.xml,
-    // how are they generated then if vk.xml doesn't contain all the necessary defintions?
-    if let Some(bitfield) = bitfield {
-        write!(out, " /* bitfield: {bitfield} */")?;
-    }
-    let ptr = outer_ptr || inner_ptr;
-    let const_ = (outer_ptr && outer_const) || (!outer_const && inner_ptr && inner_const);
-    Ok(CDecl { name, const_ptr: const_, ptr, array: array_len_inner.is_some() || array_len_outer.is_some(), ty })
+    let name = caps.get(7).map(|m| m.as_str().to_string()).unwrap();
+    let array_len_outer = caps.get(8).map(|m| m.as_str().to_string());
+    let array_len_inner = caps.get(9).map(|m| m.as_str().to_string());
+    let bitfield = caps.get(10).map(|m| m.as_str().to_string());
+
+    Ok(CDecl {
+        name,
+        inner_ty,
+        inner_const,
+        outer_const,
+        array_len_inner,
+        array_len_outer,
+        inner_ptr,
+        outer_ptr,
+        bitfield,
+    })
 }
 
 /// Crude parser for C-style constants in vk.xml.
@@ -757,7 +945,7 @@ fn c_constant_to_rust(mut value: &str) -> String {
 }
 
 /// Converts a C platform type to its rust equivalent
-fn c_type_to_rust(ty: &str) -> &str {
+fn c_type_to_rust(ty: &str, return_type: bool) -> &str {
     match ty {
         "uint8_t" => "u8",
         "uint16_t" => "u16",
@@ -772,8 +960,10 @@ fn c_type_to_rust(ty: &str) -> &str {
         "size_t" => "usize",
         "intptr_t" => "isize",
         "uintptr_t" => "usize",
-        "void" => "c_void",
+        "void" if return_type => "()",
+        "void" if !return_type => "c_void",
         "char" => "c_char",
+        "int" => "c_int",
         other => other,
     }
 }

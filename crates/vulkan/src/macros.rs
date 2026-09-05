@@ -26,6 +26,8 @@ macro_rules! handle {
         }
     };
 }
+
+use std::ffi::CStr;
 pub(crate) use handle;
 
 macro_rules! non_dispatchable_handle {
@@ -49,3 +51,30 @@ macro_rules! non_dispatchable_handle {
     };
 }
 pub(crate) use non_dispatchable_handle;
+
+
+macro_rules! dispatch_table {
+    ($name:ident; $([$inherits_m:ident:$inherits_ty:ty])? $($cmd:ident,$pfn:ty,$procname:literal;)*) => {
+        #[derive(Copy, Clone)]
+        #[repr(C)]
+        pub struct $name {
+            $(pub $inherits_m : $inherits_ty,)?
+            $(pub $cmd: $pfn,)*
+        }
+        impl $name {
+            pub unsafe fn load(mut load_fn: impl FnMut(&CStr) -> PFN_vkVoidFunction) -> Self {
+                Self {
+                    $($inherits_m: <$inherits_ty>::load(&mut load_fn),)?
+                    $($cmd: unsafe { ::core::mem::transmute(load_fn($procname).unwrap_or_else(|| $crate::proc_not_found($procname))) },)*
+                }
+            }
+        }
+        $(impl ::core::ops::Deref for $name {
+            type Target = $inherits_ty;
+            fn deref(&self) -> &Self::Target {
+                &self.$inherits_m
+            }
+        })?
+    };
+}
+pub(crate) use dispatch_table;

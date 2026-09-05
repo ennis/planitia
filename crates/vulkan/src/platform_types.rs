@@ -24,6 +24,13 @@ opaque_type!(_screen_buffer);
 opaque_type!(_screen_context);
 opaque_type!(_screen_window);
 opaque_type!(SECURITY_ATTRIBUTES);
+opaque_type!(NativeWindow);
+pub type OHNativeWindow = NativeWindow;
+opaque_type!(OHBufferHandle);
+opaque_type!(OH_NativeBuffer);
+pub type VkRemoteAddressNV = *mut c_void;
+opaque_type!(ubm_surface);
+opaque_type!(ubm_device);
 
 // This part below adapted from ash (https://github.com/ash-rs/ash)
 //

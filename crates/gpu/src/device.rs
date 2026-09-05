@@ -26,13 +26,14 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 use std::{fmt, mem, ptr};
+use ash::vk::Handle;
 use vulkan_headers::vulkan::vulkan as vk2;
 use vulkan_headers::vulkan::vulkan::{
     VK_FALSE, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_FEATURES_EXT, VK_TRUE,
     VkPhysicalDeviceDescriptorHeapFeaturesEXT, VkPhysicalDeviceShaderUntypedPointersFeaturesKHR,
 };
 use vulkan_headers::vulkan::vulkan_core::VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT;
-
+use vulkan::{VkDevice, VkSemaphore};
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Sizes of the global descriptor heaps (in number of descriptors).
@@ -124,6 +125,7 @@ pub(crate) struct DeviceSubmissionState {
 pub struct Device {
     /// Underlying vulkan device
     pub(crate) raw: ash::Device,
+    pub(crate) vk: vulkan::Vulkan_1_4_DeviceDispatch,
     /// Common device extensions.
     pub(crate) ext: DeviceExtensions,
     /// Platform-specific extension functions
@@ -452,6 +454,10 @@ impl Device {
         let entry = get_vulkan_entry();
         let instance = get_vulkan_instance();
         let device = ash::Device::load(instance.fp_v1_0(), device);
+        //
+        let device2 = ::vulkan::Vulkan_1_4_DeviceDispatch::load(|proc| {
+            instance.get_device_proc_addr(device.handle(), proc.as_ptr())
+        });
         let queue = device.get_device_queue(graphics_queue_family_index, 0);
         let timeline = {
             let timeline_create_info = vk::SemaphoreTypeCreateInfo {
@@ -549,6 +555,7 @@ impl Device {
 
         Ok(Device {
             raw: device,
+            vk: device2,
             ext: DeviceExtensions {
                 swapchain: khr_swapchain,
                 push_descriptor: khr_push_descriptor,
@@ -862,9 +869,17 @@ impl Device {
         // /!\ we are now in frame N+1 /!\
         // Reclaim resources of completed frames.
         let last_completed_frame_index = unsafe {
-            self.raw
-                .get_semaphore_counter_value(self.thread_safe.frame_timeline)
-                .expect("get_semaphore_counter_value failed")
+            let mut value = 0u64;
+            // VULKAN-MIGRATION
+            (self.vk.GetSemaphoreCounterValue)(
+                VkDevice(self.raw.handle().as_raw() as *mut _),
+                VkSemaphore(self.thread_safe.frame_timeline.as_raw()),
+                &mut value,
+            );
+            //self.raw
+            //    .get_semaphore_counter_value(self.thread_safe.frame_timeline)
+            //    .expect("get_semaphore_counter_value failed")
+            value
         };
         if last_completed_frame_index == u64::MAX {
             // This means "device lost".
@@ -873,7 +888,6 @@ impl Device {
         //trace!("GPU: cleaning up to submission {last_completed_submission_index}");
 
         // process all completed submissions
-        //let mut free_timestamp_query_pools = self.free_timestamp_query_pools.lock().unwrap();
         let mut ss = self.submission_state.lock().unwrap();
         loop {
             if ss.active_submissions.is_empty() {
@@ -883,27 +897,6 @@ impl Device {
                 break;
             };
             let _sub = ss.active_submissions.pop_front().unwrap();
-            // read timestamp query results
-            //unsafe {
-            //    if sub.timestamp_query_count > 0 {
-            //        let mut timestamp_results = vec![0u64; sub.timestamp_query_count as usize];
-            //        self.raw
-            //            .get_query_pool_results(
-            //                sub.timestamp_query_pool,
-            //                0,
-            //                &mut timestamp_results[..],
-            //                vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT,
-            //            )
-            //            .expect("vkGetQueryPoolResults failed");
-            //        self.raw.reset_query_pool(sub.timestamp_query_pool, 0, sub.timestamp_query_count);
-            //        // Invoke callbacks with the results
-            //        for (i, cb) in sub.timestamp_callbacks.into_iter().enumerate() {
-            //            (cb)(timestamp_results[i]);
-            //        }
-            //    }
-            //}
-            //// recycle query pools
-            //free_timestamp_query_pools.push(sub.timestamp_query_pool);
         }
 
         let mut deletion_queue = self.deletion_queue.lock().unwrap();
