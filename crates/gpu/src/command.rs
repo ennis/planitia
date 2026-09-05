@@ -91,7 +91,10 @@ impl<'a, T: Copy + 'static> From<ImmediatePushData<'a, T>> for PushDataSource<'a
 
 /// Buffer into which GPU commands are recorded.
 ///
-/// These should be submitted to the GPU using [`submit`].
+/// To submit a command buffer for execution, call [`gpu::submit`](crate::submit).
+/// `CommandBuffer` will panic on drop if not submitted this way.
+///
+/// `CommandBuffer`s should be submitted in the same frame as they were created.
 pub struct CommandBuffer {
     // FIXME: the query pool should be created on-demand
     timestamp_query_pool: vk::QueryPool,
@@ -109,11 +112,7 @@ pub struct CommandBuffer {
 }
 
 impl CommandBuffer {
-    /// Creates a command stream used to submit commands to the GPU.
-    ///
-    /// Once finished, the command stream should be submitted to the GPU using
-    /// `CommandStream::flush`.
-    /// They should be submitted in the same order as they were created.
+    /// Creates a command buffer.
     #[inline(never)]
     pub fn new() -> CommandBuffer {
         let device = Device::instance();
@@ -528,8 +527,6 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
     //----------------------
     let mut submission_state = device.submission_state.lock().unwrap();
 
-    // Verify that the command streams are submitted in the order in which they were created.
-    // Timeline semaphore values depend on this.
     assert!(!cmd.submitted);
 
     let frame_index_submitted = device.frame_index.load(Relaxed);

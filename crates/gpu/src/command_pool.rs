@@ -63,7 +63,7 @@ impl ThreadLocalCommandPool {
                 // complicates the logic in this module.
                 //
                 // So we don't care and free command buffers anyway. Ideally the driver should be
-                // in charge of optimizing this (because it knows best), but Vulkan forces that onto
+                // in charge of optimizing this (because it should know best), but Vulkan forces that onto
                 // the application instead...
                 device.free_command_buffers(self.command_pool, &[*cmdbuf]);
                 false
@@ -78,6 +78,7 @@ thread_local! {
     static COMMAND_POOL: RefCell<Option<ThreadLocalCommandPool>> = const { RefCell::new(None) };
 }
 
+#[inline(never)]
 pub(crate) fn allocate_command_buffer() -> vk::CommandBuffer {
     COMMAND_POOL.with(|pool| {
         let mut pool = pool.borrow_mut();
@@ -89,6 +90,7 @@ pub(crate) fn allocate_command_buffer() -> vk::CommandBuffer {
     })
 }
 
+#[inline(never)]
 pub(crate) fn defer_free_command_buffer(cmdbuf: vk::CommandBuffer, defer_until_frame_completed: u64) {
     COMMAND_POOL.with(|pool| {
         let mut pool = pool.borrow_mut();

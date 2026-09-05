@@ -104,10 +104,8 @@ pub(crate) struct DeviceThreadSafeState {
     pub(crate) physical_device_memory_properties: vk::PhysicalDeviceMemoryProperties,
     pub(crate) physical_device_id_properties: vk::PhysicalDeviceIDProperties<'static>,
     pub(crate) descriptor_heap_properties: vk2::VkPhysicalDeviceDescriptorHeapPropertiesEXT,
-
     _physical_device_descriptor_buffer_properties: vk::PhysicalDeviceDescriptorBufferPropertiesEXT<'static>,
     physical_device_properties: vk::PhysicalDeviceProperties,
-
     /// Timeline used to track completion of frames.
     /// It is incremented and signalled on each frame completion (see `poll`).
     // SAFETY: we're never using this as an externally-synchronized command parameter.
@@ -129,39 +127,25 @@ pub(crate) struct DeviceSubmissionState {
 pub struct Device {
     /// Underlying vulkan device
     pub(crate) raw: ash::Device,
-
     /// Common device extensions.
     pub(crate) ext: DeviceExtensions,
     /// Platform-specific extension functions
     pub(crate) platform_extensions: PlatformExtensions,
     pub(crate) allocator: Mutex<gpu_allocator::vulkan::Allocator>,
-
     /// Queue family index of the main queue.
     pub(crate) queue_family: u32,
-
     pub(crate) thread_safe: DeviceThreadSafeState,
     pub(crate) submission_state: Mutex<DeviceSubmissionState>,
-
-    // TODO: we don't track resources anymore, so this should go,
-    //       unless we have a need for IDs somewhere
-    //pub(crate) resources: Mutex<SlotMap<ResourceId, ResourceState>>,
-    //pub(crate) descriptor_table: BindlessDescriptorTable,
-    //pub(crate) descriptor_indices: Mutex<DeviceDescriptorIndexTable>,
-
     // WIP
     pub(crate) descriptor_heaps: DescriptorHeaps,
-
     // --- descriptor heap ---
     /// semaphores ready for reuse.
     pub(crate) semaphores: Mutex<Vec<vk::Semaphore>>,
-
     free_timestamp_query_pools: Mutex<Vec<vk::QueryPool>>,
-
     // Index of the next submission not yet created.
     //pub(crate) next_create_ticket: AtomicU64,
     /// The index of the frame being recorded, or, equivalently, the next frame index to be signalled.
     pub(crate) frame_index: AtomicU64,
-
     /// Destructors (or other function calls) that are delayed until associated command buffers
     /// have completed execution.
     ///
@@ -172,7 +156,6 @@ pub struct Device {
     /// This is necessary to avoid unsound scenarios where resources are deleted while still in use
     /// by the GPU, due to command buffers being submitted out-of-order.
     deletion_queue: Mutex<Vec<DeleteQueueEntry>>,
-
     pub(crate) sampler_cache: Mutex<HashMap<SamplerParamsHashable, SamplerDescriptorHandle>>,
 }
 
@@ -368,7 +351,6 @@ unsafe fn find_queue_family(
                     continue;
                 }
             }
-
             if let Some(ref mut i) = best_queue_family {
                 // there was already a queue for the specified usage,
                 // change it only if it is more specialized.
@@ -479,11 +461,7 @@ impl Device {
         let entry = get_vulkan_entry();
         let instance = get_vulkan_instance();
         let device = ash::Device::load(instance.fp_v1_0(), device);
-
-        // fetch the graphics queue
         let queue = device.get_device_queue(graphics_queue_family_index, 0);
-
-        // create timeline semaphore
         let timeline = {
             let timeline_create_info = vk::SemaphoreTypeCreateInfo {
                 semaphore_type: vk::SemaphoreType::TIMELINE,
@@ -496,32 +474,17 @@ impl Device {
             };
             device.create_semaphore(&semaphore_create_info, None).expect("failed to create timeline semaphore")
         };
-
-        // Create the GPU memory allocator
-        let allocator_create_desc = gpu_allocator::vulkan::AllocatorCreateDesc {
-            physical_device,
-            debug_settings: Default::default(),
-            device: device.clone(),     // not cheap!
-            instance: instance.clone(), // not cheap!
-            buffer_device_address: true,
-            allocation_sizes: Default::default(),
+        let mut allocator = {
+            let allocator_create_desc = gpu_allocator::vulkan::AllocatorCreateDesc {
+                physical_device,
+                debug_settings: Default::default(),
+                device: device.clone(),     // not cheap!
+                instance: instance.clone(), // not cheap!
+                buffer_device_address: true,
+                allocation_sizes: Default::default(),
+            };
+            gpu_allocator::vulkan::Allocator::new(&allocator_create_desc).expect("failed to create GPU allocator")
         };
-
-        let mut allocator =
-            gpu_allocator::vulkan::Allocator::new(&allocator_create_desc).expect("failed to create GPU allocator");
-
-        // Extensions
-        let khr_swapchain = ash::khr::swapchain::Device::new(instance, &device);
-        let khr_push_descriptor = ash::khr::push_descriptor::Device::new(instance, &device);
-        let khr_calibrated_timestamps = ash::khr::calibrated_timestamps::Device::new(instance, &device);
-        let ext_extended_dynamic_state3 = ash::ext::extended_dynamic_state3::Device::new(instance, &device);
-        let ext_mesh_shader = ash::ext::mesh_shader::Device::new(instance, &device);
-        //let vk_ext_descriptor_buffer = ash::extensions::ext::DescriptorBuffer::new(instance, &device);
-        let physical_device_memory_properties = instance.get_physical_device_memory_properties(physical_device);
-        let ext_debug_utils = ash::ext::debug_utils::Device::new(instance, &device);
-        let platform_extensions = PlatformExtensions::load(entry, instance, &device);
-        let ext_descriptor_heap = ExtDescriptorHeap::load(entry, instance);
-
         let mut physical_device_descriptor_buffer_properties =
             vk::PhysicalDeviceDescriptorBufferPropertiesEXT::default();
         // TODO: replace this once ash is updated
@@ -556,12 +519,21 @@ impl Device {
             p_next: &mut physical_device_id_properties as *mut _ as *mut c_void,
             ..Default::default()
         };
-
         instance.get_physical_device_properties2(physical_device, &mut physical_device_properties);
 
-        // Descriptor heap stuff (unused for now)
+        // Extensions
+        let khr_swapchain = ash::khr::swapchain::Device::new(instance, &device);
+        let khr_push_descriptor = ash::khr::push_descriptor::Device::new(instance, &device);
+        let khr_calibrated_timestamps = ash::khr::calibrated_timestamps::Device::new(instance, &device);
+        let ext_extended_dynamic_state3 = ash::ext::extended_dynamic_state3::Device::new(instance, &device);
+        let ext_mesh_shader = ash::ext::mesh_shader::Device::new(instance, &device);
+        let physical_device_memory_properties = instance.get_physical_device_memory_properties(physical_device);
+        let ext_debug_utils = ash::ext::debug_utils::Device::new(instance, &device);
+        let platform_extensions = PlatformExtensions::load(entry, instance, &device);
+        let ext_descriptor_heap = ExtDescriptorHeap::load(entry, instance);
         let descriptor_heaps = DescriptorHeaps::new(&mut allocator, &device, &descriptor_heap_properties);
 
+        // ------ info dump ------
         let device_name = CStr::from_ptr(physical_device_properties.properties.device_name.as_ptr()).to_string_lossy();
         info!("gpu: using device {device_name}",);
         info!(
@@ -644,7 +616,6 @@ impl Device {
     pub unsafe fn with_surface(present_surface: Option<vk::SurfaceKHR>) -> Result<Device, DeviceCreateError> {
         let instance = get_vulkan_instance();
         let vk_khr_surface = vk_khr_surface();
-
         let phy = select_physical_device(instance);
         let queue_family_properties = instance.get_physical_device_queue_family_properties(phy.physical_device);
         let graphics_queue_family = find_queue_family(
@@ -654,7 +625,6 @@ impl Device {
             vk::QueueFlags::GRAPHICS,
             present_surface,
         );
-
         let queue_priorities = [1.0f32];
         let device_queue_create_infos = &[vk::DeviceQueueCreateInfo {
             flags: Default::default(),
@@ -665,45 +635,41 @@ impl Device {
         }];
 
         // ------ BEGIN SHOPPING LIST ------
-
+        // TODO: this code should probably be generated by a JSON profile.
+        //       on occasion, try the vulkan profiles library
         let mut shader_untyped_pointers = VkPhysicalDeviceShaderUntypedPointersFeaturesKHR {
             sType: vk2::VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_UNTYPED_POINTERS_FEATURES_KHR,
             pNext: ptr::null_mut(),
             shaderUntypedPointers: VK_TRUE,
         };
-
         let mut descriptor_heap_features = VkPhysicalDeviceDescriptorHeapFeaturesEXT {
             sType: VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_FEATURES_EXT,
             pNext: &mut shader_untyped_pointers as *mut _ as *mut c_void,
-            descriptorHeap: VK_TRUE,
+            descriptorHeap: VK_TRUE, // we use descriptor heaps exclusively
             descriptorHeapCaptureReplay: VK_FALSE,
         };
-
         let mut fragment_shader_interlock_features = vk::PhysicalDeviceFragmentShaderInterlockFeaturesEXT {
             p_next: &mut descriptor_heap_features as *mut _ as *mut c_void,
-            fragment_shader_pixel_interlock: vk::TRUE,
+            fragment_shader_pixel_interlock: vk::TRUE, // nice-to-have for experimentation
             ..Default::default()
         };
-
         let mut maintenance5_features = vk::PhysicalDeviceMaintenance5FeaturesKHR {
             p_next: &mut fragment_shader_interlock_features as *mut _ as *mut c_void,
             maintenance5: vk::TRUE,
             ..Default::default()
         };
-
         let mut mutable_descriptor_type_features = vk::PhysicalDeviceMutableDescriptorTypeFeaturesEXT {
             p_next: &mut maintenance5_features as *mut _ as *mut c_void,
-            mutable_descriptor_type: vk::TRUE,
+            mutable_descriptor_type: vk::TRUE, // TODO not sure this is needed anymore with descriptor_heap
             ..Default::default()
         };
-
         let mut mesh_shader_features = vk::PhysicalDeviceMeshShaderFeaturesEXT {
             p_next: &mut mutable_descriptor_type_features as *mut _ as *mut c_void,
-            task_shader: vk::TRUE,
+            task_shader: vk::TRUE, // it's the future
             mesh_shader: vk::TRUE,
             ..Default::default()
         };
-
+        // don't bother with static state in pipelines
         let mut ext_dynamic_state = vk::PhysicalDeviceExtendedDynamicState3FeaturesEXT {
             p_next: &mut mesh_shader_features as *mut _ as *mut c_void,
             extended_dynamic_state3_tessellation_domain_origin: vk::TRUE,
@@ -739,15 +705,14 @@ impl Device {
             extended_dynamic_state3_shading_rate_image_enable: vk::TRUE,
             ..Default::default()
         };
-
         let mut vk13_features = vk::PhysicalDeviceVulkan13Features {
             p_next: &mut ext_dynamic_state as *mut _ as *mut c_void,
             synchronization2: vk::TRUE,
-            dynamic_rendering: vk::TRUE,
+            dynamic_rendering: vk::TRUE, // we use dynamic rendering exclusively
+            // we expose a constant subgroup size of 32 to simplify the implementation of algorithms that depend on subgroups
             subgroup_size_control: vk::TRUE,
             ..Default::default()
         };
-
         let mut vk12_features = vk::PhysicalDeviceVulkan12Features {
             p_next: &mut vk13_features as *mut _ as *mut c_void,
             descriptor_indexing: vk::TRUE,
@@ -769,7 +734,6 @@ impl Device {
             host_query_reset: vk::TRUE,
             ..Default::default()
         };
-
         let mut vk11_features = vk::PhysicalDeviceVulkan11Features {
             p_next: &mut vk12_features as *mut _ as *mut c_void,
             shader_draw_parameters: vk::TRUE,
@@ -777,7 +741,6 @@ impl Device {
             storage_push_constant16: vk::TRUE,
             ..Default::default()
         };
-
         let mut features2 = vk::PhysicalDeviceFeatures2 {
             p_next: &mut vk11_features as *mut _ as *mut c_void,
             features: vk::PhysicalDeviceFeatures {
@@ -795,16 +758,13 @@ impl Device {
             },
             ..Default::default()
         };
-
         // Convert extension strings into C-strings
         let c_device_extensions: Vec<_> = DEVICE_EXTENSIONS
             .iter()
             .chain(PlatformExtensions::names().iter())
             .map(|&s| CString::new(s).unwrap())
             .collect();
-
         let device_extensions: Vec<_> = c_device_extensions.iter().map(|s| s.as_ptr()).collect();
-
         let device_create_info = vk::DeviceCreateInfo {
             p_next: &mut features2 as *mut _ as *mut c_void,
             flags: Default::default(),
@@ -815,15 +775,12 @@ impl Device {
             p_enabled_features: ptr::null(),
             ..Default::default()
         };
-
         // ------ END SHOPPING LIST ------
 
         // ------ Create device ------
-
         let device: ash::Device = instance
             .create_device(phy.physical_device, &device_create_info, None)
             .expect("could not create vulkan device");
-
         Self::from_existing(phy.physical_device, device.handle(), graphics_queue_family)
     }
 }
@@ -837,23 +794,6 @@ impl Device {
     pub fn raw(&self) -> &ash::Device {
         &self.raw
     }
-
-    ///// Allocates a new resource ID for tracking a resource.
-    //pub(crate) fn allocate_resource_id(&self) -> ResourceId {
-    //    self.resources.lock().unwrap().insert(ResourceState {
-    //        //last_submission_index: 0,
-    //    })
-    //}
-
-    ///// Releases a resource ID that is no longer used.
-    //pub(crate) fn free_resource_id(&self, resource_id: ResourceId) {
-    //    self.resources.lock().unwrap().remove(resource_id);
-    //}
-
-    // Releases a resource heap index that is no longer used.
-    //pub(crate) fn free_resource_heap_index(&self, index: ResourceDescriptorIndex) {
-    //    self.descriptor_indices.lock().unwrap().resource.remove(index);
-    //}
 
     /// Allocates memory, or panic trying.
     ///
@@ -931,7 +871,6 @@ impl Device {
 
         // /!\ we are now in frame N+1 /!\
         // Reclaim resources of completed frames.
-
         let last_completed_frame_index = unsafe {
             self.raw
                 .get_semaphore_counter_value(self.thread_safe.frame_timeline)
@@ -941,24 +880,19 @@ impl Device {
             // This means "device lost".
             panic!("GetSemaphoreCounterValue returned an invalid value");
         }
-
         //trace!("GPU: cleaning up to submission {last_completed_submission_index}");
 
         // process all completed submissions
-        //let mut free_command_pools = self.free_command_pools.lock().unwrap();
         let mut free_timestamp_query_pools = self.free_timestamp_query_pools.lock().unwrap();
         let mut ss = self.submission_state.lock().unwrap();
         loop {
             if ss.active_submissions.is_empty() {
                 break;
             }
-
             if ss.active_submissions.front().unwrap().frame_index > last_completed_frame_index {
                 break;
             };
-
             let sub = ss.active_submissions.pop_front().unwrap();
-
             // read timestamp query results
             unsafe {
                 if sub.timestamp_query_count > 0 {
@@ -978,13 +912,11 @@ impl Device {
                     }
                 }
             }
-
             // recycle query pools
             free_timestamp_query_pools.push(sub.timestamp_query_pool);
         }
 
         let mut deletion_queue = self.deletion_queue.lock().unwrap();
-
         // *** This invokes all delayed destructors for resources which are no longer in use by the GPU.
         deletion_queue.retain_mut(|DeleteQueueEntry { frame_index, deleter }| {
             if *frame_index > last_completed_frame_index {
@@ -994,7 +926,6 @@ impl Device {
             deleter(self);
             false
         });
-
         frame_index
     }
 
@@ -1005,7 +936,6 @@ impl Device {
         if let Some(semaphore) = self.semaphores.lock().unwrap().pop() {
             return semaphore;
         }
-
         // Otherwise create a new one
         unsafe {
             let create_info = vk::SemaphoreCreateInfo { ..Default::default() };
@@ -1025,7 +955,6 @@ impl Device {
         if let Some(sampler) = self.sampler_cache.lock().unwrap().get(&info_hashable) {
             return SamplerHandle::new(*sampler);
         }
-
         let create_info = vk::SamplerCreateInfo {
             flags: Default::default(),
             mag_filter: info.mag_filter,
@@ -1044,7 +973,6 @@ impl Device {
             border_color: info.border_color,
             ..Default::default()
         };
-
         let sampler = self.allocate_sampler_descriptor(&create_info);
         self.sampler_cache.lock().unwrap().insert(info_hashable, sampler);
         SamplerHandle::new(sampler)
@@ -1055,21 +983,15 @@ impl Device {
         if let Some(pool) = free.pop() {
             pool
         } else {
+            let create_info = vk::QueryPoolCreateInfo {
+                flags: Default::default(),
+                query_type: vk::QueryType::TIMESTAMP,
+                query_count: MAX_TIMESTAMP_QUERY_COUNT,
+                pipeline_statistics: Default::default(),
+                ..Default::default()
+            };
             unsafe {
-                let pool = self
-                    .raw
-                    .create_query_pool(
-                        &vk::QueryPoolCreateInfo {
-                            flags: Default::default(),
-                            query_type: vk::QueryType::TIMESTAMP,
-                            query_count: MAX_TIMESTAMP_QUERY_COUNT,
-                            pipeline_statistics: Default::default(),
-                            _marker: Default::default(),
-                            ..Default::default()
-                        },
-                        None,
-                    )
-                    .expect("failed to create timestamp query pool");
+                let pool = self.raw.create_query_pool(&create_info, None).unwrap();
                 self.raw.reset_query_pool(pool, 0, MAX_TIMESTAMP_QUERY_COUNT);
                 pool
             }
@@ -1081,6 +1003,7 @@ impl Device {
 // SHADERS, PIPELINES & LAYOUTS
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
+/*
 struct ShaderModuleGuard<'a> {
     device: &'a Device,
     module: vk::ShaderModule,
@@ -1092,8 +1015,9 @@ impl<'a> Drop for ShaderModuleGuard<'a> {
             self.device.raw.destroy_shader_module(self.module, None);
         }
     }
-}
+}*/
 
+/*
 /// Helper to create PipelineShaderStageCreateInfo
 fn create_stage<'a>(
     device: &'a Device,
@@ -1119,7 +1043,8 @@ fn create_stage<'a>(
         ..Default::default()
     };
     Ok((stage_create_info, ShaderModuleGuard { device, module }))
-}
+}*/
+
 macro_rules! make_stage {
     ($sh:expr, $stage_flags:expr, $module:ident, $p_next:ident, $entry_point_name:ident) => {{
         $entry_point_name = CString::new($sh.entry_point).unwrap();
@@ -1140,96 +1065,18 @@ macro_rules! make_stage {
 }
 
 impl Device {
-    /*/// FIXME: this should be a constructor of `DescriptorSetLayout`, because now we have two
-    ///        functions with very similar names (`create_descriptor_set_layout` and `create_descriptor_set_layout_from_handle`)
-    ///        that have totally different semantics (one returns a raw vulkan handle, the other returns a RAII wrapper `DescriptorSetLayout`).
-    pub fn create_descriptor_set_layout_from_handle(&self, handle: vk::DescriptorSetLayout) -> DescriptorSetLayout {
-        DescriptorSetLayout { last_submission_index: Some(Arc::new(Default::default())), handle }
-    }
-
-    pub fn create_push_descriptor_set_layout(
-        &self,
-        bindings: &[vk::DescriptorSetLayoutBinding],
-    ) -> DescriptorSetLayout {
-        let create_info = vk::DescriptorSetLayoutCreateInfo {
-            flags: vk::DescriptorSetLayoutCreateFlags::PUSH_DESCRIPTOR_KHR,
-            binding_count: bindings.len() as u32,
-            p_bindings: bindings.as_ptr(),
-            ..Default::default()
-        };
-        let handle = unsafe {
-            self.raw.create_descriptor_set_layout(&create_info, None).expect("failed to create descriptor set layout")
-        };
-        self.create_descriptor_set_layout_from_handle(handle)
-    }
-
-    /// Creates a pipeline layout object.
-    fn create_pipeline_layout(
-        &self,
-        bind_point: vk::PipelineBindPoint,
-        descriptor_set_layouts: &[DescriptorSetLayout],
-        push_constants_size: usize,
-    ) -> vk::PipelineLayout {
-        let layout_handles: Vec<_> = if descriptor_set_layouts.is_empty() {
-            // Empty set layouts means use the universal bindless layouts
-            vec![self.descriptor_table.layout]
-        } else {
-            descriptor_set_layouts.iter().map(|layout| layout.handle).collect()
-        };
-
-        let pc_range = if push_constants_size != 0 {
-            Some(match bind_point {
-                vk::PipelineBindPoint::GRAPHICS => vk::PushConstantRange {
-                    stage_flags: vk::ShaderStageFlags::ALL_GRAPHICS
-                        | vk::ShaderStageFlags::MESH_EXT
-                        | vk::ShaderStageFlags::TASK_EXT,
-                    offset: 0,
-                    size: push_constants_size as u32,
-                },
-                vk::PipelineBindPoint::COMPUTE => vk::PushConstantRange {
-                    stage_flags: vk::ShaderStageFlags::COMPUTE,
-                    offset: 0,
-                    size: push_constants_size as u32,
-                },
-                _ => unimplemented!(),
-            })
-        } else {
-            None
-        };
-        let pc_range = pc_range.as_slice();
-
-        let create_info = vk::PipelineLayoutCreateInfo {
-            set_layout_count: layout_handles.len() as u32,
-            p_set_layouts: layout_handles.as_ptr(),
-            push_constant_range_count: pc_range.len() as u32,
-            p_push_constant_ranges: pc_range.as_ptr(),
-            ..Default::default()
-        };
-
-        let pipeline_layout =
-            unsafe { self.raw.create_pipeline_layout(&create_info, None).expect("failed to create pipeline layout") };
-
-        pipeline_layout
-    }*/
-
+    /// Creates a compute pipeline.
     pub(crate) fn create_compute_pipeline(
         &self,
         create_info: ComputePipelineCreateInfo,
     ) -> Result<ComputePipeline, Error> {
         let mut push_constants_size = create_info.push_constants_size;
         push_constants_size = push_constants_size.max(create_info.shader.push_constants_size);
-
-        //let pipeline_layout =
-        //    self.create_pipeline_layout(vk::PipelineBindPoint::COMPUTE, create_info.set_layouts, push_constants_size);
-
-        //let is_bindless = create_info.set_layouts.is_empty();
-
         let req_subgroup_size = vk::PipelineShaderStageRequiredSubgroupSizeCreateInfo {
             required_subgroup_size: SUBGROUP_SIZE,
             p_next: ptr::null_mut(),
             ..Default::default()
         };
-
         let _module;
         let _entry_point_name;
         let compute_stage = make_stage!(
@@ -1239,12 +1086,10 @@ impl Device {
             req_subgroup_size,
             _entry_point_name
         );
-
         let pipeline_create_flags = vk::PipelineCreateFlags2CreateInfoKHR {
             flags: vk::PipelineCreateFlags2KHR::from_raw(VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT),
             ..Default::default()
         };
-
         let cpci = vk::ComputePipelineCreateInfo {
             p_next: &pipeline_create_flags as *const _ as *const c_void,
             flags: vk::PipelineCreateFlags::empty(),
@@ -1252,7 +1097,6 @@ impl Device {
             layout: Default::default(),
             ..Default::default()
         };
-
         let pipeline = unsafe {
             match self.raw.create_compute_pipelines(vk::PipelineCache::null(), &[cpci], None) {
                 Ok(pipelines) => pipelines[0],
@@ -1261,14 +1105,7 @@ impl Device {
                 }
             }
         };
-
-        Ok(ComputePipeline {
-            pipeline,
-            //pipeline_layout,
-            //_descriptor_set_layouts: create_info.set_layouts.to_vec(),
-            //bindless: is_bindless,
-            reflection: create_info.shader.refl_params,
-        })
+        Ok(ComputePipeline { pipeline, reflection: create_info.shader.refl_params })
     }
 
     /// Creates a graphics pipeline.
@@ -1291,19 +1128,17 @@ impl Device {
         push_constants_size = push_constants_size.max(create_info.fragment.shader.push_constants_size);
 
         // ------ Dynamic states ------
-
         // TODO: this could be a static property of the pipeline interface
+        // FIXME don't allocate there
         let mut dynamic_states = vec![
             vk::DynamicState::VIEWPORT,
             vk::DynamicState::SCISSOR,
             vk::DynamicState::DEPTH_BIAS,
             vk::DynamicState::DEPTH_BIAS_ENABLE,
         ];
-
         if matches!(create_info.pre_rasterization_shaders, PreRasterizationShaders::PrimitiveShading { .. }) {
             dynamic_states.push(vk::DynamicState::PRIMITIVE_TOPOLOGY);
         }
-
         let dynamic_state_create_info = vk::PipelineDynamicStateCreateInfo {
             dynamic_state_count: dynamic_states.len() as u32,
             p_dynamic_states: dynamic_states.as_ptr(),
@@ -1311,14 +1146,11 @@ impl Device {
         };
 
         // ------ Vertex state ------
-
         let vertex_input = create_info.vertex_input;
         let vertex_attribute_count = vertex_input.attributes.len();
         let vertex_buffer_count = vertex_input.buffers.len();
-
         let mut vertex_attribute_descriptions = Vec::with_capacity(vertex_attribute_count);
         let mut vertex_binding_descriptions = Vec::with_capacity(vertex_buffer_count);
-
         for attribute in vertex_input.attributes.iter() {
             vertex_attribute_descriptions.push(vk::VertexInputAttributeDescription {
                 location: attribute.location,
@@ -1327,7 +1159,6 @@ impl Device {
                 offset: attribute.offset,
             });
         }
-
         for desc in vertex_input.buffers.iter() {
             vertex_binding_descriptions.push(vk::VertexInputBindingDescription {
                 binding: desc.binding,
@@ -1335,7 +1166,6 @@ impl Device {
                 input_rate: desc.input_rate.into(),
             });
         }
-
         let vertex_input_state = vk::PipelineVertexInputStateCreateInfo {
             vertex_binding_description_count: vertex_buffer_count as u32,
             p_vertex_binding_descriptions: vertex_binding_descriptions.as_ptr(),
@@ -1343,7 +1173,6 @@ impl Device {
             p_vertex_attribute_descriptions: vertex_attribute_descriptions.as_ptr(),
             ..Default::default()
         };
-
         let input_assembly_state = vk::PipelineInputAssemblyStateCreateInfo {
             topology: vk::PrimitiveTopology::TRIANGLE_LIST, // ignored, specified dynamically
             primitive_restart_enable: vk::FALSE,
@@ -1351,15 +1180,12 @@ impl Device {
         };
 
         // ------ Shader stages ------
-
         let req_subgroup_size = vk::PipelineShaderStageRequiredSubgroupSizeCreateInfo {
             required_subgroup_size: SUBGROUP_SIZE,
             p_next: ptr::null_mut(),
             ..Default::default()
         };
-
         let mut stages = Vec::new();
-
         // those variables are referenced by VkGraphicsPipelineCreateInfo
         // put them here so that they live at least until vkCreateGraphicsPipelines is called
         let vertex_entry_point;
@@ -1370,9 +1196,7 @@ impl Device {
         let task_module;
         let mesh_module;
         let fragment_module;
-
         let mut stage_reflection = vec![];
-
         match create_info.pre_rasterization_shaders {
             PreRasterizationShaders::PrimitiveShading { vertex } => {
                 stages.push(make_stage!(
@@ -1395,7 +1219,6 @@ impl Device {
                     ));
                     stage_reflection.push((ShaderStage::Task, task.refl_params));
                 }
-
                 stages.push(make_stage!(
                     mesh,
                     vk::ShaderStageFlags::MESH_EXT,
@@ -1406,7 +1229,6 @@ impl Device {
                 stage_reflection.push((ShaderStage::Mesh, mesh.refl_params));
             }
         };
-
         stages.push(make_stage!(
             create_info.fragment.shader,
             vk::ShaderStageFlags::FRAGMENT,
@@ -1416,6 +1238,7 @@ impl Device {
         ));
         stage_reflection.push((ShaderStage::Fragment, create_info.fragment.shader.refl_params));
 
+        // ------ attachments ------
         let attachment_states: Vec<_> = create_info
             .fragment
             .color_targets
@@ -1439,11 +1262,11 @@ impl Device {
             })
             .collect();
 
+        // ------ misc ------
         let conservative_rasterization_state = vk::PipelineRasterizationConservativeStateCreateInfoEXT {
             conservative_rasterization_mode: create_info.rasterization.conservative_rasterization_mode.into(),
             ..Default::default()
         };
-
         let rasterization_state = vk::PipelineRasterizationStateCreateInfo {
             p_next: &conservative_rasterization_state as *const _ as *const _,
             depth_clamp_enable: create_info.rasterization.depth_clamp_enable.into(),
@@ -1458,7 +1281,6 @@ impl Device {
             line_width: 1.0,
             ..Default::default()
         };
-
         let multisample_state = vk::PipelineMultisampleStateCreateInfo {
             rasterization_samples: vk::SampleCountFlags::TYPE_1,
             sample_shading_enable: vk::FALSE,
@@ -1468,7 +1290,6 @@ impl Device {
             alpha_to_one_enable: vk::FALSE,
             ..Default::default()
         };
-
         let color_blend_state = vk::PipelineColorBlendStateCreateInfo {
             flags: Default::default(),
             logic_op_enable: vk::FALSE,
@@ -1478,7 +1299,6 @@ impl Device {
             blend_constants: create_info.fragment.blend_constants,
             ..Default::default()
         };
-
         let depth_stencil_state = if let Some(ds) = create_info.depth_stencil {
             vk::PipelineDepthStencilStateCreateInfo {
                 flags: Default::default(),
@@ -1496,7 +1316,6 @@ impl Device {
         } else {
             Default::default()
         };
-
         let color_attachment_formats =
             create_info.fragment.color_targets.iter().map(|target| target.format).collect::<Vec<_>>();
         let depth_attachment_format = create_info.depth_stencil.map(|ds| ds.format).unwrap_or(vk::Format::UNDEFINED);
@@ -1505,7 +1324,6 @@ impl Device {
         } else {
             vk::Format::UNDEFINED
         };
-
         let rendering_info = vk::PipelineRenderingCreateInfo {
             view_mask: 0,
             color_attachment_count: color_attachment_formats.len() as u32,
@@ -1514,13 +1332,11 @@ impl Device {
             stencil_attachment_format,
             ..Default::default()
         };
-
         let pipeline_create_flags = vk::PipelineCreateFlags2CreateInfoKHR {
             p_next: &rendering_info as *const _ as *const c_void,
             flags: vk::PipelineCreateFlags2KHR::from_raw(vk2::VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT),
             ..Default::default()
         };
-
         let pipeline_create_info = vk::GraphicsPipelineCreateInfo {
             p_next: &pipeline_create_flags as *const _ as *const _,
             flags: vk::PipelineCreateFlags::empty(),
@@ -1555,7 +1371,6 @@ impl Device {
                 }
             }
         };
-
         Ok(GraphicsPipeline { pipeline, stage_reflection })
     }
 }
