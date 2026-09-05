@@ -52,6 +52,7 @@ mod surface;
 mod swapchain;
 mod temp;
 pub mod util;
+mod query_pool;
 
 use gpu_types::reflection::ShaderReflection;
 use std::sync::Arc;
@@ -71,6 +72,7 @@ pub use instance::*;
 pub use surface::*;
 pub use swapchain::*;
 pub use temp::{alloc_temp, alloc_temp_slice};
+pub use query_pool::*;
 
 // proc-macros
 pub use gpu_macros::{Vertex, shader_module};

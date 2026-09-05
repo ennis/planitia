@@ -152,7 +152,9 @@ impl ApplicationHandler for App {
 
                 gpu::submit(cmd).unwrap();
                 gpu::present(&mut window.swap_chain, index).unwrap();
-                gpu::end_frame();
+                unsafe {
+                    gpu::end_frame();
+                }
             }
             _ => {}
         }

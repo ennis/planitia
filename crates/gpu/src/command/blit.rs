@@ -71,7 +71,6 @@ impl CommandBuffer {
     ) {
         // TODO: this is not required for multi-planar formats
         assert_eq!(source.aspect, destination.aspect);
-
         let regions = [vk::ImageCopy {
             src_subresource: vk::ImageSubresourceLayers {
                 aspect_mask: source.aspect.to_aspect(source.image.format),
@@ -89,7 +88,6 @@ impl CommandBuffer {
             dst_offset: destination.origin.into(),
             extent: copy_size,
         }];
-
         // SAFETY: FFI call and parameters are valid
         unsafe {
             Device::instance().raw.cmd_copy_image(
@@ -114,7 +112,6 @@ impl CommandBuffer {
     ) {
         assert!(src_offset + size <= source.byte_size());
         assert!(dst_offset + size <= destination.byte_size());
-
         // SAFETY: FFI call and parameters are valid
         unsafe {
             Device::instance().raw.cmd_copy_buffer(
@@ -148,7 +145,6 @@ impl CommandBuffer {
             image_offset: vk::Offset3D { x: destination.origin.x, y: destination.origin.y, z: destination.origin.z },
             image_extent: copy_size,
         }];
-
         // SAFETY: FFI call and parameters are valid
         unsafe {
             Device::instance().raw.cmd_copy_buffer_to_image(
@@ -181,7 +177,6 @@ impl CommandBuffer {
             image_offset: source.origin.into(),
             image_extent: copy_size.into(),
         }];
-
         // SAFETY: FFI call and parameters are valid
         unsafe {
             Device::instance().raw.cmd_copy_image_to_buffer(
@@ -220,7 +215,6 @@ impl CommandBuffer {
             },
             dst_offsets: [dst_region.min.into(), dst_region.max.into()],
         }];
-
         // SAFETY: command buffer is OK, params OK
         unsafe {
             Device::instance().raw.cmd_blit_image(

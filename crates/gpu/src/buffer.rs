@@ -14,32 +14,6 @@ use std::os::raw::c_void;
 use std::ptr::NonNull;
 use std::{mem, ptr, slice};
 
-impl<T: ?Sized> Drop for Buffer<T> {
-    fn drop(&mut self) {
-        let mut allocation = mem::take(&mut self.allocation);
-        let handle = self.handle;
-
-        // skip this if no buffer was actually allocated
-        if !handle.is_null() {
-            Device::instance().delete_after_current_frame(move |device| unsafe {
-                trace!("GPU: deleting buffer: {:?}", handle);
-                device.raw.destroy_buffer(handle, None);
-                device.free_memory(&mut allocation);
-            });
-        }
-    }
-}
-
-/// Buffer creation info.
-#[derive(Copy, Clone, Debug)]
-pub struct BufferCreateInfo {
-    /// Length in number of elements.
-    pub len: usize,
-    /// Usage flags. Must include all intended uses of the buffer.
-    pub usage: BufferUsage = BufferUsage::empty(),
-    pub memory_location: MemoryLocation = MemoryLocation::Unknown,
-}
-
 /// A buffer of GPU-visible memory, optionally mapped in host memory, without any associated type.
 ///
 /// `Buffer` objects themselves are Send+Sync, however access to the buffer contents on the host
@@ -57,11 +31,6 @@ pub struct Buffer<T: ?Sized> {
     _marker: PhantomData<T>,
 }
 
-// Safe to send to another thread (buffers do not have shared reference semantics).
-unsafe impl<T: ?Sized> Send for Buffer<T> {}
-// References can be shared between threads (access to the content of the buffer on the CPU
-// is done via unsafe methods, and the caller should ensure proper synchronization).
-unsafe impl<T: ?Sized> Sync for Buffer<T> {}
 
 impl<T: ?Sized> Buffer<T> {
     pub unsafe fn from_layout(layout: Layout) -> Buffer<T> {
@@ -296,6 +265,23 @@ impl<T: Copy> Buffer<T> {
     }
 }
 
+impl<T: ?Sized> Drop for Buffer<T> {
+    fn drop(&mut self) {
+        let mut allocation = mem::take(&mut self.allocation);
+        let handle = self.handle;
+
+        // skip this if no buffer was actually allocated
+        if !handle.is_null() {
+            Device::instance().delete_after_current_frame(move |device| unsafe {
+                trace!("GPU: deleting buffer: {:?}", handle);
+                device.raw.destroy_buffer(handle, None);
+                device.free_memory(&mut allocation);
+            });
+        }
+    }
+}
+
+
 // TODO: impl From<IntoIterator> for Buffer
 impl<T: ?Sized> std::fmt::Debug for Buffer<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -319,7 +305,22 @@ impl<'a, T: Copy> From<&'a Buffer<T>> for BufferRange<'a, T> {
     }
 }
 
-/// Buffer creation.
+// Safe to send to another thread (buffers do not have shared reference semantics).
+unsafe impl<T: ?Sized> Send for Buffer<T> {}
+// References can be shared between threads (access to the content of the buffer on the CPU
+// is done via unsafe methods, and the caller should ensure proper synchronization).
+unsafe impl<T: ?Sized> Sync for Buffer<T> {}
+
+/// Buffer creation info.
+#[derive(Copy, Clone, Debug)]
+pub struct BufferCreateInfo {
+    /// Length in number of elements.
+    pub len: usize,
+    /// Usage flags. Must include all intended uses of the buffer.
+    pub usage: BufferUsage = BufferUsage::empty(),
+    pub memory_location: MemoryLocation = MemoryLocation::Unknown,
+}
+
 impl Device {
     /// Creates a new buffer resource.
     pub(crate) fn create_buffer(&self, elem_size: usize, create_info: BufferCreateInfo) -> BufferUntyped {

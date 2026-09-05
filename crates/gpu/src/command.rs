@@ -1,8 +1,9 @@
 use crate::device::ActiveSubmission;
+use crate::query_pool::QueryPool;
 use crate::{
     Buffer, BufferRangeUntyped, BufferUntyped, ColorAttachment, ComputePipeline, DepthStencilAttachment, Device, Image,
-    ImageCopyBuffer, ImageCopyView, ImageCreateInfo, MAX_TIMESTAMP_QUERY_COUNT, Ptr, ShaderReflection, SwapChain,
-    VulkanObject, command_pool, vk,
+    ImageCopyBuffer, ImageCopyView, ImageCreateInfo, Ptr, ShaderReflection, SwapChain, VulkanObject, command_pool,
+    query_pool, vk,
 };
 use arrayvec::ArrayVec;
 use ash::prelude::VkResult;
@@ -97,9 +98,9 @@ impl<'a, T: Copy + 'static> From<ImmediatePushData<'a, T>> for PushDataSource<'a
 /// `CommandBuffer`s should be submitted in the same frame as they were created.
 pub struct CommandBuffer {
     // FIXME: the query pool should be created on-demand
-    timestamp_query_pool: vk::QueryPool,
-    timestamp_query_count: u32,
-    timestamp_callbacks: Vec<Box<dyn FnOnce(u64) + Send>>,
+    //timestamp_query_pool: vk::QueryPool,
+    //timestamp_query_count: u32,
+    //timestamp_callbacks: Vec<Box<dyn FnOnce(u64) + Send>>,
     /// Current command buffer.
     cmdbuf: vk::CommandBuffer,
     submitted: bool,
@@ -116,7 +117,7 @@ impl CommandBuffer {
     #[inline(never)]
     pub fn new() -> CommandBuffer {
         let device = Device::instance();
-        let timestamp_query_pool = device.get_or_create_timestamp_query_pool();
+        //let timestamp_query_pool = device.get_or_create_timestamp_query_pool();
         let frame_index_created = device.frame_index.load(Relaxed);
         trace!("GPU: create CommandBuffer, frame_index_created={}", frame_index_created);
         let cmdbuf = command_pool::allocate_command_buffer();
@@ -131,9 +132,9 @@ impl CommandBuffer {
             device.bind_descriptor_heaps(cmdbuf);
         }
         CommandBuffer {
-            timestamp_query_pool,
-            timestamp_query_count: 0,
-            timestamp_callbacks: vec![],
+            //timestamp_query_pool,
+            //timestamp_query_count: 0,
+            //timestamp_callbacks: vec![],
             cmdbuf,
             submitted: false,
             frame_index_created,
@@ -342,18 +343,53 @@ impl CommandBuffer {
     }
 
     /// TODO documentation
+
+    // So we have multiple options for asynchronous query results like this:
+    // 1. callbacks: the current option
+    //    Pass callbacks to async queries, which are called during `end_frame` when we know the result is ready.
+    //    Overhead: one boxed callback (most likely non-zero sized) per query
+    //    Async compatibility: do stuff in the callback to unblock a future and pass the result to it (possibly another allocation)
+    //
+    // 2. explicit query result fetch outside end_frame
+    //    write_timestamp and other queries return a query object.
+    //    Can query the value sync or asynchronously; conceptually this is like a future.
+    //    Issue: query objects are a strong ref to the pool; can't reclaim the pool
+    //    during end_frame, can't put the pool up for deletion.
+    //    Also, can't use thread-local query pools since the query object can be sent to other threads.
+    //    -> need an allocator over query pools that can free individual ranges of queries
+    //
+    // 3. Expose query pools
+    //    Create a QueryPool<T> object, like any other resource, and pass that to write_timestamp.
+    //    Then wait for QueryPool to become available, read back results.
+    //
+    // Also, vkGetQueryResults should not be called for each query
+    /*
     pub fn write_timestamp(&mut self, callback: impl FnOnce(u64) + Send + 'static) {
-        let cb = self.cmdbuf;
-        let index = self.timestamp_query_count;
-        assert!(index < MAX_TIMESTAMP_QUERY_COUNT, "maximum number of timestamp queries reached");
-        self.timestamp_query_count += 1;
+        //let index = self.timestamp_query_count;
+        //assert!(index < MAX_TIMESTAMP_QUERY_COUNT, "maximum number of timestamp queries reached");
+        //self.timestamp_query_count += 1;
+
+        let (pool, index) = query_pool::allocate_query(vk::QueryType::TIMESTAMP);
         self.timestamp_callbacks.push(Box::new(callback));
 
         unsafe {
             Device::instance().raw.cmd_write_timestamp2(
-                cb,
+                self.cmdbuf,
                 vk::PipelineStageFlags2::BOTTOM_OF_PIPE,
-                self.timestamp_query_pool,
+                pool,
+                index,
+            );
+        }
+    }*/
+
+    pub fn write_timestamp(&mut self, query_pool: &QueryPool, index: u32) {
+        assert!((index as usize) < query_pool.size, "query index out of bounds");
+        assert!(query_pool.ty == vk::QueryType::TIMESTAMP, "query pool type must be TIMESTAMP");
+        unsafe {
+            Device::instance().raw.cmd_write_timestamp2(
+                self.cmdbuf,
+                vk::PipelineStageFlags2::BOTTOM_OF_PIPE,
+                query_pool.pool,
                 index,
             );
         }
@@ -446,27 +482,22 @@ pub const MAX_SYNC_COUNT: usize = 4;
 /// must not exceed `MAX_SYNC_COUNT`. Same with signals.
 fn sync(waits: &[SyncWait], signals: &[SyncSignal]) {
     let device = Device::instance();
-
     // /!\ Lock the device for command submission.
     let submission_state = device.submission_state.lock().unwrap();
-
     let mut wait_semaphores = [vk::Semaphore::null(); MAX_SYNC_COUNT];
     let mut signal_semaphores = [vk::Semaphore::null(); MAX_SYNC_COUNT];
     let mut wait_semaphore_values = [0u64; MAX_SYNC_COUNT];
     let mut signal_semaphore_values = [0u64; MAX_SYNC_COUNT];
     let mut wait_semaphore_dst_stages = [vk::PipelineStageFlags::empty(); MAX_SYNC_COUNT];
-
     for (i, signal) in signals.iter().enumerate() {
         signal_semaphores[i] = signal.semaphore;
         signal_semaphore_values[i] = signal.value;
     }
-
     for (i, w) in waits.iter().enumerate() {
         wait_semaphore_dst_stages[i] = vk::PipelineStageFlags::ALL_COMMANDS;
         wait_semaphores[i] = w.semaphore;
         wait_semaphore_values[i] = w.value;
     }
-
     let timeline_submit_info = vk::TimelineSemaphoreSubmitInfo {
         wait_semaphore_value_count: waits.len() as u32,
         p_wait_semaphore_values: wait_semaphore_values.as_ptr(),
@@ -474,7 +505,6 @@ fn sync(waits: &[SyncWait], signals: &[SyncSignal]) {
         p_signal_semaphore_values: signal_semaphore_values.as_ptr(),
         ..Default::default()
     };
-
     let submit_info = vk::SubmitInfo {
         p_next: &timeline_submit_info as *const _ as *const c_void,
         wait_semaphore_count: waits.len() as u32,
@@ -486,7 +516,6 @@ fn sync(waits: &[SyncWait], signals: &[SyncSignal]) {
         p_signal_semaphores: signal_semaphores.as_ptr(),
         ..Default::default()
     };
-
     unsafe {
         trace!("GPU: QueueSubmit (synchronization)");
         match device.raw.queue_submit(submission_state.queue, &[submit_info], vk::Fence::null()) {
@@ -516,7 +545,7 @@ pub fn signal(semaphore: vk::Semaphore, value: u64) {
 /// command buffer are submitted before this command buffer.
 #[inline(never)]
 pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
-    // Submit the default command buffer.
+    // Always submit the default command buffer before user-provided cmdbufs.
     flush()?;
 
     let device = Device::instance();
@@ -527,31 +556,28 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
     //----------------------
     let mut submission_state = device.submission_state.lock().unwrap();
 
+    // checks
     assert!(!cmd.submitted);
-
     let frame_index_submitted = device.frame_index.load(Relaxed);
     assert_eq!(
         cmd.frame_index_created, frame_index_submitted,
         "a command buffer was submitted in a different frame than the one it was created in"
     );
-
     trace!(
         "GPU: submit CommandStream, frame_index_created={}, frame_index_submitted={}",
         cmd.frame_index_created, frame_index_submitted
     );
 
     // flush pending writes
+    // TODO not sure that's necessary, the user should emit their own barriers, even across
+    //      two different cmdbufs
     cmd.barrier(BarrierFlags::empty());
-
-    // finish recording the command buffer
+    // finish recording the command buffer & put it for delayed deletion
     unsafe {
         device.raw.end_command_buffer(cmd.cmdbuf).unwrap();
     }
-
-    // Put the command buffer up for deletion
     command_pool::defer_free_command_buffer(cmd.cmdbuf, frame_index_submitted);
 
-    //----------------------
     // submit
     let signal_semaphores = vec![];
     let signal_semaphore_values = vec![];
@@ -568,7 +594,6 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
         p_signal_semaphores: signal_semaphores.as_ptr(),
         ..Default::default()
     };
-
     let result;
     unsafe {
         // SAFETY: apart from Vulkan handles being valid, Vulkan specifies that access to the
@@ -576,15 +601,13 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
         //         lock on submission_state.
         trace!("GPU: QueueSubmit");
         result = device.raw.queue_submit(submission_state.queue, &[submit_info], vk::Fence::null());
-
         submission_state.active_submissions.push_back(ActiveSubmission {
             frame_index: frame_index_submitted,
-            timestamp_query_pool: cmd.timestamp_query_pool,
-            timestamp_query_count: cmd.timestamp_query_count,
-            timestamp_callbacks: mem::take(&mut cmd.timestamp_callbacks),
+            //timestamp_query_pool: cmd.timestamp_query_pool,
+            //timestamp_query_count: cmd.timestamp_query_count,
+            //timestamp_callbacks: mem::take(&mut cmd.timestamp_callbacks),
         });
     };
-
     cmd.submitted = true;
     result
 }
@@ -622,7 +645,6 @@ pub fn present(swap_chain: &mut SwapChain, index: usize) -> VkResult<()> {
     // NOTE: submission state is unlocked here, so it's possible that another thread submits
     //       commands to the image that was transitioned to PRESENT layout before we present it.
     //       This is up to the caller to avoid doing that.
-
     let device = Device::instance();
     signal(image.render_finished, 0);
     unsafe {
@@ -645,6 +667,9 @@ thread_local! {
     static DEFAULT_COMMAND_BUFFER: RefCell<Option<CommandBuffer>> = const { RefCell::new(None) };
 }
 
+/// Runs the closure with a reference to the default command buffer for the current thread.
+///
+/// If no default cmdbuf exists currently (e.g. after [`take_cmdbuf`]), a new one is created.
 #[inline]
 pub fn with_cmdbuf<R>(f: impl FnOnce(&mut CommandBuffer) -> R) -> R {
     // This has better codegen than calling `f` inside `with`.
@@ -657,6 +682,7 @@ pub fn with_cmdbuf<R>(f: impl FnOnce(&mut CommandBuffer) -> R) -> R {
     }
 }
 
+/// Takes the default command buffer for the current thread.
 pub(crate) fn take_cmdbuf() -> Option<CommandBuffer> {
     DEFAULT_COMMAND_BUFFER.take()
 }
@@ -842,6 +868,6 @@ pub fn flush() -> VkResult<()> {
 
 /// Writes a timestamp.
 #[inline(never)]
-pub fn write_timestamp(callback: impl FnOnce(u64) + Send + 'static) {
-    with_cmdbuf(|cb| cb.write_timestamp(callback))
+pub fn write_timestamp(query_pool: &QueryPool, index: u32) {
+    with_cmdbuf(|cb| cb.write_timestamp(query_pool, index));
 }

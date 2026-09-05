@@ -1,7 +1,7 @@
 use crate::device::get_vk_sample_count;
 use crate::{
-    BufferUntyped, ColorAttachment, CommandBuffer, DepthStencilAttachment, Device, Format,
-    ResourceAllocation, Size3D, StorageImageHandle, TextureHandle, VulkanObject, aspects_for_format, upload_image_data,
+    BufferUntyped, ColorAttachment, CommandBuffer, DepthStencilAttachment, Device, Format, ResourceAllocation, Size3D,
+    StorageImageHandle, TextureHandle, VulkanObject, aspects_for_format, upload_image_data,
 };
 use ash::vk;
 use gpu::ImageCopyView;
@@ -11,9 +11,9 @@ use gpu_types::{ImageAspect, ImageType, ImageUsage, Offset3D};
 use slotmap::Key;
 use std::{mem, ptr};
 use vulkan_headers::vulkan::vulkan::{
-    VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_IMAGE_LAYOUT_GENERAL,
-    VK_STRUCTURE_TYPE_IMAGE_DESCRIPTOR_INFO_EXT, VK_STRUCTURE_TYPE_RESOURCE_DESCRIPTOR_INFO_EXT,
-    VkImageDescriptorInfoEXT, VkImageViewCreateInfo, VkResourceDescriptorDataEXT, VkResourceDescriptorInfoEXT,
+    VK_IMAGE_LAYOUT_GENERAL, VK_STRUCTURE_TYPE_IMAGE_DESCRIPTOR_INFO_EXT,
+    VK_STRUCTURE_TYPE_RESOURCE_DESCRIPTOR_INFO_EXT, VkImageDescriptorInfoEXT, VkImageViewCreateInfo,
+    VkResourceDescriptorDataEXT, VkResourceDescriptorInfoEXT,
 };
 
 /// Information passed to `Image::new` to describe the image to be created.
@@ -73,7 +73,6 @@ impl Drop for Image {
             let mut allocation = mem::take(&mut self.allocation);
             let handle = self.handle;
             let descriptors = self.descriptors;
-
             Device::instance().delete_after_current_frame(move |device| unsafe {
                 //debug!("dropping image {:?} (handle: {:?})", id, handle);
                 if descriptors.texture != u32::MAX {
@@ -518,9 +517,7 @@ impl Device {
                 initial_layout: vk::ImageLayout::UNDEFINED,
                 ..Default::default()
             };
-
             let handle = self.raw.create_image(&create_info, None).expect("failed to create image");
-
             let mem_req = self.raw.get_image_memory_requirements(handle);
             let allocation = self.allocate_memory_or_panic(&AllocationCreateDesc {
                 name: "",
@@ -529,14 +526,10 @@ impl Device {
                 linear: true,
                 allocation_scheme: AllocationScheme::GpuAllocatorManaged,
             });
-
             self.raw.bind_image_memory(handle, allocation.memory(), allocation.offset() as u64).unwrap();
-
             let descriptors = self.register_image_descriptors(handle, &create_info);
             let attachment_view = self.create_attachment_image_view(handle, image_info.format);
-
             self.transition_image_to_general(handle, aspects_for_format(image_info.format));
-
             Image {
                 handle,
                 attachment_view,
@@ -566,7 +559,6 @@ impl Device {
             pView: view as *const _ as *const VkImageViewCreateInfo,
             layout: VK_IMAGE_LAYOUT_GENERAL,
         };
-
         self.allocate_resource_descriptor(&VkResourceDescriptorInfoEXT {
             sType: VK_STRUCTURE_TYPE_RESOURCE_DESCRIPTOR_INFO_EXT,
             pNext: ptr::null(),
@@ -598,7 +590,6 @@ impl Device {
             vk::ImageType::TYPE_3D => vk::ImageViewType::TYPE_3D,
             _ => panic!("invalid image type"),
         };
-
         let view_for_aspect = |aspect: vk::ImageAspectFlags| {
             vk::ImageViewCreateInfo {
                 flags: vk::ImageViewCreateFlags::empty(),
@@ -616,7 +607,6 @@ impl Device {
                 ..Default::default()
             }
         };
-
         let aspects = aspects_for_format(create_info.format);
         let main_view: vk::ImageViewCreateInfo; // color or depth aspect
         let stencil_view: vk::ImageViewCreateInfo; // stencil aspect
@@ -624,7 +614,6 @@ impl Device {
         let mut storage_descriptor = u32::MAX;
         let mut stencil_texture_descriptor = u32::MAX;
         let mut stencil_storage_descriptor = u32::MAX;
-
         if aspects.intersects(vk::ImageAspectFlags::COLOR | vk::ImageAspectFlags::DEPTH) {
             let main_aspect = if aspects.contains(vk::ImageAspectFlags::COLOR) {
                 vk::ImageAspectFlags::COLOR
@@ -632,19 +621,15 @@ impl Device {
                 vk::ImageAspectFlags::DEPTH
             };
             main_view = view_for_aspect(main_aspect);
-
             if create_info.usage.contains(vk::ImageUsageFlags::SAMPLED) {
                 // COLOR or DEPTH aspect, SAMPLED access
-                texture_descriptor =
-                    self.allocate_image_descriptor(vk::DescriptorType::SAMPLED_IMAGE, &main_view);
+                texture_descriptor = self.allocate_image_descriptor(vk::DescriptorType::SAMPLED_IMAGE, &main_view);
             }
             if create_info.usage.contains(vk::ImageUsageFlags::STORAGE) {
                 // COLOR or DEPTH aspect, STORAGE access
-                storage_descriptor =
-                    self.allocate_image_descriptor(vk::DescriptorType::STORAGE_IMAGE, &main_view);
+                storage_descriptor = self.allocate_image_descriptor(vk::DescriptorType::STORAGE_IMAGE, &main_view);
             }
         }
-
         if aspects.intersects(vk::ImageAspectFlags::STENCIL) {
             stencil_view = view_for_aspect(vk::ImageAspectFlags::STENCIL);
             if create_info.usage.contains(vk::ImageUsageFlags::SAMPLED) {
@@ -658,7 +643,6 @@ impl Device {
                     self.allocate_image_descriptor(vk::DescriptorType::STORAGE_IMAGE, &stencil_view);
             }
         }
-
         ImageDescriptors {
             texture: texture_descriptor,
             image: storage_descriptor,

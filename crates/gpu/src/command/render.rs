@@ -42,44 +42,6 @@ pub struct DrawIndexedIndirectCommand {
 const _: () = assert!(size_of::<DrawIndexedIndirectCommand>() == size_of::<vk::DrawIndexedIndirectCommand>());
 
 impl<'a> RenderEncoder<'a> {
-    /*/// Binds a descriptor set (`vkCmdBindDescriptorSets`).
-    ///
-    /// # Safety
-    ///
-    /// The caller is responsible for ensuring that the descriptor set is compatible with the
-    /// currently bound pipeline, and that the descriptor set is not destroyed while it is still
-    /// in use by the GPU.
-    #[deprecated = "use descriptor heaps and push data instead"]
-    pub unsafe fn bind_descriptor_set(&mut self, index: u32, set: vk::DescriptorSet) {
-        Device::instance().raw.cmd_bind_descriptor_sets(
-            self.parent.cmdbuf,
-            vk::PipelineBindPoint::GRAPHICS,
-            self.pipeline_layout,
-            index,
-            &[set],
-            &[],
-        )
-    }*/
-
-    /*
-    /// Specifies descriptors for subsequent draw calls with `vkCmdPushDescriptorSetKHR`.
-    pub fn push_descriptors(&mut self, set: u32, bindings: &[(u32, Descriptor)]) {
-        assert!(
-            self.pipeline_layout != vk::PipelineLayout::null(),
-            "encoder must have a pipeline bound before binding arguments"
-        );
-
-        unsafe {
-            self.stream.do_cmd_push_descriptor_set(
-                self.command_buffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline_layout,
-                set,
-                bindings,
-            );
-        }
-    }*/
-
     #[inline]
     pub fn set_depth_bias(&mut self, db: Option<DepthBias>) {
         let device = &Device::instance().raw;
@@ -118,22 +80,13 @@ impl<'a> RenderEncoder<'a> {
         // if the sets are already bound
         // (for reference, see https://gitlab.freedesktop.org/mesa/mesa/-/blob/main/src/nouveau/vulkan/nvk_cmd_buffer.c?ref_type=heads#L648)
 
-        // SAFETY: TBD
-        // TODO strong ref to pipeline
+        // SAFETY: TBD, but the pipeline should live at least until the current frame has finished executing
         unsafe {
             Device::instance().raw.cmd_bind_pipeline(
                 self.parent.cmdbuf,
                 vk::PipelineBindPoint::GRAPHICS,
                 pipeline.pipeline,
             );
-            /*if pipeline.bindless {
-                self.stream.bind_bindless_descriptor_sets(
-                    self.parent.cmdbuf,
-                    vk::PipelineBindPoint::GRAPHICS,
-                    pipeline.pipeline_layout,
-                );
-            }
-            self.pipeline_layout = pipeline.pipeline_layout;*/
         }
     }
 

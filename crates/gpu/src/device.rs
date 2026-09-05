@@ -24,6 +24,7 @@ use std::ops::Range;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, LazyLock, Mutex};
+use std::time::Duration;
 use std::{fmt, mem, ptr};
 use vulkan_headers::vulkan::vulkan as vk2;
 use vulkan_headers::vulkan::vulkan::{
@@ -39,9 +40,6 @@ const DESCRIPTOR_TABLE_SIZE: usize = 4096;
 const RESOURCE_DESCRIPTOR_HEAP_SIZE: usize = 1024 * 1024;
 const SAMPLER_DESCRIPTOR_HEAP_SIZE: usize = 64 * 1024;
 
-/// Maximum number of timestamp queries within a submission.
-/// TODO: make this configurable.
-pub const MAX_TIMESTAMP_QUERY_COUNT: u32 = 4096;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -141,7 +139,6 @@ pub struct Device {
     // --- descriptor heap ---
     /// semaphores ready for reuse.
     pub(crate) semaphores: Mutex<Vec<vk::Semaphore>>,
-    free_timestamp_query_pools: Mutex<Vec<vk::QueryPool>>,
     // Index of the next submission not yet created.
     //pub(crate) next_create_ticket: AtomicU64,
     /// The index of the frame being recorded, or, equivalently, the next frame index to be signalled.
@@ -170,9 +167,9 @@ pub(crate) struct ActiveSubmission {
     //pub(crate) create_ticket: u64,
     pub(crate) frame_index: u64,
     //pub(crate) command_pools: Vec<CommandPool>,
-    pub(crate) timestamp_query_pool: vk::QueryPool,
-    pub(crate) timestamp_query_count: u32,
-    pub(crate) timestamp_callbacks: Vec<Box<dyn FnOnce(u64) + Send>>,
+    //pub(crate) timestamp_query_pool: vk::QueryPool,
+    //pub(crate) timestamp_query_count: u32,
+    //pub(crate) timestamp_callbacks: Vec<Box<dyn FnOnce(u64) + Send>>,
 }
 
 struct DeleteQueueEntry {
@@ -586,7 +583,6 @@ impl Device {
             //}),
             //descriptor_table,
             sampler_cache: Mutex::new(Default::default()),
-            free_timestamp_query_pools: Mutex::new(vec![]),
             frame_index: AtomicU64::new(1),
             semaphores: Default::default(),
             deletion_queue: Mutex::new(Vec::new()),
@@ -883,7 +879,7 @@ impl Device {
         //trace!("GPU: cleaning up to submission {last_completed_submission_index}");
 
         // process all completed submissions
-        let mut free_timestamp_query_pools = self.free_timestamp_query_pools.lock().unwrap();
+        //let mut free_timestamp_query_pools = self.free_timestamp_query_pools.lock().unwrap();
         let mut ss = self.submission_state.lock().unwrap();
         loop {
             if ss.active_submissions.is_empty() {
@@ -892,28 +888,28 @@ impl Device {
             if ss.active_submissions.front().unwrap().frame_index > last_completed_frame_index {
                 break;
             };
-            let sub = ss.active_submissions.pop_front().unwrap();
+            let _sub = ss.active_submissions.pop_front().unwrap();
             // read timestamp query results
-            unsafe {
-                if sub.timestamp_query_count > 0 {
-                    let mut timestamp_results = vec![0u64; sub.timestamp_query_count as usize];
-                    self.raw
-                        .get_query_pool_results(
-                            sub.timestamp_query_pool,
-                            0,
-                            &mut timestamp_results[..],
-                            vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT,
-                        )
-                        .expect("vkGetQueryPoolResults failed");
-                    self.raw.reset_query_pool(sub.timestamp_query_pool, 0, sub.timestamp_query_count);
-                    // Invoke callbacks with the results
-                    for (i, cb) in sub.timestamp_callbacks.into_iter().enumerate() {
-                        (cb)(timestamp_results[i]);
-                    }
-                }
-            }
-            // recycle query pools
-            free_timestamp_query_pools.push(sub.timestamp_query_pool);
+            //unsafe {
+            //    if sub.timestamp_query_count > 0 {
+            //        let mut timestamp_results = vec![0u64; sub.timestamp_query_count as usize];
+            //        self.raw
+            //            .get_query_pool_results(
+            //                sub.timestamp_query_pool,
+            //                0,
+            //                &mut timestamp_results[..],
+            //                vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT,
+            //            )
+            //            .expect("vkGetQueryPoolResults failed");
+            //        self.raw.reset_query_pool(sub.timestamp_query_pool, 0, sub.timestamp_query_count);
+            //        // Invoke callbacks with the results
+            //        for (i, cb) in sub.timestamp_callbacks.into_iter().enumerate() {
+            //            (cb)(timestamp_results[i]);
+            //        }
+            //    }
+            //}
+            //// recycle query pools
+            //free_timestamp_query_pools.push(sub.timestamp_query_pool);
         }
 
         let mut deletion_queue = self.deletion_queue.lock().unwrap();
@@ -978,7 +974,7 @@ impl Device {
         SamplerHandle::new(sampler)
     }
 
-    pub(crate) fn get_or_create_timestamp_query_pool(&self) -> vk::QueryPool {
+    /*pub(crate) fn get_or_create_timestamp_query_pool(&self) -> vk::QueryPool {
         let free = &mut self.free_timestamp_query_pools.lock().unwrap();
         if let Some(pool) = free.pop() {
             pool
@@ -996,7 +992,7 @@ impl Device {
                 pool
             }
         }
-    }
+    }*/
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////>
@@ -1380,6 +1376,30 @@ pub fn wait_idle() {
     unsafe { Device::instance().raw.device_wait_idle().unwrap() }
 }
 
+/// Waits for the specified frame.
+pub fn wait_for_frame(frame_index: FrameIndex, timeout: Option<Duration>) {
+    unsafe {
+        let device = Device::instance();
+        let wait_info = vk::SemaphoreWaitInfo {
+            semaphore_count: 1,
+            p_semaphores: &device.thread_safe.frame_timeline,
+            p_values: &frame_index,
+            ..Default::default()
+        };
+        device.raw.wait_semaphores(&wait_info, timeout.map(|d| d.as_nanos() as u64).unwrap_or(u64::MAX)).unwrap();
+    }
+}
+
+/// Waits for frame `get_frame_index() - nth_prev` to complete.
+pub fn wait_for_previous_frame(nth_prev: usize, timeout: Option<Duration>) {
+    let frame_index = get_frame_index();
+    if frame_index < nth_prev as u64 {
+        return;
+    }
+    let target_frame_index = frame_index - nth_prev as u64;
+    wait_for_frame(target_frame_index, timeout);
+}
+
 /// Ends the frame.
 ///
 /// The next frame starts automatically.
@@ -1390,10 +1410,16 @@ pub fn wait_idle() {
 /// used by the GPU, and per-frame is a good frequency.
 /// Otherwise, tasks scheduled with `call_later` or `delete_later` will never be executed.
 ///
+/// # Safety
+///
+/// It is undefined behavior to call this function concurrently with functions that modify internal
+/// thread-local state, such as [`alloc_temp`](crate::alloc_temp). Those functions are marked as
+/// such in their documentation.
+///
 /// # Return value
 ///
 /// The index of the frame that was just ended.
-pub fn end_frame() -> u64 {
+pub unsafe fn end_frame() -> FrameIndex {
     Device::instance().end_frame()
 }
 

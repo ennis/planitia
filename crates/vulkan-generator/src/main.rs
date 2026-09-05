@@ -140,7 +140,7 @@ fn gen_type_map<'a, 'input>(registry: Node<'a, 'input>) -> io::Result<TypeMap<'a
     for types in children_tagged(registry, "types") {
         for node in children_tagged(types, "type") {
             if !api_check(node) {
-                continue
+                continue;
             }
             // PAIN:
             // For bitmasks, the name is in a child tag
@@ -270,6 +270,15 @@ fn gen_type(out: &mut Writer, name: &str, node: Node, type_map: &mut TypeMap) ->
             }
             dedent(out);
             writeln!(out, "}}")?;
+            // Structs may contain raw pointers and thus not automatically Send/Sync.
+            // Rust questionably makes all pointers !Send+!Sync by default to avoid "footguns"
+            // but the real unsafety is in the use (via derefs) of the pointers.
+            //
+            // For convenience, mark all Vulkan structs as Send+Sync.
+            // This doesn't make the crate any less sound, it just moves the thread-safety
+            // contract to each command's "unsafe" contract.
+            writeln!(out, "unsafe impl Send for {name} {{}}")?;
+            writeln!(out, "unsafe impl Sync for {name} {{}}")?;
         }
         _ => {}
     }

@@ -57,6 +57,7 @@ impl ThreadLocalAllocator {
     }
 
     /// Allocates a new temporary buffer chunk.
+    #[cold]
     fn alloc_buffer(&mut self) {
         // Retire the current chunk.
         if let Some(buf) = self.current.take() {
@@ -64,7 +65,6 @@ impl ThreadLocalAllocator {
             trace!("alloc_buffer: retire {:p} frame_index={}", buf.handle, frame_index);
             self.retired.push_back((frame_index, buf));
         }
-
         let last_completed_frame = crate::get_last_completed_frame_index();
         let mut free_buf = None;
         // Free all chunks older than the last completed frame, save for one, which we'll reuse.
@@ -80,9 +80,7 @@ impl ThreadLocalAllocator {
         if let Some(free_buf) = free_buf.as_ref() {
             trace!("alloc_buffer: reusing {:p}", free_buf.handle);
         }
-
         self.offset = 0;
-
         // Reuse the free chunk if there's one, or allocate a new one.
         self.current = Some(free_buf.unwrap_or_else(|| {
             BufferUntyped::new(BufferCreateInfo {
@@ -93,6 +91,7 @@ impl ThreadLocalAllocator {
         }));
     }
 
+    #[cold]
     fn alloc_dedicated(&mut self, layout: Layout) -> TempAlloc {
         let buf = BufferUntyped::new(BufferCreateInfo {
             len: layout.size(),
@@ -104,7 +103,6 @@ impl ThreadLocalAllocator {
         // Schedule for deletion immediately since we're not going to allocate anything else in it.
         // We don't recycle dedicated buffers.
         drop(buf); // buf is dropped automatically on return, but spell it out for clarity
-
         // `buf` is dropped, but the underlying resources are not destroyed until the current
         // frame has completed, so this is OK.
         alloc
@@ -114,12 +112,10 @@ impl ThreadLocalAllocator {
     pub(super) fn alloc_raw(&mut self, layout: Layout) -> TempAlloc {
         let size = layout.size();
         assert!(layout.align() <= ALLOC_ALIGNMENT);
-
         // If the allocation size is bigger than the threshold, allocate a dedicated buffer for it.
         if size >= DEDICATED_BUFFER_THRESHOLD_SIZE {
             return self.alloc_dedicated(layout);
         }
-
         // Ensure that there's enough space in the current chunk, otherwise retire the current chunk
         // and get a new one.
         let mut aligned_offset = align(self.offset);
@@ -128,7 +124,6 @@ impl ThreadLocalAllocator {
             debug_assert_eq!(self.offset, 0);
             aligned_offset = 0;
         }
-
         let current = self.current.as_ref().unwrap();
         let offset = aligned_offset;
         self.offset = aligned_offset + size;

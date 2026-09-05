@@ -45,7 +45,6 @@ static VULKAN_INSTANCE: LazyLock<ash::Instance> = LazyLock::new(create_vulkan_in
 static VK_KHR_SURFACE: LazyLock<ash::khr::surface::Instance> =
     LazyLock::new(|| ash::khr::surface::Instance::new(&*VULKAN_ENTRY, &*VULKAN_INSTANCE));
 
-
 fn initialize_vulkan_entry() -> ash::Entry {
     unsafe { ash::Entry::load().expect("failed to initialize vulkan entry points") }
 }
@@ -67,15 +66,12 @@ fn create_vulkan_instance() -> ash::Instance {
         if !validation_available {
             eprintln!("validation layer not available");
         }
-
         // Convert instance extension strings into C-strings
         let c_instance_extensions: Vec<_> = INSTANCE_EXTENSIONS.iter().map(|&s| CString::new(s).unwrap()).collect();
         let instance_extensions: Vec<_> = c_instance_extensions.iter().map(|s| s.as_ptr()).collect();
-
         // Convert validation layer names into C-strings
         let c_validation_layers: Vec<_> = VALIDATION_LAYERS.iter().map(|&s| CString::new(s).unwrap()).collect();
         let validation_layers: Vec<_> = c_validation_layers.iter().map(|s| s.as_ptr()).collect();
-
         let application_info = vk::ApplicationInfo {
             // TODO let the user provide their own name here
             p_application_name: b"GRAAL\0".as_ptr() as *const c_char,
@@ -85,7 +81,6 @@ fn create_vulkan_instance() -> ash::Instance {
             api_version: VK_API_VERSION,
             ..Default::default()
         };
-
         let mut instance_create_info = vk::InstanceCreateInfo {
             flags: Default::default(),
             p_application_info: &application_info,
@@ -95,12 +90,10 @@ fn create_vulkan_instance() -> ash::Instance {
             pp_enabled_extension_names: instance_extensions.as_ptr(),
             ..Default::default()
         };
-
         if validation_available {
             instance_create_info.enabled_layer_count = validation_layers.len() as u32;
             instance_create_info.pp_enabled_layer_names = validation_layers.as_ptr();
         }
-
         VULKAN_ENTRY.create_instance(&instance_create_info, None).expect("failed to create vulkan instance")
     }
 }

@@ -18,7 +18,6 @@ mod platform {
             RawWindowHandle::Win32(h) => h,
             _ => panic!("incompatible window handle"),
         };
-
         let create_info = vk::Win32SurfaceCreateInfoKHR {
             flags: Default::default(),
             hinstance: win32_handle.hinstance.unwrap().get() as HINSTANCE,

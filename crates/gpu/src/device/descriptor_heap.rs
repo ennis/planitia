@@ -1,16 +1,16 @@
-use crate::device::{RESOURCE_DESCRIPTOR_HEAP_SIZE, SAMPLER_DESCRIPTOR_HEAP_SIZE};
 use crate::Device;
+use crate::device::{RESOURCE_DESCRIPTOR_HEAP_SIZE, SAMPLER_DESCRIPTOR_HEAP_SIZE};
 use ash::vk;
 use ash::vk::Handle;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme, Allocator};
 use std::ffi::c_void;
 use std::ptr;
 use std::sync::Mutex;
+use gpu_allocator::MemoryLocation;
 use vulkan_headers::vulkan::vulkan as vk2;
 use vulkan_headers::vulkan::vulkan::{
-    VK_BUFFER_USAGE_DESCRIPTOR_HEAP_BIT_EXT, VK_STRUCTURE_TYPE_BIND_HEAP_INFO_EXT, VkBindHeapInfoEXT, VkCommandBuffer, VkDevice,
-    VkDeviceAddressRangeEXT,
-    VkPhysicalDeviceDescriptorHeapPropertiesEXT, VkResourceDescriptorInfoEXT,
+    VK_BUFFER_USAGE_DESCRIPTOR_HEAP_BIT_EXT, VK_STRUCTURE_TYPE_BIND_HEAP_INFO_EXT, VkBindHeapInfoEXT, VkCommandBuffer,
+    VkDevice, VkDeviceAddressRangeEXT, VkPhysicalDeviceDescriptorHeapPropertiesEXT, VkResourceDescriptorInfoEXT,
     VkSamplerCreateInfo,
 };
 
@@ -43,12 +43,7 @@ impl FreeList {
 
     fn free(&mut self, index: u32) {
         assert!(index < self.count, "index out of bounds");
-        debug_assert!(
-            index < self.mark,
-            "index {} is greater than high water mark {}",
-            index,
-            self.mark
-        );
+        debug_assert!(index < self.mark, "index {} is greater than high water mark {}", index, self.mark);
         if index == self.mark - 1 {
             self.mark -= 1;
         } else {
@@ -139,31 +134,26 @@ fn allocate_descriptor_heap_memory(
         heap_type
     );
 
-    let alloc = allocator
-        .allocate(&AllocationCreateDesc {
+    let alloc = {
+        let alloc_desc = AllocationCreateDesc {
             name: "descriptor heap".into(),
             requirements: vk::MemoryRequirements { size: byte_size as u64, alignment, memory_type_bits: u32::MAX },
-            location: gpu_allocator::MemoryLocation::CpuToGpu,
+            location: MemoryLocation::CpuToGpu,
             linear: true,
             allocation_scheme: AllocationScheme::GpuAllocatorManaged,
-        })
-        .expect("failed to allocate descriptor heap memory");
-
+        };
+        allocator.allocate(&alloc_desc).expect("failed to allocate descriptor heap memory")
+    };
     let buffer;
     let device_addr;
-
     unsafe {
-        buffer = device
-            .create_buffer(
-                &vk::BufferCreateInfo {
-                    size: byte_size as u64,
-                    usage: usage_flags,
-                    sharing_mode: vk::SharingMode::EXCLUSIVE,
-                    ..Default::default()
-                },
-                None,
-            )
-            .expect("failed to create descriptor heap buffer");
+        let info = vk::BufferCreateInfo {
+            size: byte_size as u64,
+            usage: usage_flags,
+            sharing_mode: vk::SharingMode::EXCLUSIVE,
+            ..Default::default()
+        };
+        buffer = device.create_buffer(&info, None).expect("failed to create descriptor heap buffer");
         device
             .bind_buffer_memory(buffer, alloc.memory(), alloc.offset())
             .expect("failed to bind memory for descriptor heap buffer");
@@ -193,19 +183,28 @@ fn allocate_descriptor_heap_memory(
 
     let index_offset = (start_offset / stride) as u32;
 
-    DescriptorHeapInfo { alloc, buffer, ptr, device_addr, start_offset, stride, alignment, index_offset, size: byte_size }
+    DescriptorHeapInfo {
+        alloc,
+        buffer,
+        ptr,
+        device_addr,
+        start_offset,
+        stride,
+        alignment,
+        index_offset,
+        size: byte_size,
+    }
 }
 
 /// Device state related to resource and sampler descriptor heaps.
 pub(crate) struct DescriptorHeaps {
-    /// Descriptor writes must be externally synchronized, but we don't want to
-    /// wrap DescriptorHeapInfo in a Mutex because that would require locking every time we want
-    /// to copy the address. So instead we lock this mutex when writing to the descriptor set.
+    // Descriptor writes must be externally synchronized, but we don't want to
+    // wrap DescriptorHeapInfo in a Mutex because that would require locking every time we want
+    // to copy the address. So instead we lock this mutex when writing to the descriptor set.
     write_lock: Mutex<()>,
     resource: DescriptorHeapInfo,
     sampler: DescriptorHeapInfo,
-
-    /// Allocation table.
+    // Allocation tables.
     resource_slots: Mutex<FreeList>,
     sampler_slots: Mutex<FreeList>,
 }
@@ -231,7 +230,6 @@ impl DescriptorHeaps {
             SAMPLER_DESCRIPTOR_HEAP_SIZE,
             &descriptor_heap_properties,
         );
-
         let max_resource_descriptors = (resource_heap.size - resource_heap.start_offset) / resource_heap.stride;
         let max_sampler_descriptors = (sampler_heap.size - sampler_heap.start_offset) / sampler_heap.stride;
         DescriptorHeaps {
@@ -248,20 +246,28 @@ pub type ResourceDescriptorHandle = u32;
 pub type SamplerDescriptorHandle = u32;
 
 impl Device {
-
-
     /// Allocates a sampler descriptor in the corresponding descriptor heap.
     ///
     /// Returns the host pointer to the descriptor slot.
-    fn allocate_sampler_descriptor_slot(
-        &self,
-    ) -> u32 {
-        let i = self.descriptor_heaps.sampler_slots.lock().unwrap().alloc().expect("exceeded maximum number of sampler descriptors");
+    fn allocate_sampler_descriptor_slot(&self) -> u32 {
+        let i = self
+            .descriptor_heaps
+            .sampler_slots
+            .lock()
+            .unwrap()
+            .alloc()
+            .expect("exceeded maximum number of sampler descriptors");
         self.descriptor_heaps.sampler.index_offset + i
     }
 
     fn allocate_resource_descriptor_slot(&self) -> u32 {
-        let i = self.descriptor_heaps.resource_slots.lock().unwrap().alloc().expect("exceeded maximum number of resource descriptors");
+        let i = self
+            .descriptor_heaps
+            .resource_slots
+            .lock()
+            .unwrap()
+            .alloc()
+            .expect("exceeded maximum number of resource descriptors");
         self.descriptor_heaps.resource.index_offset + i
     }
 
@@ -287,7 +293,7 @@ impl Device {
                 self.raw.handle().as_raw() as VkDevice,
                 1,
                 info as *const _ as *const VkSamplerCreateInfo,
-                &self.descriptor_heaps.sampler.address_range_by_index(index, 1)
+                &self.descriptor_heaps.sampler.address_range_by_index(index, 1),
             );
         }
         index
@@ -303,7 +309,7 @@ impl Device {
                 self.raw.handle().as_raw() as VkDevice,
                 1,
                 info as *const _,
-                &self.descriptor_heaps.resource.address_range_by_index(index, 1)
+                &self.descriptor_heaps.resource.address_range_by_index(index, 1),
             );
         }
         index

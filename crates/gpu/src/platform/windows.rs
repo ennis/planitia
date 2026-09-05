@@ -6,36 +6,8 @@ use std::ffi::{OsStr, c_void};
 use std::ptr;
 use std::rc::Rc;
 
-/*/// External memory handle types.
-#[derive(Clone, Debug)]
-pub enum Win32ExternalMemoryHandle<'a> {
-    D3D11Texture(crate::platform::windows::Win32Handle<'a>),
-    D3D11TextureKMT(crate::platform::windows::Win32Handle<'a>),
-}
-
-impl Win32ExternalMemoryHandle {
-    pub(crate) fn handle_type(&self) -> vk::ExternalMemoryHandleTypeFlags {
-        match self {
-            Win32ExternalMemoryHandle::D3D11Texture(_) => {
-                vk::ExternalMemoryHandleTypeFlags::D3D11_TEXTURE
-            }
-            Win32ExternalMemoryHandle::D3D11TextureKMT(_) => {
-                vk::ExternalMemoryHandleTypeFlags::D3D11_TEXTURE_KMT
-            }
-            _ => unreachable!(), // or is it?
-        }
-    }
-}*/
-
-/*#[derive(Copy, Clone, Debug)]
-pub struct Win32Handle<'a> {
-    pub handle: HANDLE,
-    pub name: &'a str,
-}*/
-
 fn handle_name_to_wstr(name: Option<&str>) -> (Vec<u16>, *const u16) {
     use std::os::windows::ffi::OsStrExt;
-
     if let Some(name) = name {
         let mut w_name: Vec<u16> = OsStr::new(name).encode_wide().collect();
         w_name.push(0);
@@ -68,26 +40,20 @@ unsafe fn import_external_memory(
         .khr_external_memory_win32
         .get_memory_win32_handle_properties(handle_type, handle, &mut win32_handle_properties)
         .expect("vkGetMemoryWin32HandlePropertiesKHR failed");
-
     // find a memory type that both matches the resource requirement and the external handle requirements for importing
     let memory_type_bits = memory_requirements.memory_type_bits & win32_handle_properties.memory_type_bits;
     let memory_type_index = device
         .find_compatible_memory_type(memory_type_bits, required_flags, preferred_flags)
         .expect("could not find a compatible memory type for importing external memory");
-
-    // import memory
     let (_, handle_name_wstr) = handle_name_to_wstr(handle_name);
-
     let mut dedicated_allocate_info: vk::MemoryDedicatedAllocateInfo;
     let mut p_dedicated_allocate_info = ptr::null();
-
     if let Some(dedicated) = dedicated {
         dedicated_allocate_info = vk::MemoryDedicatedAllocateInfo {
             image: Default::default(),
             buffer: Default::default(),
             ..Default::default()
         };
-
         match dedicated {
             //DedicatedAllocation::Buffer(buffer) => {
             //    dedicated_allocate_info.buffer = buffer;
@@ -98,7 +64,6 @@ unsafe fn import_external_memory(
         }
         p_dedicated_allocate_info = &dedicated_allocate_info as *const _ as *const c_void;
     }
-
     let import_memory_win32_handle_info = vk::ImportMemoryWin32HandleInfoKHR {
         p_next: p_dedicated_allocate_info,
         handle_type,
@@ -106,16 +71,13 @@ unsafe fn import_external_memory(
         name: handle_name_wstr,
         ..Default::default()
     };
-
     let memory_allocate_info = vk::MemoryAllocateInfo {
         p_next: &import_memory_win32_handle_info as *const _ as *const c_void,
         allocation_size: memory_requirements.size,
         memory_type_index,
         ..Default::default()
     };
-
     let device_memory = device.raw.allocate_memory(&memory_allocate_info, None).unwrap();
-
     device_memory
 }
 
@@ -160,10 +122,8 @@ impl Device {
             Some(DedicatedAllocation::Image(handle)),
         );
         self.raw.bind_image_memory(handle, device_memory, 0).unwrap();
-
         let descriptors = self.register_image_descriptors(handle, &create_info);
         let attachment_view = self.create_attachment_image_view(handle, image_info.format);
-
         // transition image to GENERAL
         {
             let mut cmd = CommandBuffer::new();
@@ -234,9 +194,7 @@ impl Device {
         };
         let handle = self.raw.create_image(&create_info, None).expect("failed to create image");
         let mem_req = self.raw.get_image_memory_requirements(handle);
-
         let (_, handle_name_wstr) = handle_name_to_wstr(handle_name);
-
         let (required_memory_properties, preferred_memory_properties) = match memory_location {
             MemoryLocation::Unknown => Default::default(),
             MemoryLocation::GpuOnly => (vk::MemoryPropertyFlags::DEVICE_LOCAL, vk::MemoryPropertyFlags::DEVICE_LOCAL),
@@ -253,7 +211,6 @@ impl Device {
                 vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
             ),
         };
-
         let memory_type_index = self
             .find_compatible_memory_type(
                 mem_req.memory_type_bits,
@@ -261,7 +218,6 @@ impl Device {
                 preferred_memory_properties,
             )
             .expect("could not find a compatible memory type for exporting memory");
-
         let win32_handle_info = vk::ExportMemoryWin32HandleInfoKHR {
             p_attributes: security_attributes,
             dw_access: access_flags,
@@ -279,27 +235,20 @@ impl Device {
             memory_type_index,
             ..Default::default()
         };
-
         let device_memory =
             self.raw.allocate_memory(&memory_allocate_info, None).expect("failed to allocate exported memory");
-
         // retrieve the win32 handle
         let get_win32_handle_info =
             vk::MemoryGetWin32HandleInfoKHR { memory: device_memory, handle_type, ..Default::default() };
-
         // TODO proper error handling
         let win32_handle = self
             .platform_extensions
             .khr_external_memory_win32
             .get_memory_win32_handle(&get_win32_handle_info)
             .expect("vkGetMemoryWin32HandleKHR failed");
-
-        // bind memory
         self.raw.bind_image_memory(handle, device_memory, 0).unwrap();
-
         let descriptors = self.register_image_descriptors(handle, &create_info);
         let attachment_view = self.create_attachment_image_view(handle, image_info.format);
-
         let image = Image {
             handle,
             attachment_view,
@@ -326,7 +275,6 @@ impl Device {
         handle_name: Option<&str>,
     ) -> (vk::Semaphore, HANDLE) {
         let (_, handle_name_wstr) = handle_name_to_wstr(handle_name);
-
         let export_semaphore_win32_handle_info = vk::ExportSemaphoreWin32HandleInfoKHR {
             p_attributes: security_attributes,
             dw_access: access_flags,
@@ -342,11 +290,8 @@ impl Device {
             p_next: &export_semaphore_create_info as *const _ as *const c_void,
             ..Default::default()
         };
-
         let semaphore = self.raw.create_semaphore(&semaphore_create_info, None).unwrap();
-
         let get_win32_handle_info = vk::SemaphoreGetWin32HandleInfoKHR { semaphore, handle_type, ..Default::default() };
-
         let handle = self
             .platform_extensions
             .khr_external_semaphore_win32
@@ -363,26 +308,20 @@ impl Device {
         handle_name: Option<&str>,
     ) -> vk::Semaphore {
         let (_, handle_name_wstr) = handle_name_to_wstr(handle_name);
-
-        // create the semaphore
         let is_timeline = match handle_type {
             vk::ExternalSemaphoreHandleTypeFlags::D3D12_FENCE => true,
             _ => panic!("unsupported external semaphore type"),
         };
-
         let timeline_create_info = vk::SemaphoreTypeCreateInfo {
             semaphore_type: vk::SemaphoreType::TIMELINE,
             initial_value: 0,
             ..Default::default()
         };
-
         let semaphore_create_info = vk::SemaphoreCreateInfo {
             p_next: if is_timeline { &timeline_create_info as *const _ as *const c_void } else { ptr::null() },
             ..Default::default()
         };
-
         let semaphore = self.raw.create_semaphore(&semaphore_create_info, None).unwrap();
-
         let import_semaphore_win32_handle_info = vk::ImportSemaphoreWin32HandleInfoKHR {
             semaphore,
             flags: import_flags, // ?????
@@ -391,12 +330,10 @@ impl Device {
             name: handle_name_wstr,
             ..Default::default()
         };
-
         self.platform_extensions
             .khr_external_semaphore_win32
             .import_semaphore_win32_handle(&import_semaphore_win32_handle_info)
             .expect("vkImportSemaphoreWin32HandleKHR failed");
-
         semaphore
     }
 }

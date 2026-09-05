@@ -14,6 +14,7 @@ use color::Srgba8;
 use color_print::cwriteln;
 use env_logger::fmt::style::AnsiColor;
 use futures::future::AbortHandle;
+use gpu::vk;
 use gpu::vk::Handle;
 use keyboard_types::{Key, KeyState, Modifiers, NamedKey};
 use log::{debug, error, info, warn};
@@ -29,69 +30,15 @@ use std::marker::PhantomData;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, OnceLock};
-use std::{mem, ptr};
+use std::{array, mem, ptr};
 use threadbound::ThreadBound;
+use tracy_client::SpanLocation;
 
-/// Tries to load the RenderDoc DLL.
-fn load_renderdoc_dll() {
-    #[cfg(target_os = "windows")]
-    const DLL_PATH: &[&str] = &["renderdoc.dll", "C:\\Program Files\\RenderDoc\\renderdoc.dll"];
-
-    unsafe {
-        for &path in DLL_PATH {
-            match libloading::Library::new(path) {
-                Ok(library) => {
-                    info!("Loaded RenderDoc DLL from {}", path);
-                    mem::forget(library);
-                    return;
-                }
-                Err(_) => {}
-            }
-        }
-    }
-}
-
-/// Gets a pointer to a VkInstance for RenderDoc captures.
-unsafe fn rdoc_instance_ptr() -> *mut c_void {
-    unsafe {
-        let instance = gpu::get_vulkan_instance().handle().as_raw() as *mut *mut c_void;
-        ptr::read(instance)
-    }
-}
-
-/// Initializes `env_logger` with a custom format.
-fn setup_env_logger() {
-    env_logger::builder()
-        .parse_default_env()
-        .format(|fmt, record| {
-            use env_logger::fmt::style::{AnsiColor, Style};
-            use std::io::Write;
-
-            //let style = fmt.default_level_style(record.level());
-            let args = record.args();
-
-            let message_color = match record.level() {
-                log::Level::Error => Some(AnsiColor::Red),
-                log::Level::Warn => Some(AnsiColor::Yellow),
-                log::Level::Info => None,
-                log::Level::Debug => Some(AnsiColor::BrightBlack),
-                log::Level::Trace => Some(AnsiColor::BrightBlack),
-            };
-            // let target = record.target();
-            let mut msg_sty = Style::new();
-            let mut target_sty = Style::new().italic();
-            if let Some(color) = message_color {
-                msg_sty = msg_sty.fg_color(Some(color.into()));
-                target_sty = target_sty.fg_color(Some(AnsiColor::BrightBlack.into()));
-            }
-            writeln!(fmt, "{msg_sty}{args}{msg_sty:#} {target_sty} {target_sty:#}")
-        })
-        .format_target(false)
-        .format_timestamp(None)
-        .init();
-}
-
-//--------------------------------------------------------------------------------------------------
+/// Maximum number of GPU frames in flight.
+///
+/// In other terms, before we submit frame (N), we will wait for frame (N-MAX_FRAMES_IN_FLIGHT) to finish.
+/// This can be used as an upper-bound for per-frame resources.
+pub const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
 /// Application event handler.
 #[allow(unused_variables)]
@@ -118,6 +65,10 @@ pub trait AppHandler {
     fn vsync(&mut self);
 
     /// Renders the current frame.
+    ///
+    /// # Frame-in-flight synchronization
+    ///
+    /// TODO
     fn render(&mut self, window: WindowHandle, image: RenderTargetImage<'_>) {}
 
     /// Called when a watched file or directory has changed.
@@ -267,6 +218,71 @@ pub fn spawn_lua_task(&'static self, code: &str) -> AbortHandle {
     })
 }*/
 
+struct TimestampPool {
+    pool: gpu::QueryPool,
+    base: u16,
+    count: u16,
+}
+
+struct TracyTimestamps {
+    gpu_context: tracy_client::GpuContext,
+    per_frame: [TimestampPool; MAX_FRAMES_IN_FLIGHT],
+    results: Vec<u64>,
+    frame_index: usize,
+    query_counter: u16,
+}
+
+impl TracyTimestamps {
+    fn new(gpu_context: tracy_client::GpuContext) -> TracyTimestamps {
+        const MAX_TRACY_GPU_TIMESTAMPS_PER_FRAME: usize = 4096;
+        TracyTimestamps {
+            gpu_context,
+            per_frame: array::from_fn(|_| TimestampPool {
+                pool: gpu::QueryPool::new(vk::QueryType::TIMESTAMP, MAX_TRACY_GPU_TIMESTAMPS_PER_FRAME),
+                base: 0,
+                count: 0,
+            }),
+            results: vec![0; MAX_TRACY_GPU_TIMESTAMPS_PER_FRAME],
+            frame_index: 0,
+            query_counter: 0,
+        }
+    }
+
+    fn next_frame(&mut self, frame_index: gpu::FrameIndex) {
+        self.frame_index = frame_index as usize % MAX_FRAMES_IN_FLIGHT;
+        let frame = &mut self.per_frame[self.frame_index];
+        if frame.count != 0 {
+            // send query results to tracy
+            frame.pool.wait_for_results(0, &mut self.results[0..frame.count as usize]);
+            for i in 0..frame.count {
+                self.gpu_context.upload_gpu_timestamp(frame.base + i, self.results[i as usize] as i64);
+            }
+        }
+        frame.pool.reset();
+        frame.base = self.query_counter;
+        frame.count = 0;
+    }
+
+    fn write_timestamp(&mut self) -> u16 {
+        let fr = &mut self.per_frame[self.frame_index];
+        let query_id = self.query_counter;
+        gpu::write_timestamp(&fr.pool, (query_id - fr.base) as u32);
+        self.query_counter = self.query_counter.wrapping_add(1);
+        fr.count += 1;
+        query_id
+    }
+
+    fn begin_span(&mut self, location: &'static SpanLocation) {
+        let query_id = self.write_timestamp();
+        self.gpu_context.begin_span(location, query_id);
+    }
+
+    fn end_span(&mut self) {
+        let query_id = self.write_timestamp();
+        self.gpu_context.end_span(query_id);
+    }
+}
+
 /// Represents an instance of the application.
 ///
 /// Holds globally-accessible objects and systems.
@@ -297,8 +313,8 @@ pub(crate) struct MainThreadContext {
     text_overlay: RefCell<String>,
     // Registered global resources, ordered by type.
     //global_resources: RefCell<HashMap<TypeId, Box<dyn Any>>>,
-    pub(crate) tracy_gpu_context: tracy_client::GpuContext,
     timestamp_query_counter: Cell<u16>,
+    tracy_timestamps: RefCell<TracyTimestamps>,
 }
 
 impl MainThreadContext {
@@ -314,7 +330,7 @@ impl MainThreadContext {
 
         // Setup tracy GPU context
         // This depends on the GPU device being initialized.
-        let (device_timestamp, system_timestamp) = gpu::get_calibrated_timestamp_pair();
+        let (device_timestamp, _system_timestamp) = gpu::get_calibrated_timestamp_pair();
         let tracy_gpu_context = tracy_client
             .new_gpu_context(
                 Some(&gpu::get_physical_device_name()),
@@ -373,8 +389,8 @@ impl MainThreadContext {
             lua: Lua::new(),
             watch,
             text_overlay: RefCell::new(String::new()),
-            tracy_gpu_context,
             timestamp_query_counter: Cell::new(0),
+            tracy_timestamps: RefCell::new(TracyTimestamps::new(tracy_gpu_context)),
         }
     }
 
@@ -467,7 +483,6 @@ impl LoopHandler for &'static MainThreadContext {
         {
             let _span = span!("imgui");
             let _gpu_span = crate::gpu_span!("imgui");
-
             let mut cmd = gpu::CommandBuffer::new();
             self.imgui.borrow_mut().run(&mut cmd, |imgui_ctx| {
                 egui::Window::new("Tweaks").show(imgui_ctx, |ui| {
@@ -477,6 +492,15 @@ impl LoopHandler for &'static MainThreadContext {
             });
             gpu::submit(cmd).unwrap();
         }
+
+        // Frame-in-flight sync
+        // /!\ This is important: the whole application relies on the implicit CPU/GPU
+        //     synchronization on frame (N-MAX_FRAMES_IN_FLIGHT) to correctly implement
+        //     per-frame-in-flight resource lists.
+        gpu::wait_for_previous_frame(MAX_FRAMES_IN_FLIGHT, None);
+
+        #[cfg(feature = "tracy")]
+        self.tracy_timestamps.borrow_mut().next_frame(gpu::get_frame_index());
 
         // start frame capture if requested and RenderDoc is available
         if self.rdoc_capture_requested.get() {
@@ -489,7 +513,6 @@ impl LoopHandler for &'static MainThreadContext {
                 let _span = span!("render_window");
                 let _gpu_span = crate::gpu_span!("render_window");
                 self.handler.borrow_mut().render(window, render_target);
-
                 // render text overlay
                 {
                     let _span = span!("text_overlay");
@@ -518,8 +541,10 @@ impl LoopHandler for &'static MainThreadContext {
 
         // cleanup expired GPU resources
         {
-            let _span = span!("gpu_poll");
-            gpu::end_frame();
+            let _span = span!("end_frame");
+            unsafe {
+                gpu::end_frame();
+            }
         }
 
         // ask for a re-render on the next vsync
@@ -670,35 +695,6 @@ pub fn register_resource<T: Any>(resource: T) {}
 
 //--------------------------------------------------------------------------------------------------
 
-impl MainThreadContext {
-    pub(crate) fn begin_gpu_span(&self, span_location: &'static tracy_client::SpanLocation) {
-        let query_id = self.timestamp_query_counter.get();
-        // TODO: this breaks if there are more than u16::MAX pending queries: old queries
-        //       will start to overwrite new ones with the same query_id. This can also happen before
-        //       that if queries are not fulfilled in `query_id` order.
-        //       To do that cleanly, you'd need a free list of query IDs but that's just too ridiculous
-        //       for something that's supposed to be low overhead.
-        self.timestamp_query_counter.set(query_id.wrapping_add(1));
-        gpu::write_timestamp(move |ts| {
-            with_app_ctx(|ctx| ctx.tracy_gpu_context.upload_gpu_timestamp(query_id, ts as i64))
-        });
-        // FIXME: this creates another command buffer, and thus another query pool
-        //        meaning that we create one query pool per span...
-        //gpu::flush().unwrap();
-        self.tracy_gpu_context.begin_span(span_location, query_id);
-    }
-
-    pub(crate) fn end_gpu_span(&self) {
-        let query_id = self.timestamp_query_counter.get();
-        self.timestamp_query_counter.set(query_id.wrapping_add(1));
-        gpu::write_timestamp(move |ts| {
-            with_app_ctx(|ctx| ctx.tracy_gpu_context.upload_gpu_timestamp(query_id, ts as i64))
-        });
-        //gpu::flush().unwrap();
-        self.tracy_gpu_context.end_span(query_id);
-    }
-}
-
 pub struct TracyGpuSpanGuard;
 
 impl Drop for TracyGpuSpanGuard {
@@ -708,17 +704,19 @@ impl Drop for TracyGpuSpanGuard {
 }
 
 #[doc(hidden)]
+#[inline(never)]
 pub fn tracy_begin_gpu_span(location: &'static tracy_client::SpanLocation) {
-    //with_app_ctx(|app| {
-    //    app.begin_gpu_span(location);
-    //})
+    with_app_ctx(|app| {
+        app.tracy_timestamps.borrow_mut().begin_span(location);
+    })
 }
 
 #[doc(hidden)]
+#[inline(never)]
 pub fn tracy_end_gpu_span() {
-    //with_app_ctx(|app| {
-    //    app.end_gpu_span();
-    //})
+    with_app_ctx(|app| {
+        app.tracy_timestamps.borrow_mut().end_span();
+    })
 }
 
 #[macro_export]
@@ -728,4 +726,65 @@ macro_rules! gpu_span {
         $crate::tracy_begin_gpu_span(location);
         $crate::TracyGpuSpanGuard
     }};
+}
+
+//--------------------------------------------------------------------------------------------------
+
+/// Tries to load the RenderDoc DLL.
+fn load_renderdoc_dll() {
+    #[cfg(target_os = "windows")]
+    const DLL_PATH: &[&str] = &["renderdoc.dll", "C:\\Program Files\\RenderDoc\\renderdoc.dll"];
+
+    unsafe {
+        for &path in DLL_PATH {
+            match libloading::Library::new(path) {
+                Ok(library) => {
+                    info!("Loaded RenderDoc DLL from {}", path);
+                    mem::forget(library);
+                    return;
+                }
+                Err(_) => {}
+            }
+        }
+    }
+}
+
+/// Gets a pointer to a VkInstance for RenderDoc captures.
+unsafe fn rdoc_instance_ptr() -> *mut c_void {
+    unsafe {
+        let instance = gpu::get_vulkan_instance().handle().as_raw() as *mut *mut c_void;
+        ptr::read(instance)
+    }
+}
+
+/// Initializes `env_logger` with a custom format.
+fn setup_env_logger() {
+    env_logger::builder()
+        .parse_default_env()
+        .format(|fmt, record| {
+            use env_logger::fmt::style::{AnsiColor, Style};
+            use std::io::Write;
+
+            //let style = fmt.default_level_style(record.level());
+            let args = record.args();
+
+            let message_color = match record.level() {
+                log::Level::Error => Some(AnsiColor::Red),
+                log::Level::Warn => Some(AnsiColor::Yellow),
+                log::Level::Info => None,
+                log::Level::Debug => Some(AnsiColor::BrightBlack),
+                log::Level::Trace => Some(AnsiColor::BrightBlack),
+            };
+            // let target = record.target();
+            let mut msg_sty = Style::new();
+            let mut target_sty = Style::new().italic();
+            if let Some(color) = message_color {
+                msg_sty = msg_sty.fg_color(Some(color.into()));
+                target_sty = target_sty.fg_color(Some(AnsiColor::BrightBlack.into()));
+            }
+            writeln!(fmt, "{msg_sty}{args}{msg_sty:#} {target_sty} {target_sty:#}")
+        })
+        .format_target(false)
+        .format_timestamp(None)
+        .init();
 }

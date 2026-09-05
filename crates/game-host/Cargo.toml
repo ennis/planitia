@@ -30,3 +30,4 @@ rayon = "1.11.0"
 
 [features]
 hot_reload = ["gamelib/hot_reload"]
+tracy = ["gamelib/tracy"]
