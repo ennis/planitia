@@ -32,11 +32,10 @@ use vulkan_headers::vulkan::vulkan::{
     VkPhysicalDeviceDescriptorHeapFeaturesEXT, VkPhysicalDeviceShaderUntypedPointersFeaturesKHR,
 };
 use vulkan_headers::vulkan::vulkan_core::VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Size of the global descriptor heaps (in number of descriptors).
-const DESCRIPTOR_TABLE_SIZE: usize = 4096;
-
+// Sizes of the global descriptor heaps (in number of descriptors).
 const RESOURCE_DESCRIPTOR_HEAP_SIZE: usize = 1024 * 1024;
 const SAMPLER_DESCRIPTOR_HEAP_SIZE: usize = 64 * 1024;
 
@@ -305,7 +304,6 @@ unsafe fn select_physical_device(instance: &ash::Instance) -> PhysicalDeviceAndP
     if physical_devices.is_empty() {
         panic!("no device with vulkan support");
     }
-
     let mut selected_phy = None;
     let mut selected_phy_properties = Default::default();
     //let mut selected_phy_features = Default::default();
@@ -318,8 +316,7 @@ unsafe fn select_physical_device(instance: &ash::Instance) -> PhysicalDeviceAndP
             //selected_phy_features = features;
         }
     }
-    // TODO fallbacks
-
+    // TODO implement fallbacks
     PhysicalDeviceAndProperties {
         physical_device: selected_phy.expect("no suitable physical device"),
         properties: selected_phy_properties,
@@ -363,7 +360,6 @@ unsafe fn find_queue_family(
         }
         index += 1;
     }
-
     best_queue_family.expect("could not find a compatible queue")
 }
 
@@ -438,8 +434,6 @@ impl Device {
         )
         .or_else(|| self.find_compatible_memory_type_internal(memory_type_bits, required_memory_properties))
     }
-
-    // TODO: enabled features?
 
     /// Creates a new `Device` from an existing vulkan device.
     ///

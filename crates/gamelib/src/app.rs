@@ -38,7 +38,66 @@ use tracy_client::SpanLocation;
 ///
 /// In other terms, before we submit frame (N), we will wait for frame (N-MAX_FRAMES_IN_FLIGHT) to finish.
 /// This can be used as an upper-bound for per-frame resources.
+///
+// TODO frames-in-flight synchronization (TODO² find a better name?) should probably be done
+//      within `gpu`. However, ideally we want to synchronize just before we begin rendering the
+//      current frame, not when we submit the previous frame. This means that a `gpu::begin_frame`
+//      method would be necessary.
 pub const MAX_FRAMES_IN_FLIGHT: usize = 2;
+
+//--------------------------------------------------------------------------------------------------
+
+/// Main application object.
+///
+/// This should be created as a static singleton. E.g:
+/// ```
+/// static APP: App<MyAppHandler> = App::new();
+/// # fn main() {
+/// APP.run(&AppOptions {
+///     // options here
+/// });
+/// # }
+/// ```
+pub struct App<H: 'static>(OnceLock<ThreadBound<&'static MainThreadContext>>, PhantomData<fn() -> H>);
+
+impl<H: AppHandler + Default + 'static> App<H> {
+    pub const fn new() -> Self {
+        App(OnceLock::new(), PhantomData)
+    }
+
+    pub fn run(&'static self, init_options: &AppOptions) {
+        setup_env_logger();
+        // Load the renderdoc DLL asap
+        if env_flag("RENDERDOC") {
+            load_renderdoc_dll();
+        }
+        // Create the main thread context object.
+        let main_thread_ctx = self.0.get_or_init(|| {
+            let handler = RefCell::new(Box::new(DummyHandler));
+            // This needs to be a leaked static because ThreadBound wouldn't be Send, and
+            // OnceLock requires its contents to be Send + Sync in order to be Sync and usable
+            // within a static.
+            //
+            // See https://users.rust-lang.org/t/how-to-migrate-to-lazylock-from-lazy-static/128921
+            ThreadBound::new(Box::leak(Box::new(MainThreadContext::new(handler, init_options))))
+        });
+        let ctx = *main_thread_ctx.get_ref().unwrap();
+        CURRENT_CTX.set(Some(ctx));
+        let handler = Box::new(H::default());
+        ctx.handler.replace(handler);
+        // Schedule the first render on the next VSync.
+        // TODO: we probably should render immediately to avoid blank screens on startup?
+        ctx.platform.wake_at_next_vsync();
+        ctx.run_event_loop(); // This doesn't return until the application exits.
+        ctx.platform.teardown();
+    }
+}
+
+/// Application initialization options.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct AppOptions {
+    // nothing for now
+}
 
 /// Application event handler.
 #[allow(unused_variables)]
@@ -96,69 +155,102 @@ impl AppHandler for DummyHandler {
     }
 }
 
-//--------------------------------------------------------------------------------------------------
-
-/// Main application object.
+/// Quits the application.
 ///
-/// This should be created as a static singleton. E.g:
-/// ```
-/// static APP: App<MyAppHandler> = App::new();
-/// # fn main() {
-/// APP.run(&AppOptions {
-///     // options here
-/// });
-/// # }
-/// ```
-pub struct App<H: 'static>(OnceLock<ThreadBound<&'static MainThreadContext>>, PhantomData<fn() -> H>);
-
-/// Application initialization options.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct AppOptions {
-    // nothing for now
+/// This causes the event loop to exit and `App::run` to return to the caller.
+pub fn quit() {
+    with_app_ctx(|ctx| {
+        ctx.platform.quit();
+    });
 }
 
-impl<H: AppHandler + Default + 'static> App<H> {
-    pub const fn new() -> Self {
-        App(OnceLock::new(), PhantomData)
-    }
+/// Render ImGui components in the specified render target.
+pub fn render_imgui(command_stream: &mut gpu::CommandBuffer, image: &gpu::Image) {
+    with_app_ctx(|ctx| {
+        ctx.imgui.borrow_mut().render(command_stream, image);
+    });
+}
 
-    pub fn run(&'static self, init_options: &AppOptions) {
-        // Setup env_logger.
-        setup_env_logger();
+#[derive(thiserror::Error, Debug, Copy, Clone)]
+#[error("failed to watch file")]
+pub struct WatchFileError;
 
-        // Load the renderdoc DLL asap
-        if env_flag("RENDERDOC") {
-            load_renderdoc_dll();
+/// Watch for file changes at the specified path.
+///
+/// When a change occurs, the [`file_changed`] method of the currently running [`AppHandler`] will be called with the path of the changed file.
+/// To stop watching a file, call [`unwatch_file`].
+pub fn watch_file(path: &Path) -> ExcResult<(), WatchFileError> {
+    debug!("watching file: {}", path.display());
+    with_app_ctx(|ctx| {
+        match ctx.watch.borrow_mut().watcher().watch(path, RecursiveMode::NonRecursive).raise(WatchFileError) {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                err.log_to_stderr();
+                Err(err)
+            }
         }
+    })
+}
 
-        // Create the main thread context object.
-        let main_thread_ctx = self.0.get_or_init(|| {
-            let handler = RefCell::new(Box::new(DummyHandler));
-            // This needs to be a leaked static because ThreadBound wouldn't be Send, and
-            // OnceLock requires its contents to be Send + Sync in order to be Sync and usable
-            // within a static.
-            //
-            // See https://users.rust-lang.org/t/how-to-migrate-to-lazylock-from-lazy-static/128921
-            ThreadBound::new(Box::leak(Box::new(MainThreadContext::new(handler, init_options))))
-        });
+/// Stop watching for file changes at the specified path.
+pub fn unwatch_file(path: &Path) {
+    debug!("unwatching file: {}", path.display());
+    with_app_ctx(|ctx| {
+        ctx.watch.borrow_mut().watcher().unwatch(path).expect("failed to unwatch file");
+    });
+}
 
-        let ctx = *main_thread_ctx.get_ref().unwrap();
-        CURRENT_CTX.set(Some(ctx));
-
-        // Create handler.
-        let handler = Box::new(H::default());
-        ctx.handler.replace(handler);
-
-        // Schedule the first render on the next VSync.
-        // TODO: we probably should render immediately?
-        ctx.platform.wake_at_next_vsync();
-
-        // Enter the event loop. This doesn't return until the application exits.
-        ctx.run_event_loop();
-
-        // The event loop has returned, the application is exiting. Do platform-specific cleanup.
-        ctx.platform.teardown();
+/// Shows a file picker dialog.
+pub fn show_file_dialog(options: &FileDialogOptions<'_>) -> Option<std::path::PathBuf> {
+    let mut dialog = rfd::FileDialog::new();
+    for (name, extensions) in options.filters {
+        dialog = dialog.add_filter(*name, extensions);
     }
+    dialog.pick_file()
+}
+
+/// Options for [`show_file_dialog`](show_file_dialog).
+///
+/// # Example
+///
+/// * Show a file picker for image files:
+/// ```rust
+/// let options = FileDialogOptions {
+///     filters: &[("Image files", &["png", "jpg", "jpeg"])],
+/// };
+#[derive(Clone, Debug, Default)]
+pub struct FileDialogOptions<'a> {
+    /// File type filter.
+    ///
+    /// It's a list of (file_type_description, allowed_extensions) tuples.
+    pub filters: &'a [(&'a str, &'a [&'a str])] = &[],
+}
+
+/// Shows a file picker dialog (shorthand for `show_file_dialog` with one filter).
+///
+/// # Arguments
+/// * `file_type_description` - A description of the file type.
+/// * `extensions` - A list of allowed file extensions (without the dot) (e.g. `["png", "jpg"]`).
+pub fn pick_file(file_type_description: &str, extensions: &[&str]) -> Option<std::path::PathBuf> {
+    let mut dialog = rfd::FileDialog::new();
+    dialog = dialog.add_filter(file_type_description, extensions);
+    dialog.pick_file()
+}
+
+/// Prints a message on screen.
+pub fn print_message(message: impl AsRef<str>) {
+    with_app_ctx(|ctx| {
+        ctx.text_overlay.borrow_mut().push_str(message.as_ref());
+    });
+}
+
+/// Formats a message on screen.
+#[macro_export]
+macro_rules! format_message {
+    ($($arg:tt)*) => {{
+        let message = format!($($arg)*);
+        $crate::print_message(message);
+    }};
 }
 
 /*pub fn lua(&self) -> &Lua {
@@ -218,70 +310,8 @@ pub fn spawn_lua_task(&'static self, code: &str) -> AbortHandle {
     })
 }*/
 
-struct TimestampPool {
-    pool: gpu::QueryPool,
-    base: u16,
-    count: u16,
-}
-
-struct TracyTimestamps {
-    gpu_context: tracy_client::GpuContext,
-    per_frame: [TimestampPool; MAX_FRAMES_IN_FLIGHT],
-    results: Vec<u64>,
-    frame_index: usize,
-    query_counter: u16,
-}
-
-impl TracyTimestamps {
-    fn new(gpu_context: tracy_client::GpuContext) -> TracyTimestamps {
-        const MAX_TRACY_GPU_TIMESTAMPS_PER_FRAME: usize = 4096;
-        TracyTimestamps {
-            gpu_context,
-            per_frame: array::from_fn(|_| TimestampPool {
-                pool: gpu::QueryPool::new(vk::QueryType::TIMESTAMP, MAX_TRACY_GPU_TIMESTAMPS_PER_FRAME),
-                base: 0,
-                count: 0,
-            }),
-            results: vec![0; MAX_TRACY_GPU_TIMESTAMPS_PER_FRAME],
-            frame_index: 0,
-            query_counter: 0,
-        }
-    }
-
-    fn next_frame(&mut self, frame_index: gpu::FrameIndex) {
-        self.frame_index = frame_index as usize % MAX_FRAMES_IN_FLIGHT;
-        let frame = &mut self.per_frame[self.frame_index];
-        if frame.count != 0 {
-            // send query results to tracy
-            frame.pool.wait_for_results(0, &mut self.results[0..frame.count as usize]);
-            for i in 0..frame.count {
-                self.gpu_context.upload_gpu_timestamp(frame.base + i, self.results[i as usize] as i64);
-            }
-        }
-        frame.pool.reset();
-        frame.base = self.query_counter;
-        frame.count = 0;
-    }
-
-    fn write_timestamp(&mut self) -> u16 {
-        let fr = &mut self.per_frame[self.frame_index];
-        let query_id = self.query_counter;
-        gpu::write_timestamp(&fr.pool, (query_id - fr.base) as u32);
-        self.query_counter = self.query_counter.wrapping_add(1);
-        fr.count += 1;
-        query_id
-    }
-
-    fn begin_span(&mut self, location: &'static SpanLocation) {
-        let query_id = self.write_timestamp();
-        self.gpu_context.begin_span(location, query_id);
-    }
-
-    fn end_span(&mut self) {
-        let query_id = self.write_timestamp();
-        self.gpu_context.end_span(query_id);
-    }
-}
+//--------------------------------------------------------------------------------------------------
+// Private-ish API
 
 /// Represents an instance of the application.
 ///
@@ -320,37 +350,29 @@ pub(crate) struct MainThreadContext {
 impl MainThreadContext {
     /// Creates a new application instance and initializes the global systems.
     fn new(handler: RefCell<Box<dyn AppHandler + 'static>>, options: &AppOptions) -> Self {
-        // Setup platform. This will also initialize the GPU device.
-        let platform = Platform::new(options);
-
-        // Setup tracy.
+        let platform = Platform::new(options); // also initializes the GPU device
         let tracy_client = tracy_client::Client::running().unwrap();
         tracy_client.set_thread_name("main thread");
         info!("running with Tracy profiler enabled");
-
-        // Setup tracy GPU context
-        // This depends on the GPU device being initialized.
-        let (device_timestamp, _system_timestamp) = gpu::get_calibrated_timestamp_pair();
-        let tracy_gpu_context = tracy_client
-            .new_gpu_context(
-                Some(&gpu::get_physical_device_name()),
-                tracy_client::GpuContextType::Vulkan,
-                device_timestamp as i64,
-                gpu::get_timestamp_period(),
-            )
-            .expect("failed to create tracy GPU context");
-
-        // Create a RenderDoc connection, if available.
+        let tracy_gpu_context = {
+            let (device_timestamp, _system_timestamp) = gpu::get_calibrated_timestamp_pair();
+            tracy_client
+                .new_gpu_context(
+                    Some(&gpu::get_physical_device_name()),
+                    tracy_client::GpuContextType::Vulkan,
+                    device_timestamp as i64,
+                    gpu::get_timestamp_period(),
+                )
+                .expect("failed to create tracy GPU context")
+        };
         let rdoc = RenderDoc::new().ok();
         if rdoc.is_some() {
             info!("running with RenderDoc");
         } else {
             info!("not running with RenderDoc");
         }
-
         let executor = LocalExecutor::new();
         let imgui = RefCell::new(ImguiContext::new());
-
         // Create the file watcher.
         //
         // NOTE: `notify` spins a thread to watch for file changes, and calls the callback here.
@@ -476,10 +498,9 @@ impl LoopHandler for &'static MainThreadContext {
 
     fn vsync(&mut self) {
         let _span = span!("vsync");
-        // invoke application vsync handler
         self.handler.borrow_mut().vsync();
 
-        // update the GUI
+        // update imgui
         {
             let _span = span!("imgui");
             let _gpu_span = crate::gpu_span!("imgui");
@@ -492,7 +513,6 @@ impl LoopHandler for &'static MainThreadContext {
             });
             gpu::submit(cmd).unwrap();
         }
-
         // Frame-in-flight sync
         // /!\ This is important: the whole application relies on the implicit CPU/GPU
         //     synchronization on frame (N-MAX_FRAMES_IN_FLIGHT) to correctly implement
@@ -568,6 +588,8 @@ impl LoopHandler for &'static MainThreadContext {
     }
 }
 
+//--------------------------------------------------------------------------------------------------
+
 thread_local! {
     /// Thread-local pointer to the current application context.
     ///
@@ -592,109 +614,79 @@ pub(crate) fn get_context() -> &'static MainThreadContext {
     with_app_ctx(|ctx| ctx)
 }
 
-/// Quits the application.
-///
-/// This causes the event loop to exit and `App::run` to return to the caller.
-pub fn quit() {
-    with_app_ctx(|ctx| {
-        ctx.platform.quit();
-    });
+//--------------------------------------------------------------------------------------------------
+// Tracy GPU spans
+
+struct TimestampPool {
+    pool: gpu::QueryPool,
+    base: u16,
+    count: u16,
 }
 
-/// Render ImGui components in the specified render target.
-pub fn render_imgui(command_stream: &mut gpu::CommandBuffer, image: &gpu::Image) {
-    with_app_ctx(|ctx| {
-        ctx.imgui.borrow_mut().render(command_stream, image);
-    });
+struct TracyTimestamps {
+    gpu_context: tracy_client::GpuContext,
+    per_frame: [TimestampPool; MAX_FRAMES_IN_FLIGHT],
+    results: Vec<u64>,
+    frame_index: usize,
+    query_counter: u16,
 }
 
-#[derive(thiserror::Error, Debug, Copy, Clone)]
-#[error("failed to watch file")]
-pub struct WatchFileError;
+impl TracyTimestamps {
+    fn new(gpu_context: tracy_client::GpuContext) -> TracyTimestamps {
+        const MAX_TRACY_GPU_TIMESTAMPS_PER_FRAME: usize = 4096;
+        TracyTimestamps {
+            gpu_context,
+            per_frame: array::from_fn(|_| TimestampPool {
+                pool: gpu::QueryPool::new(vk::QueryType::TIMESTAMP, MAX_TRACY_GPU_TIMESTAMPS_PER_FRAME),
+                base: 0,
+                count: 0,
+            }),
+            results: vec![0; MAX_TRACY_GPU_TIMESTAMPS_PER_FRAME],
+            frame_index: 0,
+            query_counter: 0,
+        }
+    }
 
-/// Watch for file changes at the specified path.
-///
-/// When a change occurs, the [`file_changed`] method of the currently running [`AppHandler`] will be called with the path of the changed file.
-/// To stop watching a file, call [`unwatch_file`].
-pub fn watch_file(path: &Path) -> ExcResult<(), WatchFileError> {
-    debug!("watching file: {}", path.display());
-    with_app_ctx(|ctx| {
-        match ctx.watch.borrow_mut().watcher().watch(path, RecursiveMode::NonRecursive).raise(WatchFileError) {
-            Ok(_) => Ok(()),
-            Err(err) => {
-                err.log_to_stderr();
-                Err(err)
+    fn next_frame(&mut self, frame_index: gpu::FrameIndex) {
+        self.frame_index = frame_index as usize % MAX_FRAMES_IN_FLIGHT;
+        let frame = &mut self.per_frame[self.frame_index];
+        if frame.count != 0 {
+            // send query results to tracy
+            frame.pool.wait_for_results(0, &mut self.results[0..frame.count as usize]);
+            for i in 0..frame.count {
+                self.gpu_context.upload_gpu_timestamp(frame.base + i, self.results[i as usize] as i64);
             }
         }
-    })
-}
-
-/// Stop watching for file changes at the specified path.
-pub fn unwatch_file(path: &Path) {
-    debug!("unwatching file: {}", path.display());
-    with_app_ctx(|ctx| {
-        ctx.watch.borrow_mut().watcher().unwatch(path).expect("failed to unwatch file");
-    });
-}
-
-/// Options for [`show_file_dialog`](show_file_dialog).
-///
-/// # Example
-///
-/// * Show a file picker for image files:
-/// ```rust
-/// let options = FileDialogOptions {
-///     filters: &[("Image files", &["png", "jpg", "jpeg"])],
-/// };
-#[derive(Clone, Debug, Default)]
-pub struct FileDialogOptions<'a> {
-    /// File type filter.
-    ///
-    /// It's a list of (file_type_description, allowed_extensions) tuples.
-    pub filters: &'a [(&'a str, &'a [&'a str])] = &[],
-}
-
-/// Shows a file picker dialog.
-pub fn show_file_dialog(options: &FileDialogOptions<'_>) -> Option<std::path::PathBuf> {
-    let mut dialog = rfd::FileDialog::new();
-    for (name, extensions) in options.filters {
-        dialog = dialog.add_filter(*name, extensions);
+        frame.pool.reset();
+        frame.base = self.query_counter;
+        frame.count = 0;
     }
-    dialog.pick_file()
+
+    fn write_timestamp(&mut self) -> u16 {
+        let fr = &mut self.per_frame[self.frame_index];
+        let query_id = self.query_counter;
+        gpu::write_timestamp(&fr.pool, (query_id - fr.base) as u32);
+        self.query_counter = self.query_counter.wrapping_add(1);
+        fr.count += 1;
+        query_id
+    }
+
+    fn begin_span(&mut self, location: &'static SpanLocation) {
+        #[cfg(feature = "tracy")]
+        {
+            let query_id = self.write_timestamp();
+            self.gpu_context.begin_span(location, query_id);
+        }
+    }
+
+    fn end_span(&mut self) {
+        #[cfg(feature = "tracy")]
+        {
+            let query_id = self.write_timestamp();
+            self.gpu_context.end_span(query_id);
+        }
+    }
 }
-
-/// Shows a file picker dialog (shorthand for `show_file_dialog` with one filter).
-///
-/// # Arguments
-/// * `file_type_description` - A description of the file type.
-/// * `extensions` - A list of allowed file extensions (without the dot) (e.g. `["png", "jpg"]`).
-pub fn pick_file(file_type_description: &str, extensions: &[&str]) -> Option<std::path::PathBuf> {
-    let mut dialog = rfd::FileDialog::new();
-    dialog = dialog.add_filter(file_type_description, extensions);
-    dialog.pick_file()
-}
-
-/// Prints a message on screen.
-pub fn print_message(message: impl AsRef<str>) {
-    with_app_ctx(|ctx| {
-        ctx.text_overlay.borrow_mut().push_str(message.as_ref());
-    });
-}
-
-/// Formats a message on screen.
-#[macro_export]
-macro_rules! format_message {
-    ($($arg:tt)*) => {{
-        let message = format!($($arg)*);
-        $crate::print_message(message);
-    }};
-}
-
-/// Registers a global resource object.
-pub fn register_resource<T: Any>(resource: T) {}
-
-//--------------------------------------------------------------------------------------------------
-
 pub struct TracyGpuSpanGuard;
 
 impl Drop for TracyGpuSpanGuard {
@@ -764,10 +756,8 @@ fn setup_env_logger() {
         .format(|fmt, record| {
             use env_logger::fmt::style::{AnsiColor, Style};
             use std::io::Write;
-
             //let style = fmt.default_level_style(record.level());
             let args = record.args();
-
             let message_color = match record.level() {
                 log::Level::Error => Some(AnsiColor::Red),
                 log::Level::Warn => Some(AnsiColor::Yellow),
