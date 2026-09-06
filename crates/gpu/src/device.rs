@@ -7,7 +7,7 @@ use crate::instance::vk_khr_surface;
 use crate::platform::PlatformExtensions;
 use crate::{
     BufferAddressRange, BufferUsage, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error,
-    FrameIndex, GraphicsPipeline, GraphicsPipelineCreateInfo, PreRasterizationShaders, Ptr, SUBGROUP_SIZE,
+    FrameIndex, GraphicsPipeline, GraphicsPipelineCreateInfo, Instance, PreRasterizationShaders, Ptr, SUBGROUP_SIZE,
     SamplerParams, SamplerParamsHashable, ShaderReflection, VulkanObject, get_vulkan_entry, get_vulkan_instance,
     is_depth_and_stencil_format, signal, vkcheck,
 };
@@ -21,13 +21,13 @@ use log::{debug, error, info, trace, warn};
 use slotmap::{SlotMap, new_key_type};
 use std::collections::{HashMap, VecDeque};
 use std::ffi::{CStr, CString, c_void};
+use std::mem::MaybeUninit;
 use std::ops::Range;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 use std::{fmt, mem, ptr};
-
 use vulkan::*;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -47,13 +47,13 @@ new_key_type! {
 
 /// Device extensions.
 pub(crate) struct DeviceExtensions {
-    pub(crate) swapchain: ash::khr::swapchain::Device,
+    pub(crate) swapchain: khr_swapchain::DeviceDispatch,
     //pub(crate) ext_shader_object: ash::ext::,
-    pub(crate) push_descriptor: ash::khr::push_descriptor::Device,
-    pub(crate) calibrated_timestamps: ash::khr::calibrated_timestamps::Device,
-    pub(crate) mesh_shader: ash::ext::mesh_shader::Device,
-    pub(crate) _ext_extended_dynamic_state3: ash::ext::extended_dynamic_state3::Device,
-    pub(crate) debug_utils: ash::ext::debug_utils::Device,
+    pub(crate) push_descriptor: khr_push_descriptor::DeviceDispatch,
+    pub(crate) calibrated_timestamps: khr_calibrated_timestamps::DeviceDispatch,
+    pub(crate) mesh_shader: ext_mesh_shader::DeviceDispatch,
+    pub(crate) _ext_extended_dynamic_state3: ext_extended_dynamic_state3::DeviceDispatch,
+    pub(crate) debug_utils: ext_debug_utils::DeviceDispatch,
     pub(crate) descriptor_heap_instance: ext_descriptor_heap::InstanceDispatch,
     pub(crate) descriptor_heap: ext_descriptor_heap::DeviceDispatch,
 }
@@ -61,17 +61,16 @@ pub(crate) struct DeviceExtensions {
 /// Device state that is unconditionally safe to access from multiple threads, even though
 /// the fields themselves may not be Send or Sync.
 pub(crate) struct DeviceThreadSafeState {
-    pub(crate) physical_device_memory_properties: vk::PhysicalDeviceMemoryProperties,
-    pub(crate) physical_device_id_properties: vk::PhysicalDeviceIDProperties<'static>,
+    pub(crate) physical_device_memory_properties: VkPhysicalDeviceMemoryProperties,
+    pub(crate) physical_device_id_properties: VkPhysicalDeviceIDProperties,
     pub(crate) descriptor_heap_properties: VkPhysicalDeviceDescriptorHeapPropertiesEXT,
-    _physical_device_descriptor_buffer_properties: vk::PhysicalDeviceDescriptorBufferPropertiesEXT<'static>,
-    physical_device_properties: vk::PhysicalDeviceProperties,
+    physical_device_properties: VkPhysicalDeviceProperties,
     /// Timeline used to track completion of frames.
     /// It is incremented and signalled on each frame completion (see `poll`).
     // SAFETY: we're never using this as an externally-synchronized command parameter.
     pub(crate) frame_timeline: VkSemaphore,
     // SAFETY: we're never using this as an externally-synchronized command parameter.
-    pub(crate) physical_device: vk::PhysicalDevice,
+    pub(crate) physical_device: VkPhysicalDevice,
 }
 
 unsafe impl Send for DeviceThreadSafeState {}
@@ -86,10 +85,9 @@ pub(crate) struct DeviceSubmissionState {
 
 pub struct Device {
     /// Underlying vulkan device
-    pub(crate) raw: ash::Device,
-
+    //pub(crate) raw: ash::Device,
     pub(crate) vkd: VkDevice,
-    pub(crate) vk: vulkan::Vulkan_1_4_DeviceDispatch,
+    pub(crate) vk: Vulkan_1_4_DeviceDispatch,
     /// Common device extensions.
     pub(crate) ext: DeviceExtensions,
     /// Platform-specific extension functions
@@ -103,7 +101,7 @@ pub struct Device {
     pub(crate) descriptor_heaps: DescriptorHeaps,
     // --- descriptor heap ---
     /// semaphores ready for reuse.
-    pub(crate) semaphores: Mutex<Vec<vk::Semaphore>>,
+    pub(crate) semaphores: Mutex<Vec<VkSemaphore>>,
     // Index of the next submission not yet created.
     //pub(crate) next_create_ticket: AtomicU64,
     /// The index of the frame being recorded, or, equivalently, the next frame index to be signalled.
@@ -155,7 +153,7 @@ pub struct QueueFamilyConfig {
     pub count: u32,
 }
 
-pub(crate) fn get_vk_sample_count(count: u32) -> vk::SampleCountFlags {
+pub(crate) fn get_vk_sample_count(count: u32) -> VkSampleCountFlags {
     match count {
         0 => vk::SampleCountFlags::TYPE_1,
         1 => vk::SampleCountFlags::TYPE_1,
@@ -192,7 +190,7 @@ pub(crate) enum ResourceAllocation {
     /// We allocated a block of memory exclusively for this resource.
     Allocation { allocation: gpu_allocator::vulkan::Allocation },
     /// The memory for this resource was imported or exported from/to an external handle.
-    DeviceMemory { device_memory: vk::DeviceMemory },
+    DeviceMemory { device_memory: VkDeviceMemory },
     /// No memory is allocated for this resource.
     ///
     /// Currently, this is only used in zero-byte [`Buffer`s](crate::Buffer)
@@ -203,11 +201,11 @@ pub(crate) enum ResourceAllocation {
 /// Chooses a swap chain surface format among a list of supported formats.
 ///
 /// TODO there's only one supported format right now...
-fn get_preferred_swapchain_surface_format(surface_formats: &[vk::SurfaceFormatKHR]) -> vk::SurfaceFormatKHR {
+fn get_preferred_swapchain_surface_format(surface_formats: &[VkSurfaceFormatKHR]) -> VkSurfaceFormatKHR {
     surface_formats
         .iter()
         .find_map(|&fmt| {
-            if fmt.format == vk::Format::B8G8R8A8_SRGB && fmt.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR {
+            if fmt.format == VK_FORMAT_B8G8R8A8_SRGB && fmt.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR {
                 Some(fmt)
             } else {
                 None
@@ -221,7 +219,7 @@ fn get_preferred_swapchain_surface_format(surface_formats: &[vk::SurfaceFormatKH
 /// # Safety
 ///
 /// `present_surface` must be a valid surface handle, or `None`
-unsafe fn create_device_with_surface(present_surface: Option<vk::SurfaceKHR>) -> Result<Device, DeviceCreateError> {
+unsafe fn create_device_with_surface(present_surface: Option<VkSurfaceKHR>) -> Result<Device, DeviceCreateError> {
     let device = Device::with_surface(present_surface)?;
     Ok(device)
 }
@@ -232,41 +230,48 @@ fn create_device() -> Result<Device, DeviceCreateError> {
 }
 
 struct PhysicalDeviceAndProperties {
-    physical_device: vk::PhysicalDevice,
-    properties: vk::PhysicalDeviceProperties,
+    physical_device: VkPhysicalDevice,
+    properties: VkPhysicalDeviceProperties,
     //features: vk::PhysicalDeviceFeatures,
 }
 
 /// Chooses a present mode among a list of supported modes.
-pub(super) fn get_preferred_present_mode(available_present_modes: &[vk::PresentModeKHR]) -> vk::PresentModeKHR {
-    if available_present_modes.contains(&vk::PresentModeKHR::MAILBOX) {
-        vk::PresentModeKHR::MAILBOX
-    } else if available_present_modes.contains(&vk::PresentModeKHR::IMMEDIATE) {
-        vk::PresentModeKHR::IMMEDIATE
+pub(super) fn get_preferred_present_mode(available_present_modes: &[VkPresentModeKHR]) -> VkPresentModeKHR {
+    if available_present_modes.contains(&VK_PRESENT_MODE_MAILBOX_KHR) {
+        VK_PRESENT_MODE_MAILBOX_KHR
+    } else if available_present_modes.contains(&VK_PRESENT_MODE_IMMEDIATE_KHR) {
+        VK_PRESENT_MODE_IMMEDIATE_KHR
     } else {
-        vk::PresentModeKHR::FIFO
+        VK_PRESENT_MODE_FIFO_KHR
     }
 }
 
 /// Computes the preferred swap extent.
 pub(super) fn get_preferred_swap_extent(
     framebuffer_size: (u32, u32),
-    capabilities: &vk::SurfaceCapabilitiesKHR,
-) -> vk::Extent2D {
-    if capabilities.current_extent.width != u32::MAX {
-        capabilities.current_extent
+    capabilities: &VkSurfaceCapabilitiesKHR,
+) -> VkExtent2D {
+    if capabilities.currentExtent.width != u32::MAX {
+        capabilities.currentExtent
     } else {
-        vk::Extent2D {
-            width: framebuffer_size.0.clamp(capabilities.min_image_extent.width, capabilities.max_image_extent.width),
+        VkExtent2D {
+            width: framebuffer_size.0.clamp(capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
             height: framebuffer_size
                 .1
-                .clamp(capabilities.min_image_extent.height, capabilities.max_image_extent.height),
+                .clamp(capabilities.minImageExtent.height, capabilities.maxImageExtent.height),
         }
     }
 }
 
-unsafe fn select_physical_device(instance: &ash::Instance) -> PhysicalDeviceAndProperties {
-    let physical_devices = instance.enumerate_physical_devices().expect("failed to enumerate physical devices");
+unsafe fn select_physical_device(instance: &Instance) -> PhysicalDeviceAndProperties {
+    let physical_devices = {
+        let mut count = 0;
+        instance.fns.EnumeratePhysicalDevices(instance.instance, &mut count, ptr::null_mut()).check();
+        let mut devices = Vec::with_capacity(count as usize);
+        instance.fns.EnumeratePhysicalDevices(instance.instance, &mut count, devices.as_mut_ptr()).check();
+        devices.set_len(count as usize);
+        devices
+    };
     if physical_devices.is_empty() {
         panic!("no device with vulkan support");
     }
@@ -274,9 +279,17 @@ unsafe fn select_physical_device(instance: &ash::Instance) -> PhysicalDeviceAndP
     let mut selected_phy_properties = Default::default();
     //let mut selected_phy_features = Default::default();
     for phy in physical_devices {
-        let props = instance.get_physical_device_properties(phy);
-        let _features = instance.get_physical_device_features(phy);
-        if props.device_type == vk::PhysicalDeviceType::DISCRETE_GPU {
+        let props = {
+            let mut props = MaybeUninit::uninit();
+            instance.fns.GetPhysicalDeviceProperties(phy, props.as_mut_ptr());
+            props.assume_init()
+        };
+        let _features = {
+            let mut features = MaybeUninit::uninit();
+            instance.fns.GetPhysicalDeviceFeatures(phy, features.as_mut_ptr());
+            features.assume_init()
+        };
+        if props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU {
             selected_phy = Some(phy);
             selected_phy_properties = props;
             //selected_phy_features = features;
@@ -290,23 +303,24 @@ unsafe fn select_physical_device(instance: &ash::Instance) -> PhysicalDeviceAndP
     }
 }
 
+// TODO nuke this
 unsafe fn find_queue_family(
-    phy: vk::PhysicalDevice,
-    vk_khr_surface: &ash::khr::surface::Instance,
-    queue_families: &[vk::QueueFamilyProperties],
-    flags: vk::QueueFlags,
-    present_surface: Option<vk::SurfaceKHR>,
+    instance: &Instance,
+    phy: VkPhysicalDevice,
+    queue_families: &[VkQueueFamilyProperties],
+    flags: VkQueueFlags,
+    present_surface: Option<VkSurfaceKHR>,
 ) -> u32 {
     let mut best_queue_family: Option<u32> = None;
     let mut best_flags = 0u32;
     let mut index = 0u32;
     for queue_family in queue_families {
-        if queue_family.queue_flags.contains(flags) {
+        if queue_family.queueFlags & flags != 0 {
             // matches the intended usage
             // if present_surface != nullptr, check that it also supports presentation
             // to the given surface
             if let Some(surface) = present_surface {
-                if !vk_khr_surface.get_physical_device_surface_support(phy, index, surface).unwrap() {
+                if !instance.khr_surface.GetPhysicalDeviceSurfaceSupportKHR(phy, index, surface).unwrap() {
                     // does not support presentation, skip it
                     continue;
                 }
@@ -315,13 +329,13 @@ unsafe fn find_queue_family(
                 // there was already a queue for the specified usage,
                 // change it only if it is more specialized.
                 // to determine if it is more specialized, count number of bits (XXX sketchy?)
-                if queue_family.queue_flags.as_raw().count_ones() < best_flags.count_ones() {
+                if queue_family.queueFlags.count_ones() < best_flags.count_ones() {
                     *i = index;
-                    best_flags = queue_family.queue_flags.as_raw();
+                    best_flags = queue_family.queueFlags;
                 }
             } else {
                 best_queue_family = Some(index);
-                best_flags = queue_family.queue_flags.as_raw();
+                best_flags = queue_family.queueFlags;
             }
         }
         index += 1;
@@ -329,19 +343,19 @@ unsafe fn find_queue_family(
     best_queue_family.expect("could not find a compatible queue")
 }
 
-const DEVICE_EXTENSIONS: &[&str] = &[
-    "VK_KHR_swapchain",
-    "VK_KHR_maintenance5",
-    "VK_KHR_push_descriptor",
-    "VK_EXT_extended_dynamic_state3",
-    "VK_EXT_mesh_shader",
-    "VK_EXT_conservative_rasterization",
-    "VK_EXT_fragment_shader_interlock",
-    "VK_EXT_shader_image_atomic_int64",
-    "VK_KHR_calibrated_timestamps",
-    "VK_EXT_descriptor_heap",
-    "VK_KHR_shader_untyped_pointers",
-    "VK_EXT_mutable_descriptor_type",
+static DEVICE_EXTENSIONS: [&CStr; 12] = [
+    c"VK_KHR_swapchain",
+    c"VK_KHR_maintenance5",
+    c"VK_KHR_push_descriptor",
+    c"VK_EXT_extended_dynamic_state3",
+    c"VK_EXT_mesh_shader",
+    c"VK_EXT_conservative_rasterization",
+    c"VK_EXT_fragment_shader_interlock",
+    c"VK_EXT_shader_image_atomic_int64",
+    c"VK_KHR_calibrated_timestamps",
+    c"VK_EXT_descriptor_heap",
+    c"VK_KHR_shader_untyped_pointers",
+    c"VK_EXT_mutable_descriptor_type",
 ];
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -371,13 +385,13 @@ impl Device {
     fn find_compatible_memory_type_internal(
         &self,
         memory_type_bits: u32,
-        memory_properties: vk::MemoryPropertyFlags,
+        memory_properties: VkMemoryPropertyFlags,
     ) -> Option<u32> {
-        for i in 0..self.thread_safe.physical_device_memory_properties.memory_type_count {
+        for i in 0..self.thread_safe.physical_device_memory_properties.memoryTypeCount {
             if memory_type_bits & (1 << i) != 0
-                && self.thread_safe.physical_device_memory_properties.memory_types[i as usize]
-                    .property_flags
-                    .contains(memory_properties)
+                && (self.thread_safe.physical_device_memory_properties.memoryTypes[i as usize].propertyFlags
+                    & memory_properties)
+                    != 0
             {
                 return Some(i);
             }
@@ -389,8 +403,8 @@ impl Device {
     pub(crate) fn find_compatible_memory_type(
         &self,
         memory_type_bits: u32,
-        required_memory_properties: vk::MemoryPropertyFlags,
-        preferred_memory_properties: vk::MemoryPropertyFlags,
+        required_memory_properties: VkMemoryPropertyFlags,
+        preferred_memory_properties: VkMemoryPropertyFlags,
     ) -> Option<u32> {
         // first, try required+preferred, otherwise fallback on just required
         self.find_compatible_memory_type_internal(
@@ -410,21 +424,16 @@ impl Device {
     /// * `device` - the vulkan device handle
     /// * `graphics_queue_family_index` - queue family index of the main graphics queue
     unsafe fn from_existing(
-        physical_device: vk::PhysicalDevice,
-        device: vk::Device,
+        physical_device: VkPhysicalDevice,
+        device: VkDevice,
         graphics_queue_family_index: u32,
     ) -> Result<Device, DeviceCreateError> {
         let entry = get_vulkan_entry();
-        let instance = get_vulkan_instance();
-        let device = ash::Device::load(instance.fp_v1_0(), device);
-        //
-        let device2 = ::vulkan::Vulkan_1_4_DeviceDispatch::load_with(|proc| {
-            instance.get_device_proc_addr(device.handle(), proc.as_ptr())
-        });
-        let vkdevice = VkDevice(device.handle().as_raw() as *mut _);
+        let instance = Instance::get();
+        let dd = Vulkan_1_4_DeviceDispatch::load_with(|proc| instance.fns.GetDeviceProcAddr(device, proc.as_ptr()));
         let queue = {
             let mut queue = VkQueue::null();
-            device2.GetDeviceQueue(vkdevice, graphics_queue_family_index, 0, &mut queue);
+            dd.GetDeviceQueue(device, graphics_queue_family_index, 0, &mut queue);
             queue
         };
         let timeline = {
@@ -432,102 +441,79 @@ impl Device {
                 VkSemaphoreTypeCreateInfo { semaphoreType: VK_SEMAPHORE_TYPE_TIMELINE, initialValue: 0, .. };
             let semaphore_create_info =
                 VkSemaphoreCreateInfo { pNext: &timeline_create_info as *const _ as *const c_void, .. };
-            let mut semaphore = VkSemaphore::null();
-            vkcheck!(device2.CreateSemaphore(vkdevice, &semaphore_create_info, ptr::null(), &mut semaphore));
-            semaphore
+            dd.CreateSemaphore(device, &semaphore_create_info, ptr::null()).unwrap()
         };
         let mut allocator = {
+            let ash_instance = ash::Instance::load_with(
+                |name| mem::transmute(entry.GetInstanceProcAddr(instance.instance, name.as_ptr())),
+                vk::Instance::from_raw(instance.instance.0 as u64),
+            );
+            let ash_device = ash::Device::load(ash_instance.fp_v1_0(), ash::vk::Device::from_raw(device.0 as u64));
             let allocator_create_desc = gpu_allocator::vulkan::AllocatorCreateDesc {
-                physical_device,
+                physical_device: ash::vk::PhysicalDevice::from_raw(physical_device.0 as u64),
                 debug_settings: Default::default(),
-                device: device.clone(),     // not cheap!
-                instance: instance.clone(), // not cheap!
+                device: ash_device,
+                instance: ash_instance,
                 buffer_device_address: true,
                 allocation_sizes: Default::default(),
             };
             gpu_allocator::vulkan::Allocator::new(&allocator_create_desc).expect("failed to create GPU allocator")
         };
-        let mut physical_device_descriptor_buffer_properties =
-            vk::PhysicalDeviceDescriptorBufferPropertiesEXT::default();
-        // TODO: replace this once ash is updated
-        let mut descriptor_heap_properties = VkPhysicalDeviceDescriptorHeapPropertiesEXT {
-            pNext: &mut physical_device_descriptor_buffer_properties as *mut _ as *mut c_void,
-            samplerHeapAlignment: 0,
-            resourceHeapAlignment: 0,
-            maxSamplerHeapSize: 0,
-            maxResourceHeapSize: 0,
-            minSamplerHeapReservedRange: 0,
-            minSamplerHeapReservedRangeWithEmbedded: 0,
-            minResourceHeapReservedRange: 0,
-            samplerDescriptorSize: 0,
-            imageDescriptorSize: 0,
-            bufferDescriptorSize: 0,
-            samplerDescriptorAlignment: 0,
-            imageDescriptorAlignment: 0,
-            bufferDescriptorAlignment: 0,
-            maxPushDataSize: 0,
-            imageCaptureReplayOpaqueDataSize: 0,
-            maxDescriptorHeapEmbeddedSamplers: 0,
-            samplerYcbcrConversionCount: 0,
-            sparseDescriptorHeaps: 0,
-            protectedDescriptorHeaps: 0,
-            ..
-        };
-        let mut physical_device_id_properties = vk::PhysicalDeviceIDProperties {
-            p_next: &mut descriptor_heap_properties as *mut _ as *mut c_void,
-            ..Default::default()
-        };
-        let mut physical_device_properties = vk::PhysicalDeviceProperties2 {
-            p_next: &mut physical_device_id_properties as *mut _ as *mut c_void,
-            ..Default::default()
-        };
+        let mut descriptor_heap_properties: VkPhysicalDeviceDescriptorHeapPropertiesEXT = unsafe { mem::zeroed() };
+        descriptor_heap_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_PROPERTIES_EXT;
+        let mut physical_device_id_properties: VkPhysicalDeviceIDProperties = unsafe { mem::zeroed() };
+        physical_device_id_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
+        let mut physical_device_properties: VkPhysicalDeviceProperties2 = unsafe { mem::zeroed() };
+        physical_device_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        physical_device_id_properties.pNext = &mut descriptor_heap_properties as *mut _ as *mut c_void;
+        physical_device_properties.pNext = &mut physical_device_id_properties as *mut _ as *mut c_void;
         instance.get_physical_device_properties2(physical_device, &mut physical_device_properties);
-
         // Extensions
-        let khr_swapchain = ash::khr::swapchain::Device::new(instance, &device);
-        let khr_push_descriptor = ash::khr::push_descriptor::Device::new(instance, &device);
-        let khr_calibrated_timestamps = ash::khr::calibrated_timestamps::Device::new(instance, &device);
-        let ext_extended_dynamic_state3 = ash::ext::extended_dynamic_state3::Device::new(instance, &device);
-        let ext_mesh_shader = ash::ext::mesh_shader::Device::new(instance, &device);
-        let physical_device_memory_properties = instance.get_physical_device_memory_properties(physical_device);
-        let ext_debug_utils = ash::ext::debug_utils::Device::new(instance, &device);
+        let load_fn = |proc| instance.fns.GetDeviceProcAddr(device, proc.as_ptr());
+        let khr_swapchain = khr_swapchain::DeviceDispatch::load_with(load_fn);
+        let khr_push_descriptor = khr_push_descriptor::DeviceDispatch::load_with(load_fn);
+        let khr_calibrated_timestamps = khr_calibrated_timestamps::DeviceDispatch::load_with(load_fn);
+        let ext_extended_dynamic_state3 = ext_extended_dynamic_state3::DeviceDispatch::load_with(load_fn);
+        let ext_mesh_shader = ext_mesh_shader::DeviceDispatch::load_with(load_fn);
+        let ext_debug_utils = ext_debug_utils::DeviceDispatch::load_with(load_fn);
         let platform_extensions = PlatformExtensions::load(entry, instance, &device);
-        // VULKAN-MIGRATION
-        let descriptor_heap_device = ext_descriptor_heap::DeviceDispatch::load_with(|proc| {
-            instance.get_device_proc_addr(device.handle(), proc.as_ptr())
-        });
+        let descriptor_heap_device = ext_descriptor_heap::DeviceDispatch::load_with(load_fn);
         let descriptor_heap_instance = ext_descriptor_heap::InstanceDispatch::load_with(|proc| {
-            entry.get_instance_proc_addr(instance.handle(), proc.as_ptr())
+            entry.GetInstanceProcAddr(instance.instance, proc.as_ptr())
         });
         let descriptor_heaps = DescriptorHeaps::new(&mut allocator, &device, &descriptor_heap_properties);
-
+        let memory_properties = {
+            let mut memory_properties = MaybeUninit::uninit();
+            instance.fns.GetPhysicalDeviceMemoryProperties(physical_device, memory_properties.as_mut_ptr());
+            memory_properties.assume_init()
+        };
         // ------ info dump ------
-        let device_name = CStr::from_ptr(physical_device_properties.properties.device_name.as_ptr()).to_string_lossy();
+        let device_name = CStr::from_ptr(physical_device_properties.properties.deviceName.as_ptr()).to_string_lossy();
         info!("gpu: using device {device_name}",);
         info!(
             "    deviceType: {:?}  deviceID: {:04x}  vendorID: {:04x}",
-            physical_device_properties.properties.device_type,
-            physical_device_properties.properties.device_id,
-            physical_device_properties.properties.vendor_id
+            physical_device_properties.properties.deviceType,
+            physical_device_properties.properties.deviceID,
+            physical_device_properties.properties.vendorID
         );
-        info!("    pipelineCacheUUID: {:02x?}", physical_device_properties.properties.pipeline_cache_uuid);
+        info!("    pipelineCacheUUID: {:02x?}", physical_device_properties.properties.pipelineCacheUUID);
         info!(
             "    apiVersion: {}.{}.{}   driverVersion: {}",
-            vk::api_version_major(physical_device_properties.properties.api_version),
-            vk::api_version_minor(physical_device_properties.properties.api_version),
-            vk::api_version_patch(physical_device_properties.properties.api_version),
-            physical_device_properties.properties.driver_version
+            vk::api_version_major(physical_device_properties.properties.apiVersion),
+            vk::api_version_minor(physical_device_properties.properties.apiVersion),
+            vk::api_version_patch(physical_device_properties.properties.apiVersion),
+            physical_device_properties.properties.driverVersion
         );
-        if physical_device_id_properties.device_luid_valid == vk::TRUE {
-            info!("    deviceLUID: {:02x?}", physical_device_id_properties.device_luid);
+        if physical_device_id_properties.deviceLUIDValid == vk::TRUE {
+            info!("    deviceLUID: {:02x?}", physical_device_id_properties.deviceLUID);
         }
         info!("    Timestamp information:");
-        info!("        timestampPeriod: {}", physical_device_properties.properties.limits.timestamp_period);
+        info!("        timestampPeriod: {}", physical_device_properties.properties.limits.timestampPeriod);
 
         Ok(Device {
-            raw: device,
-            vk: device2,
-            vkd: vkdevice,
+            //raw: device,
+            vk: dd,
+            vkd: device,
             ext: DeviceExtensions {
                 swapchain: khr_swapchain,
                 push_descriptor: khr_push_descriptor,
@@ -543,7 +529,6 @@ impl Device {
                 physical_device_memory_properties,
                 physical_device_id_properties,
                 descriptor_heap_properties,
-                _physical_device_descriptor_buffer_properties: physical_device_descriptor_buffer_properties,
                 physical_device_properties: physical_device_properties.properties,
                 frame_timeline: timeline,
                 physical_device,
@@ -570,12 +555,12 @@ impl Device {
     }
 
     /// Returns the list of supported swapchain formats for the given surface.
-    pub unsafe fn get_surface_formats(&self, surface: vk::SurfaceKHR) -> Vec<vk::SurfaceFormatKHR> {
+    pub unsafe fn get_surface_formats(&self, surface: vk::SurfaceKHR) -> Vec<VkSurfaceFormatKHR> {
         vk_khr_surface().get_physical_device_surface_formats(self.thread_safe.physical_device, surface).unwrap()
     }
 
     /// Returns one supported surface format. Use if you don't care about the format of your swapchain.
-    pub unsafe fn get_preferred_surface_format(&self, surface: vk::SurfaceKHR) -> vk::SurfaceFormatKHR {
+    pub unsafe fn get_preferred_surface_format(&self, surface: vk::SurfaceKHR) -> VkSurfaceFormatKHR {
         let surface_formats = self.get_surface_formats(surface);
         get_preferred_swapchain_surface_format(&surface_formats)
     }
@@ -583,25 +568,31 @@ impl Device {
     /// Creates a new `Device` that can render to the specified `present_surface` if one is specified.
     ///
     /// Also creates queues as requested.
-    pub unsafe fn with_surface(present_surface: Option<vk::SurfaceKHR>) -> Result<Device, DeviceCreateError> {
-        let instance = get_vulkan_instance();
-        let vk_khr_surface = vk_khr_surface();
+    pub unsafe fn with_surface(present_surface: Option<VkSurfaceKHR>) -> Result<Device, DeviceCreateError> {
+        let instance = Instance::get();
         let phy = select_physical_device(instance);
-        let queue_family_properties = instance.get_physical_device_queue_family_properties(phy.physical_device);
+        let queue_family_properties = {
+            let mut count = 0;
+            instance.fns.GetPhysicalDeviceQueueFamilyProperties(phy.physical_device, &mut count, ptr::null_mut());
+            let mut qfps = Vec::with_capacity(count as usize);
+            instance.fns.GetPhysicalDeviceQueueFamilyProperties(phy.physical_device, &mut count, qfps.as_mut_ptr());
+            qfps.set_len(count as usize);
+            qfps
+        };
         let graphics_queue_family = find_queue_family(
+            instance,
             phy.physical_device,
-            &vk_khr_surface,
             &queue_family_properties,
-            vk::QueueFlags::GRAPHICS,
+            VK_QUEUE_GRAPHICS_BIT,
             present_surface,
         );
         let queue_priorities = [1.0f32];
-        let device_queue_create_infos = &[vk::DeviceQueueCreateInfo {
-            flags: Default::default(),
-            queue_family_index: graphics_queue_family,
-            queue_count: 1,
-            p_queue_priorities: queue_priorities.as_ptr(),
-            ..Default::default()
+        let device_queue_create_infos = &[VkDeviceQueueCreateInfo {
+            flags: 0,
+            queueFamilyIndex: graphics_queue_family,
+            queueCount: 1,
+            pQueuePriorities: queue_priorities.as_ptr(),
+            ..
         }];
 
         // ------ BEGIN SHOPPING LIST ------
@@ -618,140 +609,135 @@ impl Device {
             descriptorHeapCaptureReplay: VK_FALSE,
             ..
         };
-        let mut fragment_shader_interlock_features = vk::PhysicalDeviceFragmentShaderInterlockFeaturesEXT {
-            p_next: &mut descriptor_heap_features as *mut _ as *mut c_void,
-            fragment_shader_pixel_interlock: vk::TRUE, // nice-to-have for experimentation
+        let mut fragment_shader_interlock_features = VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT {
+            pNext: &mut descriptor_heap_features as *mut _ as *mut c_void,
+            fragmentShaderPixelInterlock: VK_TRUE, // nice-to-have for experimentation
+            ..
+        };
+        let mut maintenance5_features = VkPhysicalDeviceMaintenance5FeaturesKHR {
+            pNext: &mut fragment_shader_interlock_features as *mut _ as *mut c_void,
+            maintenance5: VK_TRUE,
             ..Default::default()
         };
-        let mut maintenance5_features = vk::PhysicalDeviceMaintenance5FeaturesKHR {
-            p_next: &mut fragment_shader_interlock_features as *mut _ as *mut c_void,
-            maintenance5: vk::TRUE,
+        let mut mutable_descriptor_type_features = VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT {
+            pNext: &mut maintenance5_features as *mut _ as *mut c_void,
+            mutableDescriptorType: VK_TRUE, // TODO not sure this is needed anymore with descriptor_heap
             ..Default::default()
         };
-        let mut mutable_descriptor_type_features = vk::PhysicalDeviceMutableDescriptorTypeFeaturesEXT {
-            p_next: &mut maintenance5_features as *mut _ as *mut c_void,
-            mutable_descriptor_type: vk::TRUE, // TODO not sure this is needed anymore with descriptor_heap
-            ..Default::default()
-        };
-        let mut mesh_shader_features = vk::PhysicalDeviceMeshShaderFeaturesEXT {
-            p_next: &mut mutable_descriptor_type_features as *mut _ as *mut c_void,
-            task_shader: vk::TRUE, // it's the future
-            mesh_shader: vk::TRUE,
+        let mut mesh_shader_features = VkPhysicalDeviceMeshShaderFeaturesEXT {
+            pNext: &mut mutable_descriptor_type_features as *mut _ as *mut c_void,
+            taskShader: VK_TRUE, // it's the future
+            meshShader: VK_TRUE,
             ..Default::default()
         };
         // don't bother with static state in pipelines
-        let mut ext_dynamic_state = vk::PhysicalDeviceExtendedDynamicState3FeaturesEXT {
-            p_next: &mut mesh_shader_features as *mut _ as *mut c_void,
-            extended_dynamic_state3_tessellation_domain_origin: vk::TRUE,
-            extended_dynamic_state3_depth_clamp_enable: vk::TRUE,
-            extended_dynamic_state3_polygon_mode: vk::TRUE,
-            extended_dynamic_state3_rasterization_samples: vk::TRUE,
-            extended_dynamic_state3_sample_mask: vk::TRUE,
-            extended_dynamic_state3_alpha_to_coverage_enable: vk::TRUE,
-            extended_dynamic_state3_alpha_to_one_enable: vk::TRUE,
-            extended_dynamic_state3_logic_op_enable: vk::TRUE,
-            extended_dynamic_state3_color_blend_enable: vk::TRUE,
-            extended_dynamic_state3_color_blend_equation: vk::TRUE,
-            extended_dynamic_state3_color_write_mask: vk::TRUE,
-            extended_dynamic_state3_rasterization_stream: vk::TRUE,
-            extended_dynamic_state3_conservative_rasterization_mode: vk::TRUE,
-            extended_dynamic_state3_extra_primitive_overestimation_size: vk::TRUE,
-            extended_dynamic_state3_depth_clip_enable: vk::TRUE,
-            extended_dynamic_state3_sample_locations_enable: vk::TRUE,
-            extended_dynamic_state3_color_blend_advanced: vk::TRUE,
-            extended_dynamic_state3_provoking_vertex_mode: vk::TRUE,
-            extended_dynamic_state3_line_rasterization_mode: vk::TRUE,
-            extended_dynamic_state3_line_stipple_enable: vk::TRUE,
-            extended_dynamic_state3_depth_clip_negative_one_to_one: vk::TRUE,
-            extended_dynamic_state3_viewport_w_scaling_enable: vk::TRUE,
-            extended_dynamic_state3_viewport_swizzle: vk::TRUE,
-            extended_dynamic_state3_coverage_to_color_enable: vk::TRUE,
-            extended_dynamic_state3_coverage_to_color_location: vk::TRUE,
-            extended_dynamic_state3_coverage_modulation_mode: vk::TRUE,
-            extended_dynamic_state3_coverage_modulation_table_enable: vk::TRUE,
-            extended_dynamic_state3_coverage_modulation_table: vk::TRUE,
-            extended_dynamic_state3_coverage_reduction_mode: vk::TRUE,
-            extended_dynamic_state3_representative_fragment_test_enable: vk::TRUE,
-            extended_dynamic_state3_shading_rate_image_enable: vk::TRUE,
-            ..Default::default()
+        let mut ext_dynamic_state = VkPhysicalDeviceExtendedDynamicState3FeaturesEXT {
+            pNext: &mut mesh_shader_features as *mut _ as *mut c_void,
+            extendedDynamicState3TessellationDomainOrigin: VK_TRUE,
+            extendedDynamicState3DepthClampEnable: VK_TRUE,
+            extendedDynamicState3PolygonMode: VK_TRUE,
+            extendedDynamicState3RasterizationSamples: VK_TRUE,
+            extendedDynamicState3SampleMask: VK_TRUE,
+            extendedDynamicState3AlphaToCoverageEnable: VK_TRUE,
+            extendedDynamicState3AlphaToOneEnable: VK_TRUE,
+            extendedDynamicState3LogicOpEnable: VK_TRUE,
+            extendedDynamicState3ColorBlendEnable: VK_TRUE,
+            extendedDynamicState3ColorBlendEquation: VK_TRUE,
+            extendedDynamicState3ColorWriteMask: VK_TRUE,
+            extendedDynamicState3RasterizationStream: VK_TRUE,
+            extendedDynamicState3ConservativeRasterizationMode: VK_TRUE,
+            extendedDynamicState3ExtraPrimitiveOverestimationSize: VK_TRUE,
+            extendedDynamicState3DepthClipEnable: VK_TRUE,
+            extendedDynamicState3SampleLocationsEnable: VK_TRUE,
+            extendedDynamicState3ColorBlendAdvanced: VK_TRUE,
+            extendedDynamicState3ProvokingVertexMode: VK_TRUE,
+            extendedDynamicState3LineRasterizationMode: VK_TRUE,
+            extendedDynamicState3LineStippleEnable: VK_TRUE,
+            extendedDynamicState3DepthClipNegativeOneToOne: VK_TRUE,
+            extendedDynamicState3ViewportWScalingEnable: VK_TRUE,
+            extendedDynamicState3ViewportSwizzle: VK_TRUE,
+            extendedDynamicState3CoverageToColorEnable: VK_TRUE,
+            extendedDynamicState3CoverageToColorLocation: VK_TRUE,
+            extendedDynamicState3CoverageModulationMode: VK_TRUE,
+            extendedDynamicState3CoverageModulationTableEnable: VK_TRUE,
+            extendedDynamicState3CoverageModulationTable: VK_TRUE,
+            extendedDynamicState3CoverageReductionMode: VK_TRUE,
+            extendedDynamicState3RepresentativeFragmentTestEnable: VK_TRUE,
+            extendedDynamicState3ShadingRateImageEnable: VK_TRUE,
+            ..
         };
-        let mut vk13_features = vk::PhysicalDeviceVulkan13Features {
-            p_next: &mut ext_dynamic_state as *mut _ as *mut c_void,
-            synchronization2: vk::TRUE,
-            dynamic_rendering: vk::TRUE, // we use dynamic rendering exclusively
+        let mut vk13_features = VkPhysicalDeviceVulkan13Features {
+            pNext: &mut ext_dynamic_state as *mut _ as *mut c_void,
+            synchronization2: VK_TRUE,
+            dynamicRendering: VK_TRUE, // we use dynamic rendering exclusively
             // we expose a constant subgroup size of 32 to simplify the implementation of algorithms that depend on subgroups
-            subgroup_size_control: vk::TRUE,
+            subgroupSizeControl: VK_TRUE,
             ..Default::default()
         };
-        let mut vk12_features = vk::PhysicalDeviceVulkan12Features {
-            p_next: &mut vk13_features as *mut _ as *mut c_void,
-            descriptor_indexing: vk::TRUE,
-            descriptor_binding_variable_descriptor_count: vk::TRUE,
-            descriptor_binding_partially_bound: vk::TRUE,
-            descriptor_binding_update_unused_while_pending: vk::TRUE,
-            shader_uniform_buffer_array_non_uniform_indexing: vk::TRUE,
-            shader_storage_buffer_array_non_uniform_indexing: vk::TRUE,
-            shader_sampled_image_array_non_uniform_indexing: vk::TRUE,
-            shader_storage_image_array_non_uniform_indexing: vk::TRUE,
-            runtime_descriptor_array: vk::TRUE,
-            buffer_device_address: vk::TRUE,
-            buffer_device_address_capture_replay: vk::TRUE,
-            timeline_semaphore: vk::TRUE,
-            storage_buffer8_bit_access: vk::TRUE,
-            storage_push_constant8: vk::TRUE,
-            shader_int8: vk::TRUE,
-            scalar_block_layout: vk::TRUE,
-            host_query_reset: vk::TRUE,
+        let mut vk12_features = VkPhysicalDeviceVulkan12Features {
+            pNext: &mut vk13_features as *mut _ as *mut c_void,
+            descriptorIndexing: VK_TRUE,
+            descriptorBindingVariableDescriptorCount: VK_TRUE,
+            descriptorBindingPartiallyBound: VK_TRUE,
+            descriptorBindingUpdateUnusedWhilePending: VK_TRUE,
+            shaderUniformBufferArrayNonUniformIndexing: VK_TRUE,
+            shaderStorageBufferArrayNonUniformIndexing: VK_TRUE,
+            shaderSampledImageArrayNonUniformIndexing: VK_TRUE,
+            shaderStorageImageArrayNonUniformIndexing: VK_TRUE,
+            runtimeDescriptorArray: VK_TRUE,
+            bufferDeviceAddress: VK_TRUE,
+            bufferDeviceAddressCaptureReplay: VK_TRUE,
+            timelineSemaphore: VK_TRUE,
+            storageBuffer8BitAccess: VK_TRUE,
+            storagePushConstant8: VK_TRUE,
+            shaderInt8: VK_TRUE,
+            scalarBlockLayout: VK_TRUE,
+            hostQueryReset: VK_TRUE,
             ..Default::default()
         };
-        let mut vk11_features = vk::PhysicalDeviceVulkan11Features {
-            p_next: &mut vk12_features as *mut _ as *mut c_void,
-            shader_draw_parameters: vk::TRUE,
-            storage_buffer16_bit_access: vk::TRUE,
-            storage_push_constant16: vk::TRUE,
+        let mut vk11_features = VkPhysicalDeviceVulkan11Features {
+            pNext: &mut vk12_features as *mut _ as *mut c_void,
+            shaderDrawParameters: VK_TRUE,
+            storageBuffer16BitAccess: VK_TRUE,
+            storagePushConstant16: VK_TRUE,
             ..Default::default()
         };
-        let mut features2 = vk::PhysicalDeviceFeatures2 {
-            p_next: &mut vk11_features as *mut _ as *mut c_void,
-            features: vk::PhysicalDeviceFeatures {
-                tessellation_shader: vk::TRUE,
-                fill_mode_non_solid: vk::TRUE,
-                sampler_anisotropy: vk::TRUE,
-                shader_int16: vk::TRUE,
-                shader_int64: vk::TRUE,
-                shader_storage_image_extended_formats: vk::TRUE,
-                fragment_stores_and_atomics: vk::TRUE,
-                depth_clamp: vk::TRUE,
-                multi_draw_indirect: vk::TRUE,
-                independent_blend: vk::TRUE,
+        let mut features2 = VkPhysicalDeviceFeatures2 {
+            pNext: &mut vk11_features as *mut _ as *mut c_void,
+            features: VkPhysicalDeviceFeatures {
+                tessellationShader: VK_TRUE,
+                fillModeNonSolid: VK_TRUE,
+                samplerAnisotropy: VK_TRUE,
+                shaderInt16: VK_TRUE,
+                shaderInt64: VK_TRUE,
+                shaderStorageImageExtendedFormats: VK_TRUE,
+                fragmentStoresAndAtomics: VK_TRUE,
+                depthClamp: VK_TRUE,
+                multiDrawIndirect: VK_TRUE,
+                independentBlend: VK_TRUE,
                 ..Default::default()
             },
             ..Default::default()
         };
-        // Convert extension strings into C-strings
-        let c_device_extensions: Vec<_> = DEVICE_EXTENSIONS
-            .iter()
-            .chain(PlatformExtensions::names().iter())
-            .map(|&s| CString::new(s).unwrap())
-            .collect();
-        let device_extensions: Vec<_> = c_device_extensions.iter().map(|s| s.as_ptr()).collect();
-        let device_create_info = vk::DeviceCreateInfo {
-            p_next: &mut features2 as *mut _ as *mut c_void,
+        let device_extensions = DEVICE_EXTENSIONS.map(|s| s.as_ptr());
+        let device_create_info = VkDeviceCreateInfo {
+            pNext: &mut features2 as *mut _ as *mut c_void,
             flags: Default::default(),
-            queue_create_info_count: device_queue_create_infos.len() as u32,
-            p_queue_create_infos: device_queue_create_infos.as_ptr(),
-            enabled_extension_count: device_extensions.len() as u32,
-            pp_enabled_extension_names: device_extensions.as_ptr(),
-            p_enabled_features: ptr::null(),
-            ..Default::default()
+            queueCreateInfoCount: device_queue_create_infos.len() as u32,
+            pQueueCreateInfos: device_queue_create_infos.as_ptr(),
+            enabledExtensionCount: device_extensions.len() as u32,
+            ppEnabledExtensionNames: device_extensions.as_ptr(),
+            pEnabledFeatures: ptr::null(),
+            ..
         };
         // ------ END SHOPPING LIST ------
 
         // ------ Create device ------
-        let device: ash::Device = instance
-            .create_device(phy.physical_device, &device_create_info, None)
-            .expect("could not create vulkan device");
-        Self::from_existing(phy.physical_device, device.handle(), graphics_queue_family)
+        let device = instance
+            .fns
+            .CreateDevice(phy.physical_device, &device_create_info, ptr::null_mut())
+            .expect("failed to create Vulkan device");
+        Self::from_existing(phy.physical_device, device, graphics_queue_family)
     }
 }
 
@@ -777,8 +763,7 @@ impl Device {
 
     pub(crate) fn get_last_completed_frame_index(&self) -> u64 {
         unsafe {
-            let mut value = 0u64;
-            vkcheck!(self.vk.GetSemaphoreCounterValue(self.vkd, self.thread_safe.frame_timeline, &mut value));
+            let mut value = self.vk.GetSemaphoreCounterValue(self.vkd, self.thread_safe.frame_timeline).unwrap();
             if value == u64::MAX {
                 // We've likely lost the device.
                 panic!("GetSemaphoreCounterValue returned an invalid value, possible device lost");
@@ -871,22 +856,22 @@ impl Device {
 
     /// Creates a new, or returns an existing, binary semaphore that is in the unsignaled state,
     /// or for which we've submitted a wait operation on this queue and that will eventually be unsignaled.
-    pub fn get_or_create_semaphore(&self) -> vk::Semaphore {
+    pub fn get_or_create_semaphore(&self) -> VkSemaphore {
         // Try to recycle one
         if let Some(semaphore) = self.semaphores.lock().unwrap().pop() {
             return semaphore;
         }
         // Otherwise create a new one
         unsafe {
-            let create_info = vk::SemaphoreCreateInfo { ..Default::default() };
-            self.raw.create_semaphore(&create_info, None).unwrap()
+            let create_info = VkSemaphoreCreateInfo { .. };
+            self.vk.CreateSemaphore(self.vkd, &create_info, ptr::null()).unwrap()
         }
     }
 
     /// Recycles a binary semaphore.
     ///
     /// There must be a pending wait operation on the semaphore, or it must be in the unsignaled state.
-    pub(crate) unsafe fn recycle_binary_semaphore(&self, binary_semaphore: vk::Semaphore) {
+    pub(crate) unsafe fn recycle_binary_semaphore(&self, binary_semaphore: VkSemaphore) {
         self.semaphores.lock().unwrap().push(binary_semaphore);
     }
 
@@ -895,95 +880,33 @@ impl Device {
         if let Some(sampler) = self.sampler_cache.lock().unwrap().get(&info_hashable) {
             return SamplerHandle::new(*sampler);
         }
-        let create_info = vk::SamplerCreateInfo {
+        let create_info = VkSamplerCreateInfo {
             flags: Default::default(),
-            mag_filter: info.mag_filter,
-            min_filter: info.min_filter,
-            mipmap_mode: info.mipmap_mode,
-            address_mode_u: info.address_mode_u,
-            address_mode_v: info.address_mode_v,
-            address_mode_w: info.address_mode_w,
-            mip_lod_bias: info.mip_lod_bias,
-            anisotropy_enable: info.anisotropy_enable.into(),
-            max_anisotropy: info.max_anisotropy,
-            compare_enable: info.compare_enable.into(),
-            compare_op: info.compare_op.into(),
-            min_lod: info.min_lod,
-            max_lod: info.max_lod,
-            border_color: info.border_color,
+            magFilter: info.mag_filter,
+            minFilter: info.min_filter,
+            mipmapMode: info.mipmap_mode,
+            addressModeU: info.address_mode_u,
+            addressModeV: info.address_mode_v,
+            addressModeW: info.address_mode_w,
+            mipLodBias: info.mip_lod_bias,
+            anisotropyEnable: info.anisotropy_enable.into(),
+            maxAnisotropy: info.max_anisotropy,
+            compareEnable: info.compare_enable.into(),
+            compareOp: info.compare_op.into(),
+            minLod: info.min_lod,
+            maxLod: info.max_lod,
+            borderColor: info.border_color,
             ..Default::default()
         };
         let sampler = self.allocate_sampler_descriptor(&create_info);
         self.sampler_cache.lock().unwrap().insert(info_hashable, sampler);
         SamplerHandle::new(sampler)
     }
-
-    /*pub(crate) fn get_or_create_timestamp_query_pool(&self) -> vk::QueryPool {
-        let free = &mut self.free_timestamp_query_pools.lock().unwrap();
-        if let Some(pool) = free.pop() {
-            pool
-        } else {
-            let create_info = vk::QueryPoolCreateInfo {
-                flags: Default::default(),
-                query_type: vk::QueryType::TIMESTAMP,
-                query_count: MAX_TIMESTAMP_QUERY_COUNT,
-                pipeline_statistics: Default::default(),
-                ..Default::default()
-            };
-            unsafe {
-                let pool = self.raw.create_query_pool(&create_info, None).unwrap();
-                self.raw.reset_query_pool(pool, 0, MAX_TIMESTAMP_QUERY_COUNT);
-                pool
-            }
-        }
-    }*/
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////>
 // SHADERS, PIPELINES & LAYOUTS
 ////////////////////////////////////////////////////////////////////////////////////////////////
-
-/*
-struct ShaderModuleGuard<'a> {
-    device: &'a Device,
-    module: vk::ShaderModule,
-}
-
-impl<'a> Drop for ShaderModuleGuard<'a> {
-    fn drop(&mut self) {
-        unsafe {
-            self.device.raw.destroy_shader_module(self.module, None);
-        }
-    }
-}*/
-
-/*
-/// Helper to create PipelineShaderStageCreateInfo
-fn create_stage<'a>(
-    device: &'a Device,
-    p_next: *const c_void,
-    stage: vk::ShaderStageFlags,
-    code: &'a [u32],
-    entry_point: &CStr,
-) -> Result<(vk::PipelineShaderStageCreateInfo<'static>, ShaderModuleGuard<'a>), Error> {
-    let create_info = vk::ShaderModuleCreateInfo {
-        flags: Default::default(),
-        code_size: code.len() * 4,
-        p_code: code.as_ptr(),
-        ..Default::default()
-    };
-    let module = unsafe { device.raw.create_shader_module(&create_info, None)? };
-    let stage_create_info = vk::PipelineShaderStageCreateInfo {
-        p_next,
-        flags: Default::default(),
-        stage,
-        module,
-        p_name: entry_point.as_ptr(),
-        p_specialization_info: ptr::null(),
-        ..Default::default()
-    };
-    Ok((stage_create_info, ShaderModuleGuard { device, module }))
-}*/
 
 macro_rules! make_stage {
     ($sh:expr, $stage_flags:expr, $module:ident, $p_next:ident, $entry_point_name:ident) => {{
@@ -1207,7 +1130,9 @@ impl Device {
 
         // ------ misc ------
         let conservative_rasterization_state = VkPipelineRasterizationConservativeStateCreateInfoEXT {
-            conservativeRasterizationMode: unsafe { mem::transmute(create_info.rasterization.conservative_rasterization_mode) },
+            conservativeRasterizationMode: unsafe {
+                mem::transmute(create_info.rasterization.conservative_rasterization_mode)
+            },
             extraPrimitiveOverestimationSize: 0.0,
             ..
         };

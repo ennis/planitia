@@ -8,6 +8,7 @@ bitflags = "2"
 ash = "0.38"
 math = { workspace = true }
 color = { workspace = true, optional = true }
+vulkan = { workspace = true }
 vulkan-headers = "0.2.4" # until ash updates to support vk1.4
 planitia-workspace-hack = { version = "0.1", path = "../../planitia-workspace-hack" }
 

@@ -34,7 +34,7 @@ impl Device {
         device: vk::Device,
         p_create_info: *const vk::ImageCreateInfo<'_>,
         p_allocator: *const vk::AllocationCallbacks<'_>,
-        p_image: *mut vk::Image,
+        p_image: *mut VkImage,
     ) -> vk::Result {
         // Add TRANSFER_DST so that we can copy from images
         let mut create_info_copy = *p_create_info;
@@ -62,7 +62,7 @@ impl Device {
     pub unsafe fn hook_destroy_image(
         &self,
         device: vk::Device,
-        image: vk::Image,
+        image: VkImage,
         p_allocator: *const vk::AllocationCallbacks<'_>,
     ) {
         self.take_private_data(image);
@@ -72,7 +72,7 @@ impl Device {
     pub unsafe fn hook_bind_image_memory(
         &self,
         device: vk::Device,
-        image: vk::Image,
+        image: VkImage,
         memory: vk::DeviceMemory,
         memory_offset: vk::DeviceSize,
     ) -> vk::Result {
@@ -101,7 +101,7 @@ pub struct ImageInfo {
     pub samples: vk::SampleCountFlags,
 }
 
-impl HasPrivateData for vk::Image {
+impl HasPrivateData for VkImage {
     type PrivateData = ImageInfo;
 }
 

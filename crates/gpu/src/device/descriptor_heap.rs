@@ -53,7 +53,7 @@ impl FreeList {
 ///
 struct DescriptorHeapInfo {
     alloc: Allocation,
-    buffer: vk::Buffer,
+    buffer: VkBuffer,
     ptr: *mut c_void,
     device_addr: vk::DeviceAddress,
     /// Offset to the beginning of descriptors (skips the reserved range).
@@ -135,7 +135,7 @@ fn allocate_descriptor_heap_memory(
     let alloc = {
         let alloc_desc = AllocationCreateDesc {
             name: "descriptor heap".into(),
-            requirements: vk::MemoryRequirements { size: byte_size as u64, alignment, memory_type_bits: u32::MAX },
+            requirements: VkMemoryRequirements { size: byte_size as u64, alignment, memory_type_bits: u32::MAX },
             location: MemoryLocation::CpuToGpu,
             linear: true,
             allocation_scheme: AllocationScheme::GpuAllocatorManaged,
@@ -281,7 +281,7 @@ impl Device {
     }
 
     /// Allocates a sampler descriptor.
-    pub(crate) fn allocate_sampler_descriptor(&self, info: &vk::SamplerCreateInfo) -> SamplerDescriptorHandle {
+    pub(crate) fn allocate_sampler_descriptor(&self, info: &VkSamplerCreateInfo) -> SamplerDescriptorHandle {
         let index = self.allocate_sampler_descriptor_slot();
         unsafe {
             // Write the descriptor
@@ -290,7 +290,7 @@ impl Device {
             self.ext.descriptor_heap.WriteSamplerDescriptorsEXT(
                 self.vkd,
                 1,
-                info as *const _ as *const VkSamplerCreateInfo,
+                info,
                 &self.descriptor_heaps.sampler.address_range_by_index(index, 1),
             );
         }
@@ -315,11 +315,10 @@ impl Device {
 }
 
 impl Device {
-    pub(crate) fn bind_descriptor_heaps(&self, cmdbuf: vk::CommandBuffer) {
-        let cb = VkCommandBuffer(cmdbuf.as_raw() as *mut _);
+    pub(crate) fn bind_descriptor_heaps(&self, cmdbuf: VkCommandBuffer) {
         unsafe {
             self.ext.descriptor_heap.CmdBindResourceHeapEXT(
-                cb,
+                cmdbuf,
                 &VkBindHeapInfoEXT {
                     heapRange: VkDeviceAddressRangeEXT {
                         address: self.descriptor_heaps.resource.device_addr,
@@ -331,7 +330,7 @@ impl Device {
                 },
             );
             self.ext.descriptor_heap.CmdBindSamplerHeapEXT(
-                cb,
+                cmdbuf,
                 &VkBindHeapInfoEXT {
                     heapRange: VkDeviceAddressRangeEXT {
                         address: self.descriptor_heaps.sampler.device_addr,

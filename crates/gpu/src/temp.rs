@@ -42,7 +42,7 @@ struct ThreadLocalAllocator {
 }
 
 pub(crate) struct TempAlloc {
-    buffer: vk::Buffer,
+    buffer: VkBuffer,
     /// Offset of the allocation inside the buffer.
     offset: usize,
     /// Pointer to the CPU-mapped memory of the buffer.

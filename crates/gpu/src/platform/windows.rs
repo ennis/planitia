@@ -1,10 +1,12 @@
 use crate::device::{ResourceAllocation, get_vk_sample_count};
-use crate::{CommandBuffer, Device, Image, ImageCreateInfo, Size3D, aspects_for_format, vk};
-use ash::vk::{HANDLE, SECURITY_ATTRIBUTES};
+use crate::{aspects_for_format, vk, vkcheck, CommandBuffer, Device, Image, ImageCreateInfo, Size3D};
+//use ash::vk::{HANDLE, SECURITY_ATTRIBUTES};
 use gpu_allocator::MemoryLocation;
 use std::ffi::{OsStr, c_void};
+use std::mem::MaybeUninit;
 use std::ptr;
 use std::rc::Rc;
+use vulkan::*;
 
 fn handle_name_to_wstr(name: Option<&str>) -> (Vec<u16>, *const u16) {
     use std::os::windows::ffi::OsStrExt;
@@ -19,20 +21,20 @@ fn handle_name_to_wstr(name: Option<&str>) -> (Vec<u16>, *const u16) {
 }
 
 pub(crate) enum DedicatedAllocation {
-    //Buffer(vk::Buffer),
-    Image(vk::Image),
+    //Buffer(VkBuffer),
+    Image(VkImage),
 }
 
 unsafe fn import_external_memory(
     device: &Device,
-    memory_requirements: &vk::MemoryRequirements,
-    required_flags: vk::MemoryPropertyFlags,
-    preferred_flags: vk::MemoryPropertyFlags,
-    handle_type: vk::ExternalMemoryHandleTypeFlags,
+    memory_requirements: &VkMemoryRequirements,
+    required_flags: VkMemoryPropertyFlags,
+    preferred_flags: VkMemoryPropertyFlags,
+    handle_type: VkExternalMemoryHandleTypeFlags,
     handle: HANDLE,
     handle_name: Option<&str>,
     dedicated: Option<DedicatedAllocation>,
-) -> vk::DeviceMemory {
+) -> VkDeviceMemory {
     // TODO proper error handling
     let mut win32_handle_properties = vk::MemoryWin32HandlePropertiesKHR::default();
     device
@@ -101,7 +103,7 @@ impl Device {
             mip_levels: image_info.mip_levels,
             array_layers: image_info.array_layers,
             samples: get_vk_sample_count(image_info.samples),
-            tiling: vk::ImageTiling::OPTIMAL,
+            tiling: VK_IMAGE_TILING_OPTIMAL,
             usage: image_info.usage.to_vk_image_usage_flags(),
             sharing_mode: vk::SharingMode::EXCLUSIVE,
             queue_family_index_count: 0,
@@ -167,48 +169,52 @@ impl Device {
     }
 
     pub unsafe fn create_exported_image_win32(
-        self: &Rc<Self>,
+        &self,
         memory_location: MemoryLocation,
         image_info: &ImageCreateInfo,
-        handle_type: vk::ExternalMemoryHandleTypeFlags,
+        handle_type: VkExternalMemoryHandleTypeFlags,
         security_attributes: *const SECURITY_ATTRIBUTES,
         access_flags: u32,
         handle_name: Option<&str>,
     ) -> (Image, HANDLE) {
         let external_memory_image_create_info =
-            vk::ExternalMemoryImageCreateInfo { handle_types: handle_type, ..Default::default() };
-        let create_info = vk::ImageCreateInfo {
-            p_next: &external_memory_image_create_info as *const _ as *const c_void,
-            image_type: image_info.type_.to_vk_image_type(),
+            VkExternalMemoryImageCreateInfo { handleTypes: handle_type, ..Default::default() };
+        let create_info = VkImageCreateInfo {
+            pNext: &external_memory_image_create_info as *const _ as *const c_void,
+            imageType: image_info.type_.to_vk_image_type(),
             format: image_info.format,
-            extent: vk::Extent3D { width: image_info.width, height: image_info.height, depth: image_info.depth },
-            mip_levels: image_info.mip_levels,
-            array_layers: image_info.array_layers,
+            extent: VkExtent3D { width: image_info.width, height: image_info.height, depth: image_info.depth },
+            mipLevels: image_info.mip_levels,
+            arrayLayers: image_info.array_layers,
             samples: get_vk_sample_count(image_info.samples),
-            tiling: vk::ImageTiling::OPTIMAL,
+            tiling: VK_IMAGE_TILING_OPTIMAL,
             usage: image_info.usage.to_vk_image_usage_flags(),
-            sharing_mode: vk::SharingMode::EXCLUSIVE,
-            queue_family_index_count: 0,
-            p_queue_family_indices: ptr::null(),
+            sharingMode: VK_SHARING_MODE_EXCLUSIVE,
+            queueFamilyIndexCount: 0,
+            pQueueFamilyIndices: ptr::null(),
             ..Default::default()
         };
-        let handle = self.raw.create_image(&create_info, None).expect("failed to create image");
-        let mem_req = self.raw.get_image_memory_requirements(handle);
+        let handle = self.vk.CreateImage(self.vkd, &create_info, ptr::null()).expect("failed to create image");
+        let mem_req = {
+            let mut req = MaybeUninit::uninit();
+            self.vk.GetImageMemoryRequirements(self.vkd, handle, req.as_mut_ptr());
+            req.assume_init()
+        };
         let (_, handle_name_wstr) = handle_name_to_wstr(handle_name);
         let (required_memory_properties, preferred_memory_properties) = match memory_location {
             MemoryLocation::Unknown => Default::default(),
-            MemoryLocation::GpuOnly => (vk::MemoryPropertyFlags::DEVICE_LOCAL, vk::MemoryPropertyFlags::DEVICE_LOCAL),
+            MemoryLocation::GpuOnly => (VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
             MemoryLocation::CpuToGpu => (
-                vk::MemoryPropertyFlags::HOST_VISIBLE
-                    | vk::MemoryPropertyFlags::HOST_COHERENT
-                    | vk::MemoryPropertyFlags::DEVICE_LOCAL,
-                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+                    | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+                    | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             ),
             MemoryLocation::GpuToCpu => (
-                vk::MemoryPropertyFlags::HOST_VISIBLE
-                    | vk::MemoryPropertyFlags::HOST_COHERENT
-                    | vk::MemoryPropertyFlags::HOST_CACHED,
-                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+                    | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+                    | VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             ),
         };
         let memory_type_index = self
@@ -218,35 +224,35 @@ impl Device {
                 preferred_memory_properties,
             )
             .expect("could not find a compatible memory type for exporting memory");
-        let win32_handle_info = vk::ExportMemoryWin32HandleInfoKHR {
-            p_attributes: security_attributes,
-            dw_access: access_flags,
+        let win32_handle_info = VkExportMemoryWin32HandleInfoKHR {
+            pAttributes: security_attributes,
+            dwAccess: access_flags,
             name: handle_name_wstr,
             ..Default::default()
         };
-        let export_memory_allocate_info = vk::ExportMemoryAllocateInfo {
-            p_next: &win32_handle_info as *const _ as *const c_void,
-            handle_types: handle_type,
+        let export_memory_allocate_info = VkExportMemoryAllocateInfo {
+            pNext: &win32_handle_info as *const _ as *const c_void,
+            handleTypes: handle_type,
             ..Default::default()
         };
-        let memory_allocate_info = vk::MemoryAllocateInfo {
-            p_next: &export_memory_allocate_info as *const _ as *const c_void,
-            allocation_size: mem_req.size,
-            memory_type_index,
+        let memory_allocate_info = VkMemoryAllocateInfo {
+            pNext: &export_memory_allocate_info as *const _ as *const c_void,
+            allocationSize: mem_req.size,
+            memoryTypeIndex: memory_type_index,
             ..Default::default()
         };
         let device_memory =
-            self.raw.allocate_memory(&memory_allocate_info, None).expect("failed to allocate exported memory");
+            self.vk.AllocateMemory(self.vkd, &memory_allocate_info, ptr::null()).expect("failed to allocate exported memory");
         // retrieve the win32 handle
         let get_win32_handle_info =
-            vk::MemoryGetWin32HandleInfoKHR { memory: device_memory, handle_type, ..Default::default() };
+            VkMemoryGetWin32HandleInfoKHR { memory: device_memory, handleType: handle_type, ..Default::default() };
         // TODO proper error handling
         let win32_handle = self
             .platform_extensions
             .khr_external_memory_win32
-            .get_memory_win32_handle(&get_win32_handle_info)
-            .expect("vkGetMemoryWin32HandleKHR failed");
-        self.raw.bind_image_memory(handle, device_memory, 0).unwrap();
+            .GetMemoryWin32HandleKHR(self.vkd, &get_win32_handle_info)
+            .unwrap();
+        self.vk.BindImageMemory(self.vkd, handle, device_memory, 0).check();
         let descriptors = self.register_image_descriptors(handle, &create_info);
         let attachment_view = self.create_attachment_image_view(handle, image_info.format);
         let image = Image {
@@ -269,70 +275,70 @@ impl Device {
 
     pub unsafe fn create_exported_semaphore_win32(
         &self,
-        handle_type: vk::ExternalSemaphoreHandleTypeFlags,
+        handle_type: VkExternalSemaphoreHandleTypeFlags,
         security_attributes: *const SECURITY_ATTRIBUTES,
         access_flags: u32,
         handle_name: Option<&str>,
-    ) -> (vk::Semaphore, HANDLE) {
+    ) -> (VkSemaphore, HANDLE) {
         let (_, handle_name_wstr) = handle_name_to_wstr(handle_name);
-        let export_semaphore_win32_handle_info = vk::ExportSemaphoreWin32HandleInfoKHR {
-            p_attributes: security_attributes,
-            dw_access: access_flags,
+        let export_semaphore_win32_handle_info = VkExportSemaphoreWin32HandleInfoKHR {
+            pAttributes: security_attributes,
+            dwAccess: access_flags,
             name: handle_name_wstr,
             ..Default::default()
         };
-        let export_semaphore_create_info = vk::ExportSemaphoreCreateInfo {
-            p_next: &export_semaphore_win32_handle_info as *const _ as *const c_void,
-            handle_types: handle_type,
-            ..Default::default()
+        let export_semaphore_create_info = VkExportSemaphoreCreateInfo {
+            pNext: &export_semaphore_win32_handle_info as *const _ as *const c_void,
+            handleTypes: handle_type,
+            ..
         };
-        let semaphore_create_info = vk::SemaphoreCreateInfo {
-            p_next: &export_semaphore_create_info as *const _ as *const c_void,
-            ..Default::default()
+        let semaphore_create_info = VkSemaphoreCreateInfo {
+            pNext: &export_semaphore_create_info as *const _ as *const c_void,
+            ..
         };
-        let semaphore = self.raw.create_semaphore(&semaphore_create_info, None).unwrap();
-        let get_win32_handle_info = vk::SemaphoreGetWin32HandleInfoKHR { semaphore, handle_type, ..Default::default() };
+        let semaphore = self.vk.CreateSemaphore(self.vkd, &semaphore_create_info, ptr::null()).unwrap();
+        let get_win32_handle_info = VkSemaphoreGetWin32HandleInfoKHR { semaphore, handleType: handle_type, ..Default::default() };
         let handle = self
             .platform_extensions
             .khr_external_semaphore_win32
-            .get_semaphore_win32_handle(&get_win32_handle_info)
-            .expect("vkGetSemaphoreWin32HandleKHR failed");
+            .GetSemaphoreWin32HandleKHR(self.vkd, &get_win32_handle_info)
+            .unwrap();
         (semaphore, handle)
     }
 
     pub unsafe fn create_imported_semaphore_win32(
         &self,
-        import_flags: vk::SemaphoreImportFlags,
-        handle_type: vk::ExternalSemaphoreHandleTypeFlags,
+        import_flags: VkSemaphoreImportFlags,
+        handle_type: VkExternalSemaphoreHandleTypeFlags,
         handle: HANDLE,
         handle_name: Option<&str>,
-    ) -> vk::Semaphore {
+    ) -> VkSemaphore {
         let (_, handle_name_wstr) = handle_name_to_wstr(handle_name);
         let is_timeline = match handle_type {
-            vk::ExternalSemaphoreHandleTypeFlags::D3D12_FENCE => true,
+            VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D11_FENCE_BIT => true,
             _ => panic!("unsupported external semaphore type"),
         };
-        let timeline_create_info = vk::SemaphoreTypeCreateInfo {
-            semaphore_type: vk::SemaphoreType::TIMELINE,
-            initial_value: 0,
-            ..Default::default()
+        let timeline_create_info = VkSemaphoreTypeCreateInfo {
+            semaphoreType: VK_SEMAPHORE_TYPE_TIMELINE,
+            initialValue: 0,
+            ..
         };
-        let semaphore_create_info = vk::SemaphoreCreateInfo {
-            p_next: if is_timeline { &timeline_create_info as *const _ as *const c_void } else { ptr::null() },
-            ..Default::default()
+        let semaphore_create_info = VkSemaphoreCreateInfo {
+            pNext: if is_timeline { &timeline_create_info as *const _ as *const c_void } else { ptr::null() },
+            ..
         };
-        let semaphore = self.raw.create_semaphore(&semaphore_create_info, None).unwrap();
-        let import_semaphore_win32_handle_info = vk::ImportSemaphoreWin32HandleInfoKHR {
+        let semaphore = self.vk.CreateSemaphore(self.vkd, &semaphore_create_info, ptr::null()).unwrap();
+        let import_semaphore_win32_handle_info = VkImportSemaphoreWin32HandleInfoKHR {
             semaphore,
             flags: import_flags, // ?????
-            handle_type,
+            handleType,
             handle,
             name: handle_name_wstr,
             ..Default::default()
         };
         self.platform_extensions
             .khr_external_semaphore_win32
-            .import_semaphore_win32_handle(&import_semaphore_win32_handle_info)
+            .ImportSemaphoreWin32HandleKHR(&import_semaphore_win32_handle_info)
             .expect("vkImportSemaphoreWin32HandleKHR failed");
         semaphore
     }
@@ -344,8 +350,8 @@ const PLATFORM_DEVICE_EXTENSIONS: &[&str] = &["VK_KHR_external_memory_win32", "V
 
 /// Windows-specific vulkan extensions
 pub struct PlatformExtensions {
-    pub khr_external_memory_win32: ash::khr::external_memory_win32::Device,
-    pub khr_external_semaphore_win32: ash::khr::external_semaphore_win32::Device,
+    pub khr_external_memory_win32: khr_external_memory_win32::DeviceDispatch,
+    pub khr_external_semaphore_win32: khr_external_semaphore_win32::DeviceDispatch,
 }
 
 impl PlatformExtensions {

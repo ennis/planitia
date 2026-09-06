@@ -22,24 +22,24 @@ use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
 use std::sync::atomic::Ordering::Relaxed;
 use std::{mem, ptr, slice};
-use vulkan::{VkCommandBuffer, VkFence, VkHostAddressRangeConstEXT, VkPipelineStageFlags, VkPushDataInfoEXT, VkSemaphore, VkSubmitInfo, VkTimelineSemaphoreSubmitInfo, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT};
+use vulkan::*;
 
 mod blit;
 mod render;
 
 union DescriptorBufferOrImage {
-    image: vk::DescriptorImageInfo,
-    buffer: vk::DescriptorBufferInfo,
+    image: VkDescriptorImageInfo,
+    buffer: VkDescriptorBufferInfo,
 }
 
 bitflags! {
     /// Describes the memory types to invalidate during a barrier operation.
     // Under the hood, these are just VkAccessFlags2 bits
     pub struct BarrierFlags: u64 {
-        const STORAGE = vk::AccessFlags2::SHADER_STORAGE_READ.as_raw();
-        const TEXTURE = vk::AccessFlags2::SHADER_SAMPLED_READ.as_raw();
-        const INDIRECT = vk::AccessFlags2::INDIRECT_COMMAND_READ.as_raw();
-        const UNIFORM = vk::AccessFlags2::UNIFORM_READ.as_raw();
+        const STORAGE = VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
+        const TEXTURE = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
+        const INDIRECT = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
+        const UNIFORM = VK_ACCESS_2_UNIFORM_READ_BIT;
     }
 }
 
@@ -101,7 +101,7 @@ pub struct CommandBuffer {
     //timestamp_query_count: u32,
     //timestamp_callbacks: Vec<Box<dyn FnOnce(u64) + Send>>,
     /// Current command buffer.
-    cmdbuf: vk::CommandBuffer,
+    cmdbuf: VkCommandBuffer,
     submitted: bool,
     /// The index of the frame in which this command buffer was created (and should be recorded).
     frame_index_created: u64,
@@ -121,13 +121,13 @@ impl CommandBuffer {
         trace!("GPU: create CommandBuffer, frame_index_created={}", frame_index_created);
         let cmdbuf = command_pool::allocate_command_buffer();
         unsafe {
-            let info = vk::CommandBufferBeginInfo {
-                flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
+            let info = VkCommandBufferBeginInfo {
+                flags: VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
                 ..Default::default()
             };
-            device.raw.begin_command_buffer(cmdbuf, &info).unwrap();
+            device.vk.BeginCommandBuffer(cmdbuf, &info).check();
             // setup default dynamic state so validation layers don't complain
-            device.raw.cmd_set_depth_bias_enable(cmdbuf, false);
+            device.vk.CmdSetDepthBiasEnable(cmdbuf, VK_FALSE);
             device.bind_descriptor_heaps(cmdbuf);
         }
         CommandBuffer {
@@ -177,25 +177,27 @@ impl CommandBuffer {
     /// Internal function to emit an image memory barrier.
     ///
     /// Mostly used for image layout transitions.
-    pub(crate) unsafe fn image_barrier(&mut self, barrier: &vk::ImageMemoryBarrier2) {
+    pub(crate) unsafe fn image_barrier(&mut self, barrier: &VkImageMemoryBarrier2) {
+        let device = Device::instance();
         unsafe {
-            Device::instance().raw.cmd_pipeline_barrier2(
+            device.vk.CmdPipelineBarrier2(
                 self.cmdbuf,
-                &vk::DependencyInfo {
-                    dependency_flags: Default::default(),
-                    image_memory_barrier_count: 1,
-                    p_image_memory_barriers: barrier,
-                    ..Default::default()
+                &VkDependencyInfo {
+                    dependencyFlags: 0,
+                    imageMemoryBarrierCount: 1,
+                    pImageMemoryBarriers: barrier,
+                    bufferMemoryBarrierCount: 0,
+                    memoryBarrierCount: 0,
+                    ..
                 },
             );
         }
     }
 
-    fn set_push_data<T: Data>(&mut self, cb: vk::CommandBuffer, params: PushDataSource<T>) {
+    fn set_push_data<T: Data>(&mut self, cmdbuf: VkCommandBuffer, params: PushDataSource<T>) {
         // None of the relevant drivers on desktop care about the actual stages,
         // only if it's graphics, compute, or ray tracing.
         let device = Device::instance();
-
         unsafe {
             let tmp;
             let address: *const c_void;
@@ -226,7 +228,7 @@ impl CommandBuffer {
                 data: VkHostAddressRangeConstEXT { address, size },
                 ..
             };
-            device.ext.descriptor_heap.CmdPushDataEXT(VkCommandBuffer(cb.as_raw() as *mut _), &push_data_info);
+            device.ext.descriptor_heap.CmdPushDataEXT(cmdbuf, &push_data_info);
         }
     }
 
@@ -243,28 +245,29 @@ impl CommandBuffer {
     /// The barrier makes all previous writes visible unconditionally (equivalent to
     /// src_access_mask = MEMORY_WRITE).
     pub fn barrier(&mut self, flags: BarrierFlags) {
+        let device = Device::instance();
         // This simplified barrier API just includes all previous stages and memory write types
         // in the source scope.
         // NVIDIA: stage execution dependencies seem to be ignored anyway.
         // AMD: this may affect performance, but I'm not sure.
         // TODO: add COLOR_ATTACHMENT & DEPTH_ATTACHMENT to InvalidateFlags
-        let global_memory_barrier = vk::MemoryBarrier2 {
-            src_access_mask: vk::AccessFlags2::MEMORY_WRITE,
-            dst_access_mask: vk::AccessFlags2::from_raw(flags.bits())
-                | vk::AccessFlags2::COLOR_ATTACHMENT_READ
-                | vk::AccessFlags2::DEPTH_STENCIL_ATTACHMENT_READ,
-            src_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
-            dst_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
-            ..Default::default()
+        let global_memory_barrier = VkMemoryBarrier2 {
+            srcAccessMask: VK_ACCESS_2_MEMORY_WRITE_BIT,
+            dstAccessMask: flags.bits()
+                | VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT
+                | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+            srcStageMask: VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            dstStageMask: VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            ..
         };
         unsafe {
-            Device::instance().raw.cmd_pipeline_barrier2(
+            device.vk.CmdPipelineBarrier2(
                 self.cmdbuf,
-                &vk::DependencyInfo {
-                    dependency_flags: Default::default(),
-                    memory_barrier_count: 1,
-                    p_memory_barriers: &global_memory_barrier,
-                    ..Default::default()
+                &VkDependencyInfo {
+                    dependencyFlags: Default::default(),
+                    memoryBarrierCount: 1,
+                    pMemoryBarriers: &global_memory_barrier,
+                    ..
                 },
             );
         }
@@ -276,15 +279,17 @@ impl CommandBuffer {
     ///
     /// TODO not sure why this was made unsafe?
     pub unsafe fn update_buffer(&mut self, buffer: &BufferUntyped, offset: usize, data: &[u8]) {
+        let device = Device::instance();
         unsafe {
-            Device::instance().raw.cmd_update_buffer(self.cmdbuf, buffer.handle(), offset as u64, data);
+            device.vk.CmdUpdateBuffer(self.cmdbuf, buffer.handle(), offset as VkDeviceSize, data.len() as VkDeviceSize, data.as_ptr() as *const c_void);
         }
     }
 
     // SAFETY: TBD
     pub fn bind_compute_pipeline(&mut self, pipeline: &ComputePipeline) {
+        let device = Device::instance();
         unsafe {
-            Device::instance().raw.cmd_bind_pipeline(self.cmdbuf, vk::PipelineBindPoint::COMPUTE, pipeline.pipeline);
+            device.vk.CmdBindPipeline(self.cmdbuf, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.pipeline);
         }
     }
 
@@ -304,22 +309,24 @@ impl CommandBuffer {
         group_count_z: u32,
         root_params: impl Into<PushDataSource<'params, T>>,
     ) {
+        let device = Device::instance();
         unsafe {
             self.set_push_data(self.cmdbuf, root_params.into());
-            Device::instance().raw.cmd_dispatch(self.cmdbuf, group_count_x, group_count_y, group_count_z);
+            device.vk.CmdDispatch(self.cmdbuf, group_count_x, group_count_y, group_count_z);
         }
     }
 
     /// TODO documentation
     pub fn push_debug_group(&mut self, label: &str) {
+        let device = Device::instance();
         unsafe {
             let label = CString::new(label).unwrap();
-            Device::instance().ext.debug_utils.cmd_begin_debug_utils_label(
+            device.ext.debug_utils.CmdBeginDebugUtilsLabelEXT(
                 self.cmdbuf,
-                &vk::DebugUtilsLabelEXT {
-                    p_label_name: label.as_ptr(),
+                &VkDebugUtilsLabelEXT {
+                    pLabelName: label.as_ptr(),
                     color: [0.0, 0.0, 0.0, 0.0],
-                    ..Default::default()
+                    ..
                 },
             );
         }
@@ -329,7 +336,7 @@ impl CommandBuffer {
     pub fn pop_debug_group(&mut self) {
         // TODO check that push/pop calls are balanced
         unsafe {
-            Device::instance().ext.debug_utils.cmd_end_debug_utils_label(self.cmdbuf);
+            Device::instance().ext.debug_utils.CmdEndDebugUtilsLabelEXT(self.cmdbuf);
         }
     }
 
@@ -341,52 +348,13 @@ impl CommandBuffer {
     }
 
     /// TODO documentation
-
-    // So we have multiple options for asynchronous query results like this:
-    // 1. callbacks: the current option
-    //    Pass callbacks to async queries, which are called during `end_frame` when we know the result is ready.
-    //    Overhead: one boxed callback (most likely non-zero sized) per query
-    //    Async compatibility: do stuff in the callback to unblock a future and pass the result to it (possibly another allocation)
-    //
-    // 2. explicit query result fetch outside end_frame
-    //    write_timestamp and other queries return a query object.
-    //    Can query the value sync or asynchronously; conceptually this is like a future.
-    //    Issue: query objects are a strong ref to the pool; can't reclaim the pool
-    //    during end_frame, can't put the pool up for deletion.
-    //    Also, can't use thread-local query pools since the query object can be sent to other threads.
-    //    -> need an allocator over query pools that can free individual ranges of queries
-    //
-    // 3. Expose query pools
-    //    Create a QueryPool<T> object, like any other resource, and pass that to write_timestamp.
-    //    Then wait for QueryPool to become available, read back results.
-    //
-    // Also, vkGetQueryResults should not be called for each query
-    /*
-    pub fn write_timestamp(&mut self, callback: impl FnOnce(u64) + Send + 'static) {
-        //let index = self.timestamp_query_count;
-        //assert!(index < MAX_TIMESTAMP_QUERY_COUNT, "maximum number of timestamp queries reached");
-        //self.timestamp_query_count += 1;
-
-        let (pool, index) = query_pool::allocate_query(vk::QueryType::TIMESTAMP);
-        self.timestamp_callbacks.push(Box::new(callback));
-
-        unsafe {
-            Device::instance().raw.cmd_write_timestamp2(
-                self.cmdbuf,
-                vk::PipelineStageFlags2::BOTTOM_OF_PIPE,
-                pool,
-                index,
-            );
-        }
-    }*/
-
     pub fn write_timestamp(&mut self, query_pool: &QueryPool, index: u32) {
         assert!((index as usize) < query_pool.size, "query index out of bounds");
         assert!(query_pool.ty == vk::QueryType::TIMESTAMP, "query pool type must be TIMESTAMP");
         unsafe {
-            Device::instance().raw.cmd_write_timestamp2(
+            Device::instance().vk.CmdWriteTimestamp2(
                 self.cmdbuf,
-                vk::PipelineStageFlags2::BOTTOM_OF_PIPE,
+                VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
                 query_pool.pool,
                 index,
             );
@@ -396,7 +364,6 @@ impl CommandBuffer {
     /// TODO documentation
     pub fn upload_image_data(&mut self, image: ImageCopyView, size: Size3D, data: &[u8]) {
         let staging_buffer = Buffer::from_slice(data);
-
         self.copy_buffer_to_image(
             ImageCopyBuffer {
                 buffer: staging_buffer.as_bytes(),
@@ -438,7 +405,7 @@ impl CommandBuffer {
 
 #[cold]
 fn panic_command_buffer_not_submitted() {
-    panic!("CommandBuffer was not submitted before being dropped");
+    panic!("a command buffer was not submitted before being dropped");
 }
 
 impl Drop for CommandBuffer {
@@ -521,15 +488,15 @@ fn sync(waits: &[SyncWait], signals: &[SyncSignal]) {
 }
 
 /// Waits on the given timeline semaphore until it reaches the given value.
-pub fn wait(semaphore: vk::Semaphore, value: u64) {
-    sync(&[SyncWait { semaphore: VkSemaphore(semaphore.as_raw()), value }], &[]);
+pub fn wait(semaphore: VkSemaphore, value: u64) {
+    sync(&[SyncWait { semaphore, value }], &[]);
 }
 
 /// Signals the given timeline semaphore with the given value.
 ///
 /// The value is ignored if `semaphore` is a binary semaphore.
-pub fn signal(semaphore: vk::Semaphore, value: u64) {
-    sync(&[], &[SyncSignal { semaphore: VkSemaphore(semaphore.as_raw()), value }]);
+pub fn signal(semaphore: VkSemaphore, value: u64) {
+    sync(&[], &[SyncSignal { semaphore, value }]);
 }
 
 /// Submits the given commands for execution on the GPU.
@@ -567,7 +534,7 @@ pub fn submit(mut cmd: CommandBuffer) {
     cmd.barrier(BarrierFlags::empty());
     // finish recording the command buffer & put it for delayed deletion
     unsafe {
-        device.raw.end_command_buffer(cmd.cmdbuf).unwrap();
+        device.vk.EndCommandBuffer(cmd.cmdbuf).check();
     }
     command_pool::defer_free_command_buffer(cmd.cmdbuf, frame_index_submitted);
 
@@ -580,11 +547,10 @@ pub fn submit(mut cmd: CommandBuffer) {
         waitSemaphoreValueCount: 0,
         ..
     };
-    let cmdbufs = [VkCommandBuffer(cmd.cmdbuf.as_raw() as *mut _)];
+    let cmdbufs = [cmd.cmdbuf];
     let submit_info = VkSubmitInfo {
         pNext: &timeline_submit_info as *const _ as *const c_void,
         commandBufferCount: 1,
-        // VULKAN-MIGRATION
         pCommandBuffers: cmdbufs.as_ptr(),
         signalSemaphoreCount: signal_semaphores.len() as u32,
         pSignalSemaphores: signal_semaphores.as_ptr(),
@@ -603,30 +569,28 @@ pub fn submit(mut cmd: CommandBuffer) {
 
 /// Presents the given swap chain image to the screen.
 pub fn present(swap_chain: &mut SwapChain, index: usize) {
-    let image = &swap_chain.images[index];
-
     // Automatically flush the default command buffer before presenting.
     flush();
-
     // transition image to PRESENT_SRC
+    let image = &swap_chain.images[index];
     let mut cmd = CommandBuffer::new();
     unsafe {
-        cmd.image_barrier(&vk::ImageMemoryBarrier2 {
-            src_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
-            src_access_mask: vk::AccessFlags2::MEMORY_WRITE,
-            dst_stage_mask: vk::PipelineStageFlags2::BOTTOM_OF_PIPE,
-            dst_access_mask: vk::AccessFlags2::NONE,
-            old_layout: vk::ImageLayout::GENERAL,
-            new_layout: vk::ImageLayout::PRESENT_SRC_KHR,
+        cmd.image_barrier(&VkImageMemoryBarrier2 {
+            srcStageMask: VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            srcAccessMask: VK_ACCESS_2_MEMORY_WRITE_BIT,
+            dstStageMask: VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+            dstAccessMask: VK_ACCESS_2_NONE,
+            oldLayout: VK_IMAGE_LAYOUT_GENERAL,
+            newLayout: VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
             image: image.image.handle,
-            subresource_range: vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                base_mip_level: 0,
-                level_count: vk::REMAINING_MIP_LEVELS,
-                base_array_layer: 0,
-                layer_count: vk::REMAINING_ARRAY_LAYERS,
+            subresourceRange: VkImageSubresourceRange {
+                aspectMask: VK_IMAGE_ASPECT_COLOR_BIT,
+                baseMipLevel: 0,
+                levelCount: VK_REMAINING_MIP_LEVELS,
+                baseArrayLayer: 0,
+                layerCount: VK_REMAINING_ARRAY_LAYERS,
             },
-            ..Default::default()
+            ..
         });
     }
     submit(cmd);
@@ -638,19 +602,19 @@ pub fn present(swap_chain: &mut SwapChain, index: usize) {
     signal(image.render_finished, 0);
     unsafe {
         let submission_state = device.submission_state.lock().unwrap();
-        let present_info = vk::PresentInfoKHR {
-            wait_semaphore_count: 1,
-            p_wait_semaphores: &image.render_finished,
-            swapchain_count: 1,
-            p_swapchains: &swap_chain.handle,
-            p_image_indices: &[index as u32] as *const u32,
-            p_results: ptr::null_mut(),
-            ..Default::default()
+        let present_info = VkPresentInfoKHR {
+            waitSemaphoreCount: 1,
+            pWaitSemaphores: &image.render_finished,
+            swapchainCount: 1,
+            pSwapchains: &swap_chain.handle,
+            pImageIndices: &[index as u32] as *const u32,
+            pResults: ptr::null_mut(),
+            ..
         };
         let _ = device
             .ext
             .swapchain
-            .queue_present(vk::Queue::from_raw(submission_state.queue.0 as u64), &present_info)
+            .QueuePresentKHR(submission_state.queue, &present_info)
             .map(|_| ());
     }
 }
@@ -801,7 +765,7 @@ pub fn clear_depth_image(image: &Image, depth: f32) {
 }
 
 #[inline(never)]
-pub fn copy_image_to_image(source: ImageCopyView<'_>, destination: ImageCopyView<'_>, copy_size: vk::Extent3D) {
+pub fn copy_image_to_image(source: ImageCopyView<'_>, destination: ImageCopyView<'_>, copy_size: VkExtent3D) {
     with_cmdbuf(|cb| {
         cb.copy_image_to_image(source, destination, copy_size);
     });
@@ -819,7 +783,7 @@ pub fn copy_buffer(source: &BufferUntyped, src_offset: u64, destination: &Buffer
 ///
 /// TODO copy to layer other than 0
 #[inline(never)]
-pub fn copy_buffer_to_image(source: ImageCopyBuffer<'_>, destination: ImageCopyView<'_>, copy_size: vk::Extent3D) {
+pub fn copy_buffer_to_image(source: ImageCopyBuffer<'_>, destination: ImageCopyView<'_>, copy_size: VkExtent3D) {
     with_cmdbuf(|cb| {
         cb.copy_buffer_to_image(source, destination, copy_size);
     });
@@ -841,7 +805,7 @@ pub fn blit_image(
     dst: &Image,
     dst_subresource: ImageSubresourceLayers,
     dst_region: Rect3D,
-    filter: vk::Filter,
+    filter: VkFilter,
 ) {
     with_cmdbuf(|cb| {
         cb.blit_image(src, src_subresource, src_region, dst, dst_subresource, dst_region, filter);

@@ -97,7 +97,7 @@ pub const TEXID_SWAPCHAIN: imgui::TextureId = imgui::TextureId::new(1);
 pub struct RenderData {
     pub width: i32,
     pub height: i32,
-    pub image_copy: vk::Image,
+    pub image_copy: VkImage,
     pub image_copy_view: vk::ImageView,
 }
 

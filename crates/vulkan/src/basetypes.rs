@@ -1,3 +1,4 @@
+use std::mem::MaybeUninit;
 
 pub type VkSampleMask = u32;
 pub type VkBool32 = u32;
@@ -17,6 +18,12 @@ impl VkResult {
             panic_vulkan_api_call_failed(self);
         }
         self
+    }
+
+    // Taken from ash
+    #[inline]
+    pub(crate) unsafe fn assume_init_on_success<T>(self, maybe_uninit: MaybeUninit<T>) -> Result<T, VkResult> {
+        if self.0 < 0 { Err(self) } else { Ok(unsafe { maybe_uninit.assume_init() }) }
     }
 }
 

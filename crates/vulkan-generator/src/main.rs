@@ -70,8 +70,8 @@ fn generate(out_dir: &Path, document: &roxmltree::Document) -> io::Result<()> {
         gen_enums(&mut line_writer, registry, &mut enum_types)?;
         gen_features(&mut line_writer, registry, &mut enum_types, &mut tymap, &mut cmdmap)?;
         gen_extensions(&mut line_writer, registry, &mut enum_types, &mut tymap, &mut cmdmap)?;
-        gen_core_dispatch_tables(&mut line_writer, registry, &cmdmap)?;
-        gen_ext_dispatch_tables(&mut line_writer, registry, &cmdmap)?;
+        gen_core_dispatch_tables(&mut line_writer, registry, &cmdmap, &tymap)?;
+        gen_ext_dispatch_tables(&mut line_writer, registry, &cmdmap, &tymap)?;
     }
     Ok(())
 }
@@ -94,7 +94,7 @@ enum Category {
     Bitmask(String),
     Handle(HandleType),
     FuncPointer(FuncInfo),
-    Struct,
+    Struct { base_in_struct: bool, base_out_struct: bool },
     Union,
     Trash,
 }
@@ -129,6 +129,7 @@ use crate::platform_types::*;
 use crate::video::*;
 use crate::basetypes::*;
 use std::ffi::*;
+use std::mem::MaybeUninit;
 use std::ptr;
 
 "#;
@@ -210,7 +211,24 @@ fn parse_type<'a, 'input>(node: Node<'a, 'input>, tymap: &TypeMap<'a, 'input>) -
         }
         "struct" => {
             name = node.attribute("name").unwrap().to_string();
-            cat = Category::Struct;
+            // detect pNext
+            let mut base_in_struct = false;
+            let mut base_out_struct = false;
+            for member in children_tagged(node, "member") {
+                if !api_check(member) {
+                    continue;
+                }
+                let text = node_text(&member);
+                let decl = parse_c_declarator(&text).unwrap();
+                if decl.name == "pNext" {
+                    if decl.is_const_ptr() {
+                        base_in_struct = true;
+                    } else if decl.is_ptr() {
+                        base_out_struct = true;
+                    }
+                }
+            }
+            cat = Category::Struct { base_in_struct, base_out_struct };
         }
         "union" => {
             name = node.attribute("name").unwrap().to_string();
@@ -265,7 +283,7 @@ fn gen_type(out: &mut Writer, tyinfo: &TypeInfo, tymap: &TypeMap) -> io::Result<
             gen_func_sig(out, func_info)?;
             writeln!(out, ">;")?;
         }
-        Category::Struct | Category::Union => {
+        Category::Struct { .. } | Category::Union => {
             let name = &tyinfo.name;
             writeln!(out, "/// <https://docs.vulkan.org/refpages/latest/refpages/source/{name}.html>")?;
             writeln!(out, "#[repr(C)]")?;
@@ -273,7 +291,7 @@ fn gen_type(out: &mut Writer, tyinfo: &TypeInfo, tymap: &TypeMap) -> io::Result<
             writeln!(out, "#[derive(Copy, Clone)]")?;
             let is_union = matches!(tyinfo.category, Category::Union);
             let kind = match tyinfo.category {
-                Category::Struct => "struct",
+                Category::Struct { .. } => "struct",
                 Category::Union => "union",
                 _ => unreachable!(),
             };
@@ -465,7 +483,8 @@ fn parse_command_or_funcptr<'a, 'input>(node: Node<'a, 'input>) -> Option<FuncIn
             continue;
         }
         let text = node_text(&param);
-        let decl = parse_c_declarator(&text).unwrap();
+        let mut decl = parse_c_declarator(&text).unwrap();
+        decl.len_annotation = param.attribute("len").map(|s| s.to_string());
         params.push(decl);
     }
     Some(FuncInfo { proto, params })
@@ -488,7 +507,8 @@ fn parse_command<'a, 'input>(
         })
     } else {
         let func_info = parse_command_or_funcptr(node).unwrap();
-        let dispatch = dispatch_type_from_first_param(func_info.params.first().map(|p| p.inner_ty.as_str()));
+        let dispatch =
+            infer_command_dispatch_type(&func_info.proto.name, func_info.params.first().map(|p| p.inner_ty.as_str()));
         Some(CommandInfo {
             node,
             name: func_info.proto.name.clone(),
@@ -672,6 +692,7 @@ fn gen_vk_dispatch_table(
     name: &str,
     inherits: Option<&str>,
     funcs: Vec<&CommandInfo>,
+    tymap: &TypeMap,
 ) -> io::Result<()> {
     if !funcs.is_empty() {
         writeln!(out, "dispatch_table! {{ {name};")?;
@@ -690,25 +711,7 @@ fn gen_vk_dispatch_table(
         writeln!(out, "impl {name} {{")?;
         indent(out);
         for cmd in funcs.iter() {
-            let vk_cmd_name = &cmd.name;
-            let cmd_name = vk_cmd_name.strip_prefix("vk").unwrap();
-            writeln!(out, "#[inline(always)]")?;
-            write!(out, "pub unsafe fn {cmd_name}(&self")?;
-            for param in cmd.func.params.iter() {
-                write!(out, ", {}: {}", sanitize_ident(&param.name), param.rust_type(false))?;
-            }
-            writeln!(out, ") -> {} {{", cmd.func.proto.rust_type(true))?;
-            indent(out);
-            write!(out, "unsafe {{ (self.{cmd_name})(")?;
-            for (i, param) in cmd.func.params.iter().enumerate() {
-                if i > 0 {
-                    write!(out, ", ")?;
-                }
-                write!(out, "{}", sanitize_ident(&param.name))?;
-            }
-            writeln!(out, ") }}")?;
-            dedent(out);
-            writeln!(out, "}}")?;
+            gen_command_wrapper(out, cmd, tymap)?;
         }
         dedent(out);
         writeln!(out, "}}")?;
@@ -716,7 +719,74 @@ fn gen_vk_dispatch_table(
     Ok(())
 }
 
-fn gen_core_dispatch_tables(out: &mut Writer, registry: Node, cmds: &CommandMap) -> io::Result<()> {
+fn gen_command_wrapper(out: &mut Writer, cmd: &CommandInfo, tymap: &TypeMap) -> io::Result<()> {
+    let nparams = cmd.func.params.len();
+    let vk_cmd_name = &cmd.name;
+    let cmd_name = vk_cmd_name.strip_prefix("vk").unwrap();
+    let return_type = cmd.func.proto.rust_type(true);
+    writeln!(out, "#[inline(always)]")?;
+    let transform_outparam_to_result = {
+        nparams > 0 && {
+            let last = cmd.func.params.last().unwrap();
+            let outparam_ty = last.rust_type(false);
+            // must be a pointer
+            outparam_ty != "*mut c_void"
+                && return_type == "VkResult"
+                && last.len_annotation.is_none()
+                && if let Some(rty) = outparam_ty.strip_prefix("*mut ") {
+                    // must not be a struct with pNext output
+                    tymap
+                        .get(rty)
+                        .map(|tyinfo| match tyinfo.category {
+                            Category::Struct { base_out_struct: true, .. } => false,
+                            _ => true,
+                        })
+                        .unwrap_or(true)
+                } else {
+                    false
+                }
+        }
+    };
+    if transform_outparam_to_result {
+        let last_param = cmd.func.params.last().unwrap();
+        let outparam_name = &last_param.name;
+        let outparam_type = last_param.rust_type(false).strip_prefix("*mut ").unwrap().to_string();
+        write!(out, "pub unsafe fn {cmd_name}(&self")?;
+        for param in cmd.func.params.iter().take(nparams - 1) {
+            write!(out, ", {}: {}", sanitize_ident(&param.name), param.rust_type(false))?;
+        }
+        writeln!(out, ") -> Result<{outparam_type}, VkResult> {{")?;
+        indent(out);
+        writeln!(out, "let mut {outparam_name} = MaybeUninit::uninit();")?;
+        write!(out, "unsafe {{ (self.{cmd_name})(")?;
+        for param in cmd.func.params.iter().take(nparams - 1) {
+            write!(out, "{},", sanitize_ident(&param.name))?;
+        }
+        writeln!(out, "{outparam_name}.as_mut_ptr()).assume_init_on_success({outparam_name}) }}")?;
+        dedent(out);
+        writeln!(out, "}}")?;
+    } else {
+        write!(out, "pub unsafe fn {cmd_name}(&self")?;
+        for param in cmd.func.params.iter() {
+            write!(out, ", {}: {}", sanitize_ident(&param.name), param.rust_type(false))?;
+        }
+        writeln!(out, ") -> {return_type} {{",)?;
+        indent(out);
+        write!(out, "unsafe {{ (self.{cmd_name})(")?;
+        for (i, param) in cmd.func.params.iter().enumerate() {
+            if i > 0 {
+                write!(out, ", ")?;
+            }
+            write!(out, "{}", sanitize_ident(&param.name))?;
+        }
+        writeln!(out, ") }}")?;
+        dedent(out);
+        writeln!(out, "}}")?;
+    }
+    Ok(())
+}
+
+fn gen_core_dispatch_tables(out: &mut Writer, registry: Node, cmds: &CommandMap, tymap: &TypeMap) -> io::Result<()> {
     // PAIN: Within vk.xml, Vulkan API versions are divided in smaller features (VK_{BASE,GRAPHICS,COMPUTE}_VERSION_*_*),
     //       and form a dependency tree via the "depends" attribute. However, this is useless for
     //       grouping commands by API version, so rely on "number" instead.
@@ -746,8 +816,11 @@ fn gen_core_dispatch_tables(out: &mut Writer, registry: Node, cmds: &CommandMap)
             }
         }
         // shamelessly hardcode previous version dependencies
+        let entry_previous_version = match &*api_version {
+            "1_1" => Some("1_0"),
+            _ => None,
+        };
         let instance_previous_version = match &*api_version {
-            //"1_5" => Some("1_4"), // not there yet!
             "1_3" => Some("1_1"),
             "1_1" => Some("1_0"),
             _ => None,
@@ -762,24 +835,32 @@ fn gen_core_dispatch_tables(out: &mut Writer, registry: Node, cmds: &CommandMap)
         };
         writeln!(out, "// Vulkan {api_version}")?;
 
-        gen_vk_dispatch_table(out, &format!("Vulkan_{api_version}_EntryDispatch"), None, entry_fns)?;
+        gen_vk_dispatch_table(
+            out,
+            &format!("Vulkan_{api_version}_EntryDispatch"),
+            entry_previous_version.map(|v| format!("Vulkan_{v}_EntryDispatch")).as_deref(),
+            entry_fns,
+            tymap,
+        )?;
         gen_vk_dispatch_table(
             out,
             &format!("Vulkan_{api_version}_InstanceDispatch"),
             instance_previous_version.map(|v| format!("Vulkan_{v}_InstanceDispatch")).as_deref(),
             instance_fns,
+            tymap,
         )?;
         gen_vk_dispatch_table(
             out,
             &format!("Vulkan_{api_version}_DeviceDispatch"),
             device_previous_version.map(|v| format!("Vulkan_{v}_DeviceDispatch")).as_deref(),
             device_fns,
+            tymap,
         )?;
     }
     Ok(())
 }
 
-fn gen_ext_dispatch_tables(out: &mut Writer, registry: Node, cmds: &CommandMap) -> io::Result<()> {
+fn gen_ext_dispatch_tables(out: &mut Writer, registry: Node, cmds: &CommandMap, tymap: &TypeMap) -> io::Result<()> {
     let extensions = child_tagged(registry, "extensions").unwrap();
     for ext in children_tagged(extensions, "extension") {
         if !is_vulkan_supported_extension(ext) {
@@ -813,13 +894,13 @@ fn gen_ext_dispatch_tables(out: &mut Writer, registry: Node, cmds: &CommandMap) 
         indent(out);
         writeln!(out, "use super::*;")?;
         if !entry_fns.is_empty() {
-            gen_vk_dispatch_table(out, "EntryDispatch", None, entry_fns)?;
+            gen_vk_dispatch_table(out, "EntryDispatch", None, entry_fns, tymap)?;
         }
         if !instance_fns.is_empty() {
-            gen_vk_dispatch_table(out, "InstanceDispatch", None, instance_fns)?;
+            gen_vk_dispatch_table(out, "InstanceDispatch", None, instance_fns, tymap)?;
         }
         if !device_fns.is_empty() {
-            gen_vk_dispatch_table(out, "DeviceDispatch", None, device_fns)?;
+            gen_vk_dispatch_table(out, "DeviceDispatch", None, device_fns, tymap)?;
         }
         dedent(out);
         writeln!(out, "}}")?;
@@ -839,9 +920,14 @@ fn api_check(node: Node) -> bool {
 }
 
 /// Returns the command type based on its first parameter.
-fn dispatch_type_from_first_param(first_param_type: Option<&str>) -> DispatchType {
+fn infer_command_dispatch_type(proc: &str, first_param_type: Option<&str>) -> DispatchType {
     // The overhead of the internal dispatch for VkDevice objects can be avoided by obtaining
-    // device-specific function pointers for any commands that use a device or device-child object as their dispatchable object.
+    // device-specific function pointers for any commands that use a device or device-child object as their dispatchable object
+    match proc {
+        "vkGetDeviceProcAddr" => return DispatchType::Instance,
+        "vkGetInstanceProcAddr" => return DispatchType::Entry,
+        _ => {}
+    };
     match first_param_type {
         Some("VkInstance") | Some("VkPhysicalDevice") => DispatchType::Instance,
         Some("VkDevice") | Some("VkQueue") | Some("VkCommandBuffer") => DispatchType::Device,
@@ -872,6 +958,7 @@ struct CDecl {
     array_len_outer: Option<String>,
     inner_ptr: bool,
     outer_ptr: bool,
+    len_annotation: Option<String>,
     bitfield: Option<String>,
 }
 
@@ -955,6 +1042,7 @@ fn parse_c_declarator<'a>(member: &'a str) -> io::Result<CDecl> {
         inner_ptr,
         outer_ptr,
         bitfield,
+        len_annotation: None,
     })
 }
 

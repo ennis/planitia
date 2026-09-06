@@ -3,6 +3,7 @@ use crate::platform_types::*;
 use crate::video::*;
 use crate::basetypes::*;
 use std::ffi::*;
+use std::mem::MaybeUninit;
 use std::ptr;
 
 
@@ -27084,13 +27085,19 @@ unsafe impl Sync for VkPhysicalDevicePrivateDataBaseHandleFeaturesNV {}
 // Vulkan 1_0
 dispatch_table! { Vulkan_1_0_EntryDispatch;
     CreateInstance,PFN_vkCreateInstance,c"vkCreateInstance";
+    GetInstanceProcAddr,PFN_vkGetInstanceProcAddr,c"vkGetInstanceProcAddr";
     EnumerateInstanceExtensionProperties,PFN_vkEnumerateInstanceExtensionProperties,c"vkEnumerateInstanceExtensionProperties";
     EnumerateInstanceLayerProperties,PFN_vkEnumerateInstanceLayerProperties,c"vkEnumerateInstanceLayerProperties";
 }
 impl Vulkan_1_0_EntryDispatch {
     #[inline(always)]
-    pub unsafe fn CreateInstance(&self, pCreateInfo: *const VkInstanceCreateInfo, pAllocator: *const VkAllocationCallbacks, pInstance: *mut VkInstance) -> VkResult {
-        unsafe { (self.CreateInstance)(pCreateInfo, pAllocator, pInstance) }
+    pub unsafe fn CreateInstance(&self, pCreateInfo: *const VkInstanceCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkInstance, VkResult> {
+        let mut pInstance = MaybeUninit::uninit();
+        unsafe { (self.CreateInstance)(pCreateInfo,pAllocator,pInstance.as_mut_ptr()).assume_init_on_success(pInstance) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetInstanceProcAddr(&self, instance: VkInstance, pName: *const c_char) -> PFN_vkVoidFunction {
+        unsafe { (self.GetInstanceProcAddr)(instance, pName) }
     }
     #[inline(always)]
     pub unsafe fn EnumerateInstanceExtensionProperties(&self, pLayerName: *const c_char, pPropertyCount: *mut u32, pProperties: *mut VkExtensionProperties) -> VkResult {
@@ -27110,7 +27117,7 @@ dispatch_table! { Vulkan_1_0_InstanceDispatch;
     GetPhysicalDeviceProperties,PFN_vkGetPhysicalDeviceProperties,c"vkGetPhysicalDeviceProperties";
     GetPhysicalDeviceQueueFamilyProperties,PFN_vkGetPhysicalDeviceQueueFamilyProperties,c"vkGetPhysicalDeviceQueueFamilyProperties";
     GetPhysicalDeviceMemoryProperties,PFN_vkGetPhysicalDeviceMemoryProperties,c"vkGetPhysicalDeviceMemoryProperties";
-    GetInstanceProcAddr,PFN_vkGetInstanceProcAddr,c"vkGetInstanceProcAddr";
+    GetDeviceProcAddr,PFN_vkGetDeviceProcAddr,c"vkGetDeviceProcAddr";
     CreateDevice,PFN_vkCreateDevice,c"vkCreateDevice";
     EnumerateDeviceExtensionProperties,PFN_vkEnumerateDeviceExtensionProperties,c"vkEnumerateDeviceExtensionProperties";
     EnumerateDeviceLayerProperties,PFN_vkEnumerateDeviceLayerProperties,c"vkEnumerateDeviceLayerProperties";
@@ -27134,8 +27141,9 @@ impl Vulkan_1_0_InstanceDispatch {
         unsafe { (self.GetPhysicalDeviceFormatProperties)(physicalDevice, format, pFormatProperties) }
     }
     #[inline(always)]
-    pub unsafe fn GetPhysicalDeviceImageFormatProperties(&self, physicalDevice: VkPhysicalDevice, format: VkFormat, r#type: VkImageType, tiling: VkImageTiling, usage: VkImageUsageFlags, flags: VkImageCreateFlags, pImageFormatProperties: *mut VkImageFormatProperties) -> VkResult {
-        unsafe { (self.GetPhysicalDeviceImageFormatProperties)(physicalDevice, format, r#type, tiling, usage, flags, pImageFormatProperties) }
+    pub unsafe fn GetPhysicalDeviceImageFormatProperties(&self, physicalDevice: VkPhysicalDevice, format: VkFormat, r#type: VkImageType, tiling: VkImageTiling, usage: VkImageUsageFlags, flags: VkImageCreateFlags) -> Result<VkImageFormatProperties, VkResult> {
+        let mut pImageFormatProperties = MaybeUninit::uninit();
+        unsafe { (self.GetPhysicalDeviceImageFormatProperties)(physicalDevice,format,r#type,tiling,usage,flags,pImageFormatProperties.as_mut_ptr()).assume_init_on_success(pImageFormatProperties) }
     }
     #[inline(always)]
     pub unsafe fn GetPhysicalDeviceProperties(&self, physicalDevice: VkPhysicalDevice, pProperties: *mut VkPhysicalDeviceProperties) -> () {
@@ -27150,12 +27158,13 @@ impl Vulkan_1_0_InstanceDispatch {
         unsafe { (self.GetPhysicalDeviceMemoryProperties)(physicalDevice, pMemoryProperties) }
     }
     #[inline(always)]
-    pub unsafe fn GetInstanceProcAddr(&self, instance: VkInstance, pName: *const c_char) -> PFN_vkVoidFunction {
-        unsafe { (self.GetInstanceProcAddr)(instance, pName) }
+    pub unsafe fn GetDeviceProcAddr(&self, device: VkDevice, pName: *const c_char) -> PFN_vkVoidFunction {
+        unsafe { (self.GetDeviceProcAddr)(device, pName) }
     }
     #[inline(always)]
-    pub unsafe fn CreateDevice(&self, physicalDevice: VkPhysicalDevice, pCreateInfo: *const VkDeviceCreateInfo, pAllocator: *const VkAllocationCallbacks, pDevice: *mut VkDevice) -> VkResult {
-        unsafe { (self.CreateDevice)(physicalDevice, pCreateInfo, pAllocator, pDevice) }
+    pub unsafe fn CreateDevice(&self, physicalDevice: VkPhysicalDevice, pCreateInfo: *const VkDeviceCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkDevice, VkResult> {
+        let mut pDevice = MaybeUninit::uninit();
+        unsafe { (self.CreateDevice)(physicalDevice,pCreateInfo,pAllocator,pDevice.as_mut_ptr()).assume_init_on_success(pDevice) }
     }
     #[inline(always)]
     pub unsafe fn EnumerateDeviceExtensionProperties(&self, physicalDevice: VkPhysicalDevice, pLayerName: *const c_char, pPropertyCount: *mut u32, pProperties: *mut VkExtensionProperties) -> VkResult {
@@ -27171,7 +27180,6 @@ impl Vulkan_1_0_InstanceDispatch {
     }
 }
 dispatch_table! { Vulkan_1_0_DeviceDispatch;
-    GetDeviceProcAddr,PFN_vkGetDeviceProcAddr,c"vkGetDeviceProcAddr";
     DestroyDevice,PFN_vkDestroyDevice,c"vkDestroyDevice";
     GetDeviceQueue,PFN_vkGetDeviceQueue,c"vkGetDeviceQueue";
     QueueSubmit,PFN_vkQueueSubmit,c"vkQueueSubmit";
@@ -27295,10 +27303,6 @@ dispatch_table! { Vulkan_1_0_DeviceDispatch;
 }
 impl Vulkan_1_0_DeviceDispatch {
     #[inline(always)]
-    pub unsafe fn GetDeviceProcAddr(&self, device: VkDevice, pName: *const c_char) -> PFN_vkVoidFunction {
-        unsafe { (self.GetDeviceProcAddr)(device, pName) }
-    }
-    #[inline(always)]
     pub unsafe fn DestroyDevice(&self, device: VkDevice, pAllocator: *const VkAllocationCallbacks) -> () {
         unsafe { (self.DestroyDevice)(device, pAllocator) }
     }
@@ -27319,16 +27323,18 @@ impl Vulkan_1_0_DeviceDispatch {
         unsafe { (self.DeviceWaitIdle)(device) }
     }
     #[inline(always)]
-    pub unsafe fn AllocateMemory(&self, device: VkDevice, pAllocateInfo: *const VkMemoryAllocateInfo, pAllocator: *const VkAllocationCallbacks, pMemory: *mut VkDeviceMemory) -> VkResult {
-        unsafe { (self.AllocateMemory)(device, pAllocateInfo, pAllocator, pMemory) }
+    pub unsafe fn AllocateMemory(&self, device: VkDevice, pAllocateInfo: *const VkMemoryAllocateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkDeviceMemory, VkResult> {
+        let mut pMemory = MaybeUninit::uninit();
+        unsafe { (self.AllocateMemory)(device,pAllocateInfo,pAllocator,pMemory.as_mut_ptr()).assume_init_on_success(pMemory) }
     }
     #[inline(always)]
     pub unsafe fn FreeMemory(&self, device: VkDevice, memory: VkDeviceMemory, pAllocator: *const VkAllocationCallbacks) -> () {
         unsafe { (self.FreeMemory)(device, memory, pAllocator) }
     }
     #[inline(always)]
-    pub unsafe fn MapMemory(&self, device: VkDevice, memory: VkDeviceMemory, offset: VkDeviceSize, size: VkDeviceSize, flags: VkMemoryMapFlags, ppData: *mut *mut c_void) -> VkResult {
-        unsafe { (self.MapMemory)(device, memory, offset, size, flags, ppData) }
+    pub unsafe fn MapMemory(&self, device: VkDevice, memory: VkDeviceMemory, offset: VkDeviceSize, size: VkDeviceSize, flags: VkMemoryMapFlags) -> Result<*mut c_void, VkResult> {
+        let mut ppData = MaybeUninit::uninit();
+        unsafe { (self.MapMemory)(device,memory,offset,size,flags,ppData.as_mut_ptr()).assume_init_on_success(ppData) }
     }
     #[inline(always)]
     pub unsafe fn UnmapMemory(&self, device: VkDevice, memory: VkDeviceMemory) -> () {
@@ -27371,8 +27377,9 @@ impl Vulkan_1_0_DeviceDispatch {
         unsafe { (self.QueueBindSparse)(queue, bindInfoCount, pBindInfo, fence) }
     }
     #[inline(always)]
-    pub unsafe fn CreateFence(&self, device: VkDevice, pCreateInfo: *const VkFenceCreateInfo, pAllocator: *const VkAllocationCallbacks, pFence: *mut VkFence) -> VkResult {
-        unsafe { (self.CreateFence)(device, pCreateInfo, pAllocator, pFence) }
+    pub unsafe fn CreateFence(&self, device: VkDevice, pCreateInfo: *const VkFenceCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkFence, VkResult> {
+        let mut pFence = MaybeUninit::uninit();
+        unsafe { (self.CreateFence)(device,pCreateInfo,pAllocator,pFence.as_mut_ptr()).assume_init_on_success(pFence) }
     }
     #[inline(always)]
     pub unsafe fn DestroyFence(&self, device: VkDevice, fence: VkFence, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -27391,16 +27398,18 @@ impl Vulkan_1_0_DeviceDispatch {
         unsafe { (self.WaitForFences)(device, fenceCount, pFences, waitAll, timeout) }
     }
     #[inline(always)]
-    pub unsafe fn CreateSemaphore(&self, device: VkDevice, pCreateInfo: *const VkSemaphoreCreateInfo, pAllocator: *const VkAllocationCallbacks, pSemaphore: *mut VkSemaphore) -> VkResult {
-        unsafe { (self.CreateSemaphore)(device, pCreateInfo, pAllocator, pSemaphore) }
+    pub unsafe fn CreateSemaphore(&self, device: VkDevice, pCreateInfo: *const VkSemaphoreCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkSemaphore, VkResult> {
+        let mut pSemaphore = MaybeUninit::uninit();
+        unsafe { (self.CreateSemaphore)(device,pCreateInfo,pAllocator,pSemaphore.as_mut_ptr()).assume_init_on_success(pSemaphore) }
     }
     #[inline(always)]
     pub unsafe fn DestroySemaphore(&self, device: VkDevice, semaphore: VkSemaphore, pAllocator: *const VkAllocationCallbacks) -> () {
         unsafe { (self.DestroySemaphore)(device, semaphore, pAllocator) }
     }
     #[inline(always)]
-    pub unsafe fn CreateQueryPool(&self, device: VkDevice, pCreateInfo: *const VkQueryPoolCreateInfo, pAllocator: *const VkAllocationCallbacks, pQueryPool: *mut VkQueryPool) -> VkResult {
-        unsafe { (self.CreateQueryPool)(device, pCreateInfo, pAllocator, pQueryPool) }
+    pub unsafe fn CreateQueryPool(&self, device: VkDevice, pCreateInfo: *const VkQueryPoolCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkQueryPool, VkResult> {
+        let mut pQueryPool = MaybeUninit::uninit();
+        unsafe { (self.CreateQueryPool)(device,pCreateInfo,pAllocator,pQueryPool.as_mut_ptr()).assume_init_on_success(pQueryPool) }
     }
     #[inline(always)]
     pub unsafe fn DestroyQueryPool(&self, device: VkDevice, queryPool: VkQueryPool, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -27411,16 +27420,18 @@ impl Vulkan_1_0_DeviceDispatch {
         unsafe { (self.GetQueryPoolResults)(device, queryPool, firstQuery, queryCount, dataSize, pData, stride, flags) }
     }
     #[inline(always)]
-    pub unsafe fn CreateBuffer(&self, device: VkDevice, pCreateInfo: *const VkBufferCreateInfo, pAllocator: *const VkAllocationCallbacks, pBuffer: *mut VkBuffer) -> VkResult {
-        unsafe { (self.CreateBuffer)(device, pCreateInfo, pAllocator, pBuffer) }
+    pub unsafe fn CreateBuffer(&self, device: VkDevice, pCreateInfo: *const VkBufferCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkBuffer, VkResult> {
+        let mut pBuffer = MaybeUninit::uninit();
+        unsafe { (self.CreateBuffer)(device,pCreateInfo,pAllocator,pBuffer.as_mut_ptr()).assume_init_on_success(pBuffer) }
     }
     #[inline(always)]
     pub unsafe fn DestroyBuffer(&self, device: VkDevice, buffer: VkBuffer, pAllocator: *const VkAllocationCallbacks) -> () {
         unsafe { (self.DestroyBuffer)(device, buffer, pAllocator) }
     }
     #[inline(always)]
-    pub unsafe fn CreateImage(&self, device: VkDevice, pCreateInfo: *const VkImageCreateInfo, pAllocator: *const VkAllocationCallbacks, pImage: *mut VkImage) -> VkResult {
-        unsafe { (self.CreateImage)(device, pCreateInfo, pAllocator, pImage) }
+    pub unsafe fn CreateImage(&self, device: VkDevice, pCreateInfo: *const VkImageCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkImage, VkResult> {
+        let mut pImage = MaybeUninit::uninit();
+        unsafe { (self.CreateImage)(device,pCreateInfo,pAllocator,pImage.as_mut_ptr()).assume_init_on_success(pImage) }
     }
     #[inline(always)]
     pub unsafe fn DestroyImage(&self, device: VkDevice, image: VkImage, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -27431,16 +27442,18 @@ impl Vulkan_1_0_DeviceDispatch {
         unsafe { (self.GetImageSubresourceLayout)(device, image, pSubresource, pLayout) }
     }
     #[inline(always)]
-    pub unsafe fn CreateImageView(&self, device: VkDevice, pCreateInfo: *const VkImageViewCreateInfo, pAllocator: *const VkAllocationCallbacks, pView: *mut VkImageView) -> VkResult {
-        unsafe { (self.CreateImageView)(device, pCreateInfo, pAllocator, pView) }
+    pub unsafe fn CreateImageView(&self, device: VkDevice, pCreateInfo: *const VkImageViewCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkImageView, VkResult> {
+        let mut pView = MaybeUninit::uninit();
+        unsafe { (self.CreateImageView)(device,pCreateInfo,pAllocator,pView.as_mut_ptr()).assume_init_on_success(pView) }
     }
     #[inline(always)]
     pub unsafe fn DestroyImageView(&self, device: VkDevice, imageView: VkImageView, pAllocator: *const VkAllocationCallbacks) -> () {
         unsafe { (self.DestroyImageView)(device, imageView, pAllocator) }
     }
     #[inline(always)]
-    pub unsafe fn CreateCommandPool(&self, device: VkDevice, pCreateInfo: *const VkCommandPoolCreateInfo, pAllocator: *const VkAllocationCallbacks, pCommandPool: *mut VkCommandPool) -> VkResult {
-        unsafe { (self.CreateCommandPool)(device, pCreateInfo, pAllocator, pCommandPool) }
+    pub unsafe fn CreateCommandPool(&self, device: VkDevice, pCreateInfo: *const VkCommandPoolCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkCommandPool, VkResult> {
+        let mut pCommandPool = MaybeUninit::uninit();
+        unsafe { (self.CreateCommandPool)(device,pCreateInfo,pAllocator,pCommandPool.as_mut_ptr()).assume_init_on_success(pCommandPool) }
     }
     #[inline(always)]
     pub unsafe fn DestroyCommandPool(&self, device: VkDevice, commandPool: VkCommandPool, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -27523,8 +27536,9 @@ impl Vulkan_1_0_DeviceDispatch {
         unsafe { (self.CmdExecuteCommands)(commandBuffer, commandBufferCount, pCommandBuffers) }
     }
     #[inline(always)]
-    pub unsafe fn CreateEvent(&self, device: VkDevice, pCreateInfo: *const VkEventCreateInfo, pAllocator: *const VkAllocationCallbacks, pEvent: *mut VkEvent) -> VkResult {
-        unsafe { (self.CreateEvent)(device, pCreateInfo, pAllocator, pEvent) }
+    pub unsafe fn CreateEvent(&self, device: VkDevice, pCreateInfo: *const VkEventCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkEvent, VkResult> {
+        let mut pEvent = MaybeUninit::uninit();
+        unsafe { (self.CreateEvent)(device,pCreateInfo,pAllocator,pEvent.as_mut_ptr()).assume_init_on_success(pEvent) }
     }
     #[inline(always)]
     pub unsafe fn DestroyEvent(&self, device: VkDevice, event: VkEvent, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -27543,24 +27557,27 @@ impl Vulkan_1_0_DeviceDispatch {
         unsafe { (self.ResetEvent)(device, event) }
     }
     #[inline(always)]
-    pub unsafe fn CreateBufferView(&self, device: VkDevice, pCreateInfo: *const VkBufferViewCreateInfo, pAllocator: *const VkAllocationCallbacks, pView: *mut VkBufferView) -> VkResult {
-        unsafe { (self.CreateBufferView)(device, pCreateInfo, pAllocator, pView) }
+    pub unsafe fn CreateBufferView(&self, device: VkDevice, pCreateInfo: *const VkBufferViewCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkBufferView, VkResult> {
+        let mut pView = MaybeUninit::uninit();
+        unsafe { (self.CreateBufferView)(device,pCreateInfo,pAllocator,pView.as_mut_ptr()).assume_init_on_success(pView) }
     }
     #[inline(always)]
     pub unsafe fn DestroyBufferView(&self, device: VkDevice, bufferView: VkBufferView, pAllocator: *const VkAllocationCallbacks) -> () {
         unsafe { (self.DestroyBufferView)(device, bufferView, pAllocator) }
     }
     #[inline(always)]
-    pub unsafe fn CreateShaderModule(&self, device: VkDevice, pCreateInfo: *const VkShaderModuleCreateInfo, pAllocator: *const VkAllocationCallbacks, pShaderModule: *mut VkShaderModule) -> VkResult {
-        unsafe { (self.CreateShaderModule)(device, pCreateInfo, pAllocator, pShaderModule) }
+    pub unsafe fn CreateShaderModule(&self, device: VkDevice, pCreateInfo: *const VkShaderModuleCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkShaderModule, VkResult> {
+        let mut pShaderModule = MaybeUninit::uninit();
+        unsafe { (self.CreateShaderModule)(device,pCreateInfo,pAllocator,pShaderModule.as_mut_ptr()).assume_init_on_success(pShaderModule) }
     }
     #[inline(always)]
     pub unsafe fn DestroyShaderModule(&self, device: VkDevice, shaderModule: VkShaderModule, pAllocator: *const VkAllocationCallbacks) -> () {
         unsafe { (self.DestroyShaderModule)(device, shaderModule, pAllocator) }
     }
     #[inline(always)]
-    pub unsafe fn CreatePipelineCache(&self, device: VkDevice, pCreateInfo: *const VkPipelineCacheCreateInfo, pAllocator: *const VkAllocationCallbacks, pPipelineCache: *mut VkPipelineCache) -> VkResult {
-        unsafe { (self.CreatePipelineCache)(device, pCreateInfo, pAllocator, pPipelineCache) }
+    pub unsafe fn CreatePipelineCache(&self, device: VkDevice, pCreateInfo: *const VkPipelineCacheCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkPipelineCache, VkResult> {
+        let mut pPipelineCache = MaybeUninit::uninit();
+        unsafe { (self.CreatePipelineCache)(device,pCreateInfo,pAllocator,pPipelineCache.as_mut_ptr()).assume_init_on_success(pPipelineCache) }
     }
     #[inline(always)]
     pub unsafe fn DestroyPipelineCache(&self, device: VkDevice, pipelineCache: VkPipelineCache, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -27583,32 +27600,36 @@ impl Vulkan_1_0_DeviceDispatch {
         unsafe { (self.DestroyPipeline)(device, pipeline, pAllocator) }
     }
     #[inline(always)]
-    pub unsafe fn CreatePipelineLayout(&self, device: VkDevice, pCreateInfo: *const VkPipelineLayoutCreateInfo, pAllocator: *const VkAllocationCallbacks, pPipelineLayout: *mut VkPipelineLayout) -> VkResult {
-        unsafe { (self.CreatePipelineLayout)(device, pCreateInfo, pAllocator, pPipelineLayout) }
+    pub unsafe fn CreatePipelineLayout(&self, device: VkDevice, pCreateInfo: *const VkPipelineLayoutCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkPipelineLayout, VkResult> {
+        let mut pPipelineLayout = MaybeUninit::uninit();
+        unsafe { (self.CreatePipelineLayout)(device,pCreateInfo,pAllocator,pPipelineLayout.as_mut_ptr()).assume_init_on_success(pPipelineLayout) }
     }
     #[inline(always)]
     pub unsafe fn DestroyPipelineLayout(&self, device: VkDevice, pipelineLayout: VkPipelineLayout, pAllocator: *const VkAllocationCallbacks) -> () {
         unsafe { (self.DestroyPipelineLayout)(device, pipelineLayout, pAllocator) }
     }
     #[inline(always)]
-    pub unsafe fn CreateSampler(&self, device: VkDevice, pCreateInfo: *const VkSamplerCreateInfo, pAllocator: *const VkAllocationCallbacks, pSampler: *mut VkSampler) -> VkResult {
-        unsafe { (self.CreateSampler)(device, pCreateInfo, pAllocator, pSampler) }
+    pub unsafe fn CreateSampler(&self, device: VkDevice, pCreateInfo: *const VkSamplerCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkSampler, VkResult> {
+        let mut pSampler = MaybeUninit::uninit();
+        unsafe { (self.CreateSampler)(device,pCreateInfo,pAllocator,pSampler.as_mut_ptr()).assume_init_on_success(pSampler) }
     }
     #[inline(always)]
     pub unsafe fn DestroySampler(&self, device: VkDevice, sampler: VkSampler, pAllocator: *const VkAllocationCallbacks) -> () {
         unsafe { (self.DestroySampler)(device, sampler, pAllocator) }
     }
     #[inline(always)]
-    pub unsafe fn CreateDescriptorSetLayout(&self, device: VkDevice, pCreateInfo: *const VkDescriptorSetLayoutCreateInfo, pAllocator: *const VkAllocationCallbacks, pSetLayout: *mut VkDescriptorSetLayout) -> VkResult {
-        unsafe { (self.CreateDescriptorSetLayout)(device, pCreateInfo, pAllocator, pSetLayout) }
+    pub unsafe fn CreateDescriptorSetLayout(&self, device: VkDevice, pCreateInfo: *const VkDescriptorSetLayoutCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkDescriptorSetLayout, VkResult> {
+        let mut pSetLayout = MaybeUninit::uninit();
+        unsafe { (self.CreateDescriptorSetLayout)(device,pCreateInfo,pAllocator,pSetLayout.as_mut_ptr()).assume_init_on_success(pSetLayout) }
     }
     #[inline(always)]
     pub unsafe fn DestroyDescriptorSetLayout(&self, device: VkDevice, descriptorSetLayout: VkDescriptorSetLayout, pAllocator: *const VkAllocationCallbacks) -> () {
         unsafe { (self.DestroyDescriptorSetLayout)(device, descriptorSetLayout, pAllocator) }
     }
     #[inline(always)]
-    pub unsafe fn CreateDescriptorPool(&self, device: VkDevice, pCreateInfo: *const VkDescriptorPoolCreateInfo, pAllocator: *const VkAllocationCallbacks, pDescriptorPool: *mut VkDescriptorPool) -> VkResult {
-        unsafe { (self.CreateDescriptorPool)(device, pCreateInfo, pAllocator, pDescriptorPool) }
+    pub unsafe fn CreateDescriptorPool(&self, device: VkDevice, pCreateInfo: *const VkDescriptorPoolCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkDescriptorPool, VkResult> {
+        let mut pDescriptorPool = MaybeUninit::uninit();
+        unsafe { (self.CreateDescriptorPool)(device,pCreateInfo,pAllocator,pDescriptorPool.as_mut_ptr()).assume_init_on_success(pDescriptorPool) }
     }
     #[inline(always)]
     pub unsafe fn DestroyDescriptorPool(&self, device: VkDevice, descriptorPool: VkDescriptorPool, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -27671,16 +27692,18 @@ impl Vulkan_1_0_DeviceDispatch {
         unsafe { (self.CreateGraphicsPipelines)(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines) }
     }
     #[inline(always)]
-    pub unsafe fn CreateFramebuffer(&self, device: VkDevice, pCreateInfo: *const VkFramebufferCreateInfo, pAllocator: *const VkAllocationCallbacks, pFramebuffer: *mut VkFramebuffer) -> VkResult {
-        unsafe { (self.CreateFramebuffer)(device, pCreateInfo, pAllocator, pFramebuffer) }
+    pub unsafe fn CreateFramebuffer(&self, device: VkDevice, pCreateInfo: *const VkFramebufferCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkFramebuffer, VkResult> {
+        let mut pFramebuffer = MaybeUninit::uninit();
+        unsafe { (self.CreateFramebuffer)(device,pCreateInfo,pAllocator,pFramebuffer.as_mut_ptr()).assume_init_on_success(pFramebuffer) }
     }
     #[inline(always)]
     pub unsafe fn DestroyFramebuffer(&self, device: VkDevice, framebuffer: VkFramebuffer, pAllocator: *const VkAllocationCallbacks) -> () {
         unsafe { (self.DestroyFramebuffer)(device, framebuffer, pAllocator) }
     }
     #[inline(always)]
-    pub unsafe fn CreateRenderPass(&self, device: VkDevice, pCreateInfo: *const VkRenderPassCreateInfo, pAllocator: *const VkAllocationCallbacks, pRenderPass: *mut VkRenderPass) -> VkResult {
-        unsafe { (self.CreateRenderPass)(device, pCreateInfo, pAllocator, pRenderPass) }
+    pub unsafe fn CreateRenderPass(&self, device: VkDevice, pCreateInfo: *const VkRenderPassCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkRenderPass, VkResult> {
+        let mut pRenderPass = MaybeUninit::uninit();
+        unsafe { (self.CreateRenderPass)(device,pCreateInfo,pAllocator,pRenderPass.as_mut_ptr()).assume_init_on_success(pRenderPass) }
     }
     #[inline(always)]
     pub unsafe fn DestroyRenderPass(&self, device: VkDevice, renderPass: VkRenderPass, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -27781,12 +27804,14 @@ impl Vulkan_1_0_DeviceDispatch {
 }
 // Vulkan 1_1
 dispatch_table! { Vulkan_1_1_EntryDispatch;
+    [inherit: Vulkan_1_0_EntryDispatch]
     EnumerateInstanceVersion,PFN_vkEnumerateInstanceVersion,c"vkEnumerateInstanceVersion";
 }
 impl Vulkan_1_1_EntryDispatch {
     #[inline(always)]
-    pub unsafe fn EnumerateInstanceVersion(&self, pApiVersion: *mut u32) -> VkResult {
-        unsafe { (self.EnumerateInstanceVersion)(pApiVersion) }
+    pub unsafe fn EnumerateInstanceVersion(&self) -> Result<u32, VkResult> {
+        let mut pApiVersion = MaybeUninit::uninit();
+        unsafe { (self.EnumerateInstanceVersion)(pApiVersion.as_mut_ptr()).assume_init_on_success(pApiVersion) }
     }
 }
 dispatch_table! { Vulkan_1_1_InstanceDispatch;
@@ -27910,8 +27935,9 @@ impl Vulkan_1_1_DeviceDispatch {
         unsafe { (self.CmdDispatchBase)(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY, groupCountZ) }
     }
     #[inline(always)]
-    pub unsafe fn CreateDescriptorUpdateTemplate(&self, device: VkDevice, pCreateInfo: *const VkDescriptorUpdateTemplateCreateInfo, pAllocator: *const VkAllocationCallbacks, pDescriptorUpdateTemplate: *mut VkDescriptorUpdateTemplate) -> VkResult {
-        unsafe { (self.CreateDescriptorUpdateTemplate)(device, pCreateInfo, pAllocator, pDescriptorUpdateTemplate) }
+    pub unsafe fn CreateDescriptorUpdateTemplate(&self, device: VkDevice, pCreateInfo: *const VkDescriptorUpdateTemplateCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkDescriptorUpdateTemplate, VkResult> {
+        let mut pDescriptorUpdateTemplate = MaybeUninit::uninit();
+        unsafe { (self.CreateDescriptorUpdateTemplate)(device,pCreateInfo,pAllocator,pDescriptorUpdateTemplate.as_mut_ptr()).assume_init_on_success(pDescriptorUpdateTemplate) }
     }
     #[inline(always)]
     pub unsafe fn DestroyDescriptorUpdateTemplate(&self, device: VkDevice, descriptorUpdateTemplate: VkDescriptorUpdateTemplate, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -27926,8 +27952,9 @@ impl Vulkan_1_1_DeviceDispatch {
         unsafe { (self.GetDescriptorSetLayoutSupport)(device, pCreateInfo, pSupport) }
     }
     #[inline(always)]
-    pub unsafe fn CreateSamplerYcbcrConversion(&self, device: VkDevice, pCreateInfo: *const VkSamplerYcbcrConversionCreateInfo, pAllocator: *const VkAllocationCallbacks, pYcbcrConversion: *mut VkSamplerYcbcrConversion) -> VkResult {
-        unsafe { (self.CreateSamplerYcbcrConversion)(device, pCreateInfo, pAllocator, pYcbcrConversion) }
+    pub unsafe fn CreateSamplerYcbcrConversion(&self, device: VkDevice, pCreateInfo: *const VkSamplerYcbcrConversionCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkSamplerYcbcrConversion, VkResult> {
+        let mut pYcbcrConversion = MaybeUninit::uninit();
+        unsafe { (self.CreateSamplerYcbcrConversion)(device,pCreateInfo,pAllocator,pYcbcrConversion.as_mut_ptr()).assume_init_on_success(pYcbcrConversion) }
     }
     #[inline(always)]
     pub unsafe fn DestroySamplerYcbcrConversion(&self, device: VkDevice, ycbcrConversion: VkSamplerYcbcrConversion, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -27957,8 +27984,9 @@ impl Vulkan_1_2_DeviceDispatch {
         unsafe { (self.ResetQueryPool)(device, queryPool, firstQuery, queryCount) }
     }
     #[inline(always)]
-    pub unsafe fn GetSemaphoreCounterValue(&self, device: VkDevice, semaphore: VkSemaphore, pValue: *mut u64) -> VkResult {
-        unsafe { (self.GetSemaphoreCounterValue)(device, semaphore, pValue) }
+    pub unsafe fn GetSemaphoreCounterValue(&self, device: VkDevice, semaphore: VkSemaphore) -> Result<u64, VkResult> {
+        let mut pValue = MaybeUninit::uninit();
+        unsafe { (self.GetSemaphoreCounterValue)(device,semaphore,pValue.as_mut_ptr()).assume_init_on_success(pValue) }
     }
     #[inline(always)]
     pub unsafe fn WaitSemaphores(&self, device: VkDevice, pWaitInfo: *const VkSemaphoreWaitInfo, timeout: u64) -> VkResult {
@@ -27989,8 +28017,9 @@ impl Vulkan_1_2_DeviceDispatch {
         unsafe { (self.CmdDrawIndexedIndirectCount)(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride) }
     }
     #[inline(always)]
-    pub unsafe fn CreateRenderPass2(&self, device: VkDevice, pCreateInfo: *const VkRenderPassCreateInfo2, pAllocator: *const VkAllocationCallbacks, pRenderPass: *mut VkRenderPass) -> VkResult {
-        unsafe { (self.CreateRenderPass2)(device, pCreateInfo, pAllocator, pRenderPass) }
+    pub unsafe fn CreateRenderPass2(&self, device: VkDevice, pCreateInfo: *const VkRenderPassCreateInfo2, pAllocator: *const VkAllocationCallbacks) -> Result<VkRenderPass, VkResult> {
+        let mut pRenderPass = MaybeUninit::uninit();
+        unsafe { (self.CreateRenderPass2)(device,pCreateInfo,pAllocator,pRenderPass.as_mut_ptr()).assume_init_on_success(pRenderPass) }
     }
     #[inline(always)]
     pub unsafe fn CmdBeginRenderPass2(&self, commandBuffer: VkCommandBuffer, pRenderPassBegin: *const VkRenderPassBeginInfo, pSubpassBeginInfo: *const VkSubpassBeginInfo) -> () {
@@ -28057,8 +28086,9 @@ dispatch_table! { Vulkan_1_3_DeviceDispatch;
 }
 impl Vulkan_1_3_DeviceDispatch {
     #[inline(always)]
-    pub unsafe fn CreatePrivateDataSlot(&self, device: VkDevice, pCreateInfo: *const VkPrivateDataSlotCreateInfo, pAllocator: *const VkAllocationCallbacks, pPrivateDataSlot: *mut VkPrivateDataSlot) -> VkResult {
-        unsafe { (self.CreatePrivateDataSlot)(device, pCreateInfo, pAllocator, pPrivateDataSlot) }
+    pub unsafe fn CreatePrivateDataSlot(&self, device: VkDevice, pCreateInfo: *const VkPrivateDataSlotCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkPrivateDataSlot, VkResult> {
+        let mut pPrivateDataSlot = MaybeUninit::uninit();
+        unsafe { (self.CreatePrivateDataSlot)(device,pCreateInfo,pAllocator,pPrivateDataSlot.as_mut_ptr()).assume_init_on_success(pPrivateDataSlot) }
     }
     #[inline(always)]
     pub unsafe fn DestroyPrivateDataSlot(&self, device: VkDevice, privateDataSlot: VkPrivateDataSlot, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -28226,8 +28256,9 @@ dispatch_table! { Vulkan_1_4_DeviceDispatch;
 }
 impl Vulkan_1_4_DeviceDispatch {
     #[inline(always)]
-    pub unsafe fn MapMemory2(&self, device: VkDevice, pMemoryMapInfo: *const VkMemoryMapInfo, ppData: *mut *mut c_void) -> VkResult {
-        unsafe { (self.MapMemory2)(device, pMemoryMapInfo, ppData) }
+    pub unsafe fn MapMemory2(&self, device: VkDevice, pMemoryMapInfo: *const VkMemoryMapInfo) -> Result<*mut c_void, VkResult> {
+        let mut ppData = MaybeUninit::uninit();
+        unsafe { (self.MapMemory2)(device,pMemoryMapInfo,ppData.as_mut_ptr()).assume_init_on_success(ppData) }
     }
     #[inline(always)]
     pub unsafe fn UnmapMemory2(&self, device: VkDevice, pMemoryUnmapInfo: *const VkMemoryUnmapInfo) -> VkResult {
@@ -28318,12 +28349,14 @@ pub mod khr_surface {
             unsafe { (self.DestroySurfaceKHR)(instance, surface, pAllocator) }
         }
         #[inline(always)]
-        pub unsafe fn GetPhysicalDeviceSurfaceSupportKHR(&self, physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, surface: VkSurfaceKHR, pSupported: *mut VkBool32) -> VkResult {
-            unsafe { (self.GetPhysicalDeviceSurfaceSupportKHR)(physicalDevice, queueFamilyIndex, surface, pSupported) }
+        pub unsafe fn GetPhysicalDeviceSurfaceSupportKHR(&self, physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, surface: VkSurfaceKHR) -> Result<VkBool32, VkResult> {
+            let mut pSupported = MaybeUninit::uninit();
+            unsafe { (self.GetPhysicalDeviceSurfaceSupportKHR)(physicalDevice,queueFamilyIndex,surface,pSupported.as_mut_ptr()).assume_init_on_success(pSupported) }
         }
         #[inline(always)]
-        pub unsafe fn GetPhysicalDeviceSurfaceCapabilitiesKHR(&self, physicalDevice: VkPhysicalDevice, surface: VkSurfaceKHR, pSurfaceCapabilities: *mut VkSurfaceCapabilitiesKHR) -> VkResult {
-            unsafe { (self.GetPhysicalDeviceSurfaceCapabilitiesKHR)(physicalDevice, surface, pSurfaceCapabilities) }
+        pub unsafe fn GetPhysicalDeviceSurfaceCapabilitiesKHR(&self, physicalDevice: VkPhysicalDevice, surface: VkSurfaceKHR) -> Result<VkSurfaceCapabilitiesKHR, VkResult> {
+            let mut pSurfaceCapabilities = MaybeUninit::uninit();
+            unsafe { (self.GetPhysicalDeviceSurfaceCapabilitiesKHR)(physicalDevice,surface,pSurfaceCapabilities.as_mut_ptr()).assume_init_on_success(pSurfaceCapabilities) }
         }
         #[inline(always)]
         pub unsafe fn GetPhysicalDeviceSurfaceFormatsKHR(&self, physicalDevice: VkPhysicalDevice, surface: VkSurfaceKHR, pSurfaceFormatCount: *mut u32, pSurfaceFormats: *mut VkSurfaceFormatKHR) -> VkResult {
@@ -28359,8 +28392,9 @@ pub mod khr_swapchain {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateSwapchainKHR(&self, device: VkDevice, pCreateInfo: *const VkSwapchainCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSwapchain: *mut VkSwapchainKHR) -> VkResult {
-            unsafe { (self.CreateSwapchainKHR)(device, pCreateInfo, pAllocator, pSwapchain) }
+        pub unsafe fn CreateSwapchainKHR(&self, device: VkDevice, pCreateInfo: *const VkSwapchainCreateInfoKHR, pAllocator: *const VkAllocationCallbacks) -> Result<VkSwapchainKHR, VkResult> {
+            let mut pSwapchain = MaybeUninit::uninit();
+            unsafe { (self.CreateSwapchainKHR)(device,pCreateInfo,pAllocator,pSwapchain.as_mut_ptr()).assume_init_on_success(pSwapchain) }
         }
         #[inline(always)]
         pub unsafe fn DestroySwapchainKHR(&self, device: VkDevice, swapchain: VkSwapchainKHR, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -28371,8 +28405,9 @@ pub mod khr_swapchain {
             unsafe { (self.GetSwapchainImagesKHR)(device, swapchain, pSwapchainImageCount, pSwapchainImages) }
         }
         #[inline(always)]
-        pub unsafe fn AcquireNextImageKHR(&self, device: VkDevice, swapchain: VkSwapchainKHR, timeout: u64, semaphore: VkSemaphore, fence: VkFence, pImageIndex: *mut u32) -> VkResult {
-            unsafe { (self.AcquireNextImageKHR)(device, swapchain, timeout, semaphore, fence, pImageIndex) }
+        pub unsafe fn AcquireNextImageKHR(&self, device: VkDevice, swapchain: VkSwapchainKHR, timeout: u64, semaphore: VkSemaphore, fence: VkFence) -> Result<u32, VkResult> {
+            let mut pImageIndex = MaybeUninit::uninit();
+            unsafe { (self.AcquireNextImageKHR)(device,swapchain,timeout,semaphore,fence,pImageIndex.as_mut_ptr()).assume_init_on_success(pImageIndex) }
         }
         #[inline(always)]
         pub unsafe fn QueuePresentKHR(&self, queue: VkQueue, pPresentInfo: *const VkPresentInfoKHR) -> VkResult {
@@ -28383,12 +28418,14 @@ pub mod khr_swapchain {
             unsafe { (self.GetDeviceGroupPresentCapabilitiesKHR)(device, pDeviceGroupPresentCapabilities) }
         }
         #[inline(always)]
-        pub unsafe fn GetDeviceGroupSurfacePresentModesKHR(&self, device: VkDevice, surface: VkSurfaceKHR, pModes: *mut VkDeviceGroupPresentModeFlagsKHR) -> VkResult {
-            unsafe { (self.GetDeviceGroupSurfacePresentModesKHR)(device, surface, pModes) }
+        pub unsafe fn GetDeviceGroupSurfacePresentModesKHR(&self, device: VkDevice, surface: VkSurfaceKHR) -> Result<VkDeviceGroupPresentModeFlagsKHR, VkResult> {
+            let mut pModes = MaybeUninit::uninit();
+            unsafe { (self.GetDeviceGroupSurfacePresentModesKHR)(device,surface,pModes.as_mut_ptr()).assume_init_on_success(pModes) }
         }
         #[inline(always)]
-        pub unsafe fn AcquireNextImage2KHR(&self, device: VkDevice, pAcquireInfo: *const VkAcquireNextImageInfoKHR, pImageIndex: *mut u32) -> VkResult {
-            unsafe { (self.AcquireNextImage2KHR)(device, pAcquireInfo, pImageIndex) }
+        pub unsafe fn AcquireNextImage2KHR(&self, device: VkDevice, pAcquireInfo: *const VkAcquireNextImageInfoKHR) -> Result<u32, VkResult> {
+            let mut pImageIndex = MaybeUninit::uninit();
+            unsafe { (self.AcquireNextImage2KHR)(device,pAcquireInfo,pImageIndex.as_mut_ptr()).assume_init_on_success(pImageIndex) }
         }
     }
 }
@@ -28422,16 +28459,19 @@ pub mod khr_display {
             unsafe { (self.GetDisplayModePropertiesKHR)(physicalDevice, display, pPropertyCount, pProperties) }
         }
         #[inline(always)]
-        pub unsafe fn CreateDisplayModeKHR(&self, physicalDevice: VkPhysicalDevice, display: VkDisplayKHR, pCreateInfo: *const VkDisplayModeCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pMode: *mut VkDisplayModeKHR) -> VkResult {
-            unsafe { (self.CreateDisplayModeKHR)(physicalDevice, display, pCreateInfo, pAllocator, pMode) }
+        pub unsafe fn CreateDisplayModeKHR(&self, physicalDevice: VkPhysicalDevice, display: VkDisplayKHR, pCreateInfo: *const VkDisplayModeCreateInfoKHR, pAllocator: *const VkAllocationCallbacks) -> Result<VkDisplayModeKHR, VkResult> {
+            let mut pMode = MaybeUninit::uninit();
+            unsafe { (self.CreateDisplayModeKHR)(physicalDevice,display,pCreateInfo,pAllocator,pMode.as_mut_ptr()).assume_init_on_success(pMode) }
         }
         #[inline(always)]
-        pub unsafe fn GetDisplayPlaneCapabilitiesKHR(&self, physicalDevice: VkPhysicalDevice, mode: VkDisplayModeKHR, planeIndex: u32, pCapabilities: *mut VkDisplayPlaneCapabilitiesKHR) -> VkResult {
-            unsafe { (self.GetDisplayPlaneCapabilitiesKHR)(physicalDevice, mode, planeIndex, pCapabilities) }
+        pub unsafe fn GetDisplayPlaneCapabilitiesKHR(&self, physicalDevice: VkPhysicalDevice, mode: VkDisplayModeKHR, planeIndex: u32) -> Result<VkDisplayPlaneCapabilitiesKHR, VkResult> {
+            let mut pCapabilities = MaybeUninit::uninit();
+            unsafe { (self.GetDisplayPlaneCapabilitiesKHR)(physicalDevice,mode,planeIndex,pCapabilities.as_mut_ptr()).assume_init_on_success(pCapabilities) }
         }
         #[inline(always)]
-        pub unsafe fn CreateDisplayPlaneSurfaceKHR(&self, instance: VkInstance, pCreateInfo: *const VkDisplaySurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
-            unsafe { (self.CreateDisplayPlaneSurfaceKHR)(instance, pCreateInfo, pAllocator, pSurface) }
+        pub unsafe fn CreateDisplayPlaneSurfaceKHR(&self, instance: VkInstance, pCreateInfo: *const VkDisplaySurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks) -> Result<VkSurfaceKHR, VkResult> {
+            let mut pSurface = MaybeUninit::uninit();
+            unsafe { (self.CreateDisplayPlaneSurfaceKHR)(instance,pCreateInfo,pAllocator,pSurface.as_mut_ptr()).assume_init_on_success(pSurface) }
         }
     }
 }
@@ -28457,8 +28497,9 @@ pub mod khr_xlib_surface {
     }
     impl InstanceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateXlibSurfaceKHR(&self, instance: VkInstance, pCreateInfo: *const VkXlibSurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
-            unsafe { (self.CreateXlibSurfaceKHR)(instance, pCreateInfo, pAllocator, pSurface) }
+        pub unsafe fn CreateXlibSurfaceKHR(&self, instance: VkInstance, pCreateInfo: *const VkXlibSurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks) -> Result<VkSurfaceKHR, VkResult> {
+            let mut pSurface = MaybeUninit::uninit();
+            unsafe { (self.CreateXlibSurfaceKHR)(instance,pCreateInfo,pAllocator,pSurface.as_mut_ptr()).assume_init_on_success(pSurface) }
         }
         #[inline(always)]
         pub unsafe fn GetPhysicalDeviceXlibPresentationSupportKHR(&self, physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, dpy: *mut Display, visualID: VisualID) -> VkBool32 {
@@ -28475,8 +28516,9 @@ pub mod khr_xcb_surface {
     }
     impl InstanceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateXcbSurfaceKHR(&self, instance: VkInstance, pCreateInfo: *const VkXcbSurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
-            unsafe { (self.CreateXcbSurfaceKHR)(instance, pCreateInfo, pAllocator, pSurface) }
+        pub unsafe fn CreateXcbSurfaceKHR(&self, instance: VkInstance, pCreateInfo: *const VkXcbSurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks) -> Result<VkSurfaceKHR, VkResult> {
+            let mut pSurface = MaybeUninit::uninit();
+            unsafe { (self.CreateXcbSurfaceKHR)(instance,pCreateInfo,pAllocator,pSurface.as_mut_ptr()).assume_init_on_success(pSurface) }
         }
         #[inline(always)]
         pub unsafe fn GetPhysicalDeviceXcbPresentationSupportKHR(&self, physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, connection: *mut xcb_connection_t, visual_id: xcb_visualid_t) -> VkBool32 {
@@ -28493,8 +28535,9 @@ pub mod khr_wayland_surface {
     }
     impl InstanceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateWaylandSurfaceKHR(&self, instance: VkInstance, pCreateInfo: *const VkWaylandSurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
-            unsafe { (self.CreateWaylandSurfaceKHR)(instance, pCreateInfo, pAllocator, pSurface) }
+        pub unsafe fn CreateWaylandSurfaceKHR(&self, instance: VkInstance, pCreateInfo: *const VkWaylandSurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks) -> Result<VkSurfaceKHR, VkResult> {
+            let mut pSurface = MaybeUninit::uninit();
+            unsafe { (self.CreateWaylandSurfaceKHR)(instance,pCreateInfo,pAllocator,pSurface.as_mut_ptr()).assume_init_on_success(pSurface) }
         }
         #[inline(always)]
         pub unsafe fn GetPhysicalDeviceWaylandPresentationSupportKHR(&self, physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, display: *mut wl_display) -> VkBool32 {
@@ -28510,8 +28553,9 @@ pub mod khr_android_surface {
     }
     impl InstanceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateAndroidSurfaceKHR(&self, instance: VkInstance, pCreateInfo: *const VkAndroidSurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
-            unsafe { (self.CreateAndroidSurfaceKHR)(instance, pCreateInfo, pAllocator, pSurface) }
+        pub unsafe fn CreateAndroidSurfaceKHR(&self, instance: VkInstance, pCreateInfo: *const VkAndroidSurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks) -> Result<VkSurfaceKHR, VkResult> {
+            let mut pSurface = MaybeUninit::uninit();
+            unsafe { (self.CreateAndroidSurfaceKHR)(instance,pCreateInfo,pAllocator,pSurface.as_mut_ptr()).assume_init_on_success(pSurface) }
         }
     }
 }
@@ -28524,8 +28568,9 @@ pub mod khr_win32_surface {
     }
     impl InstanceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateWin32SurfaceKHR(&self, instance: VkInstance, pCreateInfo: *const VkWin32SurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
-            unsafe { (self.CreateWin32SurfaceKHR)(instance, pCreateInfo, pAllocator, pSurface) }
+        pub unsafe fn CreateWin32SurfaceKHR(&self, instance: VkInstance, pCreateInfo: *const VkWin32SurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks) -> Result<VkSurfaceKHR, VkResult> {
+            let mut pSurface = MaybeUninit::uninit();
+            unsafe { (self.CreateWin32SurfaceKHR)(instance,pCreateInfo,pAllocator,pSurface.as_mut_ptr()).assume_init_on_success(pSurface) }
         }
         #[inline(always)]
         pub unsafe fn GetPhysicalDeviceWin32PresentationSupportKHR(&self, physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32) -> VkBool32 {
@@ -28543,8 +28588,9 @@ pub mod ext_debug_report {
     }
     impl InstanceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateDebugReportCallbackEXT(&self, instance: VkInstance, pCreateInfo: *const VkDebugReportCallbackCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pCallback: *mut VkDebugReportCallbackEXT) -> VkResult {
-            unsafe { (self.CreateDebugReportCallbackEXT)(instance, pCreateInfo, pAllocator, pCallback) }
+        pub unsafe fn CreateDebugReportCallbackEXT(&self, instance: VkInstance, pCreateInfo: *const VkDebugReportCallbackCreateInfoEXT, pAllocator: *const VkAllocationCallbacks) -> Result<VkDebugReportCallbackEXT, VkResult> {
+            let mut pCallback = MaybeUninit::uninit();
+            unsafe { (self.CreateDebugReportCallbackEXT)(instance,pCreateInfo,pAllocator,pCallback.as_mut_ptr()).assume_init_on_success(pCallback) }
         }
         #[inline(always)]
         pub unsafe fn DestroyDebugReportCallbackEXT(&self, instance: VkInstance, callback: VkDebugReportCallbackEXT, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -28620,8 +28666,9 @@ pub mod khr_video_queue {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateVideoSessionKHR(&self, device: VkDevice, pCreateInfo: *const VkVideoSessionCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pVideoSession: *mut VkVideoSessionKHR) -> VkResult {
-            unsafe { (self.CreateVideoSessionKHR)(device, pCreateInfo, pAllocator, pVideoSession) }
+        pub unsafe fn CreateVideoSessionKHR(&self, device: VkDevice, pCreateInfo: *const VkVideoSessionCreateInfoKHR, pAllocator: *const VkAllocationCallbacks) -> Result<VkVideoSessionKHR, VkResult> {
+            let mut pVideoSession = MaybeUninit::uninit();
+            unsafe { (self.CreateVideoSessionKHR)(device,pCreateInfo,pAllocator,pVideoSession.as_mut_ptr()).assume_init_on_success(pVideoSession) }
         }
         #[inline(always)]
         pub unsafe fn DestroyVideoSessionKHR(&self, device: VkDevice, videoSession: VkVideoSessionKHR, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -28636,8 +28683,9 @@ pub mod khr_video_queue {
             unsafe { (self.BindVideoSessionMemoryKHR)(device, videoSession, bindSessionMemoryInfoCount, pBindSessionMemoryInfos) }
         }
         #[inline(always)]
-        pub unsafe fn CreateVideoSessionParametersKHR(&self, device: VkDevice, pCreateInfo: *const VkVideoSessionParametersCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pVideoSessionParameters: *mut VkVideoSessionParametersKHR) -> VkResult {
-            unsafe { (self.CreateVideoSessionParametersKHR)(device, pCreateInfo, pAllocator, pVideoSessionParameters) }
+        pub unsafe fn CreateVideoSessionParametersKHR(&self, device: VkDevice, pCreateInfo: *const VkVideoSessionParametersCreateInfoKHR, pAllocator: *const VkAllocationCallbacks) -> Result<VkVideoSessionParametersKHR, VkResult> {
+            let mut pVideoSessionParameters = MaybeUninit::uninit();
+            unsafe { (self.CreateVideoSessionParametersKHR)(device,pCreateInfo,pAllocator,pVideoSessionParameters.as_mut_ptr()).assume_init_on_success(pVideoSessionParameters) }
         }
         #[inline(always)]
         pub unsafe fn UpdateVideoSessionParametersKHR(&self, device: VkDevice, videoSessionParameters: VkVideoSessionParametersKHR, pUpdateInfo: *const VkVideoSessionParametersUpdateInfoKHR) -> VkResult {
@@ -28724,12 +28772,14 @@ pub mod nvx_binary_import {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateCuModuleNVX(&self, device: VkDevice, pCreateInfo: *const VkCuModuleCreateInfoNVX, pAllocator: *const VkAllocationCallbacks, pModule: *mut VkCuModuleNVX) -> VkResult {
-            unsafe { (self.CreateCuModuleNVX)(device, pCreateInfo, pAllocator, pModule) }
+        pub unsafe fn CreateCuModuleNVX(&self, device: VkDevice, pCreateInfo: *const VkCuModuleCreateInfoNVX, pAllocator: *const VkAllocationCallbacks) -> Result<VkCuModuleNVX, VkResult> {
+            let mut pModule = MaybeUninit::uninit();
+            unsafe { (self.CreateCuModuleNVX)(device,pCreateInfo,pAllocator,pModule.as_mut_ptr()).assume_init_on_success(pModule) }
         }
         #[inline(always)]
-        pub unsafe fn CreateCuFunctionNVX(&self, device: VkDevice, pCreateInfo: *const VkCuFunctionCreateInfoNVX, pAllocator: *const VkAllocationCallbacks, pFunction: *mut VkCuFunctionNVX) -> VkResult {
-            unsafe { (self.CreateCuFunctionNVX)(device, pCreateInfo, pAllocator, pFunction) }
+        pub unsafe fn CreateCuFunctionNVX(&self, device: VkDevice, pCreateInfo: *const VkCuFunctionCreateInfoNVX, pAllocator: *const VkAllocationCallbacks) -> Result<VkCuFunctionNVX, VkResult> {
+            let mut pFunction = MaybeUninit::uninit();
+            unsafe { (self.CreateCuFunctionNVX)(device,pCreateInfo,pAllocator,pFunction.as_mut_ptr()).assume_init_on_success(pFunction) }
         }
         #[inline(always)]
         pub unsafe fn DestroyCuModuleNVX(&self, device: VkDevice, module: VkCuModuleNVX, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -28830,8 +28880,9 @@ pub mod ggp_stream_descriptor_surface {
     }
     impl InstanceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateStreamDescriptorSurfaceGGP(&self, instance: VkInstance, pCreateInfo: *const VkStreamDescriptorSurfaceCreateInfoGGP, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
-            unsafe { (self.CreateStreamDescriptorSurfaceGGP)(instance, pCreateInfo, pAllocator, pSurface) }
+        pub unsafe fn CreateStreamDescriptorSurfaceGGP(&self, instance: VkInstance, pCreateInfo: *const VkStreamDescriptorSurfaceCreateInfoGGP, pAllocator: *const VkAllocationCallbacks) -> Result<VkSurfaceKHR, VkResult> {
+            let mut pSurface = MaybeUninit::uninit();
+            unsafe { (self.CreateStreamDescriptorSurfaceGGP)(instance,pCreateInfo,pAllocator,pSurface.as_mut_ptr()).assume_init_on_success(pSurface) }
         }
     }
 }
@@ -28843,8 +28894,9 @@ pub mod nv_external_memory_capabilities {
     }
     impl InstanceDispatch {
         #[inline(always)]
-        pub unsafe fn GetPhysicalDeviceExternalImageFormatPropertiesNV(&self, physicalDevice: VkPhysicalDevice, format: VkFormat, r#type: VkImageType, tiling: VkImageTiling, usage: VkImageUsageFlags, flags: VkImageCreateFlags, externalHandleType: VkExternalMemoryHandleTypeFlagsNV, pExternalImageFormatProperties: *mut VkExternalImageFormatPropertiesNV) -> VkResult {
-            unsafe { (self.GetPhysicalDeviceExternalImageFormatPropertiesNV)(physicalDevice, format, r#type, tiling, usage, flags, externalHandleType, pExternalImageFormatProperties) }
+        pub unsafe fn GetPhysicalDeviceExternalImageFormatPropertiesNV(&self, physicalDevice: VkPhysicalDevice, format: VkFormat, r#type: VkImageType, tiling: VkImageTiling, usage: VkImageUsageFlags, flags: VkImageCreateFlags, externalHandleType: VkExternalMemoryHandleTypeFlagsNV) -> Result<VkExternalImageFormatPropertiesNV, VkResult> {
+            let mut pExternalImageFormatProperties = MaybeUninit::uninit();
+            unsafe { (self.GetPhysicalDeviceExternalImageFormatPropertiesNV)(physicalDevice,format,r#type,tiling,usage,flags,externalHandleType,pExternalImageFormatProperties.as_mut_ptr()).assume_init_on_success(pExternalImageFormatProperties) }
         }
     }
 }
@@ -28856,8 +28908,9 @@ pub mod nv_external_memory_win32 {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn GetMemoryWin32HandleNV(&self, device: VkDevice, memory: VkDeviceMemory, handleType: VkExternalMemoryHandleTypeFlagsNV, pHandle: *mut HANDLE) -> VkResult {
-            unsafe { (self.GetMemoryWin32HandleNV)(device, memory, handleType, pHandle) }
+        pub unsafe fn GetMemoryWin32HandleNV(&self, device: VkDevice, memory: VkDeviceMemory, handleType: VkExternalMemoryHandleTypeFlagsNV) -> Result<HANDLE, VkResult> {
+            let mut pHandle = MaybeUninit::uninit();
+            unsafe { (self.GetMemoryWin32HandleNV)(device,memory,handleType,pHandle.as_mut_ptr()).assume_init_on_success(pHandle) }
         }
     }
 }
@@ -28942,12 +28995,14 @@ pub mod khr_device_group {
             unsafe { (self.GetDeviceGroupPresentCapabilitiesKHR)(device, pDeviceGroupPresentCapabilities) }
         }
         #[inline(always)]
-        pub unsafe fn GetDeviceGroupSurfacePresentModesKHR(&self, device: VkDevice, surface: VkSurfaceKHR, pModes: *mut VkDeviceGroupPresentModeFlagsKHR) -> VkResult {
-            unsafe { (self.GetDeviceGroupSurfacePresentModesKHR)(device, surface, pModes) }
+        pub unsafe fn GetDeviceGroupSurfacePresentModesKHR(&self, device: VkDevice, surface: VkSurfaceKHR) -> Result<VkDeviceGroupPresentModeFlagsKHR, VkResult> {
+            let mut pModes = MaybeUninit::uninit();
+            unsafe { (self.GetDeviceGroupSurfacePresentModesKHR)(device,surface,pModes.as_mut_ptr()).assume_init_on_success(pModes) }
         }
         #[inline(always)]
-        pub unsafe fn AcquireNextImage2KHR(&self, device: VkDevice, pAcquireInfo: *const VkAcquireNextImageInfoKHR, pImageIndex: *mut u32) -> VkResult {
-            unsafe { (self.AcquireNextImage2KHR)(device, pAcquireInfo, pImageIndex) }
+        pub unsafe fn AcquireNextImage2KHR(&self, device: VkDevice, pAcquireInfo: *const VkAcquireNextImageInfoKHR) -> Result<u32, VkResult> {
+            let mut pImageIndex = MaybeUninit::uninit();
+            unsafe { (self.AcquireNextImage2KHR)(device,pAcquireInfo,pImageIndex.as_mut_ptr()).assume_init_on_success(pImageIndex) }
         }
     }
 }
@@ -28959,8 +29014,9 @@ pub mod nn_vi_surface {
     }
     impl InstanceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateViSurfaceNN(&self, instance: VkInstance, pCreateInfo: *const VkViSurfaceCreateInfoNN, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
-            unsafe { (self.CreateViSurfaceNN)(instance, pCreateInfo, pAllocator, pSurface) }
+        pub unsafe fn CreateViSurfaceNN(&self, instance: VkInstance, pCreateInfo: *const VkViSurfaceCreateInfoNN, pAllocator: *const VkAllocationCallbacks) -> Result<VkSurfaceKHR, VkResult> {
+            let mut pSurface = MaybeUninit::uninit();
+            unsafe { (self.CreateViSurfaceNN)(instance,pCreateInfo,pAllocator,pSurface.as_mut_ptr()).assume_init_on_success(pSurface) }
         }
     }
 }
@@ -29012,8 +29068,9 @@ pub mod khr_external_memory_win32 {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn GetMemoryWin32HandleKHR(&self, device: VkDevice, pGetWin32HandleInfo: *const VkMemoryGetWin32HandleInfoKHR, pHandle: *mut HANDLE) -> VkResult {
-            unsafe { (self.GetMemoryWin32HandleKHR)(device, pGetWin32HandleInfo, pHandle) }
+        pub unsafe fn GetMemoryWin32HandleKHR(&self, device: VkDevice, pGetWin32HandleInfo: *const VkMemoryGetWin32HandleInfoKHR) -> Result<HANDLE, VkResult> {
+            let mut pHandle = MaybeUninit::uninit();
+            unsafe { (self.GetMemoryWin32HandleKHR)(device,pGetWin32HandleInfo,pHandle.as_mut_ptr()).assume_init_on_success(pHandle) }
         }
         #[inline(always)]
         pub unsafe fn GetMemoryWin32HandlePropertiesKHR(&self, device: VkDevice, handleType: VkExternalMemoryHandleTypeFlagBits, handle: HANDLE, pMemoryWin32HandleProperties: *mut VkMemoryWin32HandlePropertiesKHR) -> VkResult {
@@ -29030,8 +29087,9 @@ pub mod khr_external_memory_fd {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn GetMemoryFdKHR(&self, device: VkDevice, pGetFdInfo: *const VkMemoryGetFdInfoKHR, pFd: *mut c_int) -> VkResult {
-            unsafe { (self.GetMemoryFdKHR)(device, pGetFdInfo, pFd) }
+        pub unsafe fn GetMemoryFdKHR(&self, device: VkDevice, pGetFdInfo: *const VkMemoryGetFdInfoKHR) -> Result<c_int, VkResult> {
+            let mut pFd = MaybeUninit::uninit();
+            unsafe { (self.GetMemoryFdKHR)(device,pGetFdInfo,pFd.as_mut_ptr()).assume_init_on_success(pFd) }
         }
         #[inline(always)]
         pub unsafe fn GetMemoryFdPropertiesKHR(&self, device: VkDevice, handleType: VkExternalMemoryHandleTypeFlagBits, fd: c_int, pMemoryFdProperties: *mut VkMemoryFdPropertiesKHR) -> VkResult {
@@ -29065,8 +29123,9 @@ pub mod khr_external_semaphore_win32 {
             unsafe { (self.ImportSemaphoreWin32HandleKHR)(device, pImportSemaphoreWin32HandleInfo) }
         }
         #[inline(always)]
-        pub unsafe fn GetSemaphoreWin32HandleKHR(&self, device: VkDevice, pGetWin32HandleInfo: *const VkSemaphoreGetWin32HandleInfoKHR, pHandle: *mut HANDLE) -> VkResult {
-            unsafe { (self.GetSemaphoreWin32HandleKHR)(device, pGetWin32HandleInfo, pHandle) }
+        pub unsafe fn GetSemaphoreWin32HandleKHR(&self, device: VkDevice, pGetWin32HandleInfo: *const VkSemaphoreGetWin32HandleInfoKHR) -> Result<HANDLE, VkResult> {
+            let mut pHandle = MaybeUninit::uninit();
+            unsafe { (self.GetSemaphoreWin32HandleKHR)(device,pGetWin32HandleInfo,pHandle.as_mut_ptr()).assume_init_on_success(pHandle) }
         }
     }
 }
@@ -29083,8 +29142,9 @@ pub mod khr_external_semaphore_fd {
             unsafe { (self.ImportSemaphoreFdKHR)(device, pImportSemaphoreFdInfo) }
         }
         #[inline(always)]
-        pub unsafe fn GetSemaphoreFdKHR(&self, device: VkDevice, pGetFdInfo: *const VkSemaphoreGetFdInfoKHR, pFd: *mut c_int) -> VkResult {
-            unsafe { (self.GetSemaphoreFdKHR)(device, pGetFdInfo, pFd) }
+        pub unsafe fn GetSemaphoreFdKHR(&self, device: VkDevice, pGetFdInfo: *const VkSemaphoreGetFdInfoKHR) -> Result<c_int, VkResult> {
+            let mut pFd = MaybeUninit::uninit();
+            unsafe { (self.GetSemaphoreFdKHR)(device,pGetFdInfo,pFd.as_mut_ptr()).assume_init_on_success(pFd) }
         }
     }
 }
@@ -29135,8 +29195,9 @@ pub mod khr_descriptor_update_template {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateDescriptorUpdateTemplateKHR(&self, device: VkDevice, pCreateInfo: *const VkDescriptorUpdateTemplateCreateInfo, pAllocator: *const VkAllocationCallbacks, pDescriptorUpdateTemplate: *mut VkDescriptorUpdateTemplate) -> VkResult {
-            unsafe { (self.CreateDescriptorUpdateTemplateKHR)(device, pCreateInfo, pAllocator, pDescriptorUpdateTemplate) }
+        pub unsafe fn CreateDescriptorUpdateTemplateKHR(&self, device: VkDevice, pCreateInfo: *const VkDescriptorUpdateTemplateCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkDescriptorUpdateTemplate, VkResult> {
+            let mut pDescriptorUpdateTemplate = MaybeUninit::uninit();
+            unsafe { (self.CreateDescriptorUpdateTemplateKHR)(device,pCreateInfo,pAllocator,pDescriptorUpdateTemplate.as_mut_ptr()).assume_init_on_success(pDescriptorUpdateTemplate) }
         }
         #[inline(always)]
         pub unsafe fn DestroyDescriptorUpdateTemplateKHR(&self, device: VkDevice, descriptorUpdateTemplate: VkDescriptorUpdateTemplate, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -29191,8 +29252,9 @@ pub mod ext_acquire_xlib_display {
             unsafe { (self.AcquireXlibDisplayEXT)(physicalDevice, dpy, display) }
         }
         #[inline(always)]
-        pub unsafe fn GetRandROutputDisplayEXT(&self, physicalDevice: VkPhysicalDevice, dpy: *mut Display, rrOutput: RROutput, pDisplay: *mut VkDisplayKHR) -> VkResult {
-            unsafe { (self.GetRandROutputDisplayEXT)(physicalDevice, dpy, rrOutput, pDisplay) }
+        pub unsafe fn GetRandROutputDisplayEXT(&self, physicalDevice: VkPhysicalDevice, dpy: *mut Display, rrOutput: RROutput) -> Result<VkDisplayKHR, VkResult> {
+            let mut pDisplay = MaybeUninit::uninit();
+            unsafe { (self.GetRandROutputDisplayEXT)(physicalDevice,dpy,rrOutput,pDisplay.as_mut_ptr()).assume_init_on_success(pDisplay) }
         }
     }
 }
@@ -29224,16 +29286,19 @@ pub mod ext_display_control {
             unsafe { (self.DisplayPowerControlEXT)(device, display, pDisplayPowerInfo) }
         }
         #[inline(always)]
-        pub unsafe fn RegisterDeviceEventEXT(&self, device: VkDevice, pDeviceEventInfo: *const VkDeviceEventInfoEXT, pAllocator: *const VkAllocationCallbacks, pFence: *mut VkFence) -> VkResult {
-            unsafe { (self.RegisterDeviceEventEXT)(device, pDeviceEventInfo, pAllocator, pFence) }
+        pub unsafe fn RegisterDeviceEventEXT(&self, device: VkDevice, pDeviceEventInfo: *const VkDeviceEventInfoEXT, pAllocator: *const VkAllocationCallbacks) -> Result<VkFence, VkResult> {
+            let mut pFence = MaybeUninit::uninit();
+            unsafe { (self.RegisterDeviceEventEXT)(device,pDeviceEventInfo,pAllocator,pFence.as_mut_ptr()).assume_init_on_success(pFence) }
         }
         #[inline(always)]
-        pub unsafe fn RegisterDisplayEventEXT(&self, device: VkDevice, display: VkDisplayKHR, pDisplayEventInfo: *const VkDisplayEventInfoEXT, pAllocator: *const VkAllocationCallbacks, pFence: *mut VkFence) -> VkResult {
-            unsafe { (self.RegisterDisplayEventEXT)(device, display, pDisplayEventInfo, pAllocator, pFence) }
+        pub unsafe fn RegisterDisplayEventEXT(&self, device: VkDevice, display: VkDisplayKHR, pDisplayEventInfo: *const VkDisplayEventInfoEXT, pAllocator: *const VkAllocationCallbacks) -> Result<VkFence, VkResult> {
+            let mut pFence = MaybeUninit::uninit();
+            unsafe { (self.RegisterDisplayEventEXT)(device,display,pDisplayEventInfo,pAllocator,pFence.as_mut_ptr()).assume_init_on_success(pFence) }
         }
         #[inline(always)]
-        pub unsafe fn GetSwapchainCounterEXT(&self, device: VkDevice, swapchain: VkSwapchainKHR, counter: VkSurfaceCounterFlagBitsEXT, pCounterValue: *mut u64) -> VkResult {
-            unsafe { (self.GetSwapchainCounterEXT)(device, swapchain, counter, pCounterValue) }
+        pub unsafe fn GetSwapchainCounterEXT(&self, device: VkDevice, swapchain: VkSwapchainKHR, counter: VkSurfaceCounterFlagBitsEXT) -> Result<u64, VkResult> {
+            let mut pCounterValue = MaybeUninit::uninit();
+            unsafe { (self.GetSwapchainCounterEXT)(device,swapchain,counter,pCounterValue.as_mut_ptr()).assume_init_on_success(pCounterValue) }
         }
     }
 }
@@ -29246,8 +29311,9 @@ pub mod google_display_timing {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn GetRefreshCycleDurationGOOGLE(&self, device: VkDevice, swapchain: VkSwapchainKHR, pDisplayTimingProperties: *mut VkRefreshCycleDurationGOOGLE) -> VkResult {
-            unsafe { (self.GetRefreshCycleDurationGOOGLE)(device, swapchain, pDisplayTimingProperties) }
+        pub unsafe fn GetRefreshCycleDurationGOOGLE(&self, device: VkDevice, swapchain: VkSwapchainKHR) -> Result<VkRefreshCycleDurationGOOGLE, VkResult> {
+            let mut pDisplayTimingProperties = MaybeUninit::uninit();
+            unsafe { (self.GetRefreshCycleDurationGOOGLE)(device,swapchain,pDisplayTimingProperties.as_mut_ptr()).assume_init_on_success(pDisplayTimingProperties) }
         }
         #[inline(always)]
         pub unsafe fn GetPastPresentationTimingGOOGLE(&self, device: VkDevice, swapchain: VkSwapchainKHR, pPresentationTimingCount: *mut u32, pPresentationTimings: *mut VkPastPresentationTimingGOOGLE) -> VkResult {
@@ -29302,8 +29368,9 @@ pub mod khr_create_renderpass2 {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateRenderPass2KHR(&self, device: VkDevice, pCreateInfo: *const VkRenderPassCreateInfo2, pAllocator: *const VkAllocationCallbacks, pRenderPass: *mut VkRenderPass) -> VkResult {
-            unsafe { (self.CreateRenderPass2KHR)(device, pCreateInfo, pAllocator, pRenderPass) }
+        pub unsafe fn CreateRenderPass2KHR(&self, device: VkDevice, pCreateInfo: *const VkRenderPassCreateInfo2, pAllocator: *const VkAllocationCallbacks) -> Result<VkRenderPass, VkResult> {
+            let mut pRenderPass = MaybeUninit::uninit();
+            unsafe { (self.CreateRenderPass2KHR)(device,pCreateInfo,pAllocator,pRenderPass.as_mut_ptr()).assume_init_on_success(pRenderPass) }
         }
         #[inline(always)]
         pub unsafe fn CmdBeginRenderPass2KHR(&self, commandBuffer: VkCommandBuffer, pRenderPassBegin: *const VkRenderPassBeginInfo, pSubpassBeginInfo: *const VkSubpassBeginInfo) -> () {
@@ -29358,8 +29425,9 @@ pub mod khr_external_fence_win32 {
             unsafe { (self.ImportFenceWin32HandleKHR)(device, pImportFenceWin32HandleInfo) }
         }
         #[inline(always)]
-        pub unsafe fn GetFenceWin32HandleKHR(&self, device: VkDevice, pGetWin32HandleInfo: *const VkFenceGetWin32HandleInfoKHR, pHandle: *mut HANDLE) -> VkResult {
-            unsafe { (self.GetFenceWin32HandleKHR)(device, pGetWin32HandleInfo, pHandle) }
+        pub unsafe fn GetFenceWin32HandleKHR(&self, device: VkDevice, pGetWin32HandleInfo: *const VkFenceGetWin32HandleInfoKHR) -> Result<HANDLE, VkResult> {
+            let mut pHandle = MaybeUninit::uninit();
+            unsafe { (self.GetFenceWin32HandleKHR)(device,pGetWin32HandleInfo,pHandle.as_mut_ptr()).assume_init_on_success(pHandle) }
         }
     }
 }
@@ -29376,8 +29444,9 @@ pub mod khr_external_fence_fd {
             unsafe { (self.ImportFenceFdKHR)(device, pImportFenceFdInfo) }
         }
         #[inline(always)]
-        pub unsafe fn GetFenceFdKHR(&self, device: VkDevice, pGetFdInfo: *const VkFenceGetFdInfoKHR, pFd: *mut c_int) -> VkResult {
-            unsafe { (self.GetFenceFdKHR)(device, pGetFdInfo, pFd) }
+        pub unsafe fn GetFenceFdKHR(&self, device: VkDevice, pGetFdInfo: *const VkFenceGetFdInfoKHR) -> Result<c_int, VkResult> {
+            let mut pFd = MaybeUninit::uninit();
+            unsafe { (self.GetFenceFdKHR)(device,pGetFdInfo,pFd.as_mut_ptr()).assume_init_on_success(pFd) }
         }
     }
 }
@@ -29467,8 +29536,9 @@ pub mod mvk_ios_surface {
     }
     impl InstanceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateIOSSurfaceMVK(&self, instance: VkInstance, pCreateInfo: *const VkIOSSurfaceCreateInfoMVK, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
-            unsafe { (self.CreateIOSSurfaceMVK)(instance, pCreateInfo, pAllocator, pSurface) }
+        pub unsafe fn CreateIOSSurfaceMVK(&self, instance: VkInstance, pCreateInfo: *const VkIOSSurfaceCreateInfoMVK, pAllocator: *const VkAllocationCallbacks) -> Result<VkSurfaceKHR, VkResult> {
+            let mut pSurface = MaybeUninit::uninit();
+            unsafe { (self.CreateIOSSurfaceMVK)(instance,pCreateInfo,pAllocator,pSurface.as_mut_ptr()).assume_init_on_success(pSurface) }
         }
     }
 }
@@ -29480,8 +29550,9 @@ pub mod mvk_macos_surface {
     }
     impl InstanceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateMacOSSurfaceMVK(&self, instance: VkInstance, pCreateInfo: *const VkMacOSSurfaceCreateInfoMVK, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
-            unsafe { (self.CreateMacOSSurfaceMVK)(instance, pCreateInfo, pAllocator, pSurface) }
+        pub unsafe fn CreateMacOSSurfaceMVK(&self, instance: VkInstance, pCreateInfo: *const VkMacOSSurfaceCreateInfoMVK, pAllocator: *const VkAllocationCallbacks) -> Result<VkSurfaceKHR, VkResult> {
+            let mut pSurface = MaybeUninit::uninit();
+            unsafe { (self.CreateMacOSSurfaceMVK)(instance,pCreateInfo,pAllocator,pSurface.as_mut_ptr()).assume_init_on_success(pSurface) }
         }
     }
 }
@@ -29495,8 +29566,9 @@ pub mod ext_debug_utils {
     }
     impl InstanceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateDebugUtilsMessengerEXT(&self, instance: VkInstance, pCreateInfo: *const VkDebugUtilsMessengerCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pMessenger: *mut VkDebugUtilsMessengerEXT) -> VkResult {
-            unsafe { (self.CreateDebugUtilsMessengerEXT)(instance, pCreateInfo, pAllocator, pMessenger) }
+        pub unsafe fn CreateDebugUtilsMessengerEXT(&self, instance: VkInstance, pCreateInfo: *const VkDebugUtilsMessengerCreateInfoEXT, pAllocator: *const VkAllocationCallbacks) -> Result<VkDebugUtilsMessengerEXT, VkResult> {
+            let mut pMessenger = MaybeUninit::uninit();
+            unsafe { (self.CreateDebugUtilsMessengerEXT)(instance,pCreateInfo,pAllocator,pMessenger.as_mut_ptr()).assume_init_on_success(pMessenger) }
         }
         #[inline(always)]
         pub unsafe fn DestroyDebugUtilsMessengerEXT(&self, instance: VkInstance, messenger: VkDebugUtilsMessengerEXT, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -29565,8 +29637,9 @@ pub mod android_external_memory_android_hardware_buffer {
             unsafe { (self.GetAndroidHardwareBufferPropertiesANDROID)(device, buffer, pProperties) }
         }
         #[inline(always)]
-        pub unsafe fn GetMemoryAndroidHardwareBufferANDROID(&self, device: VkDevice, pInfo: *const VkMemoryGetAndroidHardwareBufferInfoANDROID, pBuffer: *mut *mut AHardwareBuffer) -> VkResult {
-            unsafe { (self.GetMemoryAndroidHardwareBufferANDROID)(device, pInfo, pBuffer) }
+        pub unsafe fn GetMemoryAndroidHardwareBufferANDROID(&self, device: VkDevice, pInfo: *const VkMemoryGetAndroidHardwareBufferInfoANDROID) -> Result<*mut AHardwareBuffer, VkResult> {
+            let mut pBuffer = MaybeUninit::uninit();
+            unsafe { (self.GetMemoryAndroidHardwareBufferANDROID)(device,pInfo,pBuffer.as_mut_ptr()).assume_init_on_success(pBuffer) }
         }
     }
 }
@@ -29589,16 +29662,18 @@ pub mod amd_gpa_interface {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateGpaSessionAMD(&self, device: VkDevice, pCreateInfo: *const VkGpaSessionCreateInfoAMD, pAllocator: *const VkAllocationCallbacks, pGpaSession: *mut VkGpaSessionAMD) -> VkResult {
-            unsafe { (self.CreateGpaSessionAMD)(device, pCreateInfo, pAllocator, pGpaSession) }
+        pub unsafe fn CreateGpaSessionAMD(&self, device: VkDevice, pCreateInfo: *const VkGpaSessionCreateInfoAMD, pAllocator: *const VkAllocationCallbacks) -> Result<VkGpaSessionAMD, VkResult> {
+            let mut pGpaSession = MaybeUninit::uninit();
+            unsafe { (self.CreateGpaSessionAMD)(device,pCreateInfo,pAllocator,pGpaSession.as_mut_ptr()).assume_init_on_success(pGpaSession) }
         }
         #[inline(always)]
         pub unsafe fn DestroyGpaSessionAMD(&self, device: VkDevice, gpaSession: VkGpaSessionAMD, pAllocator: *const VkAllocationCallbacks) -> () {
             unsafe { (self.DestroyGpaSessionAMD)(device, gpaSession, pAllocator) }
         }
         #[inline(always)]
-        pub unsafe fn SetGpaDeviceClockModeAMD(&self, device: VkDevice, pInfo: *mut VkGpaDeviceClockModeInfoAMD) -> VkResult {
-            unsafe { (self.SetGpaDeviceClockModeAMD)(device, pInfo) }
+        pub unsafe fn SetGpaDeviceClockModeAMD(&self, device: VkDevice) -> Result<VkGpaDeviceClockModeInfoAMD, VkResult> {
+            let mut pInfo = MaybeUninit::uninit();
+            unsafe { (self.SetGpaDeviceClockModeAMD)(device,pInfo.as_mut_ptr()).assume_init_on_success(pInfo) }
         }
         #[inline(always)]
         pub unsafe fn GetGpaDeviceClockInfoAMD(&self, device: VkDevice, pInfo: *mut VkGpaDeviceGetClockInfoAMD) -> VkResult {
@@ -29613,8 +29688,9 @@ pub mod amd_gpa_interface {
             unsafe { (self.CmdEndGpaSessionAMD)(commandBuffer, gpaSession) }
         }
         #[inline(always)]
-        pub unsafe fn CmdBeginGpaSampleAMD(&self, commandBuffer: VkCommandBuffer, gpaSession: VkGpaSessionAMD, pGpaSampleBeginInfo: *const VkGpaSampleBeginInfoAMD, pSampleID: *mut u32) -> VkResult {
-            unsafe { (self.CmdBeginGpaSampleAMD)(commandBuffer, gpaSession, pGpaSampleBeginInfo, pSampleID) }
+        pub unsafe fn CmdBeginGpaSampleAMD(&self, commandBuffer: VkCommandBuffer, gpaSession: VkGpaSessionAMD, pGpaSampleBeginInfo: *const VkGpaSampleBeginInfoAMD) -> Result<u32, VkResult> {
+            let mut pSampleID = MaybeUninit::uninit();
+            unsafe { (self.CmdBeginGpaSampleAMD)(commandBuffer,gpaSession,pGpaSampleBeginInfo,pSampleID.as_mut_ptr()).assume_init_on_success(pSampleID) }
         }
         #[inline(always)]
         pub unsafe fn CmdEndGpaSampleAMD(&self, commandBuffer: VkCommandBuffer, gpaSession: VkGpaSessionAMD, sampleID: u32) -> () {
@@ -29660,8 +29736,9 @@ pub mod amdx_shader_enqueue {
             unsafe { (self.GetExecutionGraphPipelineScratchSizeAMDX)(device, executionGraph, pSizeInfo) }
         }
         #[inline(always)]
-        pub unsafe fn GetExecutionGraphPipelineNodeIndexAMDX(&self, device: VkDevice, executionGraph: VkPipeline, pNodeInfo: *const VkPipelineShaderStageNodeCreateInfoAMDX, pNodeIndex: *mut u32) -> VkResult {
-            unsafe { (self.GetExecutionGraphPipelineNodeIndexAMDX)(device, executionGraph, pNodeInfo, pNodeIndex) }
+        pub unsafe fn GetExecutionGraphPipelineNodeIndexAMDX(&self, device: VkDevice, executionGraph: VkPipeline, pNodeInfo: *const VkPipelineShaderStageNodeCreateInfoAMDX) -> Result<u32, VkResult> {
+            let mut pNodeIndex = MaybeUninit::uninit();
+            unsafe { (self.GetExecutionGraphPipelineNodeIndexAMDX)(device,executionGraph,pNodeInfo,pNodeIndex.as_mut_ptr()).assume_init_on_success(pNodeIndex) }
         }
         #[inline(always)]
         pub unsafe fn CmdInitializeGraphScratchMemoryAMDX(&self, commandBuffer: VkCommandBuffer, executionGraph: VkPipeline, scratch: VkDeviceAddress, scratchSize: VkDeviceSize) -> () {
@@ -29730,8 +29807,9 @@ pub mod ext_descriptor_heap {
             unsafe { (self.GetImageOpaqueCaptureDataEXT)(device, imageCount, pImages, pDatas) }
         }
         #[inline(always)]
-        pub unsafe fn RegisterCustomBorderColorEXT(&self, device: VkDevice, pBorderColor: *const VkSamplerCustomBorderColorCreateInfoEXT, requestIndex: VkBool32, pIndex: *mut u32) -> VkResult {
-            unsafe { (self.RegisterCustomBorderColorEXT)(device, pBorderColor, requestIndex, pIndex) }
+        pub unsafe fn RegisterCustomBorderColorEXT(&self, device: VkDevice, pBorderColor: *const VkSamplerCustomBorderColorCreateInfoEXT, requestIndex: VkBool32) -> Result<u32, VkResult> {
+            let mut pIndex = MaybeUninit::uninit();
+            unsafe { (self.RegisterCustomBorderColorEXT)(device,pBorderColor,requestIndex,pIndex.as_mut_ptr()).assume_init_on_success(pIndex) }
         }
         #[inline(always)]
         pub unsafe fn UnregisterCustomBorderColorEXT(&self, device: VkDevice, index: u32) -> () {
@@ -29811,8 +29889,9 @@ pub mod khr_acceleration_structure {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateAccelerationStructureKHR(&self, device: VkDevice, pCreateInfo: *const VkAccelerationStructureCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pAccelerationStructure: *mut VkAccelerationStructureKHR) -> VkResult {
-            unsafe { (self.CreateAccelerationStructureKHR)(device, pCreateInfo, pAllocator, pAccelerationStructure) }
+        pub unsafe fn CreateAccelerationStructureKHR(&self, device: VkDevice, pCreateInfo: *const VkAccelerationStructureCreateInfoKHR, pAllocator: *const VkAllocationCallbacks) -> Result<VkAccelerationStructureKHR, VkResult> {
+            let mut pAccelerationStructure = MaybeUninit::uninit();
+            unsafe { (self.CreateAccelerationStructureKHR)(device,pCreateInfo,pAllocator,pAccelerationStructure.as_mut_ptr()).assume_init_on_success(pAccelerationStructure) }
         }
         #[inline(always)]
         pub unsafe fn DestroyAccelerationStructureKHR(&self, device: VkDevice, accelerationStructure: VkAccelerationStructureKHR, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -29928,8 +30007,9 @@ pub mod khr_sampler_ycbcr_conversion {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateSamplerYcbcrConversionKHR(&self, device: VkDevice, pCreateInfo: *const VkSamplerYcbcrConversionCreateInfo, pAllocator: *const VkAllocationCallbacks, pYcbcrConversion: *mut VkSamplerYcbcrConversion) -> VkResult {
-            unsafe { (self.CreateSamplerYcbcrConversionKHR)(device, pCreateInfo, pAllocator, pYcbcrConversion) }
+        pub unsafe fn CreateSamplerYcbcrConversionKHR(&self, device: VkDevice, pCreateInfo: *const VkSamplerYcbcrConversionCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkSamplerYcbcrConversion, VkResult> {
+            let mut pYcbcrConversion = MaybeUninit::uninit();
+            unsafe { (self.CreateSamplerYcbcrConversionKHR)(device,pCreateInfo,pAllocator,pYcbcrConversion.as_mut_ptr()).assume_init_on_success(pYcbcrConversion) }
         }
         #[inline(always)]
         pub unsafe fn DestroySamplerYcbcrConversionKHR(&self, device: VkDevice, ycbcrConversion: VkSamplerYcbcrConversion, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -29979,8 +30059,9 @@ pub mod ext_validation_cache {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateValidationCacheEXT(&self, device: VkDevice, pCreateInfo: *const VkValidationCacheCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pValidationCache: *mut VkValidationCacheEXT) -> VkResult {
-            unsafe { (self.CreateValidationCacheEXT)(device, pCreateInfo, pAllocator, pValidationCache) }
+        pub unsafe fn CreateValidationCacheEXT(&self, device: VkDevice, pCreateInfo: *const VkValidationCacheCreateInfoEXT, pAllocator: *const VkAllocationCallbacks) -> Result<VkValidationCacheEXT, VkResult> {
+            let mut pValidationCache = MaybeUninit::uninit();
+            unsafe { (self.CreateValidationCacheEXT)(device,pCreateInfo,pAllocator,pValidationCache.as_mut_ptr()).assume_init_on_success(pValidationCache) }
         }
         #[inline(always)]
         pub unsafe fn DestroyValidationCacheEXT(&self, device: VkDevice, validationCache: VkValidationCacheEXT, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -30038,8 +30119,9 @@ pub mod nv_ray_tracing {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateAccelerationStructureNV(&self, device: VkDevice, pCreateInfo: *const VkAccelerationStructureCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pAccelerationStructure: *mut VkAccelerationStructureNV) -> VkResult {
-            unsafe { (self.CreateAccelerationStructureNV)(device, pCreateInfo, pAllocator, pAccelerationStructure) }
+        pub unsafe fn CreateAccelerationStructureNV(&self, device: VkDevice, pCreateInfo: *const VkAccelerationStructureCreateInfoNV, pAllocator: *const VkAllocationCallbacks) -> Result<VkAccelerationStructureNV, VkResult> {
+            let mut pAccelerationStructure = MaybeUninit::uninit();
+            unsafe { (self.CreateAccelerationStructureNV)(device,pCreateInfo,pAllocator,pAccelerationStructure.as_mut_ptr()).assume_init_on_success(pAccelerationStructure) }
         }
         #[inline(always)]
         pub unsafe fn DestroyAccelerationStructureNV(&self, device: VkDevice, accelerationStructure: VkAccelerationStructureNV, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -30166,8 +30248,9 @@ pub mod ext_calibrated_timestamps {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn GetCalibratedTimestampsEXT(&self, device: VkDevice, timestampCount: u32, pTimestampInfos: *const VkCalibratedTimestampInfoKHR, pTimestamps: *mut u64, pMaxDeviation: *mut u64) -> VkResult {
-            unsafe { (self.GetCalibratedTimestampsEXT)(device, timestampCount, pTimestampInfos, pTimestamps, pMaxDeviation) }
+        pub unsafe fn GetCalibratedTimestampsEXT(&self, device: VkDevice, timestampCount: u32, pTimestampInfos: *const VkCalibratedTimestampInfoKHR, pTimestamps: *mut u64) -> Result<u64, VkResult> {
+            let mut pMaxDeviation = MaybeUninit::uninit();
+            unsafe { (self.GetCalibratedTimestampsEXT)(device,timestampCount,pTimestampInfos,pTimestamps,pMaxDeviation.as_mut_ptr()).assume_init_on_success(pMaxDeviation) }
         }
     }
 }
@@ -30245,8 +30328,9 @@ pub mod khr_timeline_semaphore {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn GetSemaphoreCounterValueKHR(&self, device: VkDevice, semaphore: VkSemaphore, pValue: *mut u64) -> VkResult {
-            unsafe { (self.GetSemaphoreCounterValueKHR)(device, semaphore, pValue) }
+        pub unsafe fn GetSemaphoreCounterValueKHR(&self, device: VkDevice, semaphore: VkSemaphore) -> Result<u64, VkResult> {
+            let mut pValue = MaybeUninit::uninit();
+            unsafe { (self.GetSemaphoreCounterValueKHR)(device,semaphore,pValue.as_mut_ptr()).assume_init_on_success(pValue) }
         }
         #[inline(always)]
         pub unsafe fn WaitSemaphoresKHR(&self, device: VkDevice, pWaitInfo: *const VkSemaphoreWaitInfo, timeout: u64) -> VkResult {
@@ -30273,12 +30357,14 @@ pub mod ext_present_timing {
             unsafe { (self.SetSwapchainPresentTimingQueueSizeEXT)(device, swapchain, size) }
         }
         #[inline(always)]
-        pub unsafe fn GetSwapchainTimingPropertiesEXT(&self, device: VkDevice, swapchain: VkSwapchainKHR, pSwapchainTimingProperties: *mut VkSwapchainTimingPropertiesEXT, pSwapchainTimingPropertiesCounter: *mut u64) -> VkResult {
-            unsafe { (self.GetSwapchainTimingPropertiesEXT)(device, swapchain, pSwapchainTimingProperties, pSwapchainTimingPropertiesCounter) }
+        pub unsafe fn GetSwapchainTimingPropertiesEXT(&self, device: VkDevice, swapchain: VkSwapchainKHR, pSwapchainTimingProperties: *mut VkSwapchainTimingPropertiesEXT) -> Result<u64, VkResult> {
+            let mut pSwapchainTimingPropertiesCounter = MaybeUninit::uninit();
+            unsafe { (self.GetSwapchainTimingPropertiesEXT)(device,swapchain,pSwapchainTimingProperties,pSwapchainTimingPropertiesCounter.as_mut_ptr()).assume_init_on_success(pSwapchainTimingPropertiesCounter) }
         }
         #[inline(always)]
-        pub unsafe fn GetSwapchainTimeDomainPropertiesEXT(&self, device: VkDevice, swapchain: VkSwapchainKHR, pSwapchainTimeDomainProperties: *mut VkSwapchainTimeDomainPropertiesEXT, pTimeDomainsCounter: *mut u64) -> VkResult {
-            unsafe { (self.GetSwapchainTimeDomainPropertiesEXT)(device, swapchain, pSwapchainTimeDomainProperties, pTimeDomainsCounter) }
+        pub unsafe fn GetSwapchainTimeDomainPropertiesEXT(&self, device: VkDevice, swapchain: VkSwapchainKHR, pSwapchainTimeDomainProperties: *mut VkSwapchainTimeDomainPropertiesEXT) -> Result<u64, VkResult> {
+            let mut pTimeDomainsCounter = MaybeUninit::uninit();
+            unsafe { (self.GetSwapchainTimeDomainPropertiesEXT)(device,swapchain,pSwapchainTimeDomainProperties,pTimeDomainsCounter.as_mut_ptr()).assume_init_on_success(pTimeDomainsCounter) }
         }
         #[inline(always)]
         pub unsafe fn GetPastPresentationTimingEXT(&self, device: VkDevice, pPastPresentationTimingInfo: *const VkPastPresentationTimingInfoEXT, pPastPresentationTimingProperties: *mut VkPastPresentationTimingPropertiesEXT) -> VkResult {
@@ -30322,8 +30408,9 @@ pub mod intel_performance_query {
             unsafe { (self.CmdSetPerformanceOverrideINTEL)(commandBuffer, pOverrideInfo) }
         }
         #[inline(always)]
-        pub unsafe fn AcquirePerformanceConfigurationINTEL(&self, device: VkDevice, pAcquireInfo: *const VkPerformanceConfigurationAcquireInfoINTEL, pConfiguration: *mut VkPerformanceConfigurationINTEL) -> VkResult {
-            unsafe { (self.AcquirePerformanceConfigurationINTEL)(device, pAcquireInfo, pConfiguration) }
+        pub unsafe fn AcquirePerformanceConfigurationINTEL(&self, device: VkDevice, pAcquireInfo: *const VkPerformanceConfigurationAcquireInfoINTEL) -> Result<VkPerformanceConfigurationINTEL, VkResult> {
+            let mut pConfiguration = MaybeUninit::uninit();
+            unsafe { (self.AcquirePerformanceConfigurationINTEL)(device,pAcquireInfo,pConfiguration.as_mut_ptr()).assume_init_on_success(pConfiguration) }
         }
         #[inline(always)]
         pub unsafe fn ReleasePerformanceConfigurationINTEL(&self, device: VkDevice, configuration: VkPerformanceConfigurationINTEL) -> VkResult {
@@ -30334,8 +30421,9 @@ pub mod intel_performance_query {
             unsafe { (self.QueueSetPerformanceConfigurationINTEL)(queue, configuration) }
         }
         #[inline(always)]
-        pub unsafe fn GetPerformanceParameterINTEL(&self, device: VkDevice, parameter: VkPerformanceParameterTypeINTEL, pValue: *mut VkPerformanceValueINTEL) -> VkResult {
-            unsafe { (self.GetPerformanceParameterINTEL)(device, parameter, pValue) }
+        pub unsafe fn GetPerformanceParameterINTEL(&self, device: VkDevice, parameter: VkPerformanceParameterTypeINTEL) -> Result<VkPerformanceValueINTEL, VkResult> {
+            let mut pValue = MaybeUninit::uninit();
+            unsafe { (self.GetPerformanceParameterINTEL)(device,parameter,pValue.as_mut_ptr()).assume_init_on_success(pValue) }
         }
     }
 }
@@ -30360,8 +30448,9 @@ pub mod fuchsia_imagepipe_surface {
     }
     impl InstanceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateImagePipeSurfaceFUCHSIA(&self, instance: VkInstance, pCreateInfo: *const VkImagePipeSurfaceCreateInfoFUCHSIA, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
-            unsafe { (self.CreateImagePipeSurfaceFUCHSIA)(instance, pCreateInfo, pAllocator, pSurface) }
+        pub unsafe fn CreateImagePipeSurfaceFUCHSIA(&self, instance: VkInstance, pCreateInfo: *const VkImagePipeSurfaceCreateInfoFUCHSIA, pAllocator: *const VkAllocationCallbacks) -> Result<VkSurfaceKHR, VkResult> {
+            let mut pSurface = MaybeUninit::uninit();
+            unsafe { (self.CreateImagePipeSurfaceFUCHSIA)(instance,pCreateInfo,pAllocator,pSurface.as_mut_ptr()).assume_init_on_success(pSurface) }
         }
     }
 }
@@ -30373,8 +30462,9 @@ pub mod ext_metal_surface {
     }
     impl InstanceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateMetalSurfaceEXT(&self, instance: VkInstance, pCreateInfo: *const VkMetalSurfaceCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
-            unsafe { (self.CreateMetalSurfaceEXT)(instance, pCreateInfo, pAllocator, pSurface) }
+        pub unsafe fn CreateMetalSurfaceEXT(&self, instance: VkInstance, pCreateInfo: *const VkMetalSurfaceCreateInfoEXT, pAllocator: *const VkAllocationCallbacks) -> Result<VkSurfaceKHR, VkResult> {
+            let mut pSurface = MaybeUninit::uninit();
+            unsafe { (self.CreateMetalSurfaceEXT)(instance,pCreateInfo,pAllocator,pSurface.as_mut_ptr()).assume_init_on_success(pSurface) }
         }
     }
 }
@@ -30510,8 +30600,9 @@ pub mod ext_full_screen_exclusive {
             unsafe { (self.ReleaseFullScreenExclusiveModeEXT)(device, swapchain) }
         }
         #[inline(always)]
-        pub unsafe fn GetDeviceGroupSurfacePresentModes2EXT(&self, device: VkDevice, pSurfaceInfo: *const VkPhysicalDeviceSurfaceInfo2KHR, pModes: *mut VkDeviceGroupPresentModeFlagsKHR) -> VkResult {
-            unsafe { (self.GetDeviceGroupSurfacePresentModes2EXT)(device, pSurfaceInfo, pModes) }
+        pub unsafe fn GetDeviceGroupSurfacePresentModes2EXT(&self, device: VkDevice, pSurfaceInfo: *const VkPhysicalDeviceSurfaceInfo2KHR) -> Result<VkDeviceGroupPresentModeFlagsKHR, VkResult> {
+            let mut pModes = MaybeUninit::uninit();
+            unsafe { (self.GetDeviceGroupSurfacePresentModes2EXT)(device,pSurfaceInfo,pModes.as_mut_ptr()).assume_init_on_success(pModes) }
         }
     }
 }
@@ -30523,8 +30614,9 @@ pub mod ext_headless_surface {
     }
     impl InstanceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateHeadlessSurfaceEXT(&self, instance: VkInstance, pCreateInfo: *const VkHeadlessSurfaceCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
-            unsafe { (self.CreateHeadlessSurfaceEXT)(instance, pCreateInfo, pAllocator, pSurface) }
+        pub unsafe fn CreateHeadlessSurfaceEXT(&self, instance: VkInstance, pCreateInfo: *const VkHeadlessSurfaceCreateInfoEXT, pAllocator: *const VkAllocationCallbacks) -> Result<VkSurfaceKHR, VkResult> {
+            let mut pSurface = MaybeUninit::uninit();
+            unsafe { (self.CreateHeadlessSurfaceEXT)(instance,pCreateInfo,pAllocator,pSurface.as_mut_ptr()).assume_init_on_success(pSurface) }
         }
     }
 }
@@ -30657,8 +30749,9 @@ pub mod khr_deferred_host_operations {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateDeferredOperationKHR(&self, device: VkDevice, pAllocator: *const VkAllocationCallbacks, pDeferredOperation: *mut VkDeferredOperationKHR) -> VkResult {
-            unsafe { (self.CreateDeferredOperationKHR)(device, pAllocator, pDeferredOperation) }
+        pub unsafe fn CreateDeferredOperationKHR(&self, device: VkDevice, pAllocator: *const VkAllocationCallbacks) -> Result<VkDeferredOperationKHR, VkResult> {
+            let mut pDeferredOperation = MaybeUninit::uninit();
+            unsafe { (self.CreateDeferredOperationKHR)(device,pAllocator,pDeferredOperation.as_mut_ptr()).assume_init_on_success(pDeferredOperation) }
         }
         #[inline(always)]
         pub unsafe fn DestroyDeferredOperationKHR(&self, device: VkDevice, operation: VkDeferredOperationKHR, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -30743,8 +30836,9 @@ pub mod khr_map_memory2 {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn MapMemory2KHR(&self, device: VkDevice, pMemoryMapInfo: *const VkMemoryMapInfo, ppData: *mut *mut c_void) -> VkResult {
-            unsafe { (self.MapMemory2KHR)(device, pMemoryMapInfo, ppData) }
+        pub unsafe fn MapMemory2KHR(&self, device: VkDevice, pMemoryMapInfo: *const VkMemoryMapInfo) -> Result<*mut c_void, VkResult> {
+            let mut ppData = MaybeUninit::uninit();
+            unsafe { (self.MapMemory2KHR)(device,pMemoryMapInfo,ppData.as_mut_ptr()).assume_init_on_success(ppData) }
         }
         #[inline(always)]
         pub unsafe fn UnmapMemory2KHR(&self, device: VkDevice, pMemoryUnmapInfo: *const VkMemoryUnmapInfo) -> VkResult {
@@ -30794,8 +30888,9 @@ pub mod nv_device_generated_commands {
             unsafe { (self.CmdBindPipelineShaderGroupNV)(commandBuffer, pipelineBindPoint, pipeline, groupIndex) }
         }
         #[inline(always)]
-        pub unsafe fn CreateIndirectCommandsLayoutNV(&self, device: VkDevice, pCreateInfo: *const VkIndirectCommandsLayoutCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pIndirectCommandsLayout: *mut VkIndirectCommandsLayoutNV) -> VkResult {
-            unsafe { (self.CreateIndirectCommandsLayoutNV)(device, pCreateInfo, pAllocator, pIndirectCommandsLayout) }
+        pub unsafe fn CreateIndirectCommandsLayoutNV(&self, device: VkDevice, pCreateInfo: *const VkIndirectCommandsLayoutCreateInfoNV, pAllocator: *const VkAllocationCallbacks) -> Result<VkIndirectCommandsLayoutNV, VkResult> {
+            let mut pIndirectCommandsLayout = MaybeUninit::uninit();
+            unsafe { (self.CreateIndirectCommandsLayoutNV)(device,pCreateInfo,pAllocator,pIndirectCommandsLayout.as_mut_ptr()).assume_init_on_success(pIndirectCommandsLayout) }
         }
         #[inline(always)]
         pub unsafe fn DestroyIndirectCommandsLayoutNV(&self, device: VkDevice, indirectCommandsLayout: VkIndirectCommandsLayoutNV, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -30829,8 +30924,9 @@ pub mod ext_acquire_drm_display {
             unsafe { (self.AcquireDrmDisplayEXT)(physicalDevice, drmFd, display) }
         }
         #[inline(always)]
-        pub unsafe fn GetDrmDisplayEXT(&self, physicalDevice: VkPhysicalDevice, drmFd: i32, connectorId: u32, display: *mut VkDisplayKHR) -> VkResult {
-            unsafe { (self.GetDrmDisplayEXT)(physicalDevice, drmFd, connectorId, display) }
+        pub unsafe fn GetDrmDisplayEXT(&self, physicalDevice: VkPhysicalDevice, drmFd: i32, connectorId: u32) -> Result<VkDisplayKHR, VkResult> {
+            let mut display = MaybeUninit::uninit();
+            unsafe { (self.GetDrmDisplayEXT)(physicalDevice,drmFd,connectorId,display.as_mut_ptr()).assume_init_on_success(display) }
         }
     }
 }
@@ -30845,8 +30941,9 @@ pub mod ext_private_data {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn CreatePrivateDataSlotEXT(&self, device: VkDevice, pCreateInfo: *const VkPrivateDataSlotCreateInfo, pAllocator: *const VkAllocationCallbacks, pPrivateDataSlot: *mut VkPrivateDataSlot) -> VkResult {
-            unsafe { (self.CreatePrivateDataSlotEXT)(device, pCreateInfo, pAllocator, pPrivateDataSlot) }
+        pub unsafe fn CreatePrivateDataSlotEXT(&self, device: VkDevice, pCreateInfo: *const VkPrivateDataSlotCreateInfo, pAllocator: *const VkAllocationCallbacks) -> Result<VkPrivateDataSlot, VkResult> {
+            let mut pPrivateDataSlot = MaybeUninit::uninit();
+            unsafe { (self.CreatePrivateDataSlotEXT)(device,pCreateInfo,pAllocator,pPrivateDataSlot.as_mut_ptr()).assume_init_on_success(pPrivateDataSlot) }
         }
         #[inline(always)]
         pub unsafe fn DestroyPrivateDataSlotEXT(&self, device: VkDevice, privateDataSlot: VkPrivateDataSlot, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -30915,16 +31012,18 @@ pub mod nv_cuda_kernel_launch {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateCudaModuleNV(&self, device: VkDevice, pCreateInfo: *const VkCudaModuleCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pModule: *mut VkCudaModuleNV) -> VkResult {
-            unsafe { (self.CreateCudaModuleNV)(device, pCreateInfo, pAllocator, pModule) }
+        pub unsafe fn CreateCudaModuleNV(&self, device: VkDevice, pCreateInfo: *const VkCudaModuleCreateInfoNV, pAllocator: *const VkAllocationCallbacks) -> Result<VkCudaModuleNV, VkResult> {
+            let mut pModule = MaybeUninit::uninit();
+            unsafe { (self.CreateCudaModuleNV)(device,pCreateInfo,pAllocator,pModule.as_mut_ptr()).assume_init_on_success(pModule) }
         }
         #[inline(always)]
         pub unsafe fn GetCudaModuleCacheNV(&self, device: VkDevice, module: VkCudaModuleNV, pCacheSize: *mut usize, pCacheData: *mut c_void) -> VkResult {
             unsafe { (self.GetCudaModuleCacheNV)(device, module, pCacheSize, pCacheData) }
         }
         #[inline(always)]
-        pub unsafe fn CreateCudaFunctionNV(&self, device: VkDevice, pCreateInfo: *const VkCudaFunctionCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pFunction: *mut VkCudaFunctionNV) -> VkResult {
-            unsafe { (self.CreateCudaFunctionNV)(device, pCreateInfo, pAllocator, pFunction) }
+        pub unsafe fn CreateCudaFunctionNV(&self, device: VkDevice, pCreateInfo: *const VkCudaFunctionCreateInfoNV, pAllocator: *const VkAllocationCallbacks) -> Result<VkCudaFunctionNV, VkResult> {
+            let mut pFunction = MaybeUninit::uninit();
+            unsafe { (self.CreateCudaFunctionNV)(device,pCreateInfo,pAllocator,pFunction.as_mut_ptr()).assume_init_on_success(pFunction) }
         }
         #[inline(always)]
         pub unsafe fn DestroyCudaModuleNV(&self, device: VkDevice, module: VkCudaModuleNV, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -31233,8 +31332,9 @@ pub mod khr_device_address_commands {
             unsafe { (self.CmdWriteMarkerToMemoryAMD)(commandBuffer, pInfo) }
         }
         #[inline(always)]
-        pub unsafe fn CreateAccelerationStructure2KHR(&self, device: VkDevice, pCreateInfo: *const VkAccelerationStructureCreateInfo2KHR, pAllocator: *const VkAllocationCallbacks, pAccelerationStructure: *mut VkAccelerationStructureKHR) -> VkResult {
-            unsafe { (self.CreateAccelerationStructure2KHR)(device, pCreateInfo, pAllocator, pAccelerationStructure) }
+        pub unsafe fn CreateAccelerationStructure2KHR(&self, device: VkDevice, pCreateInfo: *const VkAccelerationStructureCreateInfo2KHR, pAllocator: *const VkAllocationCallbacks) -> Result<VkAccelerationStructureKHR, VkResult> {
+            let mut pAccelerationStructure = MaybeUninit::uninit();
+            unsafe { (self.CreateAccelerationStructure2KHR)(device,pCreateInfo,pAllocator,pAccelerationStructure.as_mut_ptr()).assume_init_on_success(pAccelerationStructure) }
         }
     }
 }
@@ -31351,8 +31451,9 @@ pub mod nv_acquire_winrt_display {
             unsafe { (self.AcquireWinrtDisplayNV)(physicalDevice, display) }
         }
         #[inline(always)]
-        pub unsafe fn GetWinrtDisplayNV(&self, physicalDevice: VkPhysicalDevice, deviceRelativeId: u32, pDisplay: *mut VkDisplayKHR) -> VkResult {
-            unsafe { (self.GetWinrtDisplayNV)(physicalDevice, deviceRelativeId, pDisplay) }
+        pub unsafe fn GetWinrtDisplayNV(&self, physicalDevice: VkPhysicalDevice, deviceRelativeId: u32) -> Result<VkDisplayKHR, VkResult> {
+            let mut pDisplay = MaybeUninit::uninit();
+            unsafe { (self.GetWinrtDisplayNV)(physicalDevice,deviceRelativeId,pDisplay.as_mut_ptr()).assume_init_on_success(pDisplay) }
         }
     }
 }
@@ -31365,8 +31466,9 @@ pub mod ext_directfb_surface {
     }
     impl InstanceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateDirectFBSurfaceEXT(&self, instance: VkInstance, pCreateInfo: *const VkDirectFBSurfaceCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
-            unsafe { (self.CreateDirectFBSurfaceEXT)(instance, pCreateInfo, pAllocator, pSurface) }
+        pub unsafe fn CreateDirectFBSurfaceEXT(&self, instance: VkInstance, pCreateInfo: *const VkDirectFBSurfaceCreateInfoEXT, pAllocator: *const VkAllocationCallbacks) -> Result<VkSurfaceKHR, VkResult> {
+            let mut pSurface = MaybeUninit::uninit();
+            unsafe { (self.CreateDirectFBSurfaceEXT)(instance,pCreateInfo,pAllocator,pSurface.as_mut_ptr()).assume_init_on_success(pSurface) }
         }
         #[inline(always)]
         pub unsafe fn GetPhysicalDeviceDirectFBPresentationSupportEXT(&self, physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, dfb: *mut IDirectFB) -> VkBool32 {
@@ -31396,8 +31498,9 @@ pub mod fuchsia_external_memory {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn GetMemoryZirconHandleFUCHSIA(&self, device: VkDevice, pGetZirconHandleInfo: *const VkMemoryGetZirconHandleInfoFUCHSIA, pZirconHandle: *mut zx_handle_t) -> VkResult {
-            unsafe { (self.GetMemoryZirconHandleFUCHSIA)(device, pGetZirconHandleInfo, pZirconHandle) }
+        pub unsafe fn GetMemoryZirconHandleFUCHSIA(&self, device: VkDevice, pGetZirconHandleInfo: *const VkMemoryGetZirconHandleInfoFUCHSIA) -> Result<zx_handle_t, VkResult> {
+            let mut pZirconHandle = MaybeUninit::uninit();
+            unsafe { (self.GetMemoryZirconHandleFUCHSIA)(device,pGetZirconHandleInfo,pZirconHandle.as_mut_ptr()).assume_init_on_success(pZirconHandle) }
         }
         #[inline(always)]
         pub unsafe fn GetMemoryZirconHandlePropertiesFUCHSIA(&self, device: VkDevice, handleType: VkExternalMemoryHandleTypeFlagBits, zirconHandle: zx_handle_t, pMemoryZirconHandleProperties: *mut VkMemoryZirconHandlePropertiesFUCHSIA) -> VkResult {
@@ -31418,8 +31521,9 @@ pub mod fuchsia_external_semaphore {
             unsafe { (self.ImportSemaphoreZirconHandleFUCHSIA)(device, pImportSemaphoreZirconHandleInfo) }
         }
         #[inline(always)]
-        pub unsafe fn GetSemaphoreZirconHandleFUCHSIA(&self, device: VkDevice, pGetZirconHandleInfo: *const VkSemaphoreGetZirconHandleInfoFUCHSIA, pZirconHandle: *mut zx_handle_t) -> VkResult {
-            unsafe { (self.GetSemaphoreZirconHandleFUCHSIA)(device, pGetZirconHandleInfo, pZirconHandle) }
+        pub unsafe fn GetSemaphoreZirconHandleFUCHSIA(&self, device: VkDevice, pGetZirconHandleInfo: *const VkSemaphoreGetZirconHandleInfoFUCHSIA) -> Result<zx_handle_t, VkResult> {
+            let mut pZirconHandle = MaybeUninit::uninit();
+            unsafe { (self.GetSemaphoreZirconHandleFUCHSIA)(device,pGetZirconHandleInfo,pZirconHandle.as_mut_ptr()).assume_init_on_success(pZirconHandle) }
         }
     }
 }
@@ -31435,8 +31539,9 @@ pub mod fuchsia_buffer_collection {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateBufferCollectionFUCHSIA(&self, device: VkDevice, pCreateInfo: *const VkBufferCollectionCreateInfoFUCHSIA, pAllocator: *const VkAllocationCallbacks, pCollection: *mut VkBufferCollectionFUCHSIA) -> VkResult {
-            unsafe { (self.CreateBufferCollectionFUCHSIA)(device, pCreateInfo, pAllocator, pCollection) }
+        pub unsafe fn CreateBufferCollectionFUCHSIA(&self, device: VkDevice, pCreateInfo: *const VkBufferCollectionCreateInfoFUCHSIA, pAllocator: *const VkAllocationCallbacks) -> Result<VkBufferCollectionFUCHSIA, VkResult> {
+            let mut pCollection = MaybeUninit::uninit();
+            unsafe { (self.CreateBufferCollectionFUCHSIA)(device,pCreateInfo,pAllocator,pCollection.as_mut_ptr()).assume_init_on_success(pCollection) }
         }
         #[inline(always)]
         pub unsafe fn SetBufferCollectionImageConstraintsFUCHSIA(&self, device: VkDevice, collection: VkBufferCollectionFUCHSIA, pImageConstraintsInfo: *const VkImageConstraintsInfoFUCHSIA) -> VkResult {
@@ -31465,8 +31570,9 @@ pub mod huawei_subpass_shading {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn GetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI(&self, device: VkDevice, renderpass: VkRenderPass, pMaxWorkgroupSize: *mut VkExtent2D) -> VkResult {
-            unsafe { (self.GetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI)(device, renderpass, pMaxWorkgroupSize) }
+        pub unsafe fn GetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI(&self, device: VkDevice, renderpass: VkRenderPass) -> Result<VkExtent2D, VkResult> {
+            let mut pMaxWorkgroupSize = MaybeUninit::uninit();
+            unsafe { (self.GetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI)(device,renderpass,pMaxWorkgroupSize.as_mut_ptr()).assume_init_on_success(pMaxWorkgroupSize) }
         }
         #[inline(always)]
         pub unsafe fn CmdSubpassShadingHUAWEI(&self, commandBuffer: VkCommandBuffer) -> () {
@@ -31495,8 +31601,9 @@ pub mod nv_external_memory_rdma {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn GetMemoryRemoteAddressNV(&self, device: VkDevice, pMemoryGetRemoteAddressInfo: *const VkMemoryGetRemoteAddressInfoNV, pAddress: *mut VkRemoteAddressNV) -> VkResult {
-            unsafe { (self.GetMemoryRemoteAddressNV)(device, pMemoryGetRemoteAddressInfo, pAddress) }
+        pub unsafe fn GetMemoryRemoteAddressNV(&self, device: VkDevice, pMemoryGetRemoteAddressInfo: *const VkMemoryGetRemoteAddressInfoNV) -> Result<VkRemoteAddressNV, VkResult> {
+            let mut pAddress = MaybeUninit::uninit();
+            unsafe { (self.GetMemoryRemoteAddressNV)(device,pMemoryGetRemoteAddressInfo,pAddress.as_mut_ptr()).assume_init_on_success(pAddress) }
         }
     }
 }
@@ -31555,8 +31662,9 @@ pub mod qnx_screen_surface {
     }
     impl InstanceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateScreenSurfaceQNX(&self, instance: VkInstance, pCreateInfo: *const VkScreenSurfaceCreateInfoQNX, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
-            unsafe { (self.CreateScreenSurfaceQNX)(instance, pCreateInfo, pAllocator, pSurface) }
+        pub unsafe fn CreateScreenSurfaceQNX(&self, instance: VkInstance, pCreateInfo: *const VkScreenSurfaceCreateInfoQNX, pAllocator: *const VkAllocationCallbacks) -> Result<VkSurfaceKHR, VkResult> {
+            let mut pSurface = MaybeUninit::uninit();
+            unsafe { (self.CreateScreenSurfaceQNX)(instance,pCreateInfo,pAllocator,pSurface.as_mut_ptr()).assume_init_on_success(pSurface) }
         }
         #[inline(always)]
         pub unsafe fn GetPhysicalDeviceScreenPresentationSupportQNX(&self, physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, window: *mut _screen_window) -> VkBool32 {
@@ -31629,8 +31737,9 @@ pub mod ext_opacity_micromap {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateMicromapEXT(&self, device: VkDevice, pCreateInfo: *const VkMicromapCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pMicromap: *mut VkMicromapEXT) -> VkResult {
-            unsafe { (self.CreateMicromapEXT)(device, pCreateInfo, pAllocator, pMicromap) }
+        pub unsafe fn CreateMicromapEXT(&self, device: VkDevice, pCreateInfo: *const VkMicromapCreateInfoEXT, pAllocator: *const VkAllocationCallbacks) -> Result<VkMicromapEXT, VkResult> {
+            let mut pMicromap = MaybeUninit::uninit();
+            unsafe { (self.CreateMicromapEXT)(device,pCreateInfo,pAllocator,pMicromap.as_mut_ptr()).assume_init_on_success(pMicromap) }
         }
         #[inline(always)]
         pub unsafe fn DestroyMicromapEXT(&self, device: VkDevice, micromap: VkMicromapEXT, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -31843,8 +31952,9 @@ pub mod ohos_external_memory {
             unsafe { (self.GetNativeBufferPropertiesOHOS)(device, buffer, pProperties) }
         }
         #[inline(always)]
-        pub unsafe fn GetMemoryNativeBufferOHOS(&self, device: VkDevice, pInfo: *const VkMemoryGetNativeBufferInfoOHOS, pBuffer: *mut *mut OH_NativeBuffer) -> VkResult {
-            unsafe { (self.GetMemoryNativeBufferOHOS)(device, pInfo, pBuffer) }
+        pub unsafe fn GetMemoryNativeBufferOHOS(&self, device: VkDevice, pInfo: *const VkMemoryGetNativeBufferInfoOHOS) -> Result<*mut OH_NativeBuffer, VkResult> {
+            let mut pBuffer = MaybeUninit::uninit();
+            unsafe { (self.GetMemoryNativeBufferOHOS)(device,pInfo,pBuffer.as_mut_ptr()).assume_init_on_success(pBuffer) }
         }
     }
 }
@@ -32037,16 +32147,18 @@ pub mod arm_tensors {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateTensorARM(&self, device: VkDevice, pCreateInfo: *const VkTensorCreateInfoARM, pAllocator: *const VkAllocationCallbacks, pTensor: *mut VkTensorARM) -> VkResult {
-            unsafe { (self.CreateTensorARM)(device, pCreateInfo, pAllocator, pTensor) }
+        pub unsafe fn CreateTensorARM(&self, device: VkDevice, pCreateInfo: *const VkTensorCreateInfoARM, pAllocator: *const VkAllocationCallbacks) -> Result<VkTensorARM, VkResult> {
+            let mut pTensor = MaybeUninit::uninit();
+            unsafe { (self.CreateTensorARM)(device,pCreateInfo,pAllocator,pTensor.as_mut_ptr()).assume_init_on_success(pTensor) }
         }
         #[inline(always)]
         pub unsafe fn DestroyTensorARM(&self, device: VkDevice, tensor: VkTensorARM, pAllocator: *const VkAllocationCallbacks) -> () {
             unsafe { (self.DestroyTensorARM)(device, tensor, pAllocator) }
         }
         #[inline(always)]
-        pub unsafe fn CreateTensorViewARM(&self, device: VkDevice, pCreateInfo: *const VkTensorViewCreateInfoARM, pAllocator: *const VkAllocationCallbacks, pView: *mut VkTensorViewARM) -> VkResult {
-            unsafe { (self.CreateTensorViewARM)(device, pCreateInfo, pAllocator, pView) }
+        pub unsafe fn CreateTensorViewARM(&self, device: VkDevice, pCreateInfo: *const VkTensorViewCreateInfoARM, pAllocator: *const VkAllocationCallbacks) -> Result<VkTensorViewARM, VkResult> {
+            let mut pView = MaybeUninit::uninit();
+            unsafe { (self.CreateTensorViewARM)(device,pCreateInfo,pAllocator,pView.as_mut_ptr()).assume_init_on_success(pView) }
         }
         #[inline(always)]
         pub unsafe fn DestroyTensorViewARM(&self, device: VkDevice, tensorView: VkTensorViewARM, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -32116,8 +32228,9 @@ pub mod nv_optical_flow {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateOpticalFlowSessionNV(&self, device: VkDevice, pCreateInfo: *const VkOpticalFlowSessionCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pSession: *mut VkOpticalFlowSessionNV) -> VkResult {
-            unsafe { (self.CreateOpticalFlowSessionNV)(device, pCreateInfo, pAllocator, pSession) }
+        pub unsafe fn CreateOpticalFlowSessionNV(&self, device: VkDevice, pCreateInfo: *const VkOpticalFlowSessionCreateInfoNV, pAllocator: *const VkAllocationCallbacks) -> Result<VkOpticalFlowSessionNV, VkResult> {
+            let mut pSession = MaybeUninit::uninit();
+            unsafe { (self.CreateOpticalFlowSessionNV)(device,pCreateInfo,pAllocator,pSession.as_mut_ptr()).assume_init_on_success(pSession) }
         }
         #[inline(always)]
         pub unsafe fn DestroyOpticalFlowSessionNV(&self, device: VkDevice, session: VkOpticalFlowSessionNV, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -32477,8 +32590,9 @@ pub mod khr_pipeline_binary {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn CreatePipelineBinariesKHR(&self, device: VkDevice, pCreateInfo: *const VkPipelineBinaryCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pBinaries: *mut VkPipelineBinaryHandlesInfoKHR) -> VkResult {
-            unsafe { (self.CreatePipelineBinariesKHR)(device, pCreateInfo, pAllocator, pBinaries) }
+        pub unsafe fn CreatePipelineBinariesKHR(&self, device: VkDevice, pCreateInfo: *const VkPipelineBinaryCreateInfoKHR, pAllocator: *const VkAllocationCallbacks) -> Result<VkPipelineBinaryHandlesInfoKHR, VkResult> {
+            let mut pBinaries = MaybeUninit::uninit();
+            unsafe { (self.CreatePipelineBinariesKHR)(device,pCreateInfo,pAllocator,pBinaries.as_mut_ptr()).assume_init_on_success(pBinaries) }
         }
         #[inline(always)]
         pub unsafe fn DestroyPipelineBinaryKHR(&self, device: VkDevice, pipelineBinary: VkPipelineBinaryKHR, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -32636,8 +32750,9 @@ pub mod arm_data_graph {
             unsafe { (self.CreateDataGraphPipelinesARM)(device, deferredOperation, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines) }
         }
         #[inline(always)]
-        pub unsafe fn CreateDataGraphPipelineSessionARM(&self, device: VkDevice, pCreateInfo: *const VkDataGraphPipelineSessionCreateInfoARM, pAllocator: *const VkAllocationCallbacks, pSession: *mut VkDataGraphPipelineSessionARM) -> VkResult {
-            unsafe { (self.CreateDataGraphPipelineSessionARM)(device, pCreateInfo, pAllocator, pSession) }
+        pub unsafe fn CreateDataGraphPipelineSessionARM(&self, device: VkDevice, pCreateInfo: *const VkDataGraphPipelineSessionCreateInfoARM, pAllocator: *const VkAllocationCallbacks) -> Result<VkDataGraphPipelineSessionARM, VkResult> {
+            let mut pSession = MaybeUninit::uninit();
+            unsafe { (self.CreateDataGraphPipelineSessionARM)(device,pCreateInfo,pAllocator,pSession.as_mut_ptr()).assume_init_on_success(pSession) }
         }
         #[inline(always)]
         pub unsafe fn GetDataGraphPipelineSessionBindPointRequirementsARM(&self, device: VkDevice, pInfo: *const VkDataGraphPipelineSessionBindPointRequirementsInfoARM, pBindPointRequirementCount: *mut u32, pBindPointRequirements: *mut VkDataGraphPipelineSessionBindPointRequirementARM) -> VkResult {
@@ -32738,8 +32853,9 @@ pub mod khr_calibrated_timestamps {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn GetCalibratedTimestampsKHR(&self, device: VkDevice, timestampCount: u32, pTimestampInfos: *const VkCalibratedTimestampInfoKHR, pTimestamps: *mut u64, pMaxDeviation: *mut u64) -> VkResult {
-            unsafe { (self.GetCalibratedTimestampsKHR)(device, timestampCount, pTimestampInfos, pTimestamps, pMaxDeviation) }
+        pub unsafe fn GetCalibratedTimestampsKHR(&self, device: VkDevice, timestampCount: u32, pTimestampInfos: *const VkCalibratedTimestampInfoKHR, pTimestamps: *mut u64) -> Result<u64, VkResult> {
+            let mut pMaxDeviation = MaybeUninit::uninit();
+            unsafe { (self.GetCalibratedTimestampsKHR)(device,timestampCount,pTimestampInfos,pTimestamps,pMaxDeviation.as_mut_ptr()).assume_init_on_success(pMaxDeviation) }
         }
     }
 }
@@ -32848,8 +32964,9 @@ pub mod nv_external_compute_queue {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateExternalComputeQueueNV(&self, device: VkDevice, pCreateInfo: *const VkExternalComputeQueueCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pExternalQueue: *mut VkExternalComputeQueueNV) -> VkResult {
-            unsafe { (self.CreateExternalComputeQueueNV)(device, pCreateInfo, pAllocator, pExternalQueue) }
+        pub unsafe fn CreateExternalComputeQueueNV(&self, device: VkDevice, pCreateInfo: *const VkExternalComputeQueueCreateInfoNV, pAllocator: *const VkAllocationCallbacks) -> Result<VkExternalComputeQueueNV, VkResult> {
+            let mut pExternalQueue = MaybeUninit::uninit();
+            unsafe { (self.CreateExternalComputeQueueNV)(device,pCreateInfo,pAllocator,pExternalQueue.as_mut_ptr()).assume_init_on_success(pExternalQueue) }
         }
         #[inline(always)]
         pub unsafe fn DestroyExternalComputeQueueNV(&self, device: VkDevice, externalQueue: VkExternalComputeQueueNV, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -32921,16 +33038,18 @@ pub mod ext_device_generated_commands {
             unsafe { (self.CmdExecuteGeneratedCommandsEXT)(commandBuffer, isPreprocessed, pGeneratedCommandsInfo) }
         }
         #[inline(always)]
-        pub unsafe fn CreateIndirectCommandsLayoutEXT(&self, device: VkDevice, pCreateInfo: *const VkIndirectCommandsLayoutCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pIndirectCommandsLayout: *mut VkIndirectCommandsLayoutEXT) -> VkResult {
-            unsafe { (self.CreateIndirectCommandsLayoutEXT)(device, pCreateInfo, pAllocator, pIndirectCommandsLayout) }
+        pub unsafe fn CreateIndirectCommandsLayoutEXT(&self, device: VkDevice, pCreateInfo: *const VkIndirectCommandsLayoutCreateInfoEXT, pAllocator: *const VkAllocationCallbacks) -> Result<VkIndirectCommandsLayoutEXT, VkResult> {
+            let mut pIndirectCommandsLayout = MaybeUninit::uninit();
+            unsafe { (self.CreateIndirectCommandsLayoutEXT)(device,pCreateInfo,pAllocator,pIndirectCommandsLayout.as_mut_ptr()).assume_init_on_success(pIndirectCommandsLayout) }
         }
         #[inline(always)]
         pub unsafe fn DestroyIndirectCommandsLayoutEXT(&self, device: VkDevice, indirectCommandsLayout: VkIndirectCommandsLayoutEXT, pAllocator: *const VkAllocationCallbacks) -> () {
             unsafe { (self.DestroyIndirectCommandsLayoutEXT)(device, indirectCommandsLayout, pAllocator) }
         }
         #[inline(always)]
-        pub unsafe fn CreateIndirectExecutionSetEXT(&self, device: VkDevice, pCreateInfo: *const VkIndirectExecutionSetCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pIndirectExecutionSet: *mut VkIndirectExecutionSetEXT) -> VkResult {
-            unsafe { (self.CreateIndirectExecutionSetEXT)(device, pCreateInfo, pAllocator, pIndirectExecutionSet) }
+        pub unsafe fn CreateIndirectExecutionSetEXT(&self, device: VkDevice, pCreateInfo: *const VkIndirectExecutionSetCreateInfoEXT, pAllocator: *const VkAllocationCallbacks) -> Result<VkIndirectExecutionSetEXT, VkResult> {
+            let mut pIndirectExecutionSet = MaybeUninit::uninit();
+            unsafe { (self.CreateIndirectExecutionSetEXT)(device,pCreateInfo,pAllocator,pIndirectExecutionSet.as_mut_ptr()).assume_init_on_success(pIndirectExecutionSet) }
         }
         #[inline(always)]
         pub unsafe fn DestroyIndirectExecutionSetEXT(&self, device: VkDevice, indirectExecutionSet: VkIndirectExecutionSetEXT, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -32985,8 +33104,9 @@ pub mod ohos_surface {
     }
     impl InstanceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateSurfaceOHOS(&self, instance: VkInstance, pCreateInfo: *const VkSurfaceCreateInfoOHOS, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
-            unsafe { (self.CreateSurfaceOHOS)(instance, pCreateInfo, pAllocator, pSurface) }
+        pub unsafe fn CreateSurfaceOHOS(&self, instance: VkInstance, pCreateInfo: *const VkSurfaceCreateInfoOHOS, pAllocator: *const VkAllocationCallbacks) -> Result<VkSurfaceKHR, VkResult> {
+            let mut pSurface = MaybeUninit::uninit();
+            unsafe { (self.CreateSurfaceOHOS)(instance,pCreateInfo,pAllocator,pSurface.as_mut_ptr()).assume_init_on_success(pSurface) }
         }
     }
 }
@@ -33012,8 +33132,9 @@ pub mod ext_external_memory_metal {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn GetMemoryMetalHandleEXT(&self, device: VkDevice, pGetMetalHandleInfo: *const VkMemoryGetMetalHandleInfoEXT, pHandle: *mut *mut c_void) -> VkResult {
-            unsafe { (self.GetMemoryMetalHandleEXT)(device, pGetMetalHandleInfo, pHandle) }
+        pub unsafe fn GetMemoryMetalHandleEXT(&self, device: VkDevice, pGetMetalHandleInfo: *const VkMemoryGetMetalHandleInfoEXT) -> Result<*mut c_void, VkResult> {
+            let mut pHandle = MaybeUninit::uninit();
+            unsafe { (self.GetMemoryMetalHandleEXT)(device,pGetMetalHandleInfo,pHandle.as_mut_ptr()).assume_init_on_success(pHandle) }
         }
         #[inline(always)]
         pub unsafe fn GetMemoryMetalHandlePropertiesEXT(&self, device: VkDevice, handleType: VkExternalMemoryHandleTypeFlagBits, pHandle: *const c_void, pMemoryMetalHandleProperties: *mut VkMemoryMetalHandlePropertiesEXT) -> VkResult {
@@ -33056,8 +33177,9 @@ pub mod arm_shader_instrumentation {
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateShaderInstrumentationARM(&self, device: VkDevice, pCreateInfo: *const VkShaderInstrumentationCreateInfoARM, pAllocator: *const VkAllocationCallbacks, pInstrumentation: *mut VkShaderInstrumentationARM) -> VkResult {
-            unsafe { (self.CreateShaderInstrumentationARM)(device, pCreateInfo, pAllocator, pInstrumentation) }
+        pub unsafe fn CreateShaderInstrumentationARM(&self, device: VkDevice, pCreateInfo: *const VkShaderInstrumentationCreateInfoARM, pAllocator: *const VkAllocationCallbacks) -> Result<VkShaderInstrumentationARM, VkResult> {
+            let mut pInstrumentation = MaybeUninit::uninit();
+            unsafe { (self.CreateShaderInstrumentationARM)(device,pCreateInfo,pAllocator,pInstrumentation.as_mut_ptr()).assume_init_on_success(pInstrumentation) }
         }
         #[inline(always)]
         pub unsafe fn DestroyShaderInstrumentationARM(&self, device: VkDevice, instrumentation: VkShaderInstrumentationARM, pAllocator: *const VkAllocationCallbacks) -> () {
@@ -33173,8 +33295,9 @@ pub mod sec_ubm_surface {
     }
     impl InstanceDispatch {
         #[inline(always)]
-        pub unsafe fn CreateUbmSurfaceSEC(&self, instance: VkInstance, pCreateInfo: *const VkUbmSurfaceCreateInfoSEC, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
-            unsafe { (self.CreateUbmSurfaceSEC)(instance, pCreateInfo, pAllocator, pSurface) }
+        pub unsafe fn CreateUbmSurfaceSEC(&self, instance: VkInstance, pCreateInfo: *const VkUbmSurfaceCreateInfoSEC, pAllocator: *const VkAllocationCallbacks) -> Result<VkSurfaceKHR, VkResult> {
+            let mut pSurface = MaybeUninit::uninit();
+            unsafe { (self.CreateUbmSurfaceSEC)(instance,pCreateInfo,pAllocator,pSurface.as_mut_ptr()).assume_init_on_success(pSurface) }
         }
         #[inline(always)]
         pub unsafe fn GetPhysicalDeviceUbmPresentationSupportSEC(&self, physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, device: *mut ubm_device) -> VkBool32 {

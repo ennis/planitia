@@ -29,7 +29,7 @@ pub(crate) use include_bytes_as_u32;
 
 #[derive(Copy, Clone, Default)]
 pub struct Image {
-    pub image: vk::Image,
+    pub image: VkImage,
     pub image_view: vk::ImageView,
     pub memory: vk::DeviceMemory,
 }
@@ -274,7 +274,7 @@ impl DeviceHelper {
     pub(crate) unsafe fn layout_barrier(
         &self,
         cmdbuf: vk::CommandBuffer,
-        transitions: &[(vk::Image, vk::ImageLayout, vk::ImageLayout)],
+        transitions: &[(VkImage, vk::ImageLayout, vk::ImageLayout)],
     ) {
         // We are heavy-handed on the pipeline stages & access flags,
         // as this is not remotely worth the trouble.
@@ -544,7 +544,7 @@ impl DeviceHelper {
             mip_levels: 1,
             array_layers: 1,
             samples: vk::SampleCountFlags::TYPE_1,
-            tiling: vk::ImageTiling::OPTIMAL,
+            tiling: VK_IMAGE_TILING_OPTIMAL,
             usage,
             sharing_mode: vk::SharingMode::EXCLUSIVE,
             initial_layout: vk::ImageLayout::UNDEFINED,

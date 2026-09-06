@@ -115,7 +115,7 @@ fn create_graphics_pipeline_from_archive(
     };
 
     let gpci = gpu::GraphicsPipelineCreateInfo {
-        set_layouts: &[],
+        //set_layouts: &[],
         push_constants_size: entry.push_constants_size as usize,
         vertex_input: Default::default(),
         pre_rasterization_shaders,
@@ -148,7 +148,7 @@ fn create_compute_pipeline_from_archive(
     let spirv = &archive[module.spirv];
     let shader = get_shader_entry_point(gpu::ShaderStage::Compute, spirv, ep_name);
     let cpci = gpu::ComputePipelineCreateInfo {
-        set_layouts: &[],
+        //set_layouts: &[],
         push_constants_size: entry.push_constants_size as usize,
         shader,
     };

@@ -161,7 +161,7 @@ struct SwapchainInfo {
     format: vk::Format,
     extent: vk::Extent2D,
     swapchain: vk::SwapchainKHR,
-    images: Vec<vk::Image>,
+    images: Vec<VkImage>,
     image_views: Vec<vk::ImageView>,
     render_to_present: Vec<vk::Semaphore>,
 }

@@ -54,6 +54,7 @@ mod temp;
 pub mod util;
 mod query_pool;
 
+use std::ptr;
 use gpu_types::reflection::ShaderReflection;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -119,7 +120,7 @@ pub type FrameIndex = u64;
 /// Represents a graphics pipeline.
 #[derive(Clone)]
 pub struct GraphicsPipeline {
-    pub(crate) pipeline: vk::Pipeline,
+    pub(crate) pipeline: VkPipeline,
     pub(crate) stage_reflection: Vec<(ShaderStage, ShaderReflection)>,
 }
 
@@ -130,7 +131,7 @@ impl GraphicsPipeline {
     }
 
     /// Returns the `VkPipeline` handle of this pipeline object.
-    pub fn pipeline(&self) -> vk::Pipeline {
+    pub fn pipeline(&self) -> VkPipeline {
         self.pipeline
     }
 }
@@ -140,14 +141,14 @@ impl Drop for GraphicsPipeline {
         let pipeline = self.pipeline;
         unsafe {
             Device::instance().delete_after_current_frame(move |device| {
-                device.raw.destroy_pipeline(pipeline, None);
+                device.vk.DestroyPipeline(device.vkd, pipeline, ptr::null());
             })
         }
     }
 }
 
 impl VulkanObject for GraphicsPipeline {
-    type Handle = vk::Pipeline;
+    type Handle = VkPipeline;
     fn handle(&self) -> Self::Handle {
         self.pipeline
     }
@@ -156,7 +157,7 @@ impl VulkanObject for GraphicsPipeline {
 /// Compute pipelines.
 #[derive(Clone)]
 pub struct ComputePipeline {
-    pub(crate) pipeline: vk::Pipeline,
+    pub(crate) pipeline: VkPipeline,
     //pub(crate) pipeline_layout: vk::PipelineLayout,
     //_descriptor_set_layouts: Vec<DescriptorSetLayout>,
     /// See `GraphicsPipeline::bindless` for details.
@@ -171,7 +172,7 @@ impl ComputePipeline {
     }
 
     /// Returns the Vulkan pipeline handle.
-    pub fn pipeline(&self) -> vk::Pipeline {
+    pub fn pipeline(&self) -> VkPipeline {
         self.pipeline
     }
 }
@@ -179,21 +180,18 @@ impl ComputePipeline {
 impl Drop for ComputePipeline {
     fn drop(&mut self) {
         let pipeline = self.pipeline;
-        //let pipeline_layout = self.pipeline_layout;
-
         unsafe {
             // Wait until the current submission has completed execution since it may be using
             // the pipeline.
             Device::instance().delete_after_current_frame(move |device| {
-                device.raw.destroy_pipeline(pipeline, None);
-                //device.raw.destroy_pipeline_layout(pipeline_layout, None);
+                device.vk.DestroyPipeline(device.vkd, pipeline, ptr::null());
             })
         }
     }
 }
 
 impl VulkanObject for ComputePipeline {
-    type Handle = vk::Pipeline;
+    type Handle = VkPipeline;
     fn handle(&self) -> Self::Handle {
         self.pipeline
     }
@@ -202,6 +200,7 @@ impl VulkanObject for ComputePipeline {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/*
 #[derive(Clone, Debug)]
 pub struct DescriptorSetLayout {
     last_submission_index: Option<Arc<AtomicU64>>,
@@ -217,7 +216,7 @@ impl Drop for DescriptorSetLayout {
             });
         }
     }
-}
+}*/
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -236,17 +235,6 @@ pub struct ImageCopyView<'a> {
     pub origin: Offset3D = Offset3D::ZERO,
     pub aspect: ImageAspect = ImageAspect::All,
 }
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-///// Description of one argument in an argument block.
-//pub enum Descriptor<'a> {
-//    SampledImage { image: &'a Image, layout: vk::ImageLayout },
-//    StorageImage { image: &'a Image, layout: vk::ImageLayout },
-//    UniformBuffer { buffer: &'a BufferUntyped, offset: u64, size: u64 },
-//    StorageBuffer { buffer: &'a BufferUntyped, offset: u64, size: u64 },
-//    Sampler { sampler: Sampler },
-//}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -303,10 +291,10 @@ pub struct ColorAttachment<'a> {
 }
 
 impl ColorAttachment<'_> {
-    pub(crate) fn get_vk_clear_color_value(&self) -> vk::ClearColorValue {
+    pub(crate) fn get_vk_clear_color_value(&self) -> VkClearColorValue {
         if let Some(clear_value) = self.clear {
             match format_numeric_type(self.image.format()) {
-                FormatNumericType::UInt => vk::ClearColorValue {
+                FormatNumericType::UInt => VkClearColorValue {
                     uint32: [
                         clear_value[0] as u32,
                         clear_value[1] as u32,
@@ -314,10 +302,10 @@ impl ColorAttachment<'_> {
                         clear_value[3] as u32,
                     ],
                 },
-                FormatNumericType::SInt => vk::ClearColorValue {
+                FormatNumericType::SInt => VkClearColorValue {
                     int32: [clear_value[0] as i32, clear_value[1] as i32, clear_value[2] as i32, clear_value[3] as i32],
                 },
-                FormatNumericType::Float => vk::ClearColorValue {
+                FormatNumericType::Float => VkClearColorValue {
                     float32: [
                         clear_value[0] as f32,
                         clear_value[1] as f32,
@@ -327,7 +315,9 @@ impl ColorAttachment<'_> {
                 },
             }
         } else {
-            vk::ClearColorValue::default()
+            VkClearColorValue {
+                uint32: [0, 0, 0, 0],
+            }
         }
     }
 }
@@ -379,8 +369,8 @@ pub enum PreRasterizationShaders<'a> {
 
 #[derive(Copy, Clone, Debug)]
 pub struct GraphicsPipelineCreateInfo<'a> {
-    /// If left empty, use the universal descriptor set layout.
-    pub set_layouts: &'a [DescriptorSetLayout] = &[],
+    // If left empty, use the universal descriptor set layout.
+    //pub set_layouts: &'a [DescriptorSetLayout] = &[],
     // None of the relevant drivers on desktop seem to care about precise push constant ranges,
     // so we just store the total size of push constants.
     // FIXME: this is redundant with the information in ShaderDescriptors
@@ -394,8 +384,8 @@ pub struct GraphicsPipelineCreateInfo<'a> {
 
 #[derive(Copy, Clone, Debug)]
 pub struct ComputePipelineCreateInfo<'a> {
-    /// If left empty, use the universal descriptor set layout.
-    pub set_layouts: &'a [DescriptorSetLayout] = &[],
+    // If left empty, use the universal descriptor set layout.
+    //pub set_layouts: &'a [DescriptorSetLayout] = &[],
     /// FIXME: this is redundant with the information in `compute_shader`
     pub push_constants_size: usize = 0,
     /// Compute shader.
@@ -405,7 +395,7 @@ pub struct ComputePipelineCreateInfo<'a> {
 /// Represents the range of GPU addresses associated with a buffer.
 #[derive(Copy, Clone)]
 pub(crate) struct BufferAddressRange {
-    pub(crate) buffer: vk::Buffer,
+    pub(crate) buffer: VkBuffer,
     pub(crate) base: vk::DeviceAddress,
     pub(crate) size: usize,
 }
@@ -419,7 +409,7 @@ pub const fn append_attributes<const N: usize>(
     tail: &'static [VertexAttributeDescription],
 ) -> [VertexInputAttributeDescription; N] {
     const NULL_ATTR: VertexInputAttributeDescription =
-        VertexInputAttributeDescription { location: 0, binding: 0, format: Format::UNDEFINED, offset: 0 };
+        VertexInputAttributeDescription { location: 0, binding: 0, format: VK_FORMAT_UNDEFINED, offset: 0 };
     let mut result = [NULL_ATTR; N];
     let mut i = 0;
     while i < head.len() {

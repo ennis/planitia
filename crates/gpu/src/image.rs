@@ -4,13 +4,15 @@ use crate::{
     StorageImageHandle, TextureHandle, VulkanObject, aspects_for_format, upload_image_data,
 };
 use ash::vk;
+use ash::vk::Handle;
 use gpu::ImageCopyView;
 use gpu_allocator::MemoryLocation;
 use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
 use gpu_types::{ImageAspect, ImageType, ImageUsage, Offset3D};
 use slotmap::Key;
+use std::mem::MaybeUninit;
 use std::{mem, ptr};
-use vulkan::{VkImageDescriptorInfoEXT, VkImageViewCreateInfo, VK_IMAGE_LAYOUT_GENERAL, VkResourceDescriptorInfoEXT, VkResourceDescriptorDataEXT};
+use vulkan::*;
 
 /// Information passed to `Image::new` to describe the image to be created.
 #[derive(Copy, Clone, Debug)]
@@ -48,8 +50,8 @@ pub struct ImageBuffer {
 /// Represents an image resource on the GPU.
 #[derive(Debug)]
 pub struct Image {
-    pub(crate) handle: vk::Image,
-    pub(crate) attachment_view: vk::ImageView,
+    pub(crate) handle: VkImage,
+    pub(crate) attachment_view: VkImageView,
     pub(crate) memory_location: MemoryLocation,
     pub(crate) allocation: ResourceAllocation,
     pub(crate) swapchain_image: bool,
@@ -83,7 +85,7 @@ impl Drop for Image {
                 if descriptors.stencil_image != u32::MAX {
                     device.free_resource_descriptor(descriptors.stencil_image);
                 }
-                device.raw.destroy_image(handle, None);
+                device.vk.DestroyImage(device.vkd, handle, ptr::null());
                 device.free_memory(&mut allocation);
             });
         }
@@ -91,9 +93,9 @@ impl Drop for Image {
 }
 
 impl VulkanObject for Image {
-    type Handle = vk::Image;
+    type Handle = VkImage;
 
-    fn handle(&self) -> vk::Image {
+    fn handle(&self) -> VkImage {
         self.handle
     }
 }
@@ -197,7 +199,7 @@ impl Image {
     }
 
     /// Returns the image handle.
-    pub fn handle(&self) -> vk::Image {
+    pub fn handle(&self) -> VkImage {
         self.handle
     }
 
@@ -317,212 +319,97 @@ pub(crate) struct ImageDescriptors {
 
 /// Image creation
 impl Device {
-    //pub(crate) fn create_image_resource_descriptors(
-    //    &self,
-    //    handle: vk::Image,
-    //    type_: ImageType,
-    //    usage: vk::ImageUsageFlags,
-    //    format: Format,
-    //    mip_levels: u32,
-    //    array_layers: u32,
-    //) -> ImageResourceDescriptors {
-    //    let create_aspect_view = |aspect: vk::ImageAspectFlags| unsafe {
-    //        self.raw
-    //            .create_image_view(
-    //                &vk::ImageViewCreateInfo {
-    //                    flags: vk::ImageViewCreateFlags::empty(),
-    //                    image: handle,
-    //                    view_type: match type_ {
-    //                        ImageType::Image1D => {
-    //                            if array_layers > 1 {
-    //                                vk::ImageViewType::TYPE_1D_ARRAY
-    //                            } else {
-    //                                vk::ImageViewType::TYPE_1D
-    //                            }
-    //                        }
-    //                        ImageType::Image2D => {
-    //                            if array_layers > 1 {
-    //                                vk::ImageViewType::TYPE_2D_ARRAY
-    //                            } else {
-    //                                vk::ImageViewType::TYPE_2D
-    //                            }
-    //                        }
-    //                        ImageType::Image3D => vk::ImageViewType::TYPE_3D,
-    //                    },
-    //                    format,
-    //                    components: vk::ComponentMapping {
-    //                        r: vk::ComponentSwizzle::IDENTITY,
-    //                        g: vk::ComponentSwizzle::IDENTITY,
-    //                        b: vk::ComponentSwizzle::IDENTITY,
-    //                        a: vk::ComponentSwizzle::IDENTITY,
-    //                    },
-    //                    subresource_range: vk::ImageSubresourceRange {
-    //                        aspect_mask: aspect,
-    //                        base_mip_level: 0,
-    //                        level_count: mip_levels,
-    //                        base_array_layer: 0,
-    //                        layer_count: array_layers,
-    //                    },
-    //                    ..Default::default()
-    //                },
-    //                None,
-    //            )
-    //            .expect("failed to create image view")
-    //    };
-    //
-    //    unsafe {
-    //        let aspects = aspects_for_format(format);
-    //        let mut main_view = vk::ImageView::null();
-    //        let mut stencil_view = vk::ImageView::null();
-    //        if aspects.contains(vk::ImageAspectFlags::COLOR) {
-    //            main_view = create_aspect_view(vk::ImageAspectFlags::COLOR);
-    //        }
-    //        if aspects.contains(vk::ImageAspectFlags::DEPTH) {
-    //            main_view = create_aspect_view(vk::ImageAspectFlags::DEPTH);
-    //        }
-    //        if aspects.contains(vk::ImageAspectFlags::STENCIL) {
-    //            stencil_view = create_aspect_view(vk::ImageAspectFlags::STENCIL);
-    //        }
-    //
-    //        let mut texture = ResourceDescriptorIndex::default();
-    //        let mut storage = ResourceDescriptorIndex::default();
-    //        let mut stencil_texture = ResourceDescriptorIndex::default();
-    //        let mut stencil_storage = ResourceDescriptorIndex::default();
-    //
-    //        if usage.contains(vk::ImageUsageFlags::SAMPLED) {
-    //            if !main_view.is_null() {
-    //                texture = self.create_global_image_descriptor(
-    //                    main_view,
-    //                    vk::DescriptorType::SAMPLED_IMAGE,
-    //                    vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-    //                )
-    //            }
-    //            if !stencil_view.is_null() {
-    //                stencil_texture = self.create_global_image_descriptor(
-    //                    stencil_view,
-    //                    vk::DescriptorType::SAMPLED_IMAGE,
-    //                    vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-    //                )
-    //            }
-    //        };
-    //        if usage.contains(vk::ImageUsageFlags::STORAGE) {
-    //            if !main_view.is_null() {
-    //                storage = self.create_global_image_descriptor(
-    //                    main_view,
-    //                    vk::DescriptorType::STORAGE_IMAGE,
-    //                    vk::ImageLayout::GENERAL,
-    //                )
-    //            }
-    //            if !stencil_view.is_null() {
-    //                stencil_storage = self.create_global_image_descriptor(
-    //                    stencil_view,
-    //                    vk::DescriptorType::STORAGE_IMAGE,
-    //                    vk::ImageLayout::GENERAL,
-    //                )
-    //            }
-    //        };
-    //
-    //        ImageResourceDescriptors {
-    //            texture,
-    //            storage,
-    //            stencil_texture,
-    //            stencil_storage,
-    //            image_view: main_view,
-    //            stencil_view,
-    //        }
-    //    }
-    //}
-
     // Helper to transition to GENERAL layout during initialization and appease the validation layers.
     // The contents of the image will be undefined.
-    pub(crate) unsafe fn transition_image_to_general(&self, image: vk::Image, aspect_mask: vk::ImageAspectFlags) {
+    pub(crate) unsafe fn transition_image_to_general(&self, image: VkImage, aspect_mask: VkImageAspectFlags) {
         unsafe {
             let mut cmd = CommandBuffer::new();
-            cmd.image_barrier(&vk::ImageMemoryBarrier2 {
-                src_stage_mask: vk::PipelineStageFlags2::NONE,
-                src_access_mask: vk::AccessFlags2::empty(),
-                dst_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
-                dst_access_mask: vk::AccessFlags2::MEMORY_READ,
-                old_layout: vk::ImageLayout::UNDEFINED,
-                new_layout: vk::ImageLayout::GENERAL,
-                src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
-                dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+            cmd.image_barrier(&VkImageMemoryBarrier2 {
+                srcStageMask: VK_PIPELINE_STAGE_2_NONE,
+                srcAccessMask: VK_ACCESS_2_NONE,
+                dstStageMask: VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                dstAccessMask: VK_ACCESS_2_MEMORY_READ_BIT,
+                oldLayout: VK_IMAGE_LAYOUT_UNDEFINED,
+                newLayout: VK_IMAGE_LAYOUT_GENERAL,
+                srcQueueFamilyIndex: VK_QUEUE_FAMILY_IGNORED,
+                dstQueueFamilyIndex: VK_QUEUE_FAMILY_IGNORED,
                 image,
-                subresource_range: vk::ImageSubresourceRange {
-                    aspect_mask,
-                    base_mip_level: 0,
-                    level_count: vk::REMAINING_MIP_LEVELS,
-                    base_array_layer: 0,
-                    layer_count: vk::REMAINING_ARRAY_LAYERS,
+                subresourceRange: VkImageSubresourceRange {
+                    aspectMask: aspect_mask,
+                    baseMipLevel: 0,
+                    levelCount: VK_REMAINING_MIP_LEVELS,
+                    baseArrayLayer: 0,
+                    layerCount: VK_REMAINING_ARRAY_LAYERS,
                 },
-                ..Default::default()
+                ..
             });
             crate::submit(cmd);
         }
     }
 
     /// Creates the main image view for an image resource, suitable for use as a color or depth/stencil attachment.
-    pub(crate) unsafe fn create_attachment_image_view(&self, image: vk::Image, format: vk::Format) -> vk::ImageView {
-        unsafe {
-            self.raw
-                .create_image_view(
-                    &vk::ImageViewCreateInfo {
-                        flags: vk::ImageViewCreateFlags::empty(),
-                        image,
-                        view_type: vk::ImageViewType::TYPE_2D,
-                        format,
-                        components: vk::ComponentMapping {
-                            r: vk::ComponentSwizzle::IDENTITY,
-                            g: vk::ComponentSwizzle::IDENTITY,
-                            b: vk::ComponentSwizzle::IDENTITY,
-                            a: vk::ComponentSwizzle::IDENTITY,
-                        },
-                        subresource_range: vk::ImageSubresourceRange {
-                            //  > When an image view of a depth/stencil image is used as a depth/stencil framebuffer attachment,
-                            //    the aspectMask is ignored and both depth and stencil image subresources are used.
-                            // (https://docs.vulkan.org/refpages/latest/refpages/source/VkImageSubresourceRange.html)
-                            aspect_mask: aspects_for_format(format),
-                            base_mip_level: 0,
-                            level_count: 1,
-                            base_array_layer: 0,
-                            layer_count: 1,
-                        },
-                        ..Default::default()
-                    },
-                    None,
-                )
-                .expect("failed to create image view")
-        }
+    pub(crate) unsafe fn create_attachment_image_view(&self, image: VkImage, format: VkFormat) -> VkImageView {
+        let create_info = VkImageViewCreateInfo {
+            flags: 0,
+            image,
+            viewType: VK_IMAGE_VIEW_TYPE_2D,
+            format,
+            components: VkComponentMapping {
+                r: VK_COMPONENT_SWIZZLE_IDENTITY,
+                g: VK_COMPONENT_SWIZZLE_IDENTITY,
+                b: VK_COMPONENT_SWIZZLE_IDENTITY,
+                a: VK_COMPONENT_SWIZZLE_IDENTITY,
+            },
+            subresourceRange: VkImageSubresourceRange {
+                //  > When an image view of a depth/stencil image is used as a depth/stencil framebuffer attachment,
+                //    the aspectMask is ignored and both depth and stencil image subresources are used.
+                // (https://docs.vulkan.org/refpages/latest/refpages/source/VkImageSubresourceRange.html)
+                aspectMask: aspects_for_format(format),
+                baseMipLevel: 0,
+                levelCount: 1,
+                baseArrayLayer: 0,
+                layerCount: 1,
+            },
+            ..Default::default()
+        };
+        unsafe { self.vk.CreateImageView(self.vkd, &create_info, ptr::null()).unwrap() }
     }
 
     /// Creates a new image resource.
     pub(crate) fn create_image(&self, image_info: &ImageCreateInfo) -> Image {
         unsafe {
-            let create_info = vk::ImageCreateInfo {
-                image_type: image_info.type_.into(),
+            let create_info = VkImageCreateInfo {
+                imageType: image_info.type_.into(),
                 format: image_info.format,
-                extent: vk::Extent3D { width: image_info.width, height: image_info.height, depth: image_info.depth },
-                mip_levels: image_info.mip_levels,
-                array_layers: image_info.array_layers,
+                extent: VkExtent3D { width: image_info.width, height: image_info.height, depth: image_info.depth },
+                mipLevels: image_info.mip_levels,
+                arrayLayers: image_info.array_layers,
                 samples: get_vk_sample_count(image_info.samples),
-                tiling: vk::ImageTiling::OPTIMAL, // LINEAR tiling not used enough to be exposed
+                tiling: VK_IMAGE_TILING_OPTIMAL, // LINEAR tiling not used enough to be exposed
                 usage: image_info.usage.into(),
-                sharing_mode: vk::SharingMode::EXCLUSIVE,
-                queue_family_index_count: 0,
-                p_queue_family_indices: ptr::null(),
-                initial_layout: vk::ImageLayout::UNDEFINED,
-                ..Default::default()
+                sharingMode: VK_SHARING_MODE_EXCLUSIVE,
+                queueFamilyIndexCount: 0,
+                pQueueFamilyIndices: ptr::null(),
+                initialLayout: VK_IMAGE_LAYOUT_UNDEFINED,
+                ..
             };
-            let handle = self.raw.create_image(&create_info, None).expect("failed to create image");
-            let mem_req = self.raw.get_image_memory_requirements(handle);
+            let handle = self.vk.CreateImage(self.vkd, &create_info, ptr::null()).unwrap();
+            let mem_req = {
+                let mut req = MaybeUninit::uninit();
+                self.vk.GetImageMemoryRequirements(self.vkd, handle, req.as_mut_ptr());
+                req.assume_init()
+            };
             let allocation = self.allocate_memory_or_panic(&AllocationCreateDesc {
                 name: "",
-                requirements: mem_req,
+                // SAFETY: ash has a compatible layout for all Vulkan structs
+                requirements: unsafe { mem::transmute(mem_req) },
                 location: image_info.memory_location,
                 linear: true,
                 allocation_scheme: AllocationScheme::GpuAllocatorManaged,
             });
-            self.raw.bind_image_memory(handle, allocation.memory(), allocation.offset() as u64).unwrap();
+            self.vk
+                .BindImageMemory(self.vkd, handle, VkDeviceMemory(allocation.memory().as_raw()), allocation.offset())
+                .check();
             let descriptors = self.register_image_descriptors(handle, &create_info);
             let attachment_view = self.create_attachment_image_view(handle, image_info.format);
             self.transition_image_to_general(handle, aspects_for_format(image_info.format));
@@ -546,16 +433,12 @@ impl Device {
 
     pub(crate) fn allocate_image_descriptor(
         &self,
-        descriptor_type: vk::DescriptorType,
-        view: &vk::ImageViewCreateInfo,
+        descriptor_type: VkDescriptorType,
+        view: &VkImageViewCreateInfo,
     ) -> u32 {
-        let info = VkImageDescriptorInfoEXT {
-            pView: view as *const _ as *const VkImageViewCreateInfo,
-            layout: VK_IMAGE_LAYOUT_GENERAL,
-            ..
-        };
+        let info = VkImageDescriptorInfoEXT { pView: view, layout: VK_IMAGE_LAYOUT_GENERAL, .. };
         self.allocate_resource_descriptor(&VkResourceDescriptorInfoEXT {
-            r#type: descriptor_type.as_raw(),
+            r#type: descriptor_type,
             data: VkResourceDescriptorDataEXT { pImage: &info },
             ..
         })
@@ -563,78 +446,76 @@ impl Device {
 
     pub(crate) fn register_image_descriptors(
         &self,
-        handle: vk::Image,
-        create_info: &vk::ImageCreateInfo,
+        handle: VkImage,
+        create_info: &VkImageCreateInfo,
     ) -> ImageDescriptors {
-        let image_view_type = match create_info.image_type {
-            vk::ImageType::TYPE_1D => {
-                if create_info.array_layers > 1 {
-                    vk::ImageViewType::TYPE_1D_ARRAY
+        let image_view_type = match create_info.imageType {
+            VK_IMAGE_TYPE_1D => {
+                if create_info.arrayLayers > 1 {
+                    VK_IMAGE_VIEW_TYPE_1D_ARRAY
                 } else {
-                    vk::ImageViewType::TYPE_1D
+                    VK_IMAGE_VIEW_TYPE_1D
                 }
             }
-            vk::ImageType::TYPE_2D => {
-                if create_info.array_layers > 1 {
-                    vk::ImageViewType::TYPE_2D_ARRAY
+            VK_IMAGE_TYPE_2D => {
+                if create_info.arrayLayers > 1 {
+                    VK_IMAGE_VIEW_TYPE_2D_ARRAY
                 } else {
-                    vk::ImageViewType::TYPE_2D
+                    VK_IMAGE_VIEW_TYPE_2D
                 }
             }
-            vk::ImageType::TYPE_3D => vk::ImageViewType::TYPE_3D,
+            VK_IMAGE_TYPE_3D => VK_IMAGE_VIEW_TYPE_3D,
             _ => panic!("invalid image type"),
         };
-        let view_for_aspect = |aspect: vk::ImageAspectFlags| {
-            vk::ImageViewCreateInfo {
-                flags: vk::ImageViewCreateFlags::empty(),
-                image: handle,
-                view_type: image_view_type,
-                format: create_info.format,
-                components: vk::ComponentMapping::default(), //  defaults to IDENTITY
-                subresource_range: vk::ImageSubresourceRange {
-                    aspect_mask: aspect,
-                    base_mip_level: 0,
-                    level_count: create_info.mip_levels,
-                    base_array_layer: 0,
-                    layer_count: create_info.array_layers,
-                },
-                ..Default::default()
-            }
+        let view_for_aspect = |aspect: VkImageAspectFlags| VkImageViewCreateInfo {
+            flags: 0,
+            image: handle,
+            viewType: image_view_type,
+            format: create_info.format,
+            components: VkComponentMapping { r: 0, g: 0, b: 0, a: 0 },
+            subresourceRange: VkImageSubresourceRange {
+                aspectMask: aspect,
+                baseMipLevel: 0,
+                levelCount: create_info.mipLevels,
+                baseArrayLayer: 0,
+                layerCount: create_info.arrayLayers,
+            },
+            ..Default::default()
         };
         let aspects = aspects_for_format(create_info.format);
-        let main_view: vk::ImageViewCreateInfo; // color or depth aspect
-        let stencil_view: vk::ImageViewCreateInfo; // stencil aspect
+        let main_view: VkImageViewCreateInfo; // color or depth aspect
+        let stencil_view: VkImageViewCreateInfo; // stencil aspect
         let mut texture_descriptor = u32::MAX;
         let mut storage_descriptor = u32::MAX;
         let mut stencil_texture_descriptor = u32::MAX;
         let mut stencil_storage_descriptor = u32::MAX;
-        if aspects.intersects(vk::ImageAspectFlags::COLOR | vk::ImageAspectFlags::DEPTH) {
-            let main_aspect = if aspects.contains(vk::ImageAspectFlags::COLOR) {
-                vk::ImageAspectFlags::COLOR
+        if aspects & (VK_IMAGE_ASPECT_COLOR_BIT | VK_IMAGE_ASPECT_DEPTH_BIT) != 0 {
+            let main_aspect = if aspects & VK_IMAGE_ASPECT_COLOR_BIT != 0 {
+                VK_IMAGE_ASPECT_COLOR_BIT
             } else {
-                vk::ImageAspectFlags::DEPTH
+                VK_IMAGE_ASPECT_DEPTH_BIT
             };
             main_view = view_for_aspect(main_aspect);
-            if create_info.usage.contains(vk::ImageUsageFlags::SAMPLED) {
+            if create_info.usage & VK_IMAGE_USAGE_SAMPLED_BIT != 0 {
                 // COLOR or DEPTH aspect, SAMPLED access
-                texture_descriptor = self.allocate_image_descriptor(vk::DescriptorType::SAMPLED_IMAGE, &main_view);
+                texture_descriptor = self.allocate_image_descriptor(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, &main_view);
             }
-            if create_info.usage.contains(vk::ImageUsageFlags::STORAGE) {
+            if create_info.usage & VK_IMAGE_USAGE_STORAGE_BIT != 0 {
                 // COLOR or DEPTH aspect, STORAGE access
-                storage_descriptor = self.allocate_image_descriptor(vk::DescriptorType::STORAGE_IMAGE, &main_view);
+                storage_descriptor = self.allocate_image_descriptor(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &main_view);
             }
         }
-        if aspects.intersects(vk::ImageAspectFlags::STENCIL) {
-            stencil_view = view_for_aspect(vk::ImageAspectFlags::STENCIL);
-            if create_info.usage.contains(vk::ImageUsageFlags::SAMPLED) {
+        if aspects & VK_IMAGE_ASPECT_STENCIL_BIT {
+            stencil_view = view_for_aspect(VK_IMAGE_ASPECT_STENCIL_BIT);
+            if create_info.usage & VK_IMAGE_USAGE_SAMPLED_BIT != 0 {
                 // STENCIL aspect, SAMPLED access
                 stencil_texture_descriptor =
-                    self.allocate_image_descriptor(vk::DescriptorType::SAMPLED_IMAGE, &stencil_view);
+                    self.allocate_image_descriptor(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, &stencil_view);
             }
-            if create_info.usage.contains(vk::ImageUsageFlags::STORAGE) {
+            if create_info.usage & VK_IMAGE_USAGE_STORAGE_BIT != 0 {
                 // STENCIL aspect, STORAGE access
                 stencil_storage_descriptor =
-                    self.allocate_image_descriptor(vk::DescriptorType::STORAGE_IMAGE, &stencil_view);
+                    self.allocate_image_descriptor(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &stencil_view);
             }
         }
         ImageDescriptors {

@@ -9,10 +9,12 @@ mod platform_types;
 mod generated;
 mod entry;
 mod basetypes;
+mod handle;
 
 pub use platform_types::*;
 pub use basetypes::*;
 pub use generated::*;
+pub use handle::*;
 
 use std::ffi::CStr;
 

@@ -1,5 +1,4 @@
-use crate::{BufferRange, BufferUsage, Device, Ptr, ResourceAllocation, VulkanObject};
-use ash::vk;
+use crate::{BufferRange, BufferUsage, Device, Ptr, ResourceAllocation, VulkanObject, vkcheck};
 use ash::vk::Handle;
 use gpu_allocator::MemoryLocation;
 use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
@@ -13,6 +12,7 @@ use std::ops::RangeBounds;
 use std::os::raw::c_void;
 use std::ptr::NonNull;
 use std::{mem, ptr, slice};
+use vulkan::*;
 
 /// A buffer of GPU-visible memory, optionally mapped in host memory, without any associated type.
 ///
@@ -23,14 +23,13 @@ use std::{mem, ptr, slice};
 pub struct Buffer<T: ?Sized> {
     pub(crate) memory_location: MemoryLocation,
     pub(crate) allocation: ResourceAllocation,
-    pub(crate) device_address: vk::DeviceAddress,
-    pub(crate) handle: vk::Buffer,
+    pub(crate) device_address: VkDeviceAddress,
+    pub(crate) handle: VkBuffer,
     pub(crate) size: u64,
     pub(crate) usage: BufferUsage,
     pub(crate) mapped_ptr: Option<NonNull<c_void>>,
     _marker: PhantomData<T>,
 }
-
 
 impl<T: ?Sized> Buffer<T> {
     pub unsafe fn from_layout(layout: Layout) -> Buffer<T> {
@@ -59,7 +58,7 @@ impl<T: ?Sized> Buffer<T> {
     }
 
     /// Returns the raw device address of the buffer, for use in shaders.
-    pub fn device_address(&self) -> vk::DeviceAddress {
+    pub fn device_address(&self) -> VkDeviceAddress {
         self.device_address
     }
 
@@ -74,7 +73,7 @@ impl<T: ?Sized> Buffer<T> {
     }
 
     /// Returns the Vulkan buffer handle.
-    pub fn handle(&self) -> vk::Buffer {
+    pub fn handle(&self) -> VkBuffer {
         self.handle
     }
 
@@ -281,7 +280,6 @@ impl<T: ?Sized> Drop for Buffer<T> {
     }
 }
 
-
 // TODO: impl From<IntoIterator> for Buffer
 impl<T: ?Sized> std::fmt::Debug for Buffer<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -290,9 +288,9 @@ impl<T: ?Sized> std::fmt::Debug for Buffer<T> {
 }
 
 impl<T: ?Sized> VulkanObject for Buffer<T> {
-    type Handle = vk::Buffer;
+    type Handle = VkBuffer;
 
-    fn handle(&self) -> vk::Buffer {
+    fn handle(&self) -> VkBuffer {
         self.handle
     }
 }
@@ -332,12 +330,10 @@ impl Device {
             // dummy struct to get a dangling NonNull with correct alignment
             #[repr(align(64))]
             struct Align64;
-
             let mapped_ptr = NonNull::<Align64>::dangling().cast::<c_void>();
-
             return BufferUntyped {
                 allocation: ResourceAllocation::None,
-                handle: vk::Buffer::null(),
+                handle: VkBuffer::null(),
                 memory_location: create_info.memory_location,
                 device_address: 0,
                 size: 0,
@@ -362,50 +358,52 @@ impl Device {
         // We include STORAGE_BUFFER in the default usage flags, as the impact should be minimal,
         // but we leave out UNIFORM_BUFFER for now (it's not commonly used anymore since we mostly use
         // push constants + BDA with storage buffers).
-        let default_flags = vk::BufferUsageFlags::VERTEX_BUFFER
-            | vk::BufferUsageFlags::INDEX_BUFFER
-            | vk::BufferUsageFlags::TRANSFER_SRC
-            | vk::BufferUsageFlags::TRANSFER_DST
-            | vk::BufferUsageFlags::INDIRECT_BUFFER
-            | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS
-            | vk::BufferUsageFlags::STORAGE_BUFFER;
-
+        let default_flags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+            | VK_BUFFER_USAGE_INDEX_BUFFER_BIT
+            | VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+            | VK_BUFFER_USAGE_TRANSFER_DST_BIT
+            | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT
+            | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+            | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
         unsafe {
-            let handle = self
-                .raw
-                .create_buffer(
-                    &vk::BufferCreateInfo {
-                        flags: Default::default(),
-                        size: byte_size,
-                        usage: default_flags | create_info.usage.to_vk_buffer_usage_flags(),
-                        sharing_mode: vk::SharingMode::EXCLUSIVE,
-                        queue_family_index_count: 0,
-                        p_queue_family_indices: ptr::null(),
-                        ..Default::default()
-                    },
-                    None,
-                )
-                .expect("failed to create buffer");
-
-            let mem_req = self.raw.get_buffer_memory_requirements(handle);
+            let vk_create_info = VkBufferCreateInfo {
+                flags: Default::default(),
+                size: byte_size,
+                usage: default_flags | create_info.usage.to_vk_buffer_usage_flags(),
+                sharingMode: VK_SHARING_MODE_EXCLUSIVE,
+                queueFamilyIndexCount: 0,
+                pQueueFamilyIndices: ptr::null(),
+                ..
+            };
+            let handle = {
+                let mut buffer = Default::default();
+                vkcheck!(self.vk.CreateBuffer(self.vkd, &vk_create_info, ptr::null(), &mut buffer));
+                buffer
+            };
+            let mem_req = {
+                let mut mem_req = VkMemoryRequirements { size: 0, alignment: 0, memoryTypeBits: 0 };
+                self.vk.GetBufferMemoryRequirements(self.vkd, handle, &mut mem_req);
+                mem_req
+            };
             let allocation = self.allocate_memory_or_panic(&AllocationCreateDesc {
                 name: "", // unfortunately we don't have a name yet, it is set after creation
-                requirements: mem_req,
+                requirements: unsafe { mem::transmute(mem_req) },
                 location: create_info.memory_location,
                 linear: true,
                 allocation_scheme: AllocationScheme::GpuAllocatorManaged,
             });
-            self.raw.bind_buffer_memory(handle, allocation.memory(), allocation.offset()).unwrap();
-
+            vkcheck!(self.vk.BindBufferMemory(
+                self.vkd,
+                handle,
+                VkDeviceMemory(allocation.memory().as_raw()),
+                allocation.offset()
+            ));
             let mapped_ptr = allocation.mapped_ptr();
             let allocation = ResourceAllocation::Allocation { allocation };
-
             let device_address = self
-                .raw
-                .get_buffer_device_address(&vk::BufferDeviceAddressInfo { buffer: handle, ..Default::default() });
-
+                .vk
+                .GetBufferDeviceAddress(self.vkd, &VkBufferDeviceAddressInfo { buffer: handle, ..Default::default() });
             trace!("GPU: create_buffer {handle:?}");
-
             BufferUntyped {
                 allocation,
                 handle,

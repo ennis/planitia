@@ -7,58 +7,58 @@ use crate::{
     BufferRangeUntyped, BufferUntyped, ClearColorValue, CommandBuffer, Device, Image, ImageCopyBuffer, ImageCopyView,
     ImageSubresourceLayers, Rect3D, Size3D,
 };
+use vulkan::*;
 
 impl CommandBuffer {
     pub fn fill_buffer(&mut self, range: &BufferRangeUntyped, data: u32) {
+        let device = Device::instance();
         unsafe {
             // SAFETY: FFI call and parameters are valid
-            Device::instance().raw.cmd_fill_buffer(
-                self.cmdbuf,
-                range.buffer.handle(),
-                range.byte_offset,
-                range.byte_size,
-                data,
-            );
+            device.vk.CmdFillBuffer(self.cmdbuf, range.buffer.handle(), range.byte_offset, range.byte_size, data);
         }
     }
 
     // TODO specify subresources
     pub fn clear_image(&mut self, image: &Image, clear_color_value: ClearColorValue) {
-        static COLOR_SUBRESOURCES: &[vk::ImageSubresourceRange] = &[vk::ImageSubresourceRange {
-            aspect_mask: vk::ImageAspectFlags::COLOR,
-            base_mip_level: 0,
-            level_count: vk::REMAINING_MIP_LEVELS,
-            base_array_layer: 0,
-            layer_count: vk::REMAINING_ARRAY_LAYERS,
+        let device = Device::instance();
+        static COLOR_SUBRESOURCES: &[VkImageSubresourceRange] = &[VkImageSubresourceRange {
+            aspectMask: VK_IMAGE_ASPECT_COLOR_BIT,
+            baseMipLevel: 0,
+            levelCount: vk::REMAINING_MIP_LEVELS,
+            baseArrayLayer: 0,
+            layerCount: vk::REMAINING_ARRAY_LAYERS,
         }];
         unsafe {
             // SAFETY: FFI call and parameters are valid
-            Device::instance().raw.cmd_clear_color_image(
+            device.vk.CmdClearColorImage(
                 self.cmdbuf,
                 image.handle(),
-                vk::ImageLayout::GENERAL,
+                VK_IMAGE_LAYOUT_GENERAL,
                 &clear_color_value.into(),
-                COLOR_SUBRESOURCES,
+                COLOR_SUBRESOURCES.len() as u32,
+                COLOR_SUBRESOURCES.as_ptr(),
             );
         }
     }
 
     pub fn clear_depth_image(&mut self, image: &Image, depth: f32) {
-        static DEPTH_SUBRESOURCES: &[vk::ImageSubresourceRange] = &[vk::ImageSubresourceRange {
-            aspect_mask: vk::ImageAspectFlags::DEPTH,
-            base_mip_level: 0,
-            level_count: vk::REMAINING_MIP_LEVELS,
-            base_array_layer: 0,
-            layer_count: vk::REMAINING_ARRAY_LAYERS,
+        let device = Device::instance();
+        static DEPTH_SUBRESOURCES: &[VkImageSubresourceRange] = &[VkImageSubresourceRange {
+            aspectMask: VK_IMAGE_ASPECT_DEPTH_BIT,
+            baseMipLevel: 0,
+            levelCount: vk::REMAINING_MIP_LEVELS,
+            baseArrayLayer: 0,
+            layerCount: vk::REMAINING_ARRAY_LAYERS,
         }];
         unsafe {
             // SAFETY: FFI call and parameters are valid
-            Device::instance().raw.cmd_clear_depth_stencil_image(
+            device.vk.CmdClearDepthStencilImage(
                 self.cmdbuf,
                 image.handle(),
-                vk::ImageLayout::GENERAL,
-                &vk::ClearDepthStencilValue { depth, stencil: 0 },
-                DEPTH_SUBRESOURCES,
+                VK_IMAGE_LAYOUT_GENERAL,
+                &VkClearDepthStencilValue { depth, stencil: 0 },
+                DEPTH_SUBRESOURCES.len() as u32,
+                DEPTH_SUBRESOURCES.as_ptr(),
             );
         }
     }
@@ -67,36 +67,38 @@ impl CommandBuffer {
         &mut self,
         source: ImageCopyView<'_>,
         destination: ImageCopyView<'_>,
-        copy_size: vk::Extent3D,
+        copy_size: VkExtent3D,
     ) {
+        let device = Device::instance();
         // TODO: this is not required for multi-planar formats
         assert_eq!(source.aspect, destination.aspect);
-        let regions = [vk::ImageCopy {
-            src_subresource: vk::ImageSubresourceLayers {
-                aspect_mask: source.aspect.to_aspect(source.image.format),
-                mip_level: source.mip_level,
-                base_array_layer: 0,
-                layer_count: 1,
+        let regions = [VkImageCopy {
+            srcSubresource: VkImageSubresourceLayers {
+                aspectMask: source.aspect.to_aspect(source.image.format),
+                mipLevel: source.mip_level,
+                baseArrayLayer: 0,
+                layerCount: 1,
             },
-            src_offset: source.origin.into(),
-            dst_subresource: vk::ImageSubresourceLayers {
-                aspect_mask: destination.aspect.to_aspect(destination.image.format),
-                mip_level: destination.mip_level,
-                base_array_layer: 0,
-                layer_count: 1,
+            srcOffset: source.origin.into(),
+            dstSubresource: VkImageSubresourceLayers {
+                aspectMask: destination.aspect.to_aspect(destination.image.format),
+                mipLevel: destination.mip_level,
+                baseArrayLayer: 0,
+                layerCount: 1,
             },
-            dst_offset: destination.origin.into(),
+            dstOffset: destination.origin.into(),
             extent: copy_size,
         }];
         // SAFETY: FFI call and parameters are valid
         unsafe {
-            Device::instance().raw.cmd_copy_image(
+            device.vk.CmdCopyImage(
                 self.cmdbuf,
                 source.image.handle(),
-                vk::ImageLayout::GENERAL,
+                VK_IMAGE_LAYOUT_GENERAL,
                 destination.image.handle(),
-                vk::ImageLayout::GENERAL,
-                &regions,
+                VK_IMAGE_LAYOUT_GENERAL,
+                regions.len() as u32,
+                regions.as_ptr(),
             );
         }
     }
@@ -110,15 +112,17 @@ impl CommandBuffer {
         dst_offset: u64,
         size: u64,
     ) {
+        let device = Device::instance();
         assert!(src_offset + size <= source.byte_size());
         assert!(dst_offset + size <= destination.byte_size());
         // SAFETY: FFI call and parameters are valid
         unsafe {
-            Device::instance().raw.cmd_copy_buffer(
+            device.vk.CmdCopyBuffer(
                 self.cmdbuf,
                 source.handle(),
                 destination.handle(),
-                &[vk::BufferCopy { src_offset, dst_offset, size }],
+                1,
+                &VkBufferCopy { srcOffset: src_offset, dstOffset: dst_offset, size },
             );
         }
     }
@@ -130,29 +134,31 @@ impl CommandBuffer {
         &mut self,
         source: ImageCopyBuffer<'_>,
         destination: ImageCopyView<'_>,
-        copy_size: vk::Extent3D,
+        copy_size: VkExtent3D,
     ) {
-        let regions = [vk::BufferImageCopy {
-            buffer_offset: source.layout.offset,
-            buffer_row_length: source.layout.texel_row_length.unwrap_or(0),
-            buffer_image_height: source.layout.row_count.unwrap_or(0),
-            image_subresource: vk::ImageSubresourceLayers {
-                aspect_mask: destination.aspect.to_aspect(destination.image.format),
-                mip_level: destination.mip_level,
-                base_array_layer: 0,
-                layer_count: 1,
+        let device = Device::instance();
+        let regions = [VkBufferImageCopy {
+            bufferOffset: source.layout.offset,
+            bufferRowLength: source.layout.texel_row_length.unwrap_or(0),
+            bufferImageHeight: source.layout.row_count.unwrap_or(0),
+            imageSubresource: VkImageSubresourceLayers {
+                aspectMask: destination.aspect.to_aspect(destination.image.format),
+                mipLevel: destination.mip_level,
+                baseArrayLayer: 0,
+                layerCount: 1,
             },
-            image_offset: vk::Offset3D { x: destination.origin.x, y: destination.origin.y, z: destination.origin.z },
-            image_extent: copy_size,
+            imageOffset: VkOffset3D { x: destination.origin.x, y: destination.origin.y, z: destination.origin.z },
+            imageExtent: copy_size,
         }];
         // SAFETY: FFI call and parameters are valid
         unsafe {
-            Device::instance().raw.cmd_copy_buffer_to_image(
+            device.vk.CmdCopyBufferToImage(
                 self.cmdbuf,
                 source.buffer.handle(),
                 destination.image.handle(),
-                vk::ImageLayout::GENERAL,
-                &regions,
+                VK_IMAGE_LAYOUT_GENERAL,
+                regions.len() as u32,
+                regions.as_ptr(),
             );
         }
     }
@@ -164,27 +170,29 @@ impl CommandBuffer {
         destination: ImageCopyBuffer<'_>,
         copy_size: Size3D,
     ) {
-        let regions = [vk::BufferImageCopy {
-            buffer_offset: destination.layout.offset,
-            buffer_row_length: destination.layout.texel_row_length.unwrap_or(0),
-            buffer_image_height: destination.layout.row_count.unwrap_or(0),
-            image_subresource: vk::ImageSubresourceLayers {
-                aspect_mask: source.aspect.to_aspect(source.image.format),
-                mip_level: source.mip_level,
-                base_array_layer: 0,
-                layer_count: 1,
+        let device = Device::instance();
+        let regions = [VkBufferImageCopy {
+            bufferOffset: destination.layout.offset,
+            bufferRowLength: destination.layout.texel_row_length.unwrap_or(0),
+            bufferImageHeight: destination.layout.row_count.unwrap_or(0),
+            imageSubresource: VkImageSubresourceLayers {
+                aspectMask: source.aspect.to_aspect(source.image.format),
+                mipLevel: source.mip_level,
+                baseArrayLayer: 0,
+                layerCount: 1,
             },
-            image_offset: source.origin.into(),
-            image_extent: copy_size.into(),
+            imageOffset: source.origin.into(),
+            imageExtent: copy_size.into(),
         }];
         // SAFETY: FFI call and parameters are valid
         unsafe {
-            Device::instance().raw.cmd_copy_image_to_buffer(
+            device.vk.CmdCopyImageToBuffer(
                 self.cmdbuf,
                 source.image.handle(),
-                vk::ImageLayout::GENERAL,
+                VK_IMAGE_LAYOUT_GENERAL,
                 destination.buffer.handle(),
-                &regions,
+                regions.len() as u32,
+                regions.as_ptr(),
             );
         }
     }
@@ -197,33 +205,35 @@ impl CommandBuffer {
         dst: &Image,
         dst_subresource: ImageSubresourceLayers,
         dst_region: Rect3D,
-        filter: vk::Filter,
+        filter: VkFilter,
     ) {
-        let blits = [vk::ImageBlit {
-            src_subresource: vk::ImageSubresourceLayers {
-                aspect_mask: src_subresource.aspect.to_aspect(src.format),
-                mip_level: src_subresource.mip_level,
-                base_array_layer: src_subresource.base_array_layer,
-                layer_count: src_subresource.layer_count,
+        let device = Device::instance();
+        let blits = [VkImageBlit {
+            srcSubresource: VkImageSubresourceLayers {
+                aspectMask: src_subresource.aspect.to_aspect(src.format),
+                mipLevel: src_subresource.mip_level,
+                baseArrayLayer: src_subresource.base_array_layer,
+                layerCount: src_subresource.layer_count,
             },
-            src_offsets: [src_region.min.into(), src_region.max.into()],
-            dst_subresource: vk::ImageSubresourceLayers {
-                aspect_mask: dst_subresource.aspect.to_aspect(dst.format),
-                mip_level: dst_subresource.mip_level,
-                base_array_layer: dst_subresource.base_array_layer,
-                layer_count: dst_subresource.layer_count,
+            srcOffsets: [src_region.min.into(), src_region.max.into()],
+            dstSubresource: VkImageSubresourceLayers {
+                aspectMask: dst_subresource.aspect.to_aspect(dst.format),
+                mipLevel: dst_subresource.mip_level,
+                baseArrayLayer: dst_subresource.base_array_layer,
+                layerCount: dst_subresource.layer_count,
             },
-            dst_offsets: [dst_region.min.into(), dst_region.max.into()],
+            dstOffsets: [dst_region.min.into(), dst_region.max.into()],
         }];
         // SAFETY: command buffer is OK, params OK
         unsafe {
-            Device::instance().raw.cmd_blit_image(
+            device.vk.CmdBlitImage(
                 self.cmdbuf,
                 src.handle(),
-                vk::ImageLayout::GENERAL,
+                VK_IMAGE_LAYOUT_GENERAL,
                 dst.handle(),
-                vk::ImageLayout::GENERAL,
-                &blits,
+                VK_IMAGE_LAYOUT_GENERAL,
+                blits.len() as u32,
+                blits.as_ptr(),
                 filter,
             );
         }

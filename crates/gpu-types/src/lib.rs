@@ -7,8 +7,9 @@ use std::path::Path;
 use std::{fmt, slice};
 
 // Reexports
-pub use ash::{self, vk};
-pub use vk::Format;
+//pub use ash::{self, vk};
+pub use vulkan::*;
+pub use vulkan::VkFormat as Format;
 pub use vulkan_headers::vulkan::vulkan as vkh;
 
 /// Represents data that can be shared with the GPU and accessed in shaders.
@@ -79,9 +80,9 @@ impl Offset3D {
     pub const ZERO: Self = Self { x: 0, y: 0, z: 0 };
 }
 
-impl Into<vk::Offset3D> for Offset3D {
-    fn into(self) -> vk::Offset3D {
-        vk::Offset3D { x: self.x, y: self.y, z: self.z }
+impl Into<VkOffset3D> for Offset3D {
+    fn into(self) -> VkOffset3D {
+        VkOffset3D { x: self.x, y: self.y, z: self.z }
     }
 }
 
@@ -104,9 +105,9 @@ impl Size3D {
     }
 }
 
-impl Into<vk::Extent3D> for Size3D {
-    fn into(self) -> vk::Extent3D {
-        vk::Extent3D { width: self.width, height: self.height, depth: self.depth }
+impl Into<VkExtent3D> for Size3D {
+    fn into(self) -> VkExtent3D {
+        VkExtent3D { width: self.width, height: self.height, depth: self.depth }
     }
 }
 
@@ -165,8 +166,8 @@ bitflags! {
 }
 
 impl BufferUsage {
-    pub const fn to_vk_buffer_usage_flags(self) -> vk::BufferUsageFlags {
-        vk::BufferUsageFlags::from_raw(self.bits())
+    pub const fn to_vk_buffer_usage_flags(self) -> VkBufferUsageFlags {
+        self.bits()
     }
 }
 
@@ -176,7 +177,7 @@ impl Default for BufferUsage {
     }
 }
 
-impl From<BufferUsage> for vk::BufferUsageFlags {
+impl From<BufferUsage> for VkBufferUsageFlags {
     fn from(usage: BufferUsage) -> Self {
         usage.to_vk_buffer_usage_flags()
     }
@@ -201,76 +202,76 @@ pub fn mip_level_count(width: u32, height: u32) -> u32 {
 /// # Panics
 ///
 /// Panics if the format is a block-compressed format.
-pub const fn format_pixel_byte_size(fmt: vk::Format) -> u32 {
+pub const fn format_pixel_byte_size(fmt: VkFormat) -> u32 {
     match fmt {
-        Format::R8_UNORM
-        | Format::R8_SNORM
-        | Format::R8_USCALED
-        | Format::R8_SSCALED
-        | Format::R8_UINT
-        | Format::R8_SINT
-        | Format::R8_SRGB => 1,
-        Format::R8G8_UNORM
-        | Format::R8G8_SNORM
-        | Format::R8G8_USCALED
-        | Format::R8G8_SSCALED
-        | Format::R8G8_UINT
-        | Format::R8G8_SINT
-        | Format::R8G8_SRGB => 2,
-        Format::R5G6B5_UNORM_PACK16
-        | Format::B5G6R5_UNORM_PACK16
-        | Format::R5G5B5A1_UNORM_PACK16
-        | Format::B5G5R5A1_UNORM_PACK16
-        | Format::A1R5G5B5_UNORM_PACK16
-        | Format::R16_UNORM
-        | Format::R16_SNORM
-        | Format::R16_USCALED
-        | Format::R16_SSCALED
-        | Format::R16_UINT
-        | Format::R16_SINT
-        | Format::R16_SFLOAT => 2,
-        Format::R8G8B8_UNORM
-        | Format::R8G8B8_SNORM
-        | Format::R8G8B8_USCALED
-        | Format::R8G8B8_SSCALED
-        | Format::R8G8B8_UINT
-        | Format::R8G8B8_SINT
-        | Format::R8G8B8_SRGB
-        | Format::B8G8R8_UNORM
-        | Format::B8G8R8_SNORM
-        | Format::B8G8R8_USCALED
-        | Format::B8G8R8_SSCALED
-        | Format::B8G8R8_UINT
-        | Format::B8G8R8_SINT
-        | Format::B8G8R8_SRGB => 3,
-        Format::R32_UINT | Format::R32_SINT | Format::R32_SFLOAT | Format::D32_SFLOAT | Format::D24_UNORM_S8_UINT => 4,
-        Format::R8G8B8A8_UNORM
-        | Format::R8G8B8A8_SNORM
-        | Format::R8G8B8A8_USCALED
-        | Format::R8G8B8A8_SSCALED
-        | Format::R8G8B8A8_UINT
-        | Format::R8G8B8A8_SINT
-        | Format::R8G8B8A8_SRGB
-        | Format::B8G8R8A8_UNORM
-        | Format::B8G8R8A8_SNORM
-        | Format::B8G8R8A8_USCALED
-        | Format::B8G8R8A8_SSCALED
-        | Format::B8G8R8A8_UINT
-        | Format::B8G8R8A8_SINT
-        | Format::B8G8R8A8_SRGB
-        | Format::A2B10G10R10_UNORM_PACK32
-        | Format::A2B10G10R10_UINT_PACK32
-        | Format::A2R10G10B10_UNORM_PACK32
-        | Format::A2R10G10B10_UINT_PACK32
-        | Format::R16G16_UNORM
-        | Format::R16G16_SNORM
-        | Format::R16G16_USCALED
-        | Format::R16G16_SSCALED
-        | Format::R16G16_UINT
-        | Format::R16G16_SINT
-        | Format::R16G16_SFLOAT => 4,
-        Format::R32G32_UINT | Format::R32G32_SINT | Format::R32G32_SFLOAT => 8,
-        Format::R32G32B32A32_SFLOAT | Format::R32G32B32A32_UINT | Format::R32G32B32A32_SINT => 16,
+        VK_FORMAT_R8_UNORM
+        | VK_FORMAT_R8_SNORM
+        | VK_FORMAT_R8_USCALED
+        | VK_FORMAT_R8_SSCALED
+        | VK_FORMAT_R8_UINT
+        | VK_FORMAT_R8_SINT
+        | VK_FORMAT_R8_SRGB => 1,
+        VK_FORMAT_R8G8_UNORM
+        | VK_FORMAT_R8G8_SNORM
+        | VK_FORMAT_R8G8_USCALED
+        | VK_FORMAT_R8G8_SSCALED
+        | VK_FORMAT_R8G8_UINT
+        | VK_FORMAT_R8G8_SINT
+        | VK_FORMAT_R8G8_SRGB => 2,
+        VK_FORMAT_R5G6B5_UNORM_PACK16
+        | VK_FORMAT_B5G6R5_UNORM_PACK16
+        | VK_FORMAT_R5G5B5A1_UNORM_PACK16
+        | VK_FORMAT_B5G5R5A1_UNORM_PACK16
+        | VK_FORMAT_A1R5G5B5_UNORM_PACK16
+        | VK_FORMAT_R16_UNORM
+        | VK_FORMAT_R16_SNORM
+        | VK_FORMAT_R16_USCALED
+        | VK_FORMAT_R16_SSCALED
+        | VK_FORMAT_R16_UINT
+        | VK_FORMAT_R16_SINT
+        | VK_FORMAT_R16_SFLOAT => 2,
+        VK_FORMAT_R8G8B8_UNORM
+        | VK_FORMAT_R8G8B8_SNORM
+        | VK_FORMAT_R8G8B8_USCALED
+        | VK_FORMAT_R8G8B8_SSCALED
+        | VK_FORMAT_R8G8B8_UINT
+        | VK_FORMAT_R8G8B8_SINT
+        | VK_FORMAT_R8G8B8_SRGB
+        | VK_FORMAT_B8G8R8_UNORM
+        | VK_FORMAT_B8G8R8_SNORM
+        | VK_FORMAT_B8G8R8_USCALED
+        | VK_FORMAT_B8G8R8_SSCALED
+        | VK_FORMAT_B8G8R8_UINT
+        | VK_FORMAT_B8G8R8_SINT
+        | VK_FORMAT_B8G8R8_SRGB => 3,
+        VK_FORMAT_R32_UINT | VK_FORMAT_R32_SINT | VK_FORMAT_R32_SFLOAT | VK_FORMAT_D32_SFLOAT | VK_FORMAT_D24_UNORM_S8_UINT => 4,
+        VK_FORMAT_R8G8B8A8_UNORM
+        | VK_FORMAT_R8G8B8A8_SNORM
+        | VK_FORMAT_R8G8B8A8_USCALED
+        | VK_FORMAT_R8G8B8A8_SSCALED
+        | VK_FORMAT_R8G8B8A8_UINT
+        | VK_FORMAT_R8G8B8A8_SINT
+        | VK_FORMAT_R8G8B8A8_SRGB
+        | VK_FORMAT_B8G8R8A8_UNORM
+        | VK_FORMAT_B8G8R8A8_SNORM
+        | VK_FORMAT_B8G8R8A8_USCALED
+        | VK_FORMAT_B8G8R8A8_SSCALED
+        | VK_FORMAT_B8G8R8A8_UINT
+        | VK_FORMAT_B8G8R8A8_SINT
+        | VK_FORMAT_B8G8R8A8_SRGB
+        | VK_FORMAT_A2B10G10R10_UNORM_PACK32
+        | VK_FORMAT_A2B10G10R10_UINT_PACK32
+        | VK_FORMAT_A2R10G10B10_UNORM_PACK32
+        | VK_FORMAT_A2R10G10B10_UINT_PACK32
+        | VK_FORMAT_R16G16_UNORM
+        | VK_FORMAT_R16G16_SNORM
+        | VK_FORMAT_R16G16_USCALED
+        | VK_FORMAT_R16G16_SSCALED
+        | VK_FORMAT_R16G16_UINT
+        | VK_FORMAT_R16G16_SINT
+        | VK_FORMAT_R16G16_SFLOAT => 4,
+        VK_FORMAT_R32G32_UINT | VK_FORMAT_R32G32_SINT | VK_FORMAT_R32G32_SFLOAT => 8,
+        VK_FORMAT_R32G32B32A32_SFLOAT | VK_FORMAT_R32G32B32A32_UINT | VK_FORMAT_R32G32B32A32_SINT => 16,
         _ => panic!("unsupported or block-compressed format"),
     }
 }
@@ -282,54 +283,54 @@ pub enum FormatNumericType {
     Float,
 }
 
-pub fn format_numeric_type(fmt: vk::Format) -> FormatNumericType {
+pub fn format_numeric_type(fmt: VkFormat) -> FormatNumericType {
     match fmt {
-        Format::R8_UINT
-        | Format::R8G8_UINT
-        | Format::R8G8B8_UINT
-        | Format::R8G8B8A8_UINT
-        | Format::R16_UINT
-        | Format::R16G16_UINT
-        | Format::R16G16B16_UINT
-        | Format::R16G16B16A16_UINT
-        | Format::R32_UINT
-        | Format::R32G32_UINT
-        | Format::R32G32B32_UINT
-        | Format::R32G32B32A32_UINT
-        | Format::R64_UINT
-        | Format::R64G64_UINT
-        | Format::R64G64B64_UINT
-        | Format::R64G64B64A64_UINT => FormatNumericType::UInt,
+        VK_FORMAT_R8_UINT
+        | VK_FORMAT_R8G8_UINT
+        | VK_FORMAT_R8G8B8_UINT
+        | VK_FORMAT_R8G8B8A8_UINT
+        | VK_FORMAT_R16_UINT
+        | VK_FORMAT_R16G16_UINT
+        | VK_FORMAT_R16G16B16_UINT
+        | VK_FORMAT_R16G16B16A16_UINT
+        | VK_FORMAT_R32_UINT
+        | VK_FORMAT_R32G32_UINT
+        | VK_FORMAT_R32G32B32_UINT
+        | VK_FORMAT_R32G32B32A32_UINT
+        | VK_FORMAT_R64_UINT
+        | VK_FORMAT_R64G64_UINT
+        | VK_FORMAT_R64G64B64_UINT
+        | VK_FORMAT_R64G64B64A64_UINT => FormatNumericType::UInt,
 
-        Format::R8_SINT
-        | Format::R8G8_SINT
-        | Format::R8G8B8_SINT
-        | Format::R8G8B8A8_SINT
-        | Format::R16_SINT
-        | Format::R16G16_SINT
-        | Format::R16G16B16_SINT
-        | Format::R16G16B16A16_SINT
-        | Format::R32_SINT
-        | Format::R32G32_SINT
-        | Format::R32G32B32_SINT
-        | Format::R32G32B32A32_SINT
-        | Format::R64_SINT
-        | Format::R64G64_SINT
-        | Format::R64G64B64_SINT
-        | Format::R64G64B64A64_SINT => FormatNumericType::SInt,
+        VK_FORMAT_R8_SINT
+        | VK_FORMAT_R8G8_SINT
+        | VK_FORMAT_R8G8B8_SINT
+        | VK_FORMAT_R8G8B8A8_SINT
+        | VK_FORMAT_R16_SINT
+        | VK_FORMAT_R16G16_SINT
+        | VK_FORMAT_R16G16B16_SINT
+        | VK_FORMAT_R16G16B16A16_SINT
+        | VK_FORMAT_R32_SINT
+        | VK_FORMAT_R32G32_SINT
+        | VK_FORMAT_R32G32B32_SINT
+        | VK_FORMAT_R32G32B32A32_SINT
+        | VK_FORMAT_R64_SINT
+        | VK_FORMAT_R64G64_SINT
+        | VK_FORMAT_R64G64B64_SINT
+        | VK_FORMAT_R64G64B64A64_SINT => FormatNumericType::SInt,
 
-        Format::R16_SFLOAT
-        | Format::R16G16_SFLOAT
-        | Format::R16G16B16_SFLOAT
-        | Format::R16G16B16A16_SFLOAT
-        | Format::R32_SFLOAT
-        | Format::R32G32_SFLOAT
-        | Format::R32G32B32_SFLOAT
-        | Format::R32G32B32A32_SFLOAT
-        | Format::R64_SFLOAT
-        | Format::R64G64_SFLOAT
-        | Format::R64G64B64_SFLOAT
-        | Format::R64G64B64A64_SFLOAT => FormatNumericType::Float,
+        VK_FORMAT_R16_SFLOAT
+        | VK_FORMAT_R16G16_SFLOAT
+        | VK_FORMAT_R16G16B16_SFLOAT
+        | VK_FORMAT_R16G16B16A16_SFLOAT
+        | VK_FORMAT_R32_SFLOAT
+        | VK_FORMAT_R32G32_SFLOAT
+        | VK_FORMAT_R32G32B32_SFLOAT
+        | VK_FORMAT_R32G32B32A32_SFLOAT
+        | VK_FORMAT_R64_SFLOAT
+        | VK_FORMAT_R64G64_SFLOAT
+        | VK_FORMAT_R64G64B64_SFLOAT
+        | VK_FORMAT_R64G64B64A64_SFLOAT => FormatNumericType::Float,
 
         // TODO
         _ => FormatNumericType::Float,
@@ -351,53 +352,53 @@ pub enum ImageAspect {
 
 impl ImageAspect {
     /// Converts this enum to a `VkImageAspectFlags` value, based on the specified image format.
-    pub fn to_view_aspect_flags(self, format: Format) -> vk::ImageAspectFlags {
+    pub fn to_view_aspect_flags(self, format: Format) -> VkImageAspectFlags {
         match self {
             ImageAspect::All => aspects_for_format(format),
-            ImageAspect::Depth => vk::ImageAspectFlags::DEPTH,
-            ImageAspect::Stencil => vk::ImageAspectFlags::STENCIL,
+            ImageAspect::Depth => VK_IMAGE_ASPECT_DEPTH_BIT,
+            ImageAspect::Stencil => VK_IMAGE_ASPECT_STENCIL_BIT,
         }
     }
 
-    pub fn to_aspect(self, format: Format) -> vk::ImageAspectFlags {
+    pub fn to_aspect(self, format: Format) -> VkImageAspectFlags {
         if (is_depth_and_stencil_format(format) || is_depth_only_format(format) || is_stencil_only_format(format))
             && self == ImageAspect::All
         {
             panic!("ImageAspect::All is not valid for depth/stencil formats");
         }
         match self {
-            ImageAspect::All => vk::ImageAspectFlags::COLOR,
-            ImageAspect::Depth => vk::ImageAspectFlags::DEPTH,
-            ImageAspect::Stencil => vk::ImageAspectFlags::STENCIL,
+            ImageAspect::All => VK_IMAGE_ASPECT_COLOR_BIT,
+            ImageAspect::Depth => VK_IMAGE_ASPECT_DEPTH_BIT,
+            ImageAspect::Stencil => VK_IMAGE_ASPECT_STENCIL_BIT,
         }
     }
 }
 
-pub fn is_depth_format(fmt: vk::Format) -> bool {
+pub fn is_depth_format(fmt: VkFormat) -> bool {
     is_depth_only_format(fmt) || is_depth_and_stencil_format(fmt)
 }
 
-pub fn is_depth_and_stencil_format(fmt: vk::Format) -> bool {
-    matches!(fmt, Format::D16_UNORM_S8_UINT | Format::D24_UNORM_S8_UINT | Format::D32_SFLOAT_S8_UINT)
+pub fn is_depth_and_stencil_format(fmt: VkFormat) -> bool {
+    matches!(fmt, VK_FORMAT_D16_UNORM_S8_UINT | VK_FORMAT_D24_UNORM_S8_UINT | VK_FORMAT_D32_SFLOAT_S8_UINT)
 }
 
-pub fn is_depth_only_format(fmt: vk::Format) -> bool {
-    matches!(fmt, Format::D16_UNORM | Format::X8_D24_UNORM_PACK32 | Format::D32_SFLOAT)
+pub fn is_depth_only_format(fmt: VkFormat) -> bool {
+    matches!(fmt, VK_FORMAT_D16_UNORM | VK_FORMAT_X8_D24_UNORM_PACK32 | VK_FORMAT_D32_SFLOAT)
 }
 
-pub fn is_stencil_only_format(fmt: vk::Format) -> bool {
-    matches!(fmt, Format::S8_UINT)
+pub fn is_stencil_only_format(fmt: VkFormat) -> bool {
+    matches!(fmt, VK_FORMAT_S8_UINT)
 }
 
-pub fn aspects_for_format(fmt: Format) -> vk::ImageAspectFlags {
+pub fn aspects_for_format(fmt: Format) -> VkImageAspectFlags {
     if is_depth_only_format(fmt) {
-        vk::ImageAspectFlags::DEPTH
+        VK_IMAGE_ASPECT_DEPTH_BIT
     } else if is_stencil_only_format(fmt) {
-        vk::ImageAspectFlags::STENCIL
+        VK_IMAGE_ASPECT_STENCIL_BIT
     } else if is_depth_and_stencil_format(fmt) {
-        vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL
+        VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT
     } else {
-        vk::ImageAspectFlags::COLOR
+        VK_IMAGE_ASPECT_COLOR_BIT
     }
 }
 
@@ -410,36 +411,36 @@ pub enum ImageType {
 }
 
 impl ImageType {
-    pub const fn to_vk_image_type(self) -> vk::ImageType {
+    pub const fn to_vk_image_type(self) -> VkImageType {
         match self {
-            Self::Image1D => vk::ImageType::TYPE_1D,
-            Self::Image2D => vk::ImageType::TYPE_2D,
-            Self::Image3D => vk::ImageType::TYPE_3D,
+            Self::Image1D => VK_IMAGE_TYPE_1D,
+            Self::Image2D => VK_IMAGE_TYPE_2D,
+            Self::Image3D => VK_IMAGE_TYPE_3D,
         }
     }
 
-    pub const fn to_vk_image_view_type(self, layers: u32) -> vk::ImageViewType {
+    pub const fn to_vk_image_view_type(self, layers: u32) -> VkImageViewType {
         match self {
             Self::Image1D => {
                 if layers > 1 {
-                    vk::ImageViewType::TYPE_1D_ARRAY
+                    VK_IMAGE_VIEW_TYPE_1D_ARRAY
                 } else {
-                    vk::ImageViewType::TYPE_1D
+                    VK_IMAGE_VIEW_TYPE_1D
                 }
             }
             Self::Image2D => {
                 if layers > 1 {
-                    vk::ImageViewType::TYPE_2D_ARRAY
+                    VK_IMAGE_VIEW_TYPE_2D_ARRAY
                 } else {
-                    vk::ImageViewType::TYPE_2D
+                    VK_IMAGE_VIEW_TYPE_2D
                 }
             }
-            Self::Image3D => vk::ImageViewType::TYPE_3D,
+            Self::Image3D => VK_IMAGE_VIEW_TYPE_3D,
         }
     }
 }
 
-impl From<ImageType> for vk::ImageType {
+impl From<ImageType> for VkImageType {
     fn from(ty: ImageType) -> Self {
         ty.to_vk_image_type()
     }
@@ -467,12 +468,12 @@ impl Default for ImageUsage {
 }
 
 impl ImageUsage {
-    pub const fn to_vk_image_usage_flags(self) -> vk::ImageUsageFlags {
-        vk::ImageUsageFlags::from_raw(self.bits())
+    pub const fn to_vk_image_usage_flags(self) -> VkImageUsageFlags {
+        self.bits()
     }
 }
 
-impl From<ImageUsage> for vk::ImageUsageFlags {
+impl From<ImageUsage> for VkImageUsageFlags {
     fn from(usage: ImageUsage) -> Self {
         usage.to_vk_image_usage_flags()
     }
@@ -498,10 +499,10 @@ impl Default for ImageSubresourceLayers {
 /// See [VkImageViewCreateInfo](https://docs.vulkan.org/refpages/latest/refpages/source/VkImageViewCreateInfo.html)
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct ImageViewInfo {
-    pub view_type: vk::ImageViewType,
+    pub view_type: VkImageViewType,
     pub format: Format,
     pub subresource_range: ImageSubresourceRange,
-    pub component_mapping: [vk::ComponentSwizzle; 4],
+    pub component_mapping: [VkComponentSwizzle; 4],
 }
 
 /// Describes a subresource range of an image.
@@ -509,7 +510,7 @@ pub struct ImageViewInfo {
 /// See [VkImageSubresourceRange](https://docs.vulkan.org/refpages/latest/refpages/source/VkImageSubresourceRange.html)
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct ImageSubresourceRange {
-    pub aspect_mask: vk::ImageAspectFlags,
+    pub aspect_mask: VkImageAspectFlags,
     pub base_mip_level: u32,
     pub level_count: u32,
     pub base_array_layer: u32,
@@ -540,20 +541,20 @@ impl ImageDataLayout {
 /// See [VkSamplerCreateInfo](https://docs.vulkan.org/refpages/latest/refpages/source/VkSamplerCreateInfo.html)
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
 pub struct SamplerParams {
-    pub mag_filter: vk::Filter = vk::Filter::LINEAR,
-    pub min_filter: vk::Filter = vk::Filter::LINEAR,
-    pub mipmap_mode: vk::SamplerMipmapMode =  vk::SamplerMipmapMode::LINEAR,
-    pub address_mode_u: vk::SamplerAddressMode = vk::SamplerAddressMode::CLAMP_TO_EDGE,
-    pub address_mode_v: vk::SamplerAddressMode = vk::SamplerAddressMode::CLAMP_TO_EDGE,
-    pub address_mode_w: vk::SamplerAddressMode = vk::SamplerAddressMode::CLAMP_TO_EDGE,
+    pub mag_filter: VkFilter = VK_FILTER_LINEAR,
+    pub min_filter: VkFilter = VK_FILTER_LINEAR,
+    pub mipmap_mode: VkSamplerMipmapMode =  VK_SAMPLER_MIPMAP_MODE_LINEAR,
+    pub address_mode_u: VkSamplerAddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    pub address_mode_v: VkSamplerAddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    pub address_mode_w: VkSamplerAddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
     pub mip_lod_bias: f32 = 0.0,
     pub anisotropy_enable: bool = false,
     pub max_anisotropy: f32 = 0.0,
     pub compare_enable: bool = false,
-    pub compare_op: vk::CompareOp = vk::CompareOp::ALWAYS,
+    pub compare_op: VkCompareOp = VK_COMPARE_OP_ALWAYS,
     pub min_lod: f32 = 0.0,
     pub max_lod: f32 = 0.0,
-    pub border_color: vk::BorderColor = vk::BorderColor::INT_OPAQUE_BLACK,
+    pub border_color: VkBorderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
     pub unnormalized_coordinates: bool = false,
 }
 
@@ -566,20 +567,20 @@ impl Default for SamplerParams {
 /// [`SamplerParams`] but hashable and usable as a key in a hash map.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, Ord, PartialOrd)]
 pub struct SamplerParamsHashable {
-    pub mag_filter: vk::Filter,
-    pub min_filter: vk::Filter,
-    pub mipmap_mode: vk::SamplerMipmapMode,
-    pub address_mode_u: vk::SamplerAddressMode,
-    pub address_mode_v: vk::SamplerAddressMode,
-    pub address_mode_w: vk::SamplerAddressMode,
+    pub mag_filter: VkFilter,
+    pub min_filter: VkFilter,
+    pub mipmap_mode: VkSamplerMipmapMode,
+    pub address_mode_u: VkSamplerAddressMode,
+    pub address_mode_v: VkSamplerAddressMode,
+    pub address_mode_w: VkSamplerAddressMode,
     pub mip_lod_bias_f32_bits: u32,
     pub anisotropy_enable: bool,
     pub max_anisotropy_f32_bits: u32,
     pub compare_enable: bool,
-    pub compare_op: vk::CompareOp,
+    pub compare_op: VkCompareOp,
     pub min_lod_f32_bits: u32,
     pub max_lod_f32_bits: u32,
-    pub border_color: vk::BorderColor,
+    pub border_color: VkBorderColor,
     pub unnormalized_coordinates: bool,
 }
 
@@ -640,12 +641,12 @@ impl From<[u32; 4]> for ClearColorValue {
     }
 }
 
-impl From<ClearColorValue> for vk::ClearColorValue {
+impl From<ClearColorValue> for VkClearColorValue {
     fn from(v: ClearColorValue) -> Self {
         match v {
-            ClearColorValue::Float(v) => vk::ClearColorValue { float32: v },
-            ClearColorValue::Int(v) => vk::ClearColorValue { int32: v },
-            ClearColorValue::Uint(v) => vk::ClearColorValue { uint32: v },
+            ClearColorValue::Float(v) => VkClearColorValue { float32: v },
+            ClearColorValue::Int(v) => VkClearColorValue { int32: v },
+            ClearColorValue::Uint(v) => VkClearColorValue { uint32: v },
         }
     }
 }
@@ -653,12 +654,12 @@ impl From<ClearColorValue> for vk::ClearColorValue {
 /// Blending parameters for a color attachment.
 #[derive(Copy, Clone, Debug)]
 pub struct ColorBlendEquation {
-    pub src_color_blend_factor: vk::BlendFactor,
-    pub dst_color_blend_factor: vk::BlendFactor,
-    pub color_blend_op: vk::BlendOp,
-    pub src_alpha_blend_factor: vk::BlendFactor,
-    pub dst_alpha_blend_factor: vk::BlendFactor,
-    pub alpha_blend_op: vk::BlendOp,
+    pub src_color_blend_factor: VkBlendFactor,
+    pub dst_color_blend_factor: VkBlendFactor,
+    pub color_blend_op: VkBlendOp,
+    pub src_alpha_blend_factor: VkBlendFactor,
+    pub dst_alpha_blend_factor: VkBlendFactor,
+    pub alpha_blend_op: VkBlendOp,
 }
 
 impl Default for ColorBlendEquation {
@@ -669,40 +670,40 @@ impl Default for ColorBlendEquation {
 
 impl ColorBlendEquation {
     pub const REPLACE: Self = Self {
-        src_color_blend_factor: vk::BlendFactor::ONE,
-        dst_color_blend_factor: vk::BlendFactor::ZERO,
-        color_blend_op: vk::BlendOp::ADD,
-        src_alpha_blend_factor: vk::BlendFactor::ONE,
-        dst_alpha_blend_factor: vk::BlendFactor::ZERO,
-        alpha_blend_op: vk::BlendOp::ADD,
+        src_color_blend_factor: VK_BLEND_FACTOR_ONE,
+        dst_color_blend_factor: VK_BLEND_FACTOR_ZERO,
+        color_blend_op: VK_BLEND_OP_ADD,
+        src_alpha_blend_factor: VK_BLEND_FACTOR_ONE,
+        dst_alpha_blend_factor: VK_BLEND_FACTOR_ZERO,
+        alpha_blend_op: VK_BLEND_OP_ADD,
     };
 
     pub const ALPHA_BLENDING: Self = Self {
-        src_color_blend_factor: vk::BlendFactor::SRC_ALPHA,
-        dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
-        color_blend_op: vk::BlendOp::ADD,
-        src_alpha_blend_factor: vk::BlendFactor::ONE,
-        dst_alpha_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
-        alpha_blend_op: vk::BlendOp::ADD,
+        src_color_blend_factor: VK_BLEND_FACTOR_SRC_ALPHA,
+        dst_color_blend_factor: VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+        color_blend_op: VK_BLEND_OP_ADD,
+        src_alpha_blend_factor: VK_BLEND_FACTOR_ONE,
+        dst_alpha_blend_factor: VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+        alpha_blend_op: VK_BLEND_OP_ADD,
     };
 
     // TODO: check if this is correct
     pub const PREMULTIPLIED_ALPHA_BLENDING: Self = Self {
-        src_color_blend_factor: vk::BlendFactor::ONE,
-        dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
-        color_blend_op: vk::BlendOp::ADD,
-        src_alpha_blend_factor: vk::BlendFactor::ONE,
-        dst_alpha_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
-        alpha_blend_op: vk::BlendOp::ADD,
+        src_color_blend_factor: VK_BLEND_FACTOR_ONE,
+        dst_color_blend_factor: VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+        color_blend_op: VK_BLEND_OP_ADD,
+        src_alpha_blend_factor: VK_BLEND_FACTOR_ONE,
+        dst_alpha_blend_factor: VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+        alpha_blend_op: VK_BLEND_OP_ADD,
     };
 }
 
 /// Describes a color attachment format and blending parameters.
 #[derive(Copy, Clone, Debug)]
 pub struct ColorTargetState {
-    pub format: Format = vk::Format::UNDEFINED,
+    pub format: Format = VK_FORMAT_UNDEFINED,
     pub blend_equation: Option<ColorBlendEquation> = None,
-    pub color_write_mask: vk::ColorComponentFlags = vk::ColorComponentFlags::RGBA,
+    pub color_write_mask: VkColorComponentFlags = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
 }
 
 impl Default for ColorTargetState {
@@ -715,7 +716,7 @@ impl Default for ColorTargetState {
 pub struct VertexBufferLayoutDescription {
     pub binding: u32,
     pub stride: u32,
-    pub input_rate: vk::VertexInputRate,
+    pub input_rate: VkVertexInputRate,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -753,20 +754,20 @@ pub unsafe trait Vertex: Copy + 'static {
 /// Trait implemented by types that can serve as indices.
 pub unsafe trait VertexIndex: Copy + 'static {
     /// Index type.
-    const FORMAT: vk::IndexType;
+    const FORMAT: VkIndexType;
 }
 
 /// Description of a vertex attribute within a vertex layout.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct VertexAttributeDescription {
-    pub format: vk::Format,
+    pub format: VkFormat,
     pub offset: u32,
 }
 
 /// Trait implemented by types that can serve as a vertex attribute.
 pub unsafe trait VertexAttribute {
     /// Returns the corresponding data format (the layout of the data in memory).
-    const FORMAT: vk::Format;
+    const FORMAT: VkFormat;
 }
 
 /// Wrapper type for normalized integer attributes.
@@ -781,94 +782,94 @@ pub struct Norm<T>(pub T);
 macro_rules! impl_vertex_attr {
     ($t:ty, $fmt:ident) => {
         unsafe impl VertexAttribute for $t {
-            const FORMAT: vk::Format = vk::Format::$fmt;
+            const FORMAT: VkFormat = $fmt;
         }
     };
 }
 
 // F32
-impl_vertex_attr!(f32, R32_SFLOAT);
-impl_vertex_attr!([f32; 2], R32G32_SFLOAT);
-impl_vertex_attr!([f32; 3], R32G32B32_SFLOAT);
-impl_vertex_attr!([f32; 4], R32G32B32A32_SFLOAT);
+impl_vertex_attr!(f32, VK_FORMAT_R32_SFLOAT);
+impl_vertex_attr!([f32; 2], VK_FORMAT_R32G32_SFLOAT);
+impl_vertex_attr!([f32; 3], VK_FORMAT_R32G32B32_SFLOAT);
+impl_vertex_attr!([f32; 4], VK_FORMAT_R32G32B32A32_SFLOAT);
 
 // U32
-impl_vertex_attr!(u32, R32_UINT);
-impl_vertex_attr!([u32; 2], R32G32_UINT);
-impl_vertex_attr!([u32; 3], R32G32B32_UINT);
-impl_vertex_attr!([u32; 4], R32G32B32A32_UINT);
+impl_vertex_attr!(u32, VK_FORMAT_R32_UINT);
+impl_vertex_attr!([u32; 2], VK_FORMAT_R32G32_UINT);
+impl_vertex_attr!([u32; 3], VK_FORMAT_R32G32B32_UINT);
+impl_vertex_attr!([u32; 4], VK_FORMAT_R32G32B32A32_UINT);
 
-impl_vertex_attr!(i32, R32_SINT);
-impl_vertex_attr!([i32; 2], R32G32_SINT);
-impl_vertex_attr!([i32; 3], R32G32B32_SINT);
-impl_vertex_attr!([i32; 4], R32G32B32A32_SINT);
+impl_vertex_attr!(i32, VK_FORMAT_R32_SINT);
+impl_vertex_attr!([i32; 2], VK_FORMAT_R32G32_SINT);
+impl_vertex_attr!([i32; 3], VK_FORMAT_R32G32B32_SINT);
+impl_vertex_attr!([i32; 4], VK_FORMAT_R32G32B32A32_SINT);
 
 // U16
-impl_vertex_attr!(u16, R16_UINT);
-impl_vertex_attr!([u16; 2], R16G16_UINT);
-impl_vertex_attr!([u16; 3], R16G16B16_UINT);
-impl_vertex_attr!([u16; 4], R16G16B16A16_UINT);
+impl_vertex_attr!(u16, VK_FORMAT_R16_UINT);
+impl_vertex_attr!([u16; 2], VK_FORMAT_R16G16_UINT);
+impl_vertex_attr!([u16; 3], VK_FORMAT_R16G16B16_UINT);
+impl_vertex_attr!([u16; 4], VK_FORMAT_R16G16B16A16_UINT);
 
-impl_vertex_attr!(i16, R16_SINT);
-impl_vertex_attr!([i16; 2], R16G16_SINT);
-impl_vertex_attr!([i16; 3], R16G16B16_SINT);
-impl_vertex_attr!([i16; 4], R16G16B16A16_SINT);
+impl_vertex_attr!(i16, VK_FORMAT_R16_SINT);
+impl_vertex_attr!([i16; 2], VK_FORMAT_R16G16_SINT);
+impl_vertex_attr!([i16; 3], VK_FORMAT_R16G16B16_SINT);
+impl_vertex_attr!([i16; 4], VK_FORMAT_R16G16B16A16_SINT);
 
 // UNORM16
-impl_vertex_attr!(Norm<u16>, R16_UNORM);
-impl_vertex_attr!(Norm<[u16; 2]>, R16G16_UNORM);
-impl_vertex_attr!(Norm<[u16; 3]>, R16G16B16_UNORM);
-impl_vertex_attr!(Norm<[u16; 4]>, R16G16B16A16_UNORM);
+impl_vertex_attr!(Norm<u16>, VK_FORMAT_R16_UNORM);
+impl_vertex_attr!(Norm<[u16; 2]>, VK_FORMAT_R16G16_UNORM);
+impl_vertex_attr!(Norm<[u16; 3]>, VK_FORMAT_R16G16B16_UNORM);
+impl_vertex_attr!(Norm<[u16; 4]>, VK_FORMAT_R16G16B16A16_UNORM);
 
 // SNORM16
-impl_vertex_attr!(Norm<i16>, R16_SNORM);
-impl_vertex_attr!(Norm<[i16; 2]>, R16G16_SNORM);
-impl_vertex_attr!(Norm<[i16; 3]>, R16G16B16_SNORM);
-impl_vertex_attr!(Norm<[i16; 4]>, R16G16B16A16_SNORM);
+impl_vertex_attr!(Norm<i16>, VK_FORMAT_R16_SNORM);
+impl_vertex_attr!(Norm<[i16; 2]>, VK_FORMAT_R16G16_SNORM);
+impl_vertex_attr!(Norm<[i16; 3]>, VK_FORMAT_R16G16B16_SNORM);
+impl_vertex_attr!(Norm<[i16; 4]>, VK_FORMAT_R16G16B16A16_SNORM);
 
 // U8
-impl_vertex_attr!(u8, R8_UINT);
-impl_vertex_attr!([u8; 2], R8G8_UINT);
-impl_vertex_attr!([u8; 3], R8G8B8_UINT);
-impl_vertex_attr!([u8; 4], R8G8B8A8_UINT);
+impl_vertex_attr!(u8, VK_FORMAT_R8_UINT);
+impl_vertex_attr!([u8; 2], VK_FORMAT_R8G8_UINT);
+impl_vertex_attr!([u8; 3], VK_FORMAT_R8G8B8_UINT);
+impl_vertex_attr!([u8; 4], VK_FORMAT_R8G8B8A8_UINT);
 
-impl_vertex_attr!(Norm<u8>, R8_UNORM);
-impl_vertex_attr!(Norm<[u8; 2]>, R8G8_UNORM);
-impl_vertex_attr!(Norm<[u8; 3]>, R8G8B8_UNORM);
-impl_vertex_attr!(Norm<[u8; 4]>, R8G8B8A8_UNORM);
+impl_vertex_attr!(Norm<u8>, VK_FORMAT_R8_UNORM);
+impl_vertex_attr!(Norm<[u8; 2]>, VK_FORMAT_R8G8_UNORM);
+impl_vertex_attr!(Norm<[u8; 3]>, VK_FORMAT_R8G8B8_UNORM);
+impl_vertex_attr!(Norm<[u8; 4]>, VK_FORMAT_R8G8B8A8_UNORM);
 
-impl_vertex_attr!(i8, R8_SINT);
-impl_vertex_attr!([i8; 2], R8G8_SINT);
-impl_vertex_attr!([i8; 3], R8G8B8_SINT);
-impl_vertex_attr!([i8; 4], R8G8B8A8_SINT);
+impl_vertex_attr!(i8, VK_FORMAT_R8_SINT);
+impl_vertex_attr!([i8; 2], VK_FORMAT_R8G8_SINT);
+impl_vertex_attr!([i8; 3], VK_FORMAT_R8G8B8_SINT);
+impl_vertex_attr!([i8; 4], VK_FORMAT_R8G8B8A8_SINT);
 
-impl_vertex_attr!(math::Vec2, R32G32_SFLOAT);
-impl_vertex_attr!(math::Vec3, R32G32B32_SFLOAT);
-impl_vertex_attr!(math::Vec4, R32G32B32A32_SFLOAT);
+impl_vertex_attr!(math::Vec2, VK_FORMAT_R32G32_SFLOAT);
+impl_vertex_attr!(math::Vec3, VK_FORMAT_R32G32B32_SFLOAT);
+impl_vertex_attr!(math::Vec4, VK_FORMAT_R32G32B32A32_SFLOAT);
 
-impl_vertex_attr!(math::U16Vec2, R16G16_UINT);
-impl_vertex_attr!(math::U16Vec3, R16G16B16_UINT);
-impl_vertex_attr!(math::U16Vec4, R16G16B16A16_UINT);
+impl_vertex_attr!(math::U16Vec2, VK_FORMAT_R16G16_UINT);
+impl_vertex_attr!(math::U16Vec3, VK_FORMAT_R16G16B16_UINT);
+impl_vertex_attr!(math::U16Vec4, VK_FORMAT_R16G16B16A16_UINT);
 
-impl_vertex_attr!(Norm<math::U16Vec2>, R16G16_UNORM);
-impl_vertex_attr!(Norm<math::U16Vec3>, R16G16B16_UNORM);
-impl_vertex_attr!(Norm<math::U16Vec4>, R16G16B16A16_UNORM);
+impl_vertex_attr!(Norm<math::U16Vec2>, VK_FORMAT_R16G16_UNORM);
+impl_vertex_attr!(Norm<math::U16Vec3>, VK_FORMAT_R16G16B16_UNORM);
+impl_vertex_attr!(Norm<math::U16Vec4>, VK_FORMAT_R16G16B16A16_UNORM);
 
 #[cfg(feature = "color")]
 unsafe impl VertexAttribute for color::Srgba8 {
-    const FORMAT: Format = Format::R8G8B8A8_UNORM;
+    const FORMAT: Format = VK_FORMAT_R8G8B8A8_UNORM;
 }
 
 macro_rules! impl_index_data {
     ($t:ty, $fmt:ident) => {
         unsafe impl VertexIndex for $t {
-            const FORMAT: vk::IndexType = vk::IndexType::$fmt;
+            const FORMAT: VkIndexType = $fmt;
         }
     };
 }
 
-impl_index_data!(u16, UINT16);
-impl_index_data!(u32, UINT32);
+impl_index_data!(u16, VK_INDEX_TYPE_UINT16);
+impl_index_data!(u32, VK_INDEX_TYPE_UINT32);
 
 /// Primitive topology.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
@@ -883,14 +884,14 @@ pub enum PrimitiveTopology {
 
 impl PrimitiveTopology {
     /// Converts this enum to a `VkPrimitiveTopology` enum.
-    pub const fn to_vk_primitive_topology(self) -> vk::PrimitiveTopology {
+    pub const fn to_vk_primitive_topology(self) -> VkPrimitiveTopology {
         match self {
-            Self::TriangleList => vk::PrimitiveTopology::TRIANGLE_LIST,
-            Self::TriangleStrip => vk::PrimitiveTopology::TRIANGLE_STRIP,
-            Self::LineList => vk::PrimitiveTopology::LINE_LIST,
-            Self::LineStrip => vk::PrimitiveTopology::LINE_STRIP,
-            Self::PointList => vk::PrimitiveTopology::POINT_LIST,
-            Self::PatchList => vk::PrimitiveTopology::PATCH_LIST,
+            Self::TriangleList => VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            Self::TriangleStrip => VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
+            Self::LineList => VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
+            Self::LineStrip => VK_PRIMITIVE_TOPOLOGY_LINE_STRIP,
+            Self::PointList => VK_PRIMITIVE_TOPOLOGY_POINT_LIST,
+            Self::PatchList => VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,
         }
     }
 }
@@ -914,53 +915,53 @@ pub struct DepthBias {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct RasterizationState {
-    pub polygon_mode: vk::PolygonMode = vk::PolygonMode::FILL,
-    pub cull_mode: vk::CullModeFlags = vk::CullModeFlags::NONE,
-    pub front_face: vk::FrontFace = vk::FrontFace::CLOCKWISE,
+    pub polygon_mode: VkPolygonMode = VK_POLYGON_MODE_FILL,
+    pub cull_mode: VkCullModeFlags = VK_CULL_MODE_NONE,
+    pub front_face: VkFrontFace = VK_FRONT_FACE_CLOCKWISE,
     pub depth_clamp_enable: bool = false,
-    pub conservative_rasterization_mode: vk::ConservativeRasterizationModeEXT = vk::ConservativeRasterizationModeEXT::DISABLED,
+    pub conservative_rasterization_mode: VkConservativeRasterizationModeEXT = VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct StencilOpState {
-    pub compare: vk::CompareOp,
-    pub fail_op: vk::StencilOp,
-    pub depth_fail_op: vk::StencilOp,
-    pub pass_op: vk::StencilOp,
+    pub compare: VkCompareOp,
+    pub fail_op: VkStencilOp,
+    pub depth_fail_op: VkStencilOp,
+    pub pass_op: VkStencilOp,
 }
 
 //  Adapted from WGPU
 impl StencilOpState {
     pub const IGNORE: Self = StencilOpState {
-        compare: vk::CompareOp::ALWAYS,
-        fail_op: vk::StencilOp::KEEP,
-        depth_fail_op: vk::StencilOp::KEEP,
-        pass_op: vk::StencilOp::KEEP,
+        compare: VK_COMPARE_OP_ALWAYS,
+        fail_op: VK_STENCIL_OP_KEEP,
+        depth_fail_op: VK_STENCIL_OP_KEEP,
+        pass_op: VK_STENCIL_OP_KEEP,
     };
 
     /// Returns true if the face state doesn't mutate the target values.
     pub fn is_read_only(&self) -> bool {
-        self.pass_op == vk::StencilOp::KEEP
-            && self.depth_fail_op == vk::StencilOp::KEEP
-            && self.fail_op == vk::StencilOp::KEEP
+        self.pass_op == VK_STENCIL_OP_KEEP
+            && self.depth_fail_op == VK_STENCIL_OP_KEEP
+            && self.fail_op == VK_STENCIL_OP_KEEP
     }
 }
 
 impl StencilOpState {
-    pub const fn to_vk_stencil_op_state(&self) -> vk::StencilOpState {
-        vk::StencilOpState {
-            fail_op: self.fail_op,
-            pass_op: self.pass_op,
-            depth_fail_op: self.depth_fail_op,
-            compare_op: self.compare,
-            compare_mask: !0,
-            write_mask: !0,
+    pub const fn to_vk_stencil_op_state(&self) -> VkStencilOpState {
+        VkStencilOpState {
+            failOp: self.fail_op,
+            passOp: self.pass_op,
+            depthFailOp: self.depth_fail_op,
+            compareOp: self.compare,
+            compareMask: !0,
+            writeMask: !0,
             reference: 0,
         }
     }
 }
 
-impl From<StencilOpState> for vk::StencilOpState {
+impl From<StencilOpState> for VkStencilOpState {
     fn from(state: StencilOpState) -> Self {
         state.to_vk_stencil_op_state()
     }
@@ -1008,9 +1009,9 @@ impl Default for StencilState {
 /// Describes how a graphics pipeline reads and modifies a depth-stencil attachment.
 #[derive(Copy, Clone, Debug)]
 pub struct DepthStencilState {
-    pub format: vk::Format = Format::UNDEFINED,
+    pub format: VkFormat = VK_FORMAT_UNDEFINED,
     pub depth_write_enable: bool = false,
-    pub depth_compare_op: vk::CompareOp = vk::CompareOp::LESS,
+    pub depth_compare_op: VkCompareOp = VK_COMPARE_OP_LESS,
     pub stencil_state: StencilState = StencilState { .. },
 }
 
@@ -1068,16 +1069,16 @@ pub enum ShaderStage {
 }
 
 impl ShaderStage {
-    pub fn to_vk_shader_stage(&self) -> vk::ShaderStageFlags {
+    pub fn to_vk_shader_stage(&self) -> VkShaderStageFlags {
         match self {
-            ShaderStage::Vertex => vk::ShaderStageFlags::VERTEX,
-            ShaderStage::Fragment => vk::ShaderStageFlags::FRAGMENT,
-            ShaderStage::Compute => vk::ShaderStageFlags::COMPUTE,
-            ShaderStage::Geometry => vk::ShaderStageFlags::GEOMETRY,
-            ShaderStage::TessControl => vk::ShaderStageFlags::TESSELLATION_CONTROL,
-            ShaderStage::TessEvaluation => vk::ShaderStageFlags::TESSELLATION_EVALUATION,
-            ShaderStage::Mesh => vk::ShaderStageFlags::MESH_NV,
-            ShaderStage::Task => vk::ShaderStageFlags::TASK_NV,
+            ShaderStage::Vertex => VK_SHADER_STAGE_VERTEX_BIT,
+            ShaderStage::Fragment => VK_SHADER_STAGE_FRAGMENT_BIT,
+            ShaderStage::Compute => VK_SHADER_STAGE_COMPUTE_BIT,
+            ShaderStage::Geometry => VK_SHADER_STAGE_GEOMETRY_BIT,
+            ShaderStage::TessControl => VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
+            ShaderStage::TessEvaluation => VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
+            ShaderStage::Mesh => VK_SHADER_STAGE_MESH_BIT_EXT,
+            ShaderStage::Task => VK_SHADER_STAGE_TASK_BIT_EXT,
         }
     }
 }
@@ -1114,7 +1115,7 @@ pub struct ShaderEntryPoint<'a> {
 /// They can be used in shaders, via VK_KHR_buffer_device_address (required).
 #[repr(transparent)]
 pub struct Ptr<T: ?Sized + 'static> {
-    pub raw: vk::DeviceAddress,
+    pub raw: VkDeviceAddress,
     pub _phantom: PhantomData<T>,
 }
 

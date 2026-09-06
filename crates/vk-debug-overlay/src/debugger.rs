@@ -322,7 +322,7 @@ impl Debugger {
         })
     }
 
-    fn add_image_watch(&mut self, eid: EId, image: vk::Image) -> (WatchId, &mut CommandWatch) {
+    fn add_image_watch(&mut self, eid: EId, image: VkImage) -> (WatchId, &mut CommandWatch) {
         self.get_or_insert_watch(eid, (1, image), || CaptureKind::Image(ImageCapture { image, result: None }))
     }
 
@@ -341,7 +341,7 @@ impl Debugger {
         }
     }
 
-    pub fn capture_image(&mut self, eid: EId, image: vk::Image) -> Option<CapturedImage> {
+    pub fn capture_image(&mut self, eid: EId, image: VkImage) -> Option<CapturedImage> {
         let (_watch_id, watch) = self.add_image_watch(eid, image);
         if watch.stale {
             return None;
@@ -383,7 +383,7 @@ pub struct LoadChainCapture {
 
 pub struct ImageCapture {
     pub(crate) hash: u64,       // Unique hash
-    pub(crate) image: vk::Image,
+    pub(crate) image: VkImage,
     pub(crate) result: Option<CapturedImage>,
     pub(crate) transient: bool, // Whether this watch is temporary (removed if not read in the last frame)
     pub(crate) abandoned: bool,
