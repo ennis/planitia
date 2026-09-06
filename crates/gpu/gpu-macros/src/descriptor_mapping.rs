@@ -24,6 +24,7 @@
 //! ```
 //!
 
+/*
 pub enum DescriptorMappingSourceKind {
     /*     VK_DESCRIPTOR_MAPPING_SOURCE_HEAP_WITH_CONSTANT_OFFSET_EXT          = 0,
     VK_DESCRIPTOR_MAPPING_SOURCE_HEAP_WITH_PUSH_INDEX_EXT               = 1,
@@ -44,8 +45,7 @@ pub enum DescriptorMappingSourceKind {
     PushData,
     PushAddress,
     IndirectAddress,
-
-}
+}*/
 
 
 

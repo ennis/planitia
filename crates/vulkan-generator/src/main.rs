@@ -494,7 +494,7 @@ fn parse_command<'a, 'input>(
         })
     } else {
         let func_info = parse_command_or_funcptr(node).unwrap();
-        let dispatch = dispatch_type_from_first_param(func_info.params.first().map(|p| p.name.as_str()));
+        let dispatch = dispatch_type_from_first_param(func_info.params.first().map(|p| p.inner_ty.as_str()));
         Some(CommandInfo {
             node,
             name: func_info.proto.name.clone(),
@@ -726,14 +726,14 @@ fn gen_vk_dispatch_table(
             }
             writeln!(out, ") -> {} {{", cmd.func.proto.rust_type(true))?;
             indent(out);
-            write!(out, "(self.{cmd_name})(")?;
+            write!(out, "unsafe {{ (self.{cmd_name})(")?;
             for (i, param) in cmd.func.params.iter().enumerate() {
                 if i > 0 {
                     write!(out, ", ")?;
                 }
                 write!(out, "{}", sanitize_ident(&param.name))?;
             }
-            writeln!(out, ")")?;
+            writeln!(out, ") }}")?;
             dedent(out);
             writeln!(out, "}}")?;
         }

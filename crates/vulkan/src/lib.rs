@@ -7,6 +7,7 @@ pub mod video;
 mod macros;
 mod platform_types;
 mod vk;
+mod entry;
 
 pub use platform_types::*;
 pub use vk::*;

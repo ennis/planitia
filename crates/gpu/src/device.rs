@@ -455,7 +455,7 @@ impl Device {
         let instance = get_vulkan_instance();
         let device = ash::Device::load(instance.fp_v1_0(), device);
         //
-        let device2 = ::vulkan::Vulkan_1_4_DeviceDispatch::load(|proc| {
+        let device2 = ::vulkan::Vulkan_1_4_DeviceDispatch::load_with(|proc| {
             instance.get_device_proc_addr(device.handle(), proc.as_ptr())
         });
         let queue = device.get_device_queue(graphics_queue_family_index, 0);
@@ -871,7 +871,7 @@ impl Device {
         let last_completed_frame_index = unsafe {
             let mut value = 0u64;
             // VULKAN-MIGRATION
-            (self.vk.GetSemaphoreCounterValue)(
+            self.vk.GetSemaphoreCounterValue(
                 VkDevice(self.raw.handle().as_raw() as *mut _),
                 VkSemaphore(self.thread_safe.frame_timeline.as_raw()),
                 &mut value,

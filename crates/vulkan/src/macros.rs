@@ -27,7 +27,6 @@ macro_rules! handle {
     };
 }
 
-use std::ffi::CStr;
 pub(crate) use handle;
 
 macro_rules! non_dispatchable_handle {
@@ -62,9 +61,9 @@ macro_rules! dispatch_table {
             $(pub $cmd: $pfn,)*
         }
         impl $name {
-            pub unsafe fn load(mut load_fn: impl FnMut(&CStr) -> PFN_vkVoidFunction) -> Self {
+            pub unsafe fn load_with(mut load_fn: impl FnMut(&CStr) -> PFN_vkVoidFunction) -> Self {
                 Self {
-                    $($inherits_m: <$inherits_ty>::load(&mut load_fn),)?
+                    $($inherits_m: unsafe { <$inherits_ty>::load_with(&mut load_fn) },)?
                     $($cmd: unsafe { ::core::mem::transmute(load_fn($procname).unwrap_or_else(|| $crate::proc_not_found($procname))) },)*
                 }
             }

@@ -363,7 +363,7 @@ pub(crate) fn shader_module_impl(
 
     // Write ShaderEntryPoints
     let mut entry_points = vec![];
-    for (i, ep) in module.entry_points.iter().enumerate() {
+    for (_i, ep) in module.entry_points.iter().enumerate() {
         let ep_name = &ep.name;
         let ep_name_ident = format_ident!("{}", ep_name);
         let push_constants_size = ep.push_constants_size;
