@@ -9,6 +9,7 @@ use arrayvec::ArrayVec;
 use ash::prelude::VkResult;
 use ash::vk::{DeviceAddress, Handle};
 use bitflags::bitflags;
+use gpu::vkcheck;
 use gpu_types::{
     ClearColorValue, Data, ImageAspect, ImageDataLayout, ImageSubresourceLayers, ImageUsage, Offset3D, Rect3D, Size3D,
 };
@@ -21,9 +22,7 @@ use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
 use std::sync::atomic::Ordering::Relaxed;
 use std::{mem, ptr, slice};
-use vulkan_headers::vulkan::vulkan::{
-    VK_STRUCTURE_TYPE_PUSH_DATA_INFO_EXT, VkHostAddressRangeConstEXT, VkPushDataInfoEXT,
-};
+use vulkan::{VkCommandBuffer, VkFence, VkHostAddressRangeConstEXT, VkPipelineStageFlags, VkPushDataInfoEXT, VkSemaphore, VkSubmitInfo, VkTimelineSemaphoreSubmitInfo, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT};
 
 mod blit;
 mod render;
@@ -223,12 +222,11 @@ impl CommandBuffer {
                 }
             };
             let push_data_info = VkPushDataInfoEXT {
-                sType: VK_STRUCTURE_TYPE_PUSH_DATA_INFO_EXT,
-                pNext: ptr::null(),
                 offset: 0,
                 data: VkHostAddressRangeConstEXT { address, size },
+                ..
             };
-            (device.ext.descriptor_heap.cmd_push_data)(cb.as_raw() as *mut _, &push_data_info);
+            device.ext.descriptor_heap.CmdPushDataEXT(VkCommandBuffer(cb.as_raw() as *mut _), &push_data_info);
         }
     }
 
@@ -456,14 +454,14 @@ impl Drop for CommandBuffer {
 /// Specifies a timeline semaphore wait operation.
 #[derive(Copy, Clone)]
 pub struct SyncWait {
-    pub semaphore: vk::Semaphore,
+    pub semaphore: VkSemaphore,
     pub value: u64,
 }
 
 /// Specifies a timeline semaphore signal operation.
 #[derive(Copy, Clone)]
 pub struct SyncSignal {
-    pub semaphore: vk::Semaphore,
+    pub semaphore: VkSemaphore,
     pub value: u64,
 }
 
@@ -484,59 +482,54 @@ fn sync(waits: &[SyncWait], signals: &[SyncSignal]) {
     let device = Device::instance();
     // /!\ Lock the device for command submission.
     let submission_state = device.submission_state.lock().unwrap();
-    let mut wait_semaphores = [vk::Semaphore::null(); MAX_SYNC_COUNT];
-    let mut signal_semaphores = [vk::Semaphore::null(); MAX_SYNC_COUNT];
+    let mut wait_semaphores = [VkSemaphore::null(); MAX_SYNC_COUNT];
+    let mut signal_semaphores = [VkSemaphore::null(); MAX_SYNC_COUNT];
     let mut wait_semaphore_values = [0u64; MAX_SYNC_COUNT];
     let mut signal_semaphore_values = [0u64; MAX_SYNC_COUNT];
-    let mut wait_semaphore_dst_stages = [vk::PipelineStageFlags::empty(); MAX_SYNC_COUNT];
+    let mut wait_semaphore_dst_stages = [0; MAX_SYNC_COUNT];
     for (i, signal) in signals.iter().enumerate() {
         signal_semaphores[i] = signal.semaphore;
         signal_semaphore_values[i] = signal.value;
     }
     for (i, w) in waits.iter().enumerate() {
-        wait_semaphore_dst_stages[i] = vk::PipelineStageFlags::ALL_COMMANDS;
+        wait_semaphore_dst_stages[i] = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
         wait_semaphores[i] = w.semaphore;
         wait_semaphore_values[i] = w.value;
     }
-    let timeline_submit_info = vk::TimelineSemaphoreSubmitInfo {
-        wait_semaphore_value_count: waits.len() as u32,
-        p_wait_semaphore_values: wait_semaphore_values.as_ptr(),
-        signal_semaphore_value_count: signals.len() as u32,
-        p_signal_semaphore_values: signal_semaphore_values.as_ptr(),
-        ..Default::default()
+    let timeline_submit_info = VkTimelineSemaphoreSubmitInfo {
+        waitSemaphoreValueCount: waits.len() as u32,
+        pWaitSemaphoreValues: wait_semaphore_values.as_ptr(),
+        signalSemaphoreValueCount: signals.len() as u32,
+        pSignalSemaphoreValues: signal_semaphore_values.as_ptr(),
+        ..
     };
-    let submit_info = vk::SubmitInfo {
-        p_next: &timeline_submit_info as *const _ as *const c_void,
-        wait_semaphore_count: waits.len() as u32,
-        p_wait_semaphores: wait_semaphores.as_ptr(),
-        p_wait_dst_stage_mask: wait_semaphore_dst_stages.as_ptr(),
-        command_buffer_count: 0,
-        p_command_buffers: ptr::null(),
-        signal_semaphore_count: signals.len() as u32,
-        p_signal_semaphores: signal_semaphores.as_ptr(),
-        ..Default::default()
+    let submit_info = VkSubmitInfo {
+        pNext: &timeline_submit_info as *const _ as *const c_void,
+        waitSemaphoreCount: waits.len() as u32,
+        pWaitSemaphores: wait_semaphores.as_ptr(),
+        pWaitDstStageMask: wait_semaphore_dst_stages.as_ptr(),
+        commandBufferCount: 0,
+        pCommandBuffers: ptr::null(),
+        signalSemaphoreCount: signals.len() as u32,
+        pSignalSemaphores: signal_semaphores.as_ptr(),
+        ..
     };
     unsafe {
-        trace!("GPU: QueueSubmit (synchronization)");
-        match device.raw.queue_submit(submission_state.queue, &[submit_info], vk::Fence::null()) {
-            Ok(()) => {}
-            Err(e) => {
-                error!("QueueSubmit (synchronization) failed: {:?}", e);
-            }
-        }
+        //trace!("GPU: QueueSubmit (synchronization)");
+        vkcheck!(device.vk.QueueSubmit(submission_state.queue, 1, &submit_info, VkFence::null()));
     }
 }
 
 /// Waits on the given timeline semaphore until it reaches the given value.
 pub fn wait(semaphore: vk::Semaphore, value: u64) {
-    sync(&[SyncWait { semaphore, value }], &[]);
+    sync(&[SyncWait { semaphore: VkSemaphore(semaphore.as_raw()), value }], &[]);
 }
 
 /// Signals the given timeline semaphore with the given value.
 ///
 /// The value is ignored if `semaphore` is a binary semaphore.
 pub fn signal(semaphore: vk::Semaphore, value: u64) {
-    sync(&[], &[SyncSignal { semaphore, value }]);
+    sync(&[], &[SyncSignal { semaphore: VkSemaphore(semaphore.as_raw()), value }]);
 }
 
 /// Submits the given commands for execution on the GPU.
@@ -544,9 +537,9 @@ pub fn signal(semaphore: vk::Semaphore, value: u64) {
 /// This implicitly calls [`flush`](flush) to ensure that all pending commands on the default
 /// command buffer are submitted before this command buffer.
 #[inline(never)]
-pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
+pub fn submit(mut cmd: CommandBuffer) {
     // Always submit the default command buffer before user-provided cmdbufs.
-    flush()?;
+    flush();
 
     let device = Device::instance();
 
@@ -581,43 +574,39 @@ pub fn submit(mut cmd: CommandBuffer) -> VkResult<()> {
     // submit
     let signal_semaphores = vec![];
     let signal_semaphore_values = vec![];
-    let timeline_submit_info = vk::TimelineSemaphoreSubmitInfo {
-        signal_semaphore_value_count: signal_semaphore_values.len() as u32,
-        p_signal_semaphore_values: signal_semaphore_values.as_ptr(),
-        ..Default::default()
+    let timeline_submit_info = VkTimelineSemaphoreSubmitInfo {
+        signalSemaphoreValueCount: signal_semaphore_values.len() as u32,
+        pSignalSemaphoreValues: signal_semaphore_values.as_ptr(),
+        waitSemaphoreValueCount: 0,
+        ..
     };
-    let submit_info = vk::SubmitInfo {
-        p_next: &timeline_submit_info as *const _ as *const c_void,
-        command_buffer_count: 1,
-        p_command_buffers: &cmd.cmdbuf,
-        signal_semaphore_count: signal_semaphores.len() as u32,
-        p_signal_semaphores: signal_semaphores.as_ptr(),
-        ..Default::default()
+    let cmdbufs = [VkCommandBuffer(cmd.cmdbuf.as_raw() as *mut _)];
+    let submit_info = VkSubmitInfo {
+        pNext: &timeline_submit_info as *const _ as *const c_void,
+        commandBufferCount: 1,
+        // VULKAN-MIGRATION
+        pCommandBuffers: cmdbufs.as_ptr(),
+        signalSemaphoreCount: signal_semaphores.len() as u32,
+        pSignalSemaphores: signal_semaphores.as_ptr(),
+        waitSemaphoreCount: 0,
+        ..
     };
-    let result;
     unsafe {
         // SAFETY: apart from Vulkan handles being valid, Vulkan specifies that access to the
         //         queue object should be externally synchronized, which is realized here by the
         //         lock on submission_state.
-        trace!("GPU: QueueSubmit");
-        result = device.raw.queue_submit(submission_state.queue, &[submit_info], vk::Fence::null());
-        submission_state.active_submissions.push_back(ActiveSubmission {
-            frame_index: frame_index_submitted,
-            //timestamp_query_pool: cmd.timestamp_query_pool,
-            //timestamp_query_count: cmd.timestamp_query_count,
-            //timestamp_callbacks: mem::take(&mut cmd.timestamp_callbacks),
-        });
+        vkcheck!(device.vk.QueueSubmit(submission_state.queue, 1, &submit_info, VkFence::null()));
+        submission_state.active_submissions.push_back(ActiveSubmission { frame_index: frame_index_submitted });
     };
     cmd.submitted = true;
-    result
 }
 
 /// Presents the given swap chain image to the screen.
-pub fn present(swap_chain: &mut SwapChain, index: usize) -> VkResult<()> {
+pub fn present(swap_chain: &mut SwapChain, index: usize) {
     let image = &swap_chain.images[index];
 
     // Automatically flush the default command buffer before presenting.
-    flush()?;
+    flush();
 
     // transition image to PRESENT_SRC
     let mut cmd = CommandBuffer::new();
@@ -640,7 +629,7 @@ pub fn present(swap_chain: &mut SwapChain, index: usize) -> VkResult<()> {
             ..Default::default()
         });
     }
-    submit(cmd)?;
+    submit(cmd);
 
     // NOTE: submission state is unlocked here, so it's possible that another thread submits
     //       commands to the image that was transitioned to PRESENT layout before we present it.
@@ -658,7 +647,11 @@ pub fn present(swap_chain: &mut SwapChain, index: usize) -> VkResult<()> {
             p_results: ptr::null_mut(),
             ..Default::default()
         };
-        device.ext.swapchain.queue_present(submission_state.queue, &present_info).map(|_| ())
+        let _ = device
+            .ext
+            .swapchain
+            .queue_present(vk::Queue::from_raw(submission_state.queue.0 as u64), &present_info)
+            .map(|_| ());
     }
 }
 
@@ -857,12 +850,9 @@ pub fn blit_image(
 
 /// Submits commands in the default command buffer for execution on the GPU.
 #[inline(never)]
-pub fn flush() -> VkResult<()> {
+pub fn flush() {
     if let Some(cb) = take_cmdbuf() {
         submit(cb)
-    } else {
-        // Nothing to submit.
-        Ok(())
     }
 }
 

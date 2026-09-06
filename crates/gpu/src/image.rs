@@ -10,11 +10,7 @@ use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
 use gpu_types::{ImageAspect, ImageType, ImageUsage, Offset3D};
 use slotmap::Key;
 use std::{mem, ptr};
-use vulkan_headers::vulkan::vulkan::{
-    VK_IMAGE_LAYOUT_GENERAL, VK_STRUCTURE_TYPE_IMAGE_DESCRIPTOR_INFO_EXT,
-    VK_STRUCTURE_TYPE_RESOURCE_DESCRIPTOR_INFO_EXT, VkImageDescriptorInfoEXT, VkImageViewCreateInfo,
-    VkResourceDescriptorDataEXT, VkResourceDescriptorInfoEXT,
-};
+use vulkan::{VkImageDescriptorInfoEXT, VkImageViewCreateInfo, VK_IMAGE_LAYOUT_GENERAL, VkResourceDescriptorInfoEXT, VkResourceDescriptorDataEXT};
 
 /// Information passed to `Image::new` to describe the image to be created.
 #[derive(Copy, Clone, Debug)]
@@ -461,7 +457,7 @@ impl Device {
                 },
                 ..Default::default()
             });
-            crate::submit(cmd).unwrap();
+            crate::submit(cmd);
         }
     }
 
@@ -554,16 +550,14 @@ impl Device {
         view: &vk::ImageViewCreateInfo,
     ) -> u32 {
         let info = VkImageDescriptorInfoEXT {
-            sType: VK_STRUCTURE_TYPE_IMAGE_DESCRIPTOR_INFO_EXT,
-            pNext: ptr::null(),
             pView: view as *const _ as *const VkImageViewCreateInfo,
             layout: VK_IMAGE_LAYOUT_GENERAL,
+            ..
         };
         self.allocate_resource_descriptor(&VkResourceDescriptorInfoEXT {
-            sType: VK_STRUCTURE_TYPE_RESOURCE_DESCRIPTOR_INFO_EXT,
-            pNext: ptr::null(),
-            typ: descriptor_type.as_raw(),
+            r#type: descriptor_type.as_raw(),
             data: VkResourceDescriptorDataEXT { pImage: &info },
+            ..
         })
     }
 

@@ -50,9 +50,9 @@ fn generate(out_dir: &Path, document: &roxmltree::Document) -> io::Result<()> {
     let mut enum_types = EnumTypeMap::new();
     //let mut type_map = TypeMap::new();
 
-    // src/vk.rs
+    // src/generated.rs
     {
-        let out_file = File::create(out_dir.join("src/vk.rs"))?;
+        let out_file = File::create(out_dir.join("src/generated.rs"))?;
         let mut buf_writer = BufWriter::new(out_file);
         let mut line_writer = LineWriter::new(IndentedWriter::new(&mut buf_writer));
         // PAIN: <type> definitions don't say if they belong to the vulkan API (as opposed to, say,
@@ -71,6 +71,7 @@ fn generate(out_dir: &Path, document: &roxmltree::Document) -> io::Result<()> {
         gen_features(&mut line_writer, registry, &mut enum_types, &mut tymap, &mut cmdmap)?;
         gen_extensions(&mut line_writer, registry, &mut enum_types, &mut tymap, &mut cmdmap)?;
         gen_core_dispatch_tables(&mut line_writer, registry, &cmdmap)?;
+        gen_ext_dispatch_tables(&mut line_writer, registry, &cmdmap)?;
     }
     Ok(())
 }
@@ -126,62 +127,16 @@ type CommandMap<'a, 'input> = HashMap<String, CommandInfo<'a, 'input>>;
 static PREAMBLE: &str = r#"use crate::macros::*;   // handle, nondispatchable_handle
 use crate::platform_types::*;
 use crate::video::*;
+use crate::basetypes::*;
 use std::ffi::*;
 use std::ptr;
 
-pub type VkSampleMask = u32;
-pub type VkBool32 = u32;
-pub type VkFlags = u32;
-pub type VkFlags64 = u64;
-pub type VkDeviceSize = u64;
-pub type VkDeviceAddress = u64;
 "#;
 
 fn gen_preamble(out: &mut Writer) -> io::Result<()> {
     writeln!(out, "{PREAMBLE}\n")?;
     Ok(())
 }
-
-/*
-fn collect_vulkan_apis(registry: Node) -> HashSet<String> {
-    let mut vulkan_apis = HashSet::new();
-    for ext in children_tagged(child_tagged(registry, "extensions").unwrap(), "extension") {
-        if is_vulkan_supported_extension(ext) {
-            for require in children_tagged(ext, "require") {
-                for ty in children_tagged(require, "type") {
-                    if let Some(name) = ty.attribute("name") {
-                        vulkan_apis.insert(name.to_string());
-                    }
-                }
-            }
-        }
-    }
-    vulkan_apis
-}*/
-
-/*
-fn gen_type_map<'a, 'input>(registry: Node<'a, 'input>) -> io::Result<TypeMap<'a, 'input>> {
-    let mut type_map = TypeMap::new();
-    for types in children_tagged(registry, "types") {
-        for node in children_tagged(types, "type") {
-            if !api_check(node) {
-                continue;
-            }
-
-            let category = match node.attribute("category") {
-                Some("enum") => Category::Enum,
-                Some("bitmask") => Category::Bitmask,
-                Some("handle") => Category::Handle,
-                Some("funcpointer") => Category::FuncPointer,
-                Some("struct") => Category::Struct,
-                Some("union") => Category::Union,
-                _ => Category::Trash, // whatever
-            };
-            type_map.insert(name.to_string(), TypeInfo { node, category, generated: false });
-        }
-    }
-    Ok(type_map)
-}*/
 
 fn parse_types<'a, 'input>(registry: Node<'a, 'input>) -> TypeMap<'a, 'input> {
     let mut type_map = TypeMap::new();
@@ -203,10 +158,8 @@ fn parse_type<'a, 'input>(node: Node<'a, 'input>, tymap: &TypeMap<'a, 'input>) -
         return None;
     };
     let alias = node.attribute("alias").map(sanitize_ident).map(|s| s.to_string());
-
     let name;
     let cat;
-
     match category {
         "funcpointer" => {
             let func_info = parse_command_or_funcptr(node).unwrap();
@@ -413,54 +366,92 @@ fn gen_type(out: &mut Writer, tyinfo: &TypeInfo, tymap: &TypeMap) -> io::Result<
 
 fn gen_enums(out: &mut Writer, registry: Node, enum_types: &mut EnumTypeMap) -> io::Result<()> {
     for enums in children_tagged(registry, "enums") {
-        gen_enum(out, enums, enum_types)?;
+        gen_enums_block(out, enums, enum_types)?;
     }
     Ok(())
 }
 
-fn gen_enum(out: &mut Writer, node: Node, enum_types: &mut EnumTypeMap) -> io::Result<()> {
-    enum Kind {
-        Bitmask,
-        Constants,
-        Enum,
-    }
-    let bitwidth = int_attr(node, "bitwidth").unwrap_or(32);
-    let kind = match node.attribute("type").unwrap() {
-        "bitmask" => Kind::Bitmask,
-        "constants" => Kind::Constants,
-        "enum" => Kind::Enum,
+fn gen_enum_value(
+    out: &mut Writer,
+    en: Node,
+    ty: String,
+    extnumber: Option<i64>,
+    enum_types: &mut EnumTypeMap,
+) -> io::Result<()> {
+    let name = sanitize_ident(en.attribute("name").unwrap());
+    let bitpos = int_attr(en, "bitpos");
+    let offset = int_attr(en, "offset");
+    let value = en.attribute("value").map(c_constant_to_rust);
+    let alias = en.attribute("alias");
+    maybe_write_deprecated_attr(out, en.attribute("deprecated"), alias)?;
+    write!(out, "pub const {name}: {ty} = ")?;
+    if let Some(bitpos) = bitpos {
+        write!(out, "{:#x}", 1u64 << bitpos)?;
+    } else if let Some(offset) = offset {
+        let extnumber = int_attr(en, "extnumber").or(extnumber).unwrap();
+        let mut val = ext_enum_value(extnumber, offset);
+        if en.attribute("dir").is_some() {
+            val = -val;
+        }
+        if ty == "VkResult" {
+            // special-case VkResults
+            write!(out, "VkResult({val})")?;
+        } else {
+            write!(out, "{val}")?;
+        }
+    } else if let Some(value) = value {
+        if ty == "VkResult" {
+            // special-case VkResults
+            write!(out, "VkResult({value})")?;
+        } else {
+            write!(out, "{value}")?;
+        }
+    } else if let Some(alias) = alias {
+        write!(out, "{alias}")?;
+    };
+    writeln!(out, ";")?;
+    enum_types.insert(name.to_string(), ty);
+    Ok(())
+}
+
+fn gen_enums_block(out: &mut Writer, node: Node, enum_types: &mut EnumTypeMap) -> io::Result<()> {
+    match node.attribute("type").unwrap() {
+        "bitmask" => {
+            let name = node.attribute("name").map(sanitize_ident).unwrap();
+            let bitwidth = int_attr(node, "bitwidth").unwrap_or(32);
+            let ty = match bitwidth {
+                64 => "VkFlags64",
+                32 => "VkFlags",
+                _ => panic!("unexpected bitwidth {bitwidth}"),
+            };
+            write!(out, "pub type {name} = {ty};\n")?;
+            for en in children_tagged(node, "enum") {
+                gen_enum_value(out, en, ty.to_string(), None, enum_types)?;
+            }
+        }
+        "enum" => {
+            let name = node.attribute("name").map(sanitize_ident).unwrap();
+            let bitwidth = int_attr(node, "bitwidth").unwrap_or(32);
+            let ty = match bitwidth {
+                32 => "i32",
+                64 => "i64",
+                _ => panic!("unexpected bitwidth {bitwidth}"),
+            };
+            if name != "VkResult" {
+                write!(out, "pub type {name} = {ty};\n")?;
+            }
+            for en in children_tagged(node, "enum") {
+                gen_enum_value(out, en, ty.to_string(), None, enum_types)?;
+            }
+        }
+        "constants" => {
+            for en in children_tagged(node, "enum") {
+                let ty = c_type_to_rust(en.attribute("type").unwrap(), false);
+                gen_enum_value(out, en, ty.to_string(), None, enum_types)?;
+            }
+        }
         _ => panic!("unexpected enum kind"),
     };
-    let ty_name = node.attribute("name").map(sanitize_ident);
-    let ty_rust = enum_bitwidth_to_rust(bitwidth);
-    // Write bitmask or enum type alias
-    match kind {
-        Kind::Bitmask | Kind::Enum => {
-            let ty_name = ty_name.as_ref().unwrap();
-            write!(out, "pub type {ty_name} = {ty_rust};\n")?;
-        }
-        _ => {}
-    }
-    for en in children_tagged(node, "enum") {
-        let name = sanitize_ident(en.attribute("name").unwrap());
-        let bitpos = int_attr(en, "bitpos");
-        let value = en.attribute("value").map(c_constant_to_rust);
-        let alias = en.attribute("alias");
-        maybe_write_deprecated_attr(out, en.attribute("deprecated"), alias)?;
-        write!(out, "pub const {}: ", name)?;
-        let ty = en.attribute("type").map(|ty| c_type_to_rust(ty, false)).unwrap_or(ty_name.as_ref().unwrap().as_ref());
-        write!(out, "{ty}")?;
-        write!(out, " = ")?;
-        if let Some(bitpos) = bitpos {
-            write!(out, "{:#x}", 1u64 << bitpos)?;
-        } else if let Some(value) = value {
-            write!(out, "{value}")?;
-        } else if let Some(alias) = alias {
-            write!(out, "{alias}")?;
-        };
-        writeln!(out, ";")?;
-        enum_types.insert(name.to_string(), ty.to_string());
-    }
     Ok(())
 }
 
@@ -470,6 +461,9 @@ fn parse_command_or_funcptr<'a, 'input>(node: Node<'a, 'input>) -> Option<FuncIn
     let proto = parse_c_declarator(&proto).unwrap();
     let mut params = vec![];
     for param in children_tagged(node, "param") {
+        if !api_check(param) {
+            continue;
+        }
         let text = node_text(&param);
         let decl = parse_c_declarator(&text).unwrap();
         params.push(decl);
@@ -611,11 +605,9 @@ fn gen_require(
             continue;
         }
         let alias = en.attribute("alias");
-        let bitpos = int_attr(en, "bitpos");
-        let offset = int_attr(en, "offset");
         let value = en.attribute("value").map(c_constant_to_rust);
         let ty = match en.attribute("extends") {
-            Some(extends) => extends,
+            Some(extends) => extends.to_string(),
             None => {
                 // PAIN: vk.xml has <enum> elements without <extends> (usually VK_*_SPEC_VERSION and VK_*_EXTENSION_NAME),
                 //       and thus no known type.
@@ -626,14 +618,14 @@ fn gen_require(
                 //        for which it's impossible to infer the type without somehow resolving the alias.
                 //        That's why we have `enum_types`.
                 match value {
-                    Some(ref value) if value.starts_with('"') => "&'static str",
-                    Some(_) => "u32",
+                    Some(ref value) if value.starts_with('"') => "&'static str".to_string(),
+                    Some(_) => "u32".to_string(),
                     None => {
                         match alias {
                             Some(alias) => {
                                 // Look up the alias. Hopefully we've seen it before and know its type.
                                 // If not, bail out; someone should fix vk.xml already.
-                                enum_types.get(alias).unwrap()
+                                enum_types.get(alias).unwrap().to_string()
                             }
                             None => {
                                 // PAIN^3: sometimes there's no value or alias, e.g.:
@@ -647,25 +639,7 @@ fn gen_require(
                 }
             }
         };
-        maybe_write_deprecated_attr(out, en.attribute("deprecated"), alias)?;
-        write!(out, "pub const {name}: {ty} = ")?;
-        if let Some(bitpos) = bitpos {
-            write!(out, "{:#x}", 1u64 << bitpos)?;
-        } else if let Some(offset) = offset {
-            let extnumber = int_attr(en, "extnumber").or(extnumber).unwrap();
-            let mut val = ext_enum_value(extnumber, offset);
-            if en.attribute("dir").is_some() {
-                val = -val;
-            }
-            write!(out, "{}", val)?;
-        } else if let Some(value) = value {
-            write!(out, "{value}")?;
-        } else if let Some(alias) = alias {
-            write!(out, "{alias}")?;
-        };
-        writeln!(out, ";")?;
-        let ty_str = ty.to_string();
-        enum_types.insert(name.to_string(), ty_str);
+        gen_enum_value(out, en, ty, extnumber, enum_types)?;
     }
     for ty in children_tagged(require, "type") {
         let name = ty.attribute("name").unwrap();
@@ -695,16 +669,15 @@ fn gen_require(
 
 fn gen_vk_dispatch_table(
     out: &mut Writer,
-    version: &str,
-    dispatch_kind: &str,
+    name: &str,
     inherits: Option<&str>,
     funcs: Vec<&CommandInfo>,
 ) -> io::Result<()> {
     if !funcs.is_empty() {
-        writeln!(out, "dispatch_table! {{ Vulkan_{version}_{dispatch_kind};")?;
+        writeln!(out, "dispatch_table! {{ {name};")?;
         indent(out);
-        if let Some(ver) = inherits {
-            writeln!(out, "[vk_{ver}: Vulkan_{ver}_{dispatch_kind}]")?;
+        if let Some(inherits) = inherits {
+            writeln!(out, "[inherit: {inherits}]")?;
         }
         for cmd in funcs.iter() {
             let vk_cmd_name = &cmd.name;
@@ -714,7 +687,7 @@ fn gen_vk_dispatch_table(
         dedent(out);
         writeln!(out, "}}")?;
         // write function wrappers
-        writeln!(out, "impl Vulkan_{version}_{dispatch_kind} {{")?;
+        writeln!(out, "impl {name} {{")?;
         indent(out);
         for cmd in funcs.iter() {
             let vk_cmd_name = &cmd.name;
@@ -788,9 +761,68 @@ fn gen_core_dispatch_tables(out: &mut Writer, registry: Node, cmds: &CommandMap)
             _ => None,
         };
         writeln!(out, "// Vulkan {api_version}")?;
-        gen_vk_dispatch_table(out, &api_version, "EntryDispatch", None, entry_fns)?;
-        gen_vk_dispatch_table(out, &api_version, "InstanceDispatch", instance_previous_version, instance_fns)?;
-        gen_vk_dispatch_table(out, &api_version, "DeviceDispatch", device_previous_version, device_fns)?;
+
+        gen_vk_dispatch_table(out, &format!("Vulkan_{api_version}_EntryDispatch"), None, entry_fns)?;
+        gen_vk_dispatch_table(
+            out,
+            &format!("Vulkan_{api_version}_InstanceDispatch"),
+            instance_previous_version.map(|v| format!("Vulkan_{v}_InstanceDispatch")).as_deref(),
+            instance_fns,
+        )?;
+        gen_vk_dispatch_table(
+            out,
+            &format!("Vulkan_{api_version}_DeviceDispatch"),
+            device_previous_version.map(|v| format!("Vulkan_{v}_DeviceDispatch")).as_deref(),
+            device_fns,
+        )?;
+    }
+    Ok(())
+}
+
+fn gen_ext_dispatch_tables(out: &mut Writer, registry: Node, cmds: &CommandMap) -> io::Result<()> {
+    let extensions = child_tagged(registry, "extensions").unwrap();
+    for ext in children_tagged(extensions, "extension") {
+        if !is_vulkan_supported_extension(ext) {
+            continue;
+        }
+        let name = ext.attribute("name").unwrap();
+        let number = int_attr(ext, "number").unwrap();
+        // split instance/device commands
+        let mut entry_fns = vec![];
+        let mut instance_fns = vec![];
+        let mut device_fns = vec![];
+        for req in children_tagged(ext, "require") {
+            for cmd in children_tagged(req, "command") {
+                let info = &cmds[cmd.attribute("name").unwrap()];
+                if !info.generated.get() {
+                    continue;
+                }
+                match &info.dispatch {
+                    DispatchType::Entry => entry_fns.push(info),
+                    DispatchType::Instance => instance_fns.push(info),
+                    DispatchType::Device => device_fns.push(info),
+                }
+            }
+        }
+        if entry_fns.is_empty() && instance_fns.is_empty() && device_fns.is_empty() {
+            continue;
+        }
+        writeln!(out, "// Extension: {name} ({number})")?;
+        let ext_name = name.strip_prefix("VK_").unwrap().to_ascii_lowercase();
+        writeln!(out, "pub mod {ext_name} {{")?;
+        indent(out);
+        writeln!(out, "use super::*;")?;
+        if !entry_fns.is_empty() {
+            gen_vk_dispatch_table(out, "EntryDispatch", None, entry_fns)?;
+        }
+        if !instance_fns.is_empty() {
+            gen_vk_dispatch_table(out, "InstanceDispatch", None, instance_fns)?;
+        }
+        if !device_fns.is_empty() {
+            gen_vk_dispatch_table(out, "DeviceDispatch", None, device_fns)?;
+        }
+        dedent(out);
+        writeln!(out, "}}")?;
     }
     Ok(())
 }
@@ -977,14 +1009,6 @@ fn c_type_to_rust(ty: &str, return_type: bool) -> &str {
         "char" => "c_char",
         "int" => "c_int",
         other => other,
-    }
-}
-
-fn enum_bitwidth_to_rust(bitwidth: i64) -> &'static str {
-    match bitwidth {
-        32 => "i32",
-        64 => "i64",
-        _ => panic!("unexpected bitwidth"),
     }
 }
 

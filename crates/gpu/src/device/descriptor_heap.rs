@@ -2,15 +2,13 @@ use crate::Device;
 use crate::device::{RESOURCE_DESCRIPTOR_HEAP_SIZE, SAMPLER_DESCRIPTOR_HEAP_SIZE};
 use ash::vk;
 use ash::vk::Handle;
+use gpu_allocator::MemoryLocation;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme, Allocator};
 use std::ffi::c_void;
-use std::ptr;
 use std::sync::Mutex;
-use gpu_allocator::MemoryLocation;
-use vulkan_headers::vulkan::vulkan as vk2;
-use vulkan_headers::vulkan::vulkan::{
-    VK_BUFFER_USAGE_DESCRIPTOR_HEAP_BIT_EXT, VK_STRUCTURE_TYPE_BIND_HEAP_INFO_EXT, VkBindHeapInfoEXT, VkCommandBuffer,
-    VkDevice, VkDeviceAddressRangeEXT, VkPhysicalDeviceDescriptorHeapPropertiesEXT, VkResourceDescriptorInfoEXT,
+use vulkan::{
+    VK_BUFFER_USAGE_DESCRIPTOR_HEAP_BIT_EXT, VkBindHeapInfoEXT, VkCommandBuffer, VkDeviceAddressRangeEXT,
+    VkHostAddressRangeEXT, VkPhysicalDeviceDescriptorHeapPropertiesEXT, VkResourceDescriptorInfoEXT,
     VkSamplerCreateInfo,
 };
 
@@ -81,8 +79,8 @@ impl DescriptorHeapInfo {
     }
 
     /// Returns a VkHostAddressRange for the descriptor at the given global index.
-    fn address_range_by_index(&self, start_index: u32, index_count: u32) -> vk2::VkHostAddressRangeEXT {
-        vk2::VkHostAddressRangeEXT {
+    fn address_range_by_index(&self, start_index: u32, index_count: u32) -> VkHostAddressRangeEXT {
+        VkHostAddressRangeEXT {
             address: unsafe { self.ptr.add(self.offset_by_index(start_index)) },
             size: self.stride * index_count as usize,
         }
@@ -114,7 +112,7 @@ fn allocate_descriptor_heap_memory(
     device: &ash::Device,
     heap_type: DescriptorHeapType,
     byte_size: usize,
-    descriptor_heap_properties: &vk2::VkPhysicalDeviceDescriptorHeapPropertiesEXT,
+    descriptor_heap_properties: &VkPhysicalDeviceDescriptorHeapPropertiesEXT,
 ) -> DescriptorHeapInfo {
     let mut usage_flags = vk::BufferUsageFlags::from_raw(VK_BUFFER_USAGE_DESCRIPTOR_HEAP_BIT_EXT);
     usage_flags |= vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS;
@@ -289,8 +287,8 @@ impl Device {
             // Write the descriptor
             // SAFETY: access to the descriptor set is externally synchronized via `self.write_lock`
             let _lock = self.descriptor_heaps.write_lock.lock().unwrap();
-            (self.ext.descriptor_heap.write_sampler_descriptors)(
-                self.raw.handle().as_raw() as VkDevice,
+            self.ext.descriptor_heap.WriteSamplerDescriptorsEXT(
+                self.vkd,
                 1,
                 info as *const _ as *const VkSamplerCreateInfo,
                 &self.descriptor_heaps.sampler.address_range_by_index(index, 1),
@@ -305,10 +303,10 @@ impl Device {
             // Write the descriptor
             // SAFETY: access to the descriptor set is externally synchronized via `self.write_lock`
             let _lock = self.descriptor_heaps.write_lock.lock().unwrap();
-            (self.ext.descriptor_heap.write_resource_descriptors)(
-                self.raw.handle().as_raw() as VkDevice,
+            (self.ext.descriptor_heap.WriteResourceDescriptorsEXT)(
+                self.vkd,
                 1,
-                info as *const _,
+                info,
                 &self.descriptor_heaps.resource.address_range_by_index(index, 1),
             );
         }
@@ -318,32 +316,30 @@ impl Device {
 
 impl Device {
     pub(crate) fn bind_descriptor_heaps(&self, cmdbuf: vk::CommandBuffer) {
-        let cb = cmdbuf.as_raw() as VkCommandBuffer;
+        let cb = VkCommandBuffer(cmdbuf.as_raw() as *mut _);
         unsafe {
-            (self.ext.descriptor_heap.cmd_bind_resource_heap)(
+            self.ext.descriptor_heap.CmdBindResourceHeapEXT(
                 cb,
                 &VkBindHeapInfoEXT {
-                    sType: VK_STRUCTURE_TYPE_BIND_HEAP_INFO_EXT,
-                    pNext: ptr::null(),
                     heapRange: VkDeviceAddressRangeEXT {
                         address: self.descriptor_heaps.resource.device_addr,
                         size: self.descriptor_heaps.resource.alloc.size(),
                     },
                     reservedRangeOffset: 0,
                     reservedRangeSize: self.thread_safe.descriptor_heap_properties.minResourceHeapReservedRange,
+                    ..
                 },
             );
-            (self.ext.descriptor_heap.cmd_bind_sampler_heap)(
+            self.ext.descriptor_heap.CmdBindSamplerHeapEXT(
                 cb,
                 &VkBindHeapInfoEXT {
-                    sType: VK_STRUCTURE_TYPE_BIND_HEAP_INFO_EXT,
-                    pNext: ptr::null(),
                     heapRange: VkDeviceAddressRangeEXT {
                         address: self.descriptor_heaps.sampler.device_addr,
                         size: self.descriptor_heaps.sampler.alloc.size(),
                     },
                     reservedRangeOffset: 0,
                     reservedRangeSize: self.thread_safe.descriptor_heap_properties.minSamplerHeapReservedRange,
+                    ..
                 },
             );
         }

@@ -9,9 +9,10 @@ use crate::{
     BufferAddressRange, BufferUsage, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error,
     FrameIndex, GraphicsPipeline, GraphicsPipelineCreateInfo, PreRasterizationShaders, Ptr, SUBGROUP_SIZE,
     SamplerParams, SamplerParamsHashable, ShaderReflection, VulkanObject, get_vulkan_entry, get_vulkan_instance,
-    is_depth_and_stencil_format, signal,
+    is_depth_and_stencil_format, signal, vkcheck,
 };
 use ash::vk;
+use ash::vk::Handle;
 use gpu::device::descriptor_heap::SamplerDescriptorHandle;
 use gpu::flush;
 use gpu_allocator::vulkan::AllocationCreateDesc;
@@ -26,20 +27,14 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 use std::{fmt, mem, ptr};
-use ash::vk::Handle;
-use vulkan_headers::vulkan::vulkan as vk2;
-use vulkan_headers::vulkan::vulkan::{
-    VK_FALSE, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_FEATURES_EXT, VK_TRUE,
-    VkPhysicalDeviceDescriptorHeapFeaturesEXT, VkPhysicalDeviceShaderUntypedPointersFeaturesKHR,
-};
-use vulkan_headers::vulkan::vulkan_core::VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT;
-use vulkan::{VkDevice, VkSemaphore};
+
+use vulkan::*;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Sizes of the global descriptor heaps (in number of descriptors).
 const RESOURCE_DESCRIPTOR_HEAP_SIZE: usize = 1024 * 1024;
 const SAMPLER_DESCRIPTOR_HEAP_SIZE: usize = 64 * 1024;
-
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -48,40 +43,6 @@ new_key_type! {
     pub(crate) struct ResourceDescriptorIndex;
     /// Identifies a sampler in a bindless sampler descriptor heap.
     pub struct SamplerDescriptorIndex;
-}
-
-pub(crate) struct ExtDescriptorHeap {
-    pub(crate) cmd_bind_resource_heap: vk2::NonNullPFN_vkCmdBindResourceHeapEXT,
-    pub(crate) cmd_bind_sampler_heap: vk2::NonNullPFN_vkCmdBindSamplerHeapEXT,
-    pub(crate) cmd_push_data: vk2::NonNullPFN_vkCmdPushDataEXT,
-    pub(crate) cmd_get_physical_descriptor_size: vk2::NonNullPFN_vkGetPhysicalDeviceDescriptorSizeEXT,
-    pub(crate) write_resource_descriptors: vk2::NonNullPFN_vkWriteResourceDescriptorsEXT,
-    pub(crate) write_sampler_descriptors: vk2::NonNullPFN_vkWriteSamplerDescriptorsEXT,
-}
-
-impl ExtDescriptorHeap {
-    pub(crate) unsafe fn load(entry: &ash::Entry, instance: &ash::Instance) -> Self {
-        let get_proc_addr = |name: &CStr| {
-            let addr = entry.get_instance_proc_addr(instance.handle(), name.as_ptr());
-            if addr.is_none() {
-                panic!("failed to load function pointer for {:?}", name);
-            }
-            addr
-        };
-
-        unsafe {
-            Self {
-                cmd_bind_resource_heap: mem::transmute(get_proc_addr(c"vkCmdBindResourceHeapEXT")),
-                cmd_bind_sampler_heap: mem::transmute(get_proc_addr(c"vkCmdBindSamplerHeapEXT")),
-                cmd_push_data: mem::transmute(get_proc_addr(c"vkCmdPushDataEXT")),
-                cmd_get_physical_descriptor_size: mem::transmute(get_proc_addr(
-                    c"vkGetPhysicalDeviceDescriptorSizeEXT",
-                )),
-                write_resource_descriptors: mem::transmute(get_proc_addr(c"vkWriteResourceDescriptorsEXT")),
-                write_sampler_descriptors: mem::transmute(get_proc_addr(c"vkWriteSamplerDescriptorsEXT")),
-            }
-        }
-    }
 }
 
 /// Device extensions.
@@ -93,7 +54,8 @@ pub(crate) struct DeviceExtensions {
     pub(crate) mesh_shader: ash::ext::mesh_shader::Device,
     pub(crate) _ext_extended_dynamic_state3: ash::ext::extended_dynamic_state3::Device,
     pub(crate) debug_utils: ash::ext::debug_utils::Device,
-    pub(crate) descriptor_heap: ExtDescriptorHeap,
+    pub(crate) descriptor_heap_instance: ext_descriptor_heap::InstanceDispatch,
+    pub(crate) descriptor_heap: ext_descriptor_heap::DeviceDispatch,
 }
 
 /// Device state that is unconditionally safe to access from multiple threads, even though
@@ -101,13 +63,13 @@ pub(crate) struct DeviceExtensions {
 pub(crate) struct DeviceThreadSafeState {
     pub(crate) physical_device_memory_properties: vk::PhysicalDeviceMemoryProperties,
     pub(crate) physical_device_id_properties: vk::PhysicalDeviceIDProperties<'static>,
-    pub(crate) descriptor_heap_properties: vk2::VkPhysicalDeviceDescriptorHeapPropertiesEXT,
+    pub(crate) descriptor_heap_properties: VkPhysicalDeviceDescriptorHeapPropertiesEXT,
     _physical_device_descriptor_buffer_properties: vk::PhysicalDeviceDescriptorBufferPropertiesEXT<'static>,
     physical_device_properties: vk::PhysicalDeviceProperties,
     /// Timeline used to track completion of frames.
     /// It is incremented and signalled on each frame completion (see `poll`).
     // SAFETY: we're never using this as an externally-synchronized command parameter.
-    pub(crate) frame_timeline: vk::Semaphore,
+    pub(crate) frame_timeline: VkSemaphore,
     // SAFETY: we're never using this as an externally-synchronized command parameter.
     pub(crate) physical_device: vk::PhysicalDevice,
 }
@@ -117,7 +79,7 @@ unsafe impl Sync for DeviceThreadSafeState {}
 
 /// Submission-related device state locked during command buffer submission.
 pub(crate) struct DeviceSubmissionState {
-    pub(crate) queue: vk::Queue,
+    pub(crate) queue: VkQueue,
     /// Sorted by create_ticket, not by order of submission.
     pub(crate) active_submissions: VecDeque<ActiveSubmission>,
 }
@@ -125,6 +87,8 @@ pub(crate) struct DeviceSubmissionState {
 pub struct Device {
     /// Underlying vulkan device
     pub(crate) raw: ash::Device,
+
+    pub(crate) vkd: VkDevice,
     pub(crate) vk: vulkan::Vulkan_1_4_DeviceDispatch,
     /// Common device extensions.
     pub(crate) ext: DeviceExtensions,
@@ -386,7 +350,6 @@ const DEVICE_EXTENSIONS: &[&str] = &[
 
 impl Device {
     /// Returns the global device instance.
-    #[inline(never)]
     pub fn instance() -> &'static Device {
         static DEVICE: LazyLock<&'static Device> = LazyLock::new(|| {
             unsafe {
@@ -458,18 +421,20 @@ impl Device {
         let device2 = ::vulkan::Vulkan_1_4_DeviceDispatch::load_with(|proc| {
             instance.get_device_proc_addr(device.handle(), proc.as_ptr())
         });
-        let queue = device.get_device_queue(graphics_queue_family_index, 0);
+        let vkdevice = VkDevice(device.handle().as_raw() as *mut _);
+        let queue = {
+            let mut queue = VkQueue::null();
+            device2.GetDeviceQueue(vkdevice, graphics_queue_family_index, 0, &mut queue);
+            queue
+        };
         let timeline = {
-            let timeline_create_info = vk::SemaphoreTypeCreateInfo {
-                semaphore_type: vk::SemaphoreType::TIMELINE,
-                initial_value: 0,
-                ..Default::default()
-            };
-            let semaphore_create_info = vk::SemaphoreCreateInfo {
-                p_next: &timeline_create_info as *const _ as *const c_void,
-                ..Default::default()
-            };
-            device.create_semaphore(&semaphore_create_info, None).expect("failed to create timeline semaphore")
+            let timeline_create_info =
+                VkSemaphoreTypeCreateInfo { semaphoreType: VK_SEMAPHORE_TYPE_TIMELINE, initialValue: 0, .. };
+            let semaphore_create_info =
+                VkSemaphoreCreateInfo { pNext: &timeline_create_info as *const _ as *const c_void, .. };
+            let mut semaphore = VkSemaphore::null();
+            vkcheck!(device2.CreateSemaphore(vkdevice, &semaphore_create_info, ptr::null(), &mut semaphore));
+            semaphore
         };
         let mut allocator = {
             let allocator_create_desc = gpu_allocator::vulkan::AllocatorCreateDesc {
@@ -485,8 +450,7 @@ impl Device {
         let mut physical_device_descriptor_buffer_properties =
             vk::PhysicalDeviceDescriptorBufferPropertiesEXT::default();
         // TODO: replace this once ash is updated
-        let mut descriptor_heap_properties = vk2::VkPhysicalDeviceDescriptorHeapPropertiesEXT {
-            sType: vk2::VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_PROPERTIES_EXT,
+        let mut descriptor_heap_properties = VkPhysicalDeviceDescriptorHeapPropertiesEXT {
             pNext: &mut physical_device_descriptor_buffer_properties as *mut _ as *mut c_void,
             samplerHeapAlignment: 0,
             resourceHeapAlignment: 0,
@@ -507,6 +471,7 @@ impl Device {
             samplerYcbcrConversionCount: 0,
             sparseDescriptorHeaps: 0,
             protectedDescriptorHeaps: 0,
+            ..
         };
         let mut physical_device_id_properties = vk::PhysicalDeviceIDProperties {
             p_next: &mut descriptor_heap_properties as *mut _ as *mut c_void,
@@ -527,7 +492,13 @@ impl Device {
         let physical_device_memory_properties = instance.get_physical_device_memory_properties(physical_device);
         let ext_debug_utils = ash::ext::debug_utils::Device::new(instance, &device);
         let platform_extensions = PlatformExtensions::load(entry, instance, &device);
-        let ext_descriptor_heap = ExtDescriptorHeap::load(entry, instance);
+        // VULKAN-MIGRATION
+        let descriptor_heap_device = ext_descriptor_heap::DeviceDispatch::load_with(|proc| {
+            instance.get_device_proc_addr(device.handle(), proc.as_ptr())
+        });
+        let descriptor_heap_instance = ext_descriptor_heap::InstanceDispatch::load_with(|proc| {
+            entry.get_instance_proc_addr(instance.handle(), proc.as_ptr())
+        });
         let descriptor_heaps = DescriptorHeaps::new(&mut allocator, &device, &descriptor_heap_properties);
 
         // ------ info dump ------
@@ -556,6 +527,7 @@ impl Device {
         Ok(Device {
             raw: device,
             vk: device2,
+            vkd: vkdevice,
             ext: DeviceExtensions {
                 swapchain: khr_swapchain,
                 push_descriptor: khr_push_descriptor,
@@ -563,7 +535,8 @@ impl Device {
                 mesh_shader: ext_mesh_shader,
                 _ext_extended_dynamic_state3: ext_extended_dynamic_state3,
                 debug_utils: ext_debug_utils,
-                descriptor_heap: ext_descriptor_heap,
+                descriptor_heap: descriptor_heap_device,
+                descriptor_heap_instance,
             },
             platform_extensions,
             thread_safe: DeviceThreadSafeState {
@@ -635,15 +608,15 @@ impl Device {
         // TODO: this code should probably be generated by a JSON profile.
         //       on occasion, try the vulkan profiles library
         let mut shader_untyped_pointers = VkPhysicalDeviceShaderUntypedPointersFeaturesKHR {
-            sType: vk2::VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_UNTYPED_POINTERS_FEATURES_KHR,
             pNext: ptr::null_mut(),
             shaderUntypedPointers: VK_TRUE,
+            ..
         };
         let mut descriptor_heap_features = VkPhysicalDeviceDescriptorHeapFeaturesEXT {
-            sType: VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_FEATURES_EXT,
             pNext: &mut shader_untyped_pointers as *mut _ as *mut c_void,
             descriptorHeap: VK_TRUE, // we use descriptor heaps exclusively
             descriptorHeapCaptureReplay: VK_FALSE,
+            ..
         };
         let mut fragment_shader_interlock_features = vk::PhysicalDeviceFragmentShaderInterlockFeaturesEXT {
             p_next: &mut descriptor_heap_features as *mut _ as *mut c_void,
@@ -804,7 +777,8 @@ impl Device {
 
     pub(crate) fn get_last_completed_frame_index(&self) -> u64 {
         unsafe {
-            let value = self.raw.get_semaphore_counter_value(self.thread_safe.frame_timeline).unwrap();
+            let mut value = 0u64;
+            vkcheck!(self.vk.GetSemaphoreCounterValue(self.vkd, self.thread_safe.frame_timeline, &mut value));
             if value == u64::MAX {
                 // We've likely lost the device.
                 panic!("GetSemaphoreCounterValue returned an invalid value, possible device lost");
@@ -859,33 +833,16 @@ impl Device {
 
     fn end_frame(&self) -> u64 {
         // Terminate pending command buffers.
-        flush().unwrap();
+        flush();
 
         // /!\ we are in frame N /!\
         // Fetch and increment frame index, and signal it in on the timeline.
         let frame_index = self.frame_index.fetch_add(1, Relaxed);
-        signal(self.thread_safe.frame_timeline, frame_index);
+        signal(vk::Semaphore::from_raw(self.thread_safe.frame_timeline.0), frame_index);
 
         // /!\ we are now in frame N+1 /!\
         // Reclaim resources of completed frames.
-        let last_completed_frame_index = unsafe {
-            let mut value = 0u64;
-            // VULKAN-MIGRATION
-            self.vk.GetSemaphoreCounterValue(
-                VkDevice(self.raw.handle().as_raw() as *mut _),
-                VkSemaphore(self.thread_safe.frame_timeline.as_raw()),
-                &mut value,
-            );
-            //self.raw
-            //    .get_semaphore_counter_value(self.thread_safe.frame_timeline)
-            //    .expect("get_semaphore_counter_value failed")
-            value
-        };
-        if last_completed_frame_index == u64::MAX {
-            // This means "device lost".
-            panic!("GetSemaphoreCounterValue returned an invalid value");
-        }
-        //trace!("GPU: cleaning up to submission {last_completed_submission_index}");
+        let last_completed_frame_index = self.get_last_completed_frame_index();
 
         // process all completed submissions
         let mut ss = self.submission_state.lock().unwrap();
@@ -1031,17 +988,17 @@ fn create_stage<'a>(
 macro_rules! make_stage {
     ($sh:expr, $stage_flags:expr, $module:ident, $p_next:ident, $entry_point_name:ident) => {{
         $entry_point_name = CString::new($sh.entry_point).unwrap();
-        $module = vk::ShaderModuleCreateInfo {
-            p_next: &$p_next as *const _ as *const c_void,
-            code_size: $sh.code.len() * 4,
-            p_code: $sh.code.as_ptr(),
-            ..Default::default()
+        $module = VkShaderModuleCreateInfo {
+            pNext: &$p_next as *const _ as *const c_void,
+            codeSize: $sh.code.len() * 4,
+            pCode: $sh.code.as_ptr(),
+            ..
         };
-        vk::PipelineShaderStageCreateInfo {
-            p_next: &$module as *const _ as *const c_void,
+        VkPipelineShaderStageCreateInfo {
+            pNext: &$module as *const _ as *const c_void,
             stage: $stage_flags,
-            p_name: $entry_point_name.as_ptr(),
-            ..Default::default()
+            pName: $entry_point_name.as_ptr(),
+            ..
         }
     }};
     () => {};
@@ -1055,40 +1012,38 @@ impl Device {
     ) -> Result<ComputePipeline, Error> {
         let mut push_constants_size = create_info.push_constants_size;
         push_constants_size = push_constants_size.max(create_info.shader.push_constants_size);
-        let req_subgroup_size = vk::PipelineShaderStageRequiredSubgroupSizeCreateInfo {
-            required_subgroup_size: SUBGROUP_SIZE,
-            p_next: ptr::null_mut(),
-            ..Default::default()
+        let req_subgroup_size = VkPipelineShaderStageRequiredSubgroupSizeCreateInfo {
+            requiredSubgroupSize: SUBGROUP_SIZE,
+            pNext: ptr::null_mut(),
+            ..
         };
         let _module;
         let _entry_point_name;
-        let compute_stage = make_stage!(
-            create_info.shader,
-            vk::ShaderStageFlags::COMPUTE,
-            _module,
-            req_subgroup_size,
-            _entry_point_name
-        );
-        let pipeline_create_flags = vk::PipelineCreateFlags2CreateInfoKHR {
-            flags: vk::PipelineCreateFlags2KHR::from_raw(VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT),
-            ..Default::default()
-        };
-        let cpci = vk::ComputePipelineCreateInfo {
-            p_next: &pipeline_create_flags as *const _ as *const c_void,
-            flags: vk::PipelineCreateFlags::empty(),
+        let compute_stage =
+            make_stage!(create_info.shader, VK_SHADER_STAGE_COMPUTE_BIT, _module, req_subgroup_size, _entry_point_name);
+        let pipeline_create_flags =
+            VkPipelineCreateFlags2CreateInfoKHR { flags: VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT, .. };
+        let cpci = VkComputePipelineCreateInfo {
+            pNext: &pipeline_create_flags as *const _ as *const c_void,
+            flags: 0,
             stage: compute_stage,
             layout: Default::default(),
-            ..Default::default()
+            basePipelineIndex: 0,
+            ..
         };
         let pipeline = unsafe {
-            match self.raw.create_compute_pipelines(vk::PipelineCache::null(), &[cpci], None) {
-                Ok(pipelines) => pipelines[0],
-                Err(e) => {
-                    return Err(Error::Vulkan(e.1));
-                }
-            }
+            let mut pipeline = VkPipeline::null();
+            vkcheck!(self.vk.CreateComputePipelines(
+                self.vkd,
+                VkPipelineCache::null(),
+                1,
+                &cpci,
+                ptr::null(),
+                &mut pipeline
+            ));
+            pipeline
         };
-        Ok(ComputePipeline { pipeline, reflection: create_info.shader.refl_params })
+        Ok(ComputePipeline { pipeline: vk::Pipeline::from_raw(pipeline.0), reflection: create_info.shader.refl_params })
     }
 
     /// Creates a graphics pipeline.
@@ -1114,18 +1069,18 @@ impl Device {
         // TODO: this could be a static property of the pipeline interface
         // FIXME don't allocate there
         let mut dynamic_states = vec![
-            vk::DynamicState::VIEWPORT,
-            vk::DynamicState::SCISSOR,
-            vk::DynamicState::DEPTH_BIAS,
-            vk::DynamicState::DEPTH_BIAS_ENABLE,
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR,
+            VK_DYNAMIC_STATE_DEPTH_BIAS,
+            VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE,
         ];
         if matches!(create_info.pre_rasterization_shaders, PreRasterizationShaders::PrimitiveShading { .. }) {
-            dynamic_states.push(vk::DynamicState::PRIMITIVE_TOPOLOGY);
+            dynamic_states.push(VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY);
         }
-        let dynamic_state_create_info = vk::PipelineDynamicStateCreateInfo {
-            dynamic_state_count: dynamic_states.len() as u32,
-            p_dynamic_states: dynamic_states.as_ptr(),
-            ..Default::default()
+        let dynamic_state_create_info = VkPipelineDynamicStateCreateInfo {
+            dynamicStateCount: dynamic_states.len() as u32,
+            pDynamicStates: dynamic_states.as_ptr(),
+            ..
         };
 
         // ------ Vertex state ------
@@ -1135,39 +1090,38 @@ impl Device {
         let mut vertex_attribute_descriptions = Vec::with_capacity(vertex_attribute_count);
         let mut vertex_binding_descriptions = Vec::with_capacity(vertex_buffer_count);
         for attribute in vertex_input.attributes.iter() {
-            vertex_attribute_descriptions.push(vk::VertexInputAttributeDescription {
+            vertex_attribute_descriptions.push(VkVertexInputAttributeDescription {
                 location: attribute.location,
                 binding: attribute.binding,
-                format: attribute.format,
+                // VULKAN-MIGRATION
+                format: unsafe { mem::transmute(attribute.format) },
                 offset: attribute.offset,
             });
         }
         for desc in vertex_input.buffers.iter() {
-            vertex_binding_descriptions.push(vk::VertexInputBindingDescription {
+            vertex_binding_descriptions.push(VkVertexInputBindingDescription {
                 binding: desc.binding,
                 stride: desc.stride,
-                input_rate: desc.input_rate.into(),
+                // VULKAN-MIGRATION
+                inputRate: unsafe { mem::transmute(desc.input_rate) },
             });
         }
-        let vertex_input_state = vk::PipelineVertexInputStateCreateInfo {
-            vertex_binding_description_count: vertex_buffer_count as u32,
-            p_vertex_binding_descriptions: vertex_binding_descriptions.as_ptr(),
-            vertex_attribute_description_count: vertex_attribute_count as u32,
-            p_vertex_attribute_descriptions: vertex_attribute_descriptions.as_ptr(),
-            ..Default::default()
+        let vertex_input_state = VkPipelineVertexInputStateCreateInfo {
+            vertexBindingDescriptionCount: vertex_buffer_count as u32,
+            pVertexBindingDescriptions: vertex_binding_descriptions.as_ptr(),
+            vertexAttributeDescriptionCount: vertex_attribute_count as u32,
+            pVertexAttributeDescriptions: vertex_attribute_descriptions.as_ptr(),
+            ..
         };
-        let input_assembly_state = vk::PipelineInputAssemblyStateCreateInfo {
-            topology: vk::PrimitiveTopology::TRIANGLE_LIST, // ignored, specified dynamically
-            primitive_restart_enable: vk::FALSE,
-            ..Default::default()
+        let input_assembly_state = VkPipelineInputAssemblyStateCreateInfo {
+            topology: VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, // ignored, specified dynamically
+            primitiveRestartEnable: VK_FALSE,
+            ..
         };
 
         // ------ Shader stages ------
-        let req_subgroup_size = vk::PipelineShaderStageRequiredSubgroupSizeCreateInfo {
-            required_subgroup_size: SUBGROUP_SIZE,
-            p_next: ptr::null_mut(),
-            ..Default::default()
-        };
+        let req_subgroup_size =
+            VkPipelineShaderStageRequiredSubgroupSizeCreateInfo { requiredSubgroupSize: SUBGROUP_SIZE, .. };
         let mut stages = Vec::new();
         // those variables are referenced by VkGraphicsPipelineCreateInfo
         // put them here so that they live at least until vkCreateGraphicsPipelines is called
@@ -1184,7 +1138,7 @@ impl Device {
             PreRasterizationShaders::PrimitiveShading { vertex } => {
                 stages.push(make_stage!(
                     vertex,
-                    vk::ShaderStageFlags::VERTEX,
+                    VK_SHADER_STAGE_VERTEX_BIT,
                     vertex_module,
                     req_subgroup_size,
                     vertex_entry_point
@@ -1195,7 +1149,7 @@ impl Device {
                 if let Some(task) = task {
                     stages.push(make_stage!(
                         task,
-                        vk::ShaderStageFlags::TASK_EXT,
+                        VK_SHADER_STAGE_TASK_BIT_EXT,
                         task_module,
                         req_subgroup_size,
                         task_entry_point
@@ -1204,7 +1158,7 @@ impl Device {
                 }
                 stages.push(make_stage!(
                     mesh,
-                    vk::ShaderStageFlags::MESH_EXT,
+                    VK_SHADER_STAGE_MESH_BIT_EXT,
                     mesh_module,
                     req_subgroup_size,
                     mesh_entry_point
@@ -1214,7 +1168,7 @@ impl Device {
         };
         stages.push(make_stage!(
             create_info.fragment.shader,
-            vk::ShaderStageFlags::FRAGMENT,
+            VK_SHADER_STAGE_FRAGMENT_BIT,
             fragment_module,
             req_subgroup_size,
             fragment_entry_point
@@ -1227,77 +1181,123 @@ impl Device {
             .color_targets
             .iter()
             .map(|target| match target.blend_equation {
-                None => vk::PipelineColorBlendAttachmentState {
-                    blend_enable: vk::FALSE,
-                    color_write_mask: target.color_write_mask.into(),
-                    ..Default::default()
+                None => VkPipelineColorBlendAttachmentState {
+                    blendEnable: VK_FALSE,
+                    srcColorBlendFactor: 0,
+                    dstColorBlendFactor: 0,
+                    colorBlendOp: 0,
+                    srcAlphaBlendFactor: 0,
+                    dstAlphaBlendFactor: 0,
+                    alphaBlendOp: 0,
+                    colorWriteMask: unsafe { mem::transmute(target.color_write_mask) },
                 },
-                Some(blend_equation) => vk::PipelineColorBlendAttachmentState {
-                    blend_enable: vk::TRUE,
-                    src_color_blend_factor: blend_equation.src_color_blend_factor.into(),
-                    dst_color_blend_factor: blend_equation.dst_color_blend_factor.into(),
-                    color_blend_op: blend_equation.color_blend_op.into(),
-                    src_alpha_blend_factor: blend_equation.src_alpha_blend_factor.into(),
-                    dst_alpha_blend_factor: blend_equation.dst_alpha_blend_factor.into(),
-                    alpha_blend_op: blend_equation.alpha_blend_op.into(),
-                    color_write_mask: target.color_write_mask.into(),
+                Some(blend_equation) => VkPipelineColorBlendAttachmentState {
+                    blendEnable: VK_TRUE,
+                    // VULKAN-MIGRATION
+                    srcColorBlendFactor: unsafe { mem::transmute(blend_equation.src_color_blend_factor) },
+                    dstColorBlendFactor: unsafe { mem::transmute(blend_equation.dst_color_blend_factor) },
+                    colorBlendOp: unsafe { mem::transmute(blend_equation.color_blend_op) },
+                    srcAlphaBlendFactor: unsafe { mem::transmute(blend_equation.src_alpha_blend_factor) },
+                    dstAlphaBlendFactor: unsafe { mem::transmute(blend_equation.dst_alpha_blend_factor) },
+                    alphaBlendOp: unsafe { mem::transmute(blend_equation.alpha_blend_op) },
+                    colorWriteMask: unsafe { mem::transmute(target.color_write_mask) },
                 },
             })
             .collect();
 
         // ------ misc ------
-        let conservative_rasterization_state = vk::PipelineRasterizationConservativeStateCreateInfoEXT {
-            conservative_rasterization_mode: create_info.rasterization.conservative_rasterization_mode.into(),
-            ..Default::default()
+        let conservative_rasterization_state = VkPipelineRasterizationConservativeStateCreateInfoEXT {
+            conservativeRasterizationMode: unsafe { mem::transmute(create_info.rasterization.conservative_rasterization_mode) },
+            extraPrimitiveOverestimationSize: 0.0,
+            ..
         };
-        let rasterization_state = vk::PipelineRasterizationStateCreateInfo {
-            p_next: &conservative_rasterization_state as *const _ as *const _,
-            depth_clamp_enable: create_info.rasterization.depth_clamp_enable.into(),
-            rasterizer_discard_enable: 0,
-            polygon_mode: create_info.rasterization.polygon_mode.into(),
-            cull_mode: create_info.rasterization.cull_mode.into(),
-            front_face: create_info.rasterization.front_face.into(),
-            depth_bias_enable: vk::FALSE,
-            depth_bias_constant_factor: 0.0,
-            depth_bias_clamp: 0.0,
-            depth_bias_slope_factor: 0.0,
-            line_width: 1.0,
-            ..Default::default()
+        let rasterization_state = VkPipelineRasterizationStateCreateInfo {
+            pNext: &conservative_rasterization_state as *const _ as *const _,
+            depthClampEnable: if create_info.rasterization.depth_clamp_enable { VK_TRUE } else { VK_FALSE },
+            rasterizerDiscardEnable: 0,
+            polygonMode: unsafe { mem::transmute(create_info.rasterization.polygon_mode) },
+            cullMode: unsafe { mem::transmute(create_info.rasterization.cull_mode) },
+            frontFace: unsafe { mem::transmute(create_info.rasterization.front_face) },
+            depthBiasEnable: vk::FALSE,
+            depthBiasConstantFactor: 0.0,
+            depthBiasClamp: 0.0,
+            depthBiasSlopeFactor: 0.0,
+            lineWidth: 1.0,
+            ..
         };
-        let multisample_state = vk::PipelineMultisampleStateCreateInfo {
-            rasterization_samples: vk::SampleCountFlags::TYPE_1,
-            sample_shading_enable: vk::FALSE,
-            min_sample_shading: 0.0,
-            p_sample_mask: ptr::null(),
-            alpha_to_coverage_enable: create_info.fragment.multisample.alpha_to_coverage_enabled.into(),
-            alpha_to_one_enable: vk::FALSE,
-            ..Default::default()
+        let rasterization_samples = match create_info.fragment.multisample.count {
+            1 => VK_SAMPLE_COUNT_1_BIT,
+            2 => VK_SAMPLE_COUNT_2_BIT,
+            4 => VK_SAMPLE_COUNT_4_BIT,
+            8 => VK_SAMPLE_COUNT_8_BIT,
+            16 => VK_SAMPLE_COUNT_16_BIT,
+            32 => VK_SAMPLE_COUNT_32_BIT,
+            64 => VK_SAMPLE_COUNT_64_BIT,
+            _ => panic!("invalid multisample count {}", create_info.fragment.multisample.count),
         };
-        let color_blend_state = vk::PipelineColorBlendStateCreateInfo {
+        let multisample_state = VkPipelineMultisampleStateCreateInfo {
+            rasterizationSamples: rasterization_samples,
+            sampleShadingEnable: VK_FALSE,
+            minSampleShading: 0.0,
+            pSampleMask: ptr::null(),
+            alphaToCoverageEnable: create_info.fragment.multisample.alpha_to_coverage_enabled.into(),
+            alphaToOneEnable: VK_FALSE,
+            ..
+        };
+        let color_blend_state = VkPipelineColorBlendStateCreateInfo {
             flags: Default::default(),
-            logic_op_enable: vk::FALSE,
-            logic_op: Default::default(),
-            attachment_count: attachment_states.len() as u32,
-            p_attachments: attachment_states.as_ptr(),
-            blend_constants: create_info.fragment.blend_constants,
-            ..Default::default()
+            logicOpEnable: VK_FALSE,
+            logicOp: Default::default(),
+            attachmentCount: attachment_states.len() as u32,
+            pAttachments: attachment_states.as_ptr(),
+            blendConstants: create_info.fragment.blend_constants,
+            ..
         };
         let depth_stencil_state = if let Some(ds) = create_info.depth_stencil {
-            vk::PipelineDepthStencilStateCreateInfo {
+            VkPipelineDepthStencilStateCreateInfo {
                 flags: Default::default(),
-                depth_test_enable: (ds.depth_compare_op != vk::CompareOp::ALWAYS).into(),
-                depth_write_enable: ds.depth_write_enable.into(),
-                depth_compare_op: ds.depth_compare_op,
-                stencil_test_enable: ds.stencil_state.is_enabled().into(),
-                front: ds.stencil_state.front.into(),
-                back: ds.stencil_state.back.into(),
-                depth_bounds_test_enable: vk::FALSE,
-                min_depth_bounds: 0.0,
-                max_depth_bounds: 0.0,
-                ..Default::default()
+                depthTestEnable: (ds.depth_compare_op != vk::CompareOp::ALWAYS).into(),
+                depthWriteEnable: ds.depth_write_enable.into(),
+                // VULKAN-MIGRATION
+                depthCompareOp: unsafe { mem::transmute(ds.depth_compare_op) },
+                stencilTestEnable: ds.stencil_state.is_enabled().into(),
+                front: unsafe { mem::transmute(ds.stencil_state.front.to_vk_stencil_op_state()) },
+                back: unsafe { mem::transmute(ds.stencil_state.back.to_vk_stencil_op_state()) },
+                depthBoundsTestEnable: VK_FALSE,
+                minDepthBounds: 0.0,
+                maxDepthBounds: 0.0,
+                ..
             }
         } else {
-            Default::default()
+            VkPipelineDepthStencilStateCreateInfo {
+                flags: 0,
+                depthTestEnable: 0,
+                depthWriteEnable: 0,
+                depthCompareOp: 0,
+                depthBoundsTestEnable: 0,
+                stencilTestEnable: 0,
+                front: VkStencilOpState {
+                    failOp: 0,
+                    passOp: 0,
+                    depthFailOp: 0,
+                    compareOp: 0,
+                    compareMask: 0,
+                    writeMask: 0,
+                    reference: 0,
+                },
+                back: VkStencilOpState {
+                    failOp: 0,
+                    passOp: 0,
+                    depthFailOp: 0,
+                    compareOp: 0,
+                    compareMask: 0,
+                    writeMask: 0,
+                    reference: 0,
+                },
+                minDepthBounds: 0.0,
+                maxDepthBounds: 0.0,
+                ..
+            }
         };
         let color_attachment_formats =
             create_info.fragment.color_targets.iter().map(|target| target.format).collect::<Vec<_>>();
@@ -1307,54 +1307,54 @@ impl Device {
         } else {
             vk::Format::UNDEFINED
         };
-        let rendering_info = vk::PipelineRenderingCreateInfo {
-            view_mask: 0,
-            color_attachment_count: color_attachment_formats.len() as u32,
-            p_color_attachment_formats: color_attachment_formats.as_ptr(),
-            depth_attachment_format,
-            stencil_attachment_format,
-            ..Default::default()
+        let rendering_info = VkPipelineRenderingCreateInfo {
+            viewMask: 0,
+            colorAttachmentCount: color_attachment_formats.len() as u32,
+            pColorAttachmentFormats: unsafe { mem::transmute(color_attachment_formats.as_ptr()) },
+            depthAttachmentFormat: unsafe { mem::transmute(depth_attachment_format) },
+            stencilAttachmentFormat: unsafe { mem::transmute(stencil_attachment_format) },
+            ..
         };
-        let pipeline_create_flags = vk::PipelineCreateFlags2CreateInfoKHR {
-            p_next: &rendering_info as *const _ as *const c_void,
-            flags: vk::PipelineCreateFlags2KHR::from_raw(vk2::VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT),
-            ..Default::default()
+        let pipeline_create_flags = VkPipelineCreateFlags2CreateInfoKHR {
+            pNext: &rendering_info as *const _ as *const c_void,
+            flags: VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT,
+            ..
         };
-        let pipeline_create_info = vk::GraphicsPipelineCreateInfo {
-            p_next: &pipeline_create_flags as *const _ as *const _,
-            flags: vk::PipelineCreateFlags::empty(),
-            stage_count: stages.len() as u32,
-            p_stages: stages.as_ptr(),
-            p_vertex_input_state: &vertex_input_state,
-            p_input_assembly_state: &input_assembly_state,
-            p_tessellation_state: &Default::default(),
-            p_viewport_state: &vk::PipelineViewportStateCreateInfo {
-                viewport_count: 1,
-                scissor_count: 1,
-                ..Default::default()
-            },
-            p_rasterization_state: &rasterization_state,
-            p_multisample_state: &multisample_state,
-            p_depth_stencil_state: &depth_stencil_state,
-            p_color_blend_state: &color_blend_state,
-            p_dynamic_state: &dynamic_state_create_info,
+        let pipeline_create_info = VkGraphicsPipelineCreateInfo {
+            pNext: &pipeline_create_flags as *const _ as *const _,
+            flags: 0,
+            stageCount: stages.len() as u32,
+            pStages: stages.as_ptr(),
+            pVertexInputState: &vertex_input_state,
+            pInputAssemblyState: &input_assembly_state,
+            pTessellationState: &VkPipelineTessellationStateCreateInfo { patchControlPoints: 0, .. },
+            pViewportState: &VkPipelineViewportStateCreateInfo { viewportCount: 1, scissorCount: 1, .. },
+            pRasterizationState: &rasterization_state,
+            pMultisampleState: &multisample_state,
+            pDepthStencilState: &depth_stencil_state,
+            pColorBlendState: &color_blend_state,
+            pDynamicState: &dynamic_state_create_info,
             layout: Default::default(),
-            render_pass: Default::default(),
+            renderPass: Default::default(),
             subpass: 0,
-            base_pipeline_handle: Default::default(),
-            base_pipeline_index: 0,
-            ..Default::default()
+            basePipelineHandle: Default::default(),
+            basePipelineIndex: 0,
+            ..
         };
 
         let pipeline = unsafe {
-            match self.raw.create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_create_info], None) {
-                Ok(pipelines) => pipelines[0],
-                Err(e) => {
-                    return Err(Error::Vulkan(e.1));
-                }
-            }
+            let mut pipeline = VkPipeline::null();
+            vkcheck!(self.vk.CreateGraphicsPipelines(
+                self.vkd,
+                VkPipelineCache::null(),
+                1,
+                &pipeline_create_info,
+                ptr::null(),
+                &mut pipeline
+            ));
+            pipeline
         };
-        Ok(GraphicsPipeline { pipeline, stage_reflection })
+        Ok(GraphicsPipeline { pipeline: vk::Pipeline::from_raw(pipeline.0), stage_reflection })
     }
 }
 
@@ -1367,13 +1367,17 @@ pub fn wait_idle() {
 pub fn wait_for_frame(frame_index: FrameIndex, timeout: Option<Duration>) {
     unsafe {
         let device = Device::instance();
-        let wait_info = vk::SemaphoreWaitInfo {
-            semaphore_count: 1,
-            p_semaphores: &device.thread_safe.frame_timeline,
-            p_values: &frame_index,
-            ..Default::default()
+        let wait_info = VkSemaphoreWaitInfo {
+            semaphoreCount: 1,
+            pSemaphores: &device.thread_safe.frame_timeline,
+            pValues: &frame_index,
+            ..
         };
-        device.raw.wait_semaphores(&wait_info, timeout.map(|d| d.as_nanos() as u64).unwrap_or(u64::MAX)).unwrap();
+        vkcheck!(device.vk.WaitSemaphores(
+            device.vkd,
+            &wait_info,
+            timeout.map(|d| d.as_nanos() as u64).unwrap_or(u64::MAX)
+        ));
     }
 }
 
@@ -1454,27 +1458,25 @@ pub unsafe fn set_debug_name<Object: VulkanObject>(object: &Object, name: impl A
 }
 
 /// Returns the current frame index.
+#[inline(never)]
 pub fn get_frame_index() -> FrameIndex {
     Device::instance().frame_index.load(Relaxed)
 }
 
 /// Returns the index of the most recently completed frame.
+#[inline(never)]
 pub fn get_last_completed_frame_index() -> FrameIndex {
-    unsafe {
-        let device = Device::instance();
-        device
-            .raw
-            .get_semaphore_counter_value(device.thread_safe.frame_timeline)
-            .expect("get_semaphore_counter_value failed")
-    }
+    Device::instance().get_last_completed_frame_index()
 }
 
 /// Returns the `VkPhysicalDeviceProperties` of the physical device used by the global device.
+#[inline(never)]
 pub fn get_physical_device_properties() -> vk::PhysicalDeviceProperties {
     Device::instance().thread_safe.physical_device_properties
 }
 
 /// Returns the name of the physical device used by the global device.
+#[inline(never)]
 pub fn get_physical_device_name() -> String {
     let properties = get_physical_device_properties();
     let device_name = unsafe { CStr::from_ptr(properties.device_name.as_ptr()) };
@@ -1482,22 +1484,26 @@ pub fn get_physical_device_name() -> String {
 }
 
 /// Returns the device UUID of the physical device.
+#[inline(never)]
 pub fn get_device_uuid() -> [u8; 16] {
     Device::instance().thread_safe.physical_device_id_properties.device_uuid
 }
 
 /// Returns the device LUID of the physical device.
+#[inline(never)]
 pub fn get_device_luid() -> Option<[u8; 8]> {
     let id_properties = &Device::instance().thread_safe.physical_device_id_properties;
     if id_properties.device_luid_valid == vk::TRUE { Some(id_properties.device_luid) } else { None }
 }
 
 /// Returns the timestamp period in nanoseconds.
+#[inline(never)]
 pub fn get_timestamp_period() -> f32 {
     let properties = get_physical_device_properties();
     properties.limits.timestamp_period
 }
 
+#[inline(never)]
 pub fn register_sampler(params: &SamplerParams) -> SamplerHandle {
     Device::instance().register_sampler(params)
 }
@@ -1510,6 +1516,7 @@ pub fn register_sampler(params: &SamplerParams) -> SamplerHandle {
 /// # Platform-specific notes
 /// - On Windows, the system timestamp is a QueryPerformanceCounter value
 /// - On Linux, it's a value in the CLOCK_MONOTONIC time domain returned by clock_gettime(CLOCK_MONOTONIC).
+#[inline(never)]
 pub fn get_calibrated_timestamp_pair() -> (u64, u64) {
     let device = Device::instance();
 

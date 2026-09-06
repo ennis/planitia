@@ -76,6 +76,7 @@ pub use query_pool::*;
 
 // proc-macros
 pub use gpu_macros::{Vertex, shader_module};
+use vulkan::VkResult;
 
 pub mod prelude {
     pub use crate::{
@@ -477,3 +478,23 @@ macro_rules! bytes_as_u32 {
         }
     };
 }
+
+#[cold]
+#[track_caller]
+fn panic_vulkan_api_call_failed(result: VkResult) -> ! {
+    panic!("Vulkan API call failed: {:?}", result);
+}
+
+macro_rules! vkcheck {
+    ($command:expr) => {
+        {
+            let result = $command;
+            if result.0 >= 0 {
+                result
+            } else {
+                $crate::panic_vulkan_api_call_failed(result)
+            }
+        }
+    }
+}
+pub(crate) use vkcheck;

@@ -6,11 +6,13 @@ pub mod layer;
 pub mod video;
 mod macros;
 mod platform_types;
-mod vk;
+mod generated;
 mod entry;
+mod basetypes;
 
 pub use platform_types::*;
-pub use vk::*;
+pub use basetypes::*;
+pub use generated::*;
 
 use std::ffi::CStr;
 
@@ -18,4 +20,3 @@ use std::ffi::CStr;
 pub(crate) fn proc_not_found(procname: &CStr) -> ! {
     panic!("vulkan entry point not found: `{}`", procname.to_string_lossy());
 }
-

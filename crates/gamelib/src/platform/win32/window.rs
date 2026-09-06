@@ -174,9 +174,7 @@ impl Window {
                 }
             }
             SwapChainImpl::Vulkan(ref mut swap_chain) => {
-                if let Err(err) = gpu::present(swap_chain, self.swap_chain_image_index.get()) {
-                    error!("failed to present swap chain image: {err}");
-                }
+                gpu::present(swap_chain, self.swap_chain_image_index.get());
             }
         }
     }

@@ -102,7 +102,7 @@ impl ApplicationHandler for App {
             let mut cmd = CommandBuffer::new();
             let image =
                 load_image(&mut cmd, "crates/gpu/examples/yukari.png", ImageUsage::TRANSFER_SRC | ImageUsage::SAMPLED);
-            gpu::submit(cmd).unwrap();
+            gpu::submit(cmd);
 
             self.window = Some(VulkanWindow { window, swap_chain, width: size.width, height: size.height, image })
         }
@@ -150,8 +150,8 @@ impl ApplicationHandler for App {
                     vk::Filter::NEAREST,
                 );
 
-                gpu::submit(cmd).unwrap();
-                gpu::present(&mut window.swap_chain, index).unwrap();
+                gpu::submit(cmd);
+                gpu::present(&mut window.swap_chain, index);
                 unsafe {
                     gpu::end_frame();
                 }

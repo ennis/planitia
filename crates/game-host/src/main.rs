@@ -339,7 +339,7 @@ impl AppHandler for Game {
         }
 
 
-        gpu::flush().unwrap();
+        gpu::flush();
     }
 
     fn file_changed(&mut self, path: &Path) {
@@ -386,13 +386,11 @@ impl AppHandler for Game {
 
         //self.automaton_experiment.ui(ctx);
         self.outline_experiment.gui(ctx);
-
         self.plugin.imgui(ctx);
     }
 
     fn exiting(&mut self) {
         self.cfg.save();
-
         self.plugin.exiting();
     }
 }

@@ -511,7 +511,7 @@ impl LoopHandler for &'static MainThreadContext {
                 });
                 self.handler.borrow_mut().imgui(imgui_ctx);
             });
-            gpu::submit(cmd).unwrap();
+            gpu::submit(cmd);
         }
         // Frame-in-flight sync
         // /!\ This is important: the whole application relies on the implicit CPU/GPU

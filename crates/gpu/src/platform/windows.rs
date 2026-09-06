@@ -146,7 +146,7 @@ impl Device {
                 },
                 ..Default::default()
             });
-            crate::submit(cmd).unwrap();
+            crate::submit(cmd);
         }
 
         Image {

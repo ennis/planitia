@@ -125,7 +125,7 @@ impl Device {
                     ..Default::default()
                 });
             }
-            crate::submit(cmd)?;
+            crate::submit(cmd);
         }
         self.delete_after_current_frame(move |this| {
             this.raw.destroy_semaphore(ready, None);
