@@ -5,12 +5,13 @@ use bitflags::bitflags;
 use std::marker::PhantomData;
 use std::path::Path;
 use std::{fmt, slice};
+use vulkan::*;
 
 // Reexports
 //pub use ash::{self, vk};
-pub use vulkan::*;
 pub use vulkan::VkFormat as Format;
-pub use vulkan_headers::vulkan::vulkan as vkh;
+pub use vulkan;
+
 
 /// Represents data that can be shared with the GPU and accessed in shaders.
 ///
@@ -1238,5 +1239,5 @@ pub mod shader_types {
 //--------------------------------------------------------------------------------------------------
 
 pub trait DescriptorMapping {
-    fn get_descriptor_mapping_info() -> &'static vkh::VkShaderDescriptorSetAndBindingMappingInfoEXT;
+    fn get_descriptor_mapping_info() -> &'static VkShaderDescriptorSetAndBindingMappingInfoEXT;
 }

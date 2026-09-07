@@ -4,15 +4,15 @@ use ash::vk;
 /// Query pools.
 #[derive(Debug)]
 pub struct QueryPool {
-    pub(crate) pool: vk::QueryPool,
-    pub(crate) ty: vk::QueryType,
+    pub(crate) pool: VK_QueryPool,
+    pub(crate) ty: VK_QueryType,
     pub(crate) size: usize,
 }
 
 impl QueryPool {
-    pub fn new(query_type: vk::QueryType, pool_size: usize) -> QueryPool {
+    pub fn new(query_type: VkQueryType, pool_size: usize) -> QueryPool {
         let device = Device::instance();
-        let create_info = &vk::QueryPoolCreateInfo { query_type, query_count: pool_size as u32, ..Default::default() };
+        let create_info = &VkQueryPoolCreateInfo { query_type, query_count: pool_size as u32, ..Default::default() };
         unsafe {
             let pool = device.raw.create_query_pool(&create_info, None).unwrap();
             device.raw.reset_query_pool(pool, 0, pool_size as u32);
@@ -30,7 +30,7 @@ impl QueryPool {
                     first_query,
                     &mut results[..],
                     // FIXME: flags depend on the query type
-                    vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT,
+                    VK_QUERY_RESULT_TYPE_64_BIT | VK_QUERY_RESULT_WAIT_BIT,
                 )
                 .expect("Failed to get query results");
         }
@@ -55,7 +55,7 @@ impl Drop for QueryPool {
 }
 
 impl VulkanObject for QueryPool {
-    type Handle = vk::QueryPool;
+    type Handle = VkQueryPool;
     fn handle(&self) -> Self::Handle {
         self.pool
     }

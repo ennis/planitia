@@ -4,13 +4,12 @@ use crate::format::format_info;
 use crate::helper::{Buffer, DeviceHelper, Image, Pipeline, include_bytes_as_u32};
 use crate::state_tracker::command::Command;
 use crate::state_tracker::image::ImageInfo;
-use ash::vk;
+use vulkan::*;
 use core::fmt;
 use rustc_hash::FxHasher;
 use slotmap::{SlotMap, new_key_type};
 use std::hash::{Hash, Hasher};
 use std::ptr;
-use vulkan_headers::vulkan::vulkan::VkHostAddressRangeConstEXT;
 
 /// Represents a sequence of pointer indirections from push data at offset 0, (e.g. `base->field->field2 ...`).
 #[derive(Clone, Hash, Eq, PartialEq)]
@@ -94,8 +93,8 @@ const COPY_1D_WORKGROUP_SIZE: u32 = 32;
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 struct CopyIndirect1DParams {
-    base: vk::DeviceAddress,
-    dst: vk::DeviceAddress,
+    base: VkDeviceAddress,
+    dst: VkDeviceAddress,
     byte_size: u32,
     count: u32,
     offset: [u32; MAX_INDIRECTIONS],
@@ -179,13 +178,13 @@ impl Debugger {
         if let Some(ref mut cap) = watch.resource_heap {
             // Copy resource heap
             let buf = get_or_init_buffer(d, &mut cap.result, cb_state.resource_heap.size);
-            d.cmd_copy_buffer(
+            d.CmdCopyBuffer(
                 cb_state.cmd_buf,
-                cb_state.resource_heap.host_address as vk::Buffer,
+                cb_state.resource_heap.host_address as VkBuffer,
                 buf.buffer,
-                &[vk::BufferCopy {
-                    src_offset: 0,
-                    dst_offset: 0,
+                &[VkBufferCopy {
+                    srcOffset: 0,
+                    dstOffset: 0,
                     size: cb_state.resource_heap.size,
                 }],
             );
@@ -196,7 +195,7 @@ impl Debugger {
         &mut self,
         d: &Device,
         eid: EId,
-        cmd_buf: vk::CommandBuffer,
+        cmd_buf: VkCommandBuffer,
         push_data: &[u8],
     ) {
         for (id, watch) in self.watches.iter_mut() {
@@ -207,7 +206,7 @@ impl Debugger {
         }
     }
 
-    unsafe fn do_capture(d: &Device, watch: &mut CommandWatch, cmd_buf: vk::CommandBuffer, push_data: &[u8], resource_heap: VkHostAddressRangeConstEXT, sampler_heap: VkHostAddressRangeConstEXT) {
+    unsafe fn do_capture(d: &Device, watch: &mut CommandWatch, cmd_buf: VkCommandBuffer, push_data: &[u8], resource_heap: VkHostAddressRangeConstEXT, sampler_heap: VkHostAddressRangeConstEXT) {
         match watch.capture {
             CaptureKind::Buffer(ref mut cap) => {
                 Self::do_capture_command_data(d, cmd_buf, push_data, cap);
@@ -223,7 +222,7 @@ impl Debugger {
 
     unsafe fn do_capture_command_data(
         d: &Device,
-        cmd_buf: vk::CommandBuffer,
+        cmd_buf: VkCommandBuffer,
         push_data: &[u8],
         cap: &mut LoadChainCapture,
     ) {
@@ -235,7 +234,7 @@ impl Debugger {
         // Allocate the result buffer.
         let result_buffer = cap.result.get_or_insert_with(|| {
             d.create_buffer_helper(
-                vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::STORAGE_BUFFER,
+                VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                 cap.size,
                 None,
             )
@@ -277,11 +276,11 @@ impl Debugger {
         //eprintln!("   device offsets={:?}", &params.offset[..]);
 
         let n_workgroups = cap.size.div_ceil(COPY_1D_WORKGROUP_SIZE as usize) as u32;
-        d.cmd_bind_pipeline(cmd_buf, vk::PipelineBindPoint::COMPUTE, d.debugger_resources.copy_indirect_1d.pipeline);
+        d.cmd_bind_pipeline(cmd_buf, VK_PIPELINE_BIND_POINT_COMPUTE, d.debugger_resources.copy_indirect_1d.pipeline);
         d.push_constants_helper(
             cmd_buf,
             d.debugger_resources.copy_indirect_1d.pipeline_layout,
-            vk::ShaderStageFlags::COMPUTE,
+            VK_SHADER_STAGE_COMPUTE_BIT,
             &params,
         );
         d.cmd_dispatch(cmd_buf, n_workgroups, 1, 1);
@@ -353,7 +352,7 @@ impl Debugger {
 
 /// Command buffer state.
 pub struct CommandBufferState<'a> {
-    pub cmd_buf: vk::CommandBuffer,
+    pub cmd_buf: VkCommandBuffer,
     pub push_data: &'a [u8],
     pub resource_heap: VkHostAddressRangeConstEXT,
     pub sampler_heap: VkHostAddressRangeConstEXT,
@@ -429,7 +428,7 @@ fn image_buffer_size(image_info: &ImageInfo) -> usize {
 fn get_or_init_buffer(d: &DeviceHelper, buffer: &mut Option<Buffer>, size: usize) -> &Buffer {
     buffer.get_or_insert_with(|| unsafe {
         d.create_buffer_helper(
-            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::STORAGE_BUFFER,
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
             size,
             None,
         )

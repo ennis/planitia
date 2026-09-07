@@ -22,10 +22,10 @@ fn load_image(cmd: &mut CommandBuffer, path: impl AsRef<Path>, usage: ImageUsage
     let dyn_image = image::open(path).expect("could not open image file");
 
     let (vk_format, bpp) = match dyn_image {
-        DynamicImage::ImageLuma8(_) => (vk::Format::R8_UNORM, 1usize),
-        DynamicImage::ImageLumaA8(_) => (vk::Format::R8G8_UNORM, 2usize),
-        DynamicImage::ImageRgb8(_) => (vk::Format::R8G8B8_SRGB, 3usize),
-        DynamicImage::ImageRgba8(_) => (vk::Format::R8G8B8A8_SRGB, 4usize),
+        DynamicImage::ImageLuma8(_) => (VK_FORMAT_R8_UNORM, 1usize),
+        DynamicImage::ImageLumaA8(_) => (VK_FORMAT_R8G8_UNORM, 2usize),
+        DynamicImage::ImageRgb8(_) => (VK_FORMAT_R8G8B8_SRGB, 3usize),
+        DynamicImage::ImageRgba8(_) => (VK_FORMAT_R8G8B8A8_SRGB, 4usize),
         _ => unimplemented!(),
     };
 
@@ -67,7 +67,7 @@ fn load_image(cmd: &mut CommandBuffer, path: impl AsRef<Path>, usage: ImageUsage
         cmd.copy_buffer_to_image(
             ImageCopyBuffer { buffer: &staging_buffer, layout: ImageDataLayout::new(width, height) },
             ImageCopyView { image: &image, mip_level: 0, origin: Offset3D::ZERO, aspect: ImageAspect::All },
-            vk::Extent3D { width, height, depth: 1 },
+            VkExtent3D { width, height, depth: 1 },
         );
     }
 
@@ -76,8 +76,8 @@ fn load_image(cmd: &mut CommandBuffer, path: impl AsRef<Path>, usage: ImageUsage
 
 struct VulkanWindow {
     window: Window,
-    //surface: gpu::vk::SurfaceKHR,
-    //format: gpu::vk::SurfaceFormatKHR,
+    //surface: gpu::VkSurfaceKHR,
+    //format: gpu::VkSurfaceFormatKHR,
     swap_chain: SwapChain,
     width: u32,
     height: u32,
@@ -147,7 +147,7 @@ impl ApplicationHandler for App {
                     &swapchain_image,
                     Default::default(),
                     region,
-                    vk::Filter::NEAREST,
+                    VK_FILTER_NEAREST,
                 );
 
                 gpu::submit(cmd);

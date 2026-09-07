@@ -370,11 +370,11 @@ pub(crate) fn shader_module_impl(
         let workgroup_size = ep.workgroup_size;
 
         let stage = match ep.stage {
-            gpu_types::vk::ShaderStageFlags::VERTEX => format_ident!("Vertex"),
-            gpu_types::vk::ShaderStageFlags::FRAGMENT => format_ident!("Fragment"),
-            gpu_types::vk::ShaderStageFlags::MESH_EXT => format_ident!("Mesh"),
-            gpu_types::vk::ShaderStageFlags::TASK_EXT => format_ident!("Task"),
-            gpu_types::vk::ShaderStageFlags::COMPUTE => format_ident!("Compute"),
+            gpu_types::VK_SHADER_STAGE_VERTEX_BIT => format_ident!("Vertex"),
+            gpu_types::VK_SHADER_STAGE_FRAGMENT_BIT => format_ident!("Fragment"),
+            gpu_types::VK_SHADER_STAGE_MESH_EXT_BIT => format_ident!("Mesh"),
+            gpu_types::VK_SHADER_STAGE_TASK_EXT_BIT => format_ident!("Task"),
+            gpu_types::VK_SHADER_STAGE_COMPUTE_BIT => format_ident!("Compute"),
             _ => continue,
         };
 
@@ -428,11 +428,11 @@ pub(crate) fn shader_module_impl(
             eprintln!("entry_point {} stage {:?}", entry_point.name, entry_point.stage);
             let ep_name_ident = format_ident!("{}", entry_point.name);
             match entry_point.stage {
-                gpu_types::vk::ShaderStageFlags::VERTEX => vertex = Some(ep_name_ident),
-                gpu_types::vk::ShaderStageFlags::FRAGMENT => fragment = Some(ep_name_ident),
-                gpu_types::vk::ShaderStageFlags::MESH_EXT => mesh = Some(ep_name_ident),
-                gpu_types::vk::ShaderStageFlags::TASK_EXT => task = Some(ep_name_ident),
-                gpu_types::vk::ShaderStageFlags::COMPUTE => compute = Some(ep_name_ident),
+                gpu_types::VK_SHADER_STAGE_VERTEX_BIT => vertex = Some(ep_name_ident),
+                gpu_types::VK_SHADER_STAGE_FRAGMENT_BIT => fragment = Some(ep_name_ident),
+                gpu_types::VK_SHADER_STAGE_MESH_EXT_BIT => mesh = Some(ep_name_ident),
+                gpu_types::VK_SHADER_STAGE_TASK_EXT_BIT => task = Some(ep_name_ident),
+                gpu_types::VK_SHADER_STAGE_COMPUTE_BIT => compute = Some(ep_name_ident),
                 _ => {}
             }
         }
@@ -643,49 +643,49 @@ pub(crate) fn shader_module_impl(
     Ok(output)
 }
 
-fn vk_polygon_mode_tokens(polygon_mode: gpu_types::vk::PolygonMode) -> TokenStream {
+fn vk_polygon_mode_tokens(polygon_mode: gpu_types::VkPolygonMode) -> TokenStream {
     let polygon_mode_str = format!("{polygon_mode:?}");
-    let polygon_mode_ident = format_ident!("{polygon_mode_str}");
-    quote!(gpu::vk::PolygonMode::#polygon_mode_ident)
+    let polygon_mode_ident = format_ident!("VK_POLYGON_MODE_{polygon_mode_str}");
+    quote!(gpu::vulkan::#polygon_mode_ident)
 }
 
-fn vk_cull_mode_tokens(cull_mode: gpu_types::vk::CullModeFlags) -> TokenStream {
+fn vk_cull_mode_tokens(cull_mode: gpu_types::VkCullModeFlags) -> TokenStream {
     let mut flags = vec![];
-    if cull_mode.contains(gpu_types::vk::CullModeFlags::FRONT) {
-        flags.push(format_ident!("FRONT"));
+    if cull_mode.contains(gpu_types::VK_CULL_MODE_FLAGS_FRONT) {
+        flags.push(format_ident!("VK_CULL_MODE_FRONT_BIT"));
     }
-    if cull_mode.contains(gpu_types::vk::CullModeFlags::BACK) {
-        flags.push(format_ident!("BACK"));
+    if cull_mode.contains(gpu_types::VK_CULL_MODE_FLAGS_BACK) {
+        flags.push(format_ident!("VK_CULL_MODE_BACK_BIT"));
     }
-    quote!(gpu::vk::CullModeFlags::NONE #( | gpu::vk::CullModeFlags::#flags)*)
+    quote!(gpu::vulkan::VK_CULL_MODE_NONE #( | gpu::vulkan::#flags)*)
 }
 
-fn vk_front_face_tokens(front_face: gpu_types::vk::FrontFace) -> TokenStream {
+fn vk_front_face_tokens(front_face: gpu_types::VkFrontFace) -> TokenStream {
     let front_face_str = format!("{front_face:?}");
     let front_face_ident = format_ident!("{front_face_str}");
-    quote!(gpu::vk::FrontFace::#front_face_ident)
+    quote!(gpu::VkFrontFace::#front_face_ident)
 }
 
-fn vk_format_tokens(format: gpu_types::vk::Format) -> TokenStream {
+fn vk_format_tokens(format: gpu_types::VkFormat) -> TokenStream {
     let format_str = format!("{format:?}");
-    let format_ident = format_ident!("{format_str}");
-    quote!(gpu::vk::Format::#format_ident)
+    let format_ident = format_ident!("VK_FORMAT_{format_str}");
+    quote!(gpu::vulkan::#format_ident)
 }
 
-fn vk_blend_factor_tokens(blend_factor: gpu_types::vk::BlendFactor) -> TokenStream {
+fn vk_blend_factor_tokens(blend_factor: gpu_types::VkBlendFactor) -> TokenStream {
     let blend_factor_str = format!("{blend_factor:?}");
-    let blend_factor_ident = format_ident!("{blend_factor_str}");
-    quote!(gpu::vk::BlendFactor::#blend_factor_ident)
+    let blend_factor_ident = format_ident!("VK_BLEND_FACTOR_{blend_factor_str}");
+    quote!(gpu::vulkan::#blend_factor_ident)
 }
 
-fn vk_blend_op_tokens(blend_op: gpu_types::vk::BlendOp) -> TokenStream {
+fn vk_blend_op_tokens(blend_op: gpu_types::VkBlendOp) -> TokenStream {
     let blend_op_str = format!("{blend_op:?}");
-    let blend_op_ident = format_ident!("{blend_op_str}");
-    quote!(gpu::vk::BlendOp::#blend_op_ident)
+    let blend_op_ident = format_ident!("VK_BLEND_OP_{blend_op_str}");
+    quote!(gpu::vulkan::#blend_op_ident)
 }
 
-fn vk_compare_op_tokens(compare_op: gpu_types::vk::CompareOp) -> TokenStream {
+fn vk_compare_op_tokens(compare_op: gpu_types::VkCompareOp) -> TokenStream {
     let compare_op_str = format!("{compare_op:?}");
-    let compare_op_ident = format_ident!("{compare_op_str}");
-    quote!(gpu::vk::CompareOp::#compare_op_ident)
+    let compare_op_ident = format_ident!("VK_COMPARE_OP_{compare_op_str}");
+    quote!(gpu::vulkan::#compare_op_ident)
 }

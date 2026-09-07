@@ -1,7 +1,7 @@
 //! Device events
 use crate::Device;
 use crate::state_tracker::command::CmdKind;
-use ash::vk;
+use vulkan::*;
 use rustc_hash::FxHasher;
 use std::ffi::CString;
 use std::fmt;
@@ -15,8 +15,8 @@ enum DrawCommandKind {
 
 fn hash_draw_command(
     regions: &[CString],
-    color_attachments: &[vk::Format],
-    depth_format: vk::Format,
+    color_attachments: &[VkFormat],
+    depth_format: VkFormat,
     command_kind: &DrawCommandKind,
 ) -> u64 {
     let mut h = FxHasher::default();
@@ -110,7 +110,7 @@ impl Device {
     /// - the debug region markers
     /// - the currently bound pipeline
     /// - command parameters
-    pub fn get_command_eid(&self, debug_region_markers: &[CString], pipeline: vk::Pipeline, cmd: &CmdKind) -> EId {
+    pub fn get_command_eid(&self, debug_region_markers: &[CString], pipeline: VkPipeline, cmd: &CmdKind) -> EId {
         let mut h = FxHasher::default();
         debug_region_markers.hash(&mut h);
         pipeline.hash(&mut h);

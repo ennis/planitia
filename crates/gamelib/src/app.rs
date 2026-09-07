@@ -15,7 +15,7 @@ use color_print::cwriteln;
 use env_logger::fmt::style::AnsiColor;
 use futures::future::AbortHandle;
 use gpu::vk;
-use gpu::vk::Handle;
+use gpu::VkHandle;
 use keyboard_types::{Key, KeyState, Modifiers, NamedKey};
 use log::{debug, error, info, warn};
 use math::{IVec2, Vec2, vec2};
@@ -637,7 +637,7 @@ impl TracyTimestamps {
         TracyTimestamps {
             gpu_context,
             per_frame: array::from_fn(|_| TimestampPool {
-                pool: gpu::QueryPool::new(vk::QueryType::TIMESTAMP, MAX_TRACY_GPU_TIMESTAMPS_PER_FRAME),
+                pool: gpu::QueryPool::new(VK_QUERY_TYPE_TIMESTAMP, MAX_TRACY_GPU_TIMESTAMPS_PER_FRAME),
                 base: 0,
                 count: 0,
             }),

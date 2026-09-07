@@ -97,7 +97,7 @@ impl<'a, T: Copy + 'static> From<ImmediatePushData<'a, T>> for PushDataSource<'a
 /// `CommandBuffer`s should be submitted in the same frame as they were created.
 pub struct CommandBuffer {
     // FIXME: the query pool should be created on-demand
-    //timestamp_query_pool: vk::QueryPool,
+    //timestamp_query_pool: VkQueryPool,
     //timestamp_query_count: u32,
     //timestamp_callbacks: Vec<Box<dyn FnOnce(u64) + Send>>,
     /// Current command buffer.
@@ -145,7 +145,7 @@ impl CommandBuffer {
     /// Returns the current command buffer, creating a new one if necessary.
     ///
     /// The returned command buffer is ready to record commands.
-    pub(crate) fn get_or_create_command_buffer(&mut self) -> vk::CommandBuffer {
+    pub(crate) fn get_or_create_command_buffer(&mut self) -> VkCommandBuffer {
         if let Some(cb) = self.cmdbuf {
             cb
         } else {
@@ -350,7 +350,7 @@ impl CommandBuffer {
     /// TODO documentation
     pub fn write_timestamp(&mut self, query_pool: &QueryPool, index: u32) {
         assert!((index as usize) < query_pool.size, "query index out of bounds");
-        assert!(query_pool.ty == vk::QueryType::TIMESTAMP, "query pool type must be TIMESTAMP");
+        assert!(query_pool.ty == VK_QUERY_TYPE_TIMESTAMP, "query pool type must be TIMESTAMP");
         unsafe {
             Device::instance().vk.CmdWriteTimestamp2(
                 self.cmdbuf,
@@ -370,7 +370,7 @@ impl CommandBuffer {
                 layout: ImageDataLayout { offset: 0, texel_row_length: Some(size.width), row_count: Some(size.height) },
             },
             image,
-            vk::Extent3D { width: size.width, height: size.height, depth: size.depth },
+            VkExtent3D { width: size.width, height: size.height, depth: size.depth },
         );
     }
 
@@ -398,7 +398,7 @@ impl CommandBuffer {
             &dst,
             ImageSubresourceLayers { layer_count: 1, .. },
             Rect3D { min: Offset3D { x: 0, y: 0, z: 0 }, max: Offset3D { x: width, y: height, z: 1 } },
-            vk::Filter::NEAREST,
+            VK_FILTER_NEAREST,
         );
     }
 }

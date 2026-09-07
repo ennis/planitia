@@ -1,7 +1,7 @@
 //! Swapchain interception
 use crate::{Device, SwapchainInfo};
 use ash::vk;
-use ash::vk::Handle;
+use ash::VkHandle;
 use std::{ptr, slice};
 use crate::overlay::renderer::render_overlay;
 use crate::surface::get_hwnd_for_surface;
@@ -9,17 +9,17 @@ use crate::surface::get_hwnd_for_surface;
 impl Device {
     pub unsafe fn hook_create_swapchain_khr(
         &self,
-        device: vk::Device,
-        p_create_info: *const vk::SwapchainCreateInfoKHR,
-        p_allocator: *const vk::AllocationCallbacks,
-        p_swapchain: *mut vk::SwapchainKHR,
-    ) -> vk::Result {
+        device: VkDevice,
+        p_create_info: *const VkSwapchainCreateInfoKHR,
+        p_allocator: *const VkAllocationCallbacks,
+        p_swapchain: *mut VkSwapchainKHR,
+    ) -> VkResult {
         let mut inner = self.tracked_objects.lock();
 
         let mut create_info = *p_create_info;
 
         // The pan/zoom shader needs TRANSFER_SRC usage.
-        create_info.image_usage |= vk::ImageUsageFlags::TRANSFER_SRC;
+        create_info.image_usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
         // If there's an old swapchain to be deleted, delete the resources that we have for it
         if !create_info.old_swapchain.is_null() {
@@ -42,7 +42,7 @@ impl Device {
 
         // Call next layer
         let result = (self.khr_swapchain.create_swapchain_khr)(device, &create_info, p_allocator, p_swapchain);
-        if result != vk::Result::SUCCESS {
+        if result != VK_SUCCESS {
             return result;
         }
 
@@ -50,11 +50,11 @@ impl Device {
         let mut image_count = 0;
         let r = (self.khr_swapchain.get_swapchain_images_khr)(device, *p_swapchain, &mut image_count, ptr::null_mut());
 
-        assert_eq!(r, vk::Result::SUCCESS);
+        assert_eq!(r, VK_SUCCESS);
         let images = {
             let mut images = Vec::with_capacity(image_count as usize);
             let r = (self.khr_swapchain.get_swapchain_images_khr)(device, *p_swapchain, &mut image_count, images.as_mut_ptr());
-            assert_eq!(r, vk::Result::SUCCESS);
+            assert_eq!(r, VK_SUCCESS);
             images.set_len(image_count as usize);
             images
         };
@@ -63,12 +63,12 @@ impl Device {
             .iter()
             .map(|&image| {
                 self.create_image_view(
-                    &vk::ImageViewCreateInfo {
+                    &VkImageViewCreateInfo {
                         image,
-                        view_type: vk::ImageViewType::TYPE_2D,
+                        view_type: VK_IMAGE_VIEW_TYPE_2D,
                         format: create_info.image_format,
-                        subresource_range: vk::ImageSubresourceRange {
-                            aspect_mask: vk::ImageAspectFlags::COLOR,
+                        subresource_range: VkImageSubresourceRange {
+                            aspect_mask: VK_IMAGE_ASPECT_COLOR_BIT,
                             base_mip_level: 0,
                             level_count: 1,
                             base_array_layer: 0,
@@ -84,7 +84,7 @@ impl Device {
 
         let render_to_present_semaphores = (0..images.len())
             .map(|_| {
-                self.create_semaphore(&vk::SemaphoreCreateInfo { ..Default::default() }, None)
+                self.create_semaphore(&VkSemaphoreCreateInfo { ..Default::default() }, None)
                     .expect("create_semaphore failed")
             })
             .collect();
@@ -107,9 +107,9 @@ impl Device {
 
     pub unsafe fn hook_destroy_swapchain_khr(
         &self,
-        device: vk::Device,
-        swapchain: vk::SwapchainKHR,
-        p_allocator: *const vk::AllocationCallbacks,
+        device: VkDevice,
+        swapchain: VkSwapchainKHR,
+        p_allocator: *const VkAllocationCallbacks,
     ) {
         let mut inner = self.tracked_objects.lock();
 
@@ -125,7 +125,7 @@ impl Device {
         (self.khr_swapchain.destroy_swapchain_khr)(device, swapchain, p_allocator);
     }
 
-    pub unsafe fn hook_queue_present_khr(&self, queue: vk::Queue, p_present_info: *const vk::PresentInfoKHR) -> vk::Result {
+    pub unsafe fn hook_queue_present_khr(&self, queue: VkQueue, p_present_info: *const VkPresentInfoKHR) -> VkResult {
         // wait for our debugger probes to finish executing
         // and for the rest as well, incidentally...
         self.device_wait_idle().unwrap();

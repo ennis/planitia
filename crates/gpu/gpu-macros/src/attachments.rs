@@ -55,11 +55,11 @@ pub(crate) fn derive_attachments(input: proc_macro::TokenStream) -> syn::Result<
                         let value = meta.value()?;
                         let op: syn::Ident = value.parse()?;
                         if op == "clear" {
-                            load_op = Some(quote!(#CRATE::vk::AttachmentLoadOp::CLEAR));
+                            load_op = Some(quote!(#CRATE::VK_ATTACHMENT_LOAD_OP_CLEAR));
                         } else if op == "load" {
-                            load_op = Some(quote!(#CRATE::vk::AttachmentLoadOp::LOAD));
+                            load_op = Some(quote!(#CRATE::VK_ATTACHMENT_LOAD_OP_LOAD));
                         } else if op == "dont_care" {
-                            load_op = Some(quote!(#CRATE::vk::AttachmentLoadOp::DONT_CARE));
+                            load_op = Some(quote!(#CRATE::VK_ATTACHMENT_LOAD_OP_DONT_CARE));
                         } else {
                             return Err(meta.error("invalid syntax for `load_op`"));
                         }
@@ -70,9 +70,9 @@ pub(crate) fn derive_attachments(input: proc_macro::TokenStream) -> syn::Result<
                         let value = meta.value()?;
                         let op: syn::Ident = value.parse()?;
                         if op == "store" {
-                            store_op = Some(quote!(#CRATE::vk::AttachmentStoreOp::STORE));
+                            store_op = Some(quote!(#CRATE::VK_ATTACHMENT_STORE_OP_STORE));
                         } else if op == "dont_care" {
-                            store_op = Some(quote!(#CRATE::vk::AttachmentStoreOp::DONT_CARE));
+                            store_op = Some(quote!(#CRATE::VK_ATTACHMENT_STORE_OP_DONT_CARE));
                         } else {
                             return Err(meta.error("invalid syntax for `store_op`"));
                         }
@@ -83,7 +83,7 @@ pub(crate) fn derive_attachments(input: proc_macro::TokenStream) -> syn::Result<
                         let value = meta.value()?;
                         let color: syn::Expr = value.parse()?;
                         clear_color =
-                            Some(quote!(#CRATE::vk::ClearColorValue::from(#CRATE::ClearColorValue::from(#color))));
+                            Some(quote!(#CRATE::VkClearColorValue::from(#CRATE::ClearColorValue::from(#color))));
                         is_color = true;
                         return Ok(());
                     }
@@ -96,7 +96,7 @@ pub(crate) fn derive_attachments(input: proc_macro::TokenStream) -> syn::Result<
                                 "must specify only one of `clear_depth`, `clear_stencil`, or `clear_depth_stencil`",
                             ));
                         }
-                        clear_depth_stencil = Some(quote!(#CRATE::vk::ClearDepthStencilValue {
+                        clear_depth_stencil = Some(quote!(#CRATE::VkClearDepthStencilValue {
                             depth: #depth,
                             stencil: 0,
                         }));
@@ -112,7 +112,7 @@ pub(crate) fn derive_attachments(input: proc_macro::TokenStream) -> syn::Result<
                                 "must specify only one of `clear_depth`, `clear_stencil`, or `clear_depth_stencil`",
                             ));
                         }
-                        clear_depth_stencil = Some(quote!(#CRATE::vk::ClearDepthStencilValue {
+                        clear_depth_stencil = Some(quote!(#CRATE::VkClearDepthStencilValue {
                             depth: 0.0,
                             stencil: #stencil,
                         }));
@@ -128,7 +128,7 @@ pub(crate) fn derive_attachments(input: proc_macro::TokenStream) -> syn::Result<
                                 "must specify only one of `clear_depth`, `clear_stencil`, or `clear_depth_stencil`",
                             ));
                         }
-                        clear_depth_stencil = Some(quote!(#CRATE::vk::ClearDepthStencilValue {
+                        clear_depth_stencil = Some(quote!(#CRATE::VkClearDepthStencilValue {
                             depth: #depth_stencil.0,
                             stencil: #depth_stencil.1,
                         }));
@@ -179,13 +179,13 @@ pub(crate) fn derive_attachments(input: proc_macro::TokenStream) -> syn::Result<
                 let store_op = if let Some(store_op) = store_op { quote!(Some(#store_op)) } else { quote!(None) };
                 let clear_value = if is_color {
                     if let Some(clear_color) = clear_color {
-                        quote!(Some(#CRATE::vk::ClearValue { color: #clear_color }))
+                        quote!(Some(#CRATE::VkClearValue { color: #clear_color }))
                     } else {
                         quote!(None)
                     }
                 } else if is_depth_stencil {
                     if let Some(clear_depth_stencil) = clear_depth_stencil {
-                        quote!(Some(#CRATE::vk::ClearValue { depth_stencil: #clear_depth_stencil }))
+                        quote!(Some(#CRATE::VkClearValue { depth_stencil: #clear_depth_stencil }))
                     } else {
                         quote!(None)
                     }
@@ -205,7 +205,7 @@ pub(crate) fn derive_attachments(input: proc_macro::TokenStream) -> syn::Result<
                 quote!(#CRATE::AsAttachment::as_attachment(&self.#field_name))
             };
 
-        let format = quote!(#CRATE::vk::Format::#format);
+        let format = quote!(#CRATE::VK_FORMAT_#format);
 
         if is_color {
             color_formats.push(format);
@@ -229,8 +229,8 @@ pub(crate) fn derive_attachments(input: proc_macro::TokenStream) -> syn::Result<
 
     Ok(quote! {
         impl #impl_generics #CRATE::StaticAttachments for #struct_name #ty_generics #where_clause {
-            const COLOR: &'static [#CRATE::vk::Format] = &[#(#color_formats),*];
-            const DEPTH_STENCIL: Option<#CRATE::vk::Format> = #depth_format;
+            const COLOR: &'static [#CRATE::VkFormat] = &[#(#color_formats),*];
+            const DEPTH_STENCIL: Option<#CRATE::VkFormat> = #depth_format;
         }
 
         impl #impl_generics #CRATE::Attachments for #struct_name #ty_generics #where_clause {

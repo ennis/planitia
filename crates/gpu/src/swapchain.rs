@@ -156,11 +156,11 @@ impl Device {
             imageExtent: image_extent,
             imageArrayLayers: 1,
             // TODO: this should be a parameter
-            imageUsage: vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_DST,
-            imageSharingMode: vk::SharingMode::EXCLUSIVE,
+            imageUsage: VK_IMAGE_USAGE_FLAGS_COLOR_ATTACHMENT | VK_IMAGE_USAGE_FLAGS_TRANSFER_DST,
+            imageSharingMode: VK_SHARING_MODE_EXCLUSIVE,
             queueFamilyIndexCount: 0,
             pQueueFamilyIndices: ptr::null(),
-            preTransform: vk::SurfaceTransformFlagsKHR::IDENTITY,
+            preTransform: VkSurfaceTransformFlagsKHR::IDENTITY,
             // TODO: this should be a parameter
             compositeAlpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
             presentMode: present_mode,

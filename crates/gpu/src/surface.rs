@@ -13,12 +13,12 @@ mod platform {
         Win32Surface::new(get_vulkan_entry(), get_vulkan_instance())
     }
 
-    pub fn get_vulkan_surface(handle: RawWindowHandle) -> vk::SurfaceKHR {
+    pub fn get_vulkan_surface(handle: RawWindowHandle) -> VkSurfaceKHR {
         let win32_handle = match handle {
             RawWindowHandle::Win32(h) => h,
             _ => panic!("incompatible window handle"),
         };
-        let create_info = vk::Win32SurfaceCreateInfoKHR {
+        let create_info = VkWin32SurfaceCreateInfoKHR {
             flags: Default::default(),
             hinstance: win32_handle.hinstance.unwrap().get() as HINSTANCE,
             hwnd: win32_handle.hwnd.get() as HWND,

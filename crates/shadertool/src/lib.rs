@@ -23,7 +23,7 @@ use gpu_types::reflection as refl;
 use crate::archive_writer::build_and_write_archive;
 use crate::build::{compile_slang_module, create_slang_session};
 pub use dump2::dump_archive_file;
-use sharc::gpu_types::vk;
+use sharc::gpu_types::vulkan::*;
 
 
 /// Arena allocator to allocate compilation results.
@@ -121,7 +121,7 @@ pub struct EntryPoint<'a> {
     /// The pipeline that this entry point belongs to, either from a `[pipeline("...")]` attribute or inferred
     /// from the entry point name by stripping the stage suffix.
     pub pipeline_name: Option<String>,
-    pub stage: vk::ShaderStageFlags,
+    pub stage: VkShaderStageFlags,
     pub push_constants_size: usize,
     pub workgroup_size: [u32; 3],
     pub refl_params: Vec<&'a refl::AccessChain<'a>>,

@@ -10,7 +10,7 @@ use anyhow::{Context, bail, anyhow};
 use color_print::{ceprintln, cprintln};
 use log::warn;
 use sharc::archive::{ArchiveWriter, Offset};
-use sharc::gpu_types::vk;
+use sharc::gpu_types::vulkan::*;
 use sharc::zstring::ZString64;
 use sharc::{FileDependency, RootParamLayout, Shader};
 use std::collections::{BTreeMap, BTreeSet};
@@ -41,7 +41,7 @@ fn write_pass(
     let mut push_constants_size = 0;
     let mut workgroup_size = [1u32; 3];
     let mut shaders = vec![];
-    let mut stage_flags = vk::ShaderStageFlags::default();
+    let mut stage_flags = VkShaderStageFlags::default();
     //let mut all_params = vec![];
 
     for &ep in entry_points {
@@ -52,7 +52,7 @@ fn write_pass(
         shaders.push(Shader { stage: ep.stage, entry_point: ep.name.as_str().into() });
     }
 
-    let pipeline_kind = if stage_flags.contains(vk::ShaderStageFlags::COMPUTE) {
+    let pipeline_kind = if stage_flags & VK_SHADER_STAGE_COMPUTE_BIT != 0 {
         sharc::PipelineKind::Compute(sharc::ComputePipeline {
             push_constants_size: push_constants_size as u16,
             compute_shader: shaders[0],

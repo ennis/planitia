@@ -96,7 +96,7 @@ impl Painter {
     pub fn new() -> Painter {
         let (atlas, white_pixel_uv) = init_atlas();
         let sampler =
-            gpu::register_sampler(&gpu::SamplerParams { mag_filter: vk::Filter::LINEAR, min_filter: vk::Filter::LINEAR, .. });
+            gpu::register_sampler(&gpu::SamplerParams { mag_filter: VK_FILTER_LINEAR, min_filter: VK_FILTER_LINEAR, .. });
         let white_pixel_uv_f =
             vec2(white_pixel_uv.x as f32 / (u16::MAX as f32), white_pixel_uv.y as f32 / (u16::MAX as f32));
 
@@ -107,7 +107,7 @@ impl Painter {
             white_pixel_uv_f,
             sampler,
             render_target: RenderTarget::new(
-                vk::Format::R8G8B8A8_UNORM,
+                VK_FORMAT_R8G8B8A8_UNORM,
                 ImageUsage::COLOR_ATTACHMENT | ImageUsage::TRANSFER_DST | ImageUsage::STORAGE,
             ),
         }

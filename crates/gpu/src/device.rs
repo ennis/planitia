@@ -3,16 +3,13 @@
 mod descriptor_heap;
 
 use crate::device::descriptor_heap::DescriptorHeaps;
-use crate::instance::vk_khr_surface;
 use crate::platform::PlatformExtensions;
 use crate::{
-    BufferAddressRange, BufferUsage, ComputePipeline, ComputePipelineCreateInfo, DescriptorSetLayout, Error,
+    BufferAddressRange, BufferUsage, ComputePipeline, ComputePipelineCreateInfo, Error,
     FrameIndex, GraphicsPipeline, GraphicsPipelineCreateInfo, Instance, PreRasterizationShaders, Ptr, SUBGROUP_SIZE,
-    SamplerParams, SamplerParamsHashable, ShaderReflection, VulkanObject, get_vulkan_entry, get_vulkan_instance,
+    SamplerParams, SamplerParamsHashable, ShaderReflection, VulkanObject, get_vulkan_entry,
     is_depth_and_stencil_format, signal, vkcheck,
 };
-use ash::vk;
-use ash::vk::Handle;
 use gpu::device::descriptor_heap::SamplerDescriptorHandle;
 use gpu::flush;
 use gpu_allocator::vulkan::AllocationCreateDesc;
@@ -28,6 +25,7 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 use std::{fmt, mem, ptr};
+use ash::vk::Handle;
 use vulkan::*;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -86,8 +84,8 @@ pub(crate) struct DeviceSubmissionState {
 pub struct Device {
     /// Underlying vulkan device
     //pub(crate) raw: ash::Device,
-    pub(crate) vkd: VkDevice,
-    pub(crate) vk: Vulkan_1_4_DeviceDispatch,
+    pub vkd: VkDevice,
+    pub vk: Vulkan_1_4_DeviceDispatch,
     /// Common device extensions.
     pub(crate) ext: DeviceExtensions,
     /// Platform-specific extension functions
@@ -130,7 +128,7 @@ pub(crate) struct ActiveSubmission {
     //pub(crate) create_ticket: u64,
     pub(crate) frame_index: u64,
     //pub(crate) command_pools: Vec<CommandPool>,
-    //pub(crate) timestamp_query_pool: vk::QueryPool,
+    //pub(crate) timestamp_query_pool: VkQueryPool,
     //pub(crate) timestamp_query_count: u32,
     //pub(crate) timestamp_callbacks: Vec<Box<dyn FnOnce(u64) + Send>>,
 }
@@ -144,7 +142,7 @@ struct DeleteQueueEntry {
 #[derive(thiserror::Error, Debug)]
 pub enum DeviceCreateError {
     #[error(transparent)]
-    Vulkan(#[from] vk::Result),
+    Vulkan(#[from] VkResult),
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -155,14 +153,14 @@ pub struct QueueFamilyConfig {
 
 pub(crate) fn get_vk_sample_count(count: u32) -> VkSampleCountFlags {
     match count {
-        0 => vk::SampleCountFlags::TYPE_1,
-        1 => vk::SampleCountFlags::TYPE_1,
-        2 => vk::SampleCountFlags::TYPE_2,
-        4 => vk::SampleCountFlags::TYPE_4,
-        8 => vk::SampleCountFlags::TYPE_8,
-        16 => vk::SampleCountFlags::TYPE_16,
-        32 => vk::SampleCountFlags::TYPE_32,
-        64 => vk::SampleCountFlags::TYPE_64,
+        0 => VK_SAMPLE_COUNT_1_BIT,
+        1 => VK_SAMPLE_COUNT_1_BIT,
+        2 => VK_SAMPLE_COUNT_2_BIT,
+        4 => VK_SAMPLE_COUNT_4_BIT,
+        8 => VK_SAMPLE_COUNT_8_BIT,
+        16 => VK_SAMPLE_COUNT_16_BIT,
+        32 => VK_SAMPLE_COUNT_32_BIT,
+        64 => VK_SAMPLE_COUNT_64_BIT,
         _ => panic!("unsupported number of samples"),
     }
 }
@@ -232,7 +230,7 @@ fn create_device() -> Result<Device, DeviceCreateError> {
 struct PhysicalDeviceAndProperties {
     physical_device: VkPhysicalDevice,
     properties: VkPhysicalDeviceProperties,
-    //features: vk::PhysicalDeviceFeatures,
+    //features: VkPhysicalDeviceFeatures,
 }
 
 /// Chooses a present mode among a list of supported modes.
@@ -279,16 +277,8 @@ unsafe fn select_physical_device(instance: &Instance) -> PhysicalDeviceAndProper
     let mut selected_phy_properties = Default::default();
     //let mut selected_phy_features = Default::default();
     for phy in physical_devices {
-        let props = {
-            let mut props = MaybeUninit::uninit();
-            instance.fns.GetPhysicalDeviceProperties(phy, props.as_mut_ptr());
-            props.assume_init()
-        };
-        let _features = {
-            let mut features = MaybeUninit::uninit();
-            instance.fns.GetPhysicalDeviceFeatures(phy, features.as_mut_ptr());
-            features.assume_init()
-        };
+        let props = instance.fns.GetPhysicalDeviceProperties(phy);
+        let _features = instance.fns.GetPhysicalDeviceFeatures(phy);
         if props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU {
             selected_phy = Some(phy);
             selected_phy_properties = props;
@@ -391,7 +381,7 @@ impl Device {
             if memory_type_bits & (1 << i) != 0
                 && (self.thread_safe.physical_device_memory_properties.memoryTypes[i as usize].propertyFlags
                     & memory_properties)
-                    != 0
+                    == memory_properties
             {
                 return Some(i);
             }
@@ -431,11 +421,7 @@ impl Device {
         let entry = get_vulkan_entry();
         let instance = Instance::get();
         let dd = Vulkan_1_4_DeviceDispatch::load_with(|proc| instance.fns.GetDeviceProcAddr(device, proc.as_ptr()));
-        let queue = {
-            let mut queue = VkQueue::null();
-            dd.GetDeviceQueue(device, graphics_queue_family_index, 0, &mut queue);
-            queue
-        };
+        let queue = dd.GetDeviceQueue(device, graphics_queue_family_index, 0);
         let timeline = {
             let timeline_create_info =
                 VkSemaphoreTypeCreateInfo { semaphoreType: VK_SEMAPHORE_TYPE_TIMELINE, initialValue: 0, .. };
@@ -446,7 +432,7 @@ impl Device {
         let mut allocator = {
             let ash_instance = ash::Instance::load_with(
                 |name| mem::transmute(entry.GetInstanceProcAddr(instance.instance, name.as_ptr())),
-                vk::Instance::from_raw(instance.instance.0 as u64),
+                ash::vk::Instance::from_raw(instance.instance.0 as u64),
             );
             let ash_device = ash::Device::load(ash_instance.fp_v1_0(), ash::vk::Device::from_raw(device.0 as u64));
             let allocator_create_desc = gpu_allocator::vulkan::AllocatorCreateDesc {
@@ -482,11 +468,8 @@ impl Device {
             entry.GetInstanceProcAddr(instance.instance, proc.as_ptr())
         });
         let descriptor_heaps = DescriptorHeaps::new(&mut allocator, &device, &descriptor_heap_properties);
-        let memory_properties = {
-            let mut memory_properties = MaybeUninit::uninit();
-            instance.fns.GetPhysicalDeviceMemoryProperties(physical_device, memory_properties.as_mut_ptr());
-            memory_properties.assume_init()
-        };
+        let memory_properties = instance.fns.GetPhysicalDeviceMemoryProperties(physical_device);
+
         // ------ info dump ------
         let device_name = CStr::from_ptr(physical_device_properties.properties.deviceName.as_ptr()).to_string_lossy();
         info!("gpu: using device {device_name}",);
@@ -504,7 +487,7 @@ impl Device {
             vk::api_version_patch(physical_device_properties.properties.apiVersion),
             physical_device_properties.properties.driverVersion
         );
-        if physical_device_id_properties.deviceLUIDValid == vk::TRUE {
+        if physical_device_id_properties.deviceLUIDValid == VK_TRUE {
             info!("    deviceLUID: {:02x?}", physical_device_id_properties.deviceLUID);
         }
         info!("    Timestamp information:");
@@ -555,12 +538,18 @@ impl Device {
     }
 
     /// Returns the list of supported swapchain formats for the given surface.
-    pub unsafe fn get_surface_formats(&self, surface: vk::SurfaceKHR) -> Vec<VkSurfaceFormatKHR> {
-        vk_khr_surface().get_physical_device_surface_formats(self.thread_safe.physical_device, surface).unwrap()
+    pub unsafe fn get_surface_formats(&self, surface: VkSurfaceKHR) -> Vec<VkSurfaceFormatKHR> {
+        let instance = Instance::get();
+        let mut count = 0;
+        instance.khr_surface.GetPhysicalDeviceSurfaceFormatsKHR(self.thread_safe.physical_device, surface, &mut count, ptr::null_mut()).check();
+        let mut surface_formats = Vec::with_capacity(count as usize);
+        instance.khr_surface.GetPhysicalDeviceSurfaceFormatsKHR(self.thread_safe.physical_device, surface, &mut count, surface_formats.as_mut_ptr()).check();
+        surface_formats.set_len(count as usize);
+        surface_formats
     }
 
     /// Returns one supported surface format. Use if you don't care about the format of your swapchain.
-    pub unsafe fn get_preferred_surface_format(&self, surface: vk::SurfaceKHR) -> VkSurfaceFormatKHR {
+    pub unsafe fn get_preferred_surface_format(&self, surface: VkSurfaceKHR) -> VkSurfaceFormatKHR {
         let surface_formats = self.get_surface_formats(surface);
         get_preferred_swapchain_surface_format(&surface_formats)
     }
@@ -823,7 +812,7 @@ impl Device {
         // /!\ we are in frame N /!\
         // Fetch and increment frame index, and signal it in on the timeline.
         let frame_index = self.frame_index.fetch_add(1, Relaxed);
-        signal(vk::Semaphore::from_raw(self.thread_safe.frame_timeline.0), frame_index);
+        signal(self.thread_safe.frame_timeline, frame_index);
 
         // /!\ we are now in frame N+1 /!\
         // Reclaim resources of completed frames.
@@ -966,7 +955,7 @@ impl Device {
             ));
             pipeline
         };
-        Ok(ComputePipeline { pipeline: vk::Pipeline::from_raw(pipeline.0), reflection: create_info.shader.refl_params })
+        Ok(ComputePipeline { pipeline: pipeline, reflection: create_info.shader.refl_params })
     }
 
     /// Creates a graphics pipeline.
@@ -1143,7 +1132,7 @@ impl Device {
             polygonMode: unsafe { mem::transmute(create_info.rasterization.polygon_mode) },
             cullMode: unsafe { mem::transmute(create_info.rasterization.cull_mode) },
             frontFace: unsafe { mem::transmute(create_info.rasterization.front_face) },
-            depthBiasEnable: vk::FALSE,
+            depthBiasEnable: VK_FALSE,
             depthBiasConstantFactor: 0.0,
             depthBiasClamp: 0.0,
             depthBiasSlopeFactor: 0.0,
@@ -1181,7 +1170,7 @@ impl Device {
         let depth_stencil_state = if let Some(ds) = create_info.depth_stencil {
             VkPipelineDepthStencilStateCreateInfo {
                 flags: Default::default(),
-                depthTestEnable: (ds.depth_compare_op != vk::CompareOp::ALWAYS).into(),
+                depthTestEnable: (ds.depth_compare_op != VK_COMPARE_OP_ALWAYS).into(),
                 depthWriteEnable: ds.depth_write_enable.into(),
                 // VULKAN-MIGRATION
                 depthCompareOp: unsafe { mem::transmute(ds.depth_compare_op) },
@@ -1226,11 +1215,11 @@ impl Device {
         };
         let color_attachment_formats =
             create_info.fragment.color_targets.iter().map(|target| target.format).collect::<Vec<_>>();
-        let depth_attachment_format = create_info.depth_stencil.map(|ds| ds.format).unwrap_or(vk::Format::UNDEFINED);
+        let depth_attachment_format = create_info.depth_stencil.map(|ds| ds.format).unwrap_or(VK_FORMAT_UNDEFINED);
         let stencil_attachment_format = if is_depth_and_stencil_format(depth_attachment_format) {
             depth_attachment_format
         } else {
-            vk::Format::UNDEFINED
+            VK_FORMAT_UNDEFINED
         };
         let rendering_info = VkPipelineRenderingCreateInfo {
             viewMask: 0,
@@ -1279,7 +1268,7 @@ impl Device {
             ));
             pipeline
         };
-        Ok(GraphicsPipeline { pipeline: vk::Pipeline::from_raw(pipeline.0), stage_reflection })
+        Ok(GraphicsPipeline { pipeline: pipeline, stage_reflection })
     }
 }
 
@@ -1350,7 +1339,7 @@ pub unsafe fn end_frame() -> FrameIndex {
 ///   to the object is externally synchronized: only the calling thread may access the object
 ///   while this function is executing.
 /// * The handle must be a valid vulkan object handle.
-pub unsafe fn set_debug_name_raw<H: vk::Handle>(handle: H, name: impl AsRef<str>) {
+pub unsafe fn set_debug_name_raw<H: VulkanHandle>(handle: H, name: impl AsRef<str>) {
     let device = Device::instance();
     let object_name = CString::new(name.as_ref()).unwrap();
 
@@ -1359,7 +1348,7 @@ pub unsafe fn set_debug_name_raw<H: vk::Handle>(handle: H, name: impl AsRef<str>
         device
             .ext
             .debug_utils
-            .set_debug_utils_object_name(&vk::DebugUtilsObjectNameInfoEXT {
+            .set_debug_utils_object_name(&VkDebugUtilsObjectNameInfoEXT {
                 object_type: H::TYPE,
                 object_handle: handle.as_raw(),
                 p_object_name: object_name.as_ptr(),
@@ -1396,7 +1385,7 @@ pub fn get_last_completed_frame_index() -> FrameIndex {
 
 /// Returns the `VkPhysicalDeviceProperties` of the physical device used by the global device.
 #[inline(never)]
-pub fn get_physical_device_properties() -> vk::PhysicalDeviceProperties {
+pub fn get_physical_device_properties() -> VkPhysicalDeviceProperties {
     Device::instance().thread_safe.physical_device_properties
 }
 
@@ -1411,14 +1400,14 @@ pub fn get_physical_device_name() -> String {
 /// Returns the device UUID of the physical device.
 #[inline(never)]
 pub fn get_device_uuid() -> [u8; 16] {
-    Device::instance().thread_safe.physical_device_id_properties.device_uuid
+    Device::instance().thread_safe.physical_device_id_properties.deviceUUID
 }
 
 /// Returns the device LUID of the physical device.
 #[inline(never)]
 pub fn get_device_luid() -> Option<[u8; 8]> {
     let id_properties = &Device::instance().thread_safe.physical_device_id_properties;
-    if id_properties.device_luid_valid == vk::TRUE { Some(id_properties.device_luid) } else { None }
+    if id_properties.deviceLUIDValid == VK_TRUE { Some(id_properties.deviceLUID) } else { None }
 }
 
 /// Returns the timestamp period in nanoseconds.
@@ -1451,14 +1440,14 @@ pub fn get_calibrated_timestamp_pair() -> (u64, u64) {
             .ext
             .calibrated_timestamps
             .get_calibrated_timestamps(&[
-                vk::CalibratedTimestampInfoKHR { time_domain: vk::TimeDomainKHR::DEVICE, ..Default::default() },
+                VkCalibratedTimestampInfoKHR { time_domain: vk::TimeDomainKHR::DEVICE, ..Default::default() },
                 #[cfg(windows)]
-                vk::CalibratedTimestampInfoKHR {
+                VkImageAspectFlags {
                     time_domain: vk::TimeDomainKHR::QUERY_PERFORMANCE_COUNTER,
                     ..Default::default()
                 },
                 #[cfg(unix)]
-                vk::CalibratedTimestampInfoKHR {
+                VkImageAspectFlags {
                     time_domain: vk::TimeDomainKHR::CLOCK_MONOTONIC,
                     ..Default::default()
                 },

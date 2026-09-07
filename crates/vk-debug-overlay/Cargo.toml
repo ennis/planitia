@@ -8,10 +8,10 @@ crate-type = ["cdylib"]
 name = "VkLayer_planitia_debug_overlay"
 
 [dependencies]
-ash = { version = "0.38", default-features = false }
-ash-layer = "0.0.2"
+#ash = { version = "0.38", default-features = false }
+#ash-layer = "0.0.2"
 dashmap = "6"
-vulkan-headers = "0.2.4"
+vulkan = { workspace = true}
 bumpalo = "3.20.3"
 spirv = "0.4.0"
 thiserror = "2.0.20"

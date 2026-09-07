@@ -22,12 +22,12 @@ pub struct PipelineData {
     pub compute: Option<ShaderStageInfo>,
 }
 
-impl HasPrivateData for vk::Pipeline {
+impl HasPrivateData for VkPipeline {
     type PrivateData = PipelineData;
 }
 
 impl Device {
-    fn register_shader_module(&self, smci: &vk::ShaderModuleCreateInfo, entry_point: &str) -> ShaderStageInfo {
+    fn register_shader_module(&self, smci: &VkShaderModuleCreateInfo, entry_point: &str) -> ShaderStageInfo {
         let mut mods = self.modules.lock();
         let spirv = unsafe { from_raw_parts((*smci).p_code, (*smci).code_size / 4) };
         let module = Module::parse(spirv).unwrap();
@@ -37,19 +37,19 @@ impl Device {
         info
     }
 
-    unsafe fn create_graphics_pipeline_data(&self, create_info: &vk::GraphicsPipelineCreateInfo) -> PipelineData {
+    unsafe fn create_graphics_pipeline_data(&self, create_info: &VkGraphicsPipelineCreateInfo) -> PipelineData {
         let mut data = PipelineData::default();
         let stages = from_raw_parts(create_info.p_stages, create_info.stage_count as usize);
         for (i, stage) in stages.iter().enumerate() {
             let ep_name = CStr::from_ptr(stage.p_name).to_string_lossy();
-            if let Some(smci) = find_next::<vk::ShaderModuleCreateInfo>(stage) {
+            if let Some(smci) = find_next::<VkShaderModuleCreateInfo>(stage) {
                 let ep = self.register_shader_module(&*smci, &ep_name);
                 match stage.stage {
-                    vk::ShaderStageFlags::VERTEX => data.vertex = Some(ep),
-                    vk::ShaderStageFlags::FRAGMENT => data.fragment = Some(ep),
-                    vk::ShaderStageFlags::MESH_EXT => data.mesh = Some(ep),
-                    vk::ShaderStageFlags::TASK_EXT => data.task = Some(ep),
-                    vk::ShaderStageFlags::COMPUTE => data.compute = Some(ep),
+                    VK_SHADER_STAGE_VERTEX_BIT => data.vertex = Some(ep),
+                    VK_SHADER_STAGE_FRAGMENT_BIT => data.fragment = Some(ep),
+                    VK_SHADER_STAGE_MESH_EXT_BIT => data.mesh = Some(ep),
+                    VK_SHADER_STAGE_TASK_EXT_BIT => data.task = Some(ep),
+                    VK_SHADER_STAGE_COMPUTE_BIT => data.compute = Some(ep),
                     _ => {
                         eprintln!("unsupported shader stage: {:?}", stage.stage);
                     }
@@ -65,10 +65,10 @@ impl Device {
         data
     }
 
-    unsafe fn create_compute_pipeline_data(&self, create_info: &vk::ComputePipelineCreateInfo) -> PipelineData {
+    unsafe fn create_compute_pipeline_data(&self, create_info: &VkComputePipelineCreateInfo) -> PipelineData {
         let mut data = PipelineData::default();
         let stage = &create_info.stage;
-        if let Some(smci) = find_next::<vk::ShaderModuleCreateInfo>(stage) {
+        if let Some(smci) = find_next::<VkShaderModuleCreateInfo>(stage) {
             let ep_name = CStr::from_ptr(stage.p_name).to_string_lossy();
             let ep = self.register_shader_module(&*smci, &ep_name);
             data.compute = Some(ep);
@@ -80,13 +80,13 @@ impl Device {
 
     pub unsafe fn hook_create_graphics_pipelines(
         &self,
-        device: vk::Device,
-        pipeline_cache: vk::PipelineCache,
+        device: VkDevice,
+        pipeline_cache: VkPipelineCache,
         create_info_count: u32,
-        p_create_infos: *const vk::GraphicsPipelineCreateInfo<'_>,
-        p_allocator: *const vk::AllocationCallbacks<'_>,
-        p_pipelines: *mut vk::Pipeline,
-    ) -> vk::Result {
+        p_create_infos: *const VkGraphicsPipelineCreateInfo<'_>,
+        p_allocator: *const VkAllocationCallbacks<'_>,
+        p_pipelines: *mut VkPipeline,
+    ) -> VkResult {
         let r = (self.fp_v1_0().create_graphics_pipelines)(
             device,
             pipeline_cache,
@@ -96,7 +96,7 @@ impl Device {
             p_pipelines,
         );
 
-        if r != vk::Result::SUCCESS {
+        if r != VK_SUCCESS {
             return r;
         }
 
@@ -109,18 +109,18 @@ impl Device {
             self.set_private_data(pipelines[i], data);
         }
 
-        vk::Result::SUCCESS
+        VK_SUCCESS
     }
 
     pub unsafe fn hook_create_compute_pipelines(
         &self,
-        device: vk::Device,
-        pipeline_cache: vk::PipelineCache,
+        device: VkDevice,
+        pipeline_cache: VkPipelineCache,
         create_info_count: u32,
-        p_create_infos: *const vk::ComputePipelineCreateInfo<'_>,
-        p_allocator: *const vk::AllocationCallbacks<'_>,
-        p_pipelines: *mut vk::Pipeline,
-    ) -> vk::Result {
+        p_create_infos: *const VkComputePipelineCreateInfo<'_>,
+        p_allocator: *const VkAllocationCallbacks<'_>,
+        p_pipelines: *mut VkPipeline,
+    ) -> VkResult {
         let r = (self.fp_v1_0().create_compute_pipelines)(
             device,
             pipeline_cache,
@@ -130,7 +130,7 @@ impl Device {
             p_pipelines,
         );
 
-        if r != vk::Result::SUCCESS {
+        if r != VK_SUCCESS {
             return r;
         }
 
@@ -143,14 +143,14 @@ impl Device {
             self.set_private_data(pipelines[i], data);
         }
 
-        vk::Result::SUCCESS
+        VK_SUCCESS
     }
 
     pub unsafe fn hook_destroy_pipeline(
         &self,
-        device: vk::Device,
-        pipeline: vk::Pipeline,
-        p_allocator: *const vk::AllocationCallbacks<'_>,
+        device: VkDevice,
+        pipeline: VkPipeline,
+        p_allocator: *const VkAllocationCallbacks<'_>,
     ) {
         let _ = self.take_private_data(pipeline);
         (self.fp_v1_0().destroy_pipeline)(device, pipeline, p_allocator);

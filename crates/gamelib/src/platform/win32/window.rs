@@ -103,9 +103,9 @@ impl Window {
                 let surface = gpu::get_vulkan_surface(inner.window_handle().unwrap().as_raw());
                 let swapchain = device.create_swapchain(
                     surface,
-                    vk::SurfaceFormatKHR {
+                    VkSurfaceFormatKHR {
                         format: dxgi_to_vk_format(SWAP_CHAIN_FORMAT),
-                        color_space: gpu::vk::ColorSpaceKHR::SRGB_NONLINEAR,
+                        color_space: gpu::VkColorSpaceKHR::SRGB_NONLINEAR,
                     },
                     width,
                     height,

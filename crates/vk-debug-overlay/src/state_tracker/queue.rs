@@ -6,21 +6,21 @@ use std::slice::from_raw_parts;
 impl Device {
     pub unsafe fn hook_get_device_queue(
         &self,
-        device: vk::Device,
+        device: VkDevice,
         queue_family_index: u32,
         queue_index: u32,
-        p_queue: *mut vk::Queue,
+        p_queue: *mut VkQueue,
     ) {
         (self.fp_v1_0().get_device_queue)(device, queue_family_index, queue_index, p_queue);
     }
 
     pub unsafe fn hook_queue_submit(
         &self,
-        queue: vk::Queue,
+        queue: VkQueue,
         submit_count: u32,
-        p_submits: *const vk::SubmitInfo<'_>,
-        fence: vk::Fence,
-    ) -> vk::Result {
+        p_submits: *const VkSubmitInfo<'_>,
+        fence: VkFence,
+    ) -> VkResult {
         let mut sbs = self.submissions.lock();
         let submits = from_raw_parts(p_submits, submit_count as usize);
         for submit in submits {

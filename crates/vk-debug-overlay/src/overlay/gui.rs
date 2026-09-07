@@ -5,8 +5,7 @@ use crate::spirv::{Module, ScalarType, StructType, TypeId, TypeInfo, pretty_prin
 use crate::state_tracker::command::Command;
 use crate::state_tracker::pipeline::ShaderStageInfo;
 use crate::{Device, ModuleId, ModuleMap, SubmissionState};
-use ash::vk;
-use ash::vk::Handle;
+use vulkan::*;
 use color_print::cwrite;
 use imgui::Condition::Always;
 use imgui::{StyleVar, TreeNodeFlags, Ui};
@@ -667,7 +666,7 @@ fn shader_stage_row_ui(
     ctx: &mut CommandContext,
     ui: &Ui,
     st: &mut GuiState,
-    stage: vk::ShaderStageFlags,
+    stage: VkShaderStageFlags,
     ep: &ShaderStageInfo,
 ) {
     let module = &ctx.modules[ep.module];
@@ -715,19 +714,19 @@ fn command_params_ui(ctx: &mut CommandContext, ui: &Ui, st: &mut GuiState) {
         unsafe {
             if let Some(pipeline) = ctx.d.get_private_data_ref(ctx.cmd.key.pipeline) {
                 if let Some(ref vertex) = pipeline.vertex {
-                    shader_stage_row_ui(ctx, ui, st, vk::ShaderStageFlags::VERTEX, vertex);
+                    shader_stage_row_ui(ctx, ui, st, VK_SHADER_STAGE_VERTEX_BIT, vertex);
                 }
                 if let Some(ref mesh) = pipeline.mesh {
-                    shader_stage_row_ui(ctx, ui, st, vk::ShaderStageFlags::MESH_EXT, mesh);
+                    shader_stage_row_ui(ctx, ui, st, VK_SHADER_STAGE_MESH_EXT_BIT, mesh);
                 }
                 if let Some(ref task) = pipeline.task {
-                    shader_stage_row_ui(ctx, ui, st, vk::ShaderStageFlags::TASK_EXT, task);
+                    shader_stage_row_ui(ctx, ui, st, VK_SHADER_STAGE_TASK_EXT_BIT, task);
                 }
                 if let Some(ref fragment) = pipeline.fragment {
-                    shader_stage_row_ui(ctx, ui, st, vk::ShaderStageFlags::FRAGMENT, fragment);
+                    shader_stage_row_ui(ctx, ui, st, VK_SHADER_STAGE_FRAGMENT_BIT, fragment);
                 }
                 if let Some(ref compute) = pipeline.compute {
-                    shader_stage_row_ui(ctx, ui, st, vk::ShaderStageFlags::COMPUTE, compute);
+                    shader_stage_row_ui(ctx, ui, st, VK_SHADER_STAGE_COMPUTE_BIT, compute);
                 }
             }
         }

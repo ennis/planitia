@@ -132,7 +132,7 @@ impl InputState {
 }
 
 impl Device {
-    pub fn update_inputs_for_surface(&self, surface: vk::SurfaceKHR) {
+    pub fn update_inputs_for_surface(&self, surface: VkSurfaceKHR) {
         let Some(hwnd) = get_hwnd_for_surface(surface) else {
             eprintln!("Failed to get HWND for surface {:?}", surface);
             return;

@@ -4,7 +4,7 @@ use crate::{
 };
 use anyhow::{Context, anyhow};
 use color_print::cprintln;
-use sharc::gpu_types::vk;
+use sharc::gpu_types::vulkan::*;
 use slang::DebugInfoLevel;
 use std::cell::OnceCell;
 use std::collections::BTreeMap;
@@ -36,16 +36,16 @@ impl From<slang::Error> for Error {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-fn slang_stage_to_stage_flags(stage: slang::Stage) -> vk::ShaderStageFlags {
+fn slang_stage_to_stage_flags(stage: slang::Stage) -> VkShaderStageFlags {
     match stage {
-        slang::Stage::Vertex => vk::ShaderStageFlags::VERTEX,
-        slang::Stage::Hull => vk::ShaderStageFlags::TESSELLATION_CONTROL,
-        slang::Stage::Domain => vk::ShaderStageFlags::TESSELLATION_EVALUATION,
-        slang::Stage::Geometry => vk::ShaderStageFlags::GEOMETRY,
-        slang::Stage::Fragment => vk::ShaderStageFlags::FRAGMENT,
-        slang::Stage::Compute => vk::ShaderStageFlags::COMPUTE,
-        slang::Stage::Mesh => vk::ShaderStageFlags::MESH_EXT,
-        slang::Stage::Amplification => vk::ShaderStageFlags::TASK_EXT,
+        slang::Stage::Vertex => VK_SHADER_STAGE_VERTEX_BIT,
+        slang::Stage::Hull => VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
+        slang::Stage::Domain => VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
+        slang::Stage::Geometry => VK_SHADER_STAGE_GEOMETRY_BIT,
+        slang::Stage::Fragment => VK_SHADER_STAGE_FRAGMENT_BIT,
+        slang::Stage::Compute => VK_SHADER_STAGE_COMPUTE_BIT,
+        slang::Stage::Mesh => VK_SHADER_STAGE_MESH_BIT_EXT,
+        slang::Stage::Amplification => VK_SHADER_STAGE_TASK_BIT_EXT,
         _ => panic!("unsupported shader stage: {:?}", stage),
     }
 }
@@ -344,7 +344,7 @@ pub(crate) fn compile_slang_module<'a>(
         // infer push constants size and workgroup size from entry points
         let mut push_constants_size = 0;
         let mut workgroup_size = [1u32; 3];
-        let mut stage_flags = vk::ShaderStageFlags::default();
+        let mut stage_flags = VkShaderStageFlags::default();
         //let mut all_params = vec![];
 
         // Collect parameter reflection information:

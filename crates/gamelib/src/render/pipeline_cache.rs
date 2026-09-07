@@ -65,7 +65,7 @@ fn create_graphics_pipeline_from_archive(
                         dst_alpha_blend_factor: blend.dst_alpha_blend_factor,
                         alpha_blend_op: blend.alpha_blend_op,
                     }),
-                    color_write_mask: vk::ColorComponentFlags::RGBA,
+                    color_write_mask: VK_COLOR_COMPONENT_FLAGS_RGBA,
                 }
             })
             .collect()
@@ -75,27 +75,27 @@ fn create_graphics_pipeline_from_archive(
     let mut fragment_shader = None;
     let mut mesh_shader = None;
     let mut task_shader = None;
-    let mut stage_flags = vk::ShaderStageFlags::empty();
+    let mut stage_flags = VkShaderStageFlags::empty();
 
     for shader in &archive[entry.shaders] {
         let ep_name = shader.entry_point.as_str();
         let spirv = &archive[module.spirv];
         match shader.stage {
-            vk::ShaderStageFlags::VERTEX => {
+            VK_SHADER_STAGE_VERTEX_BIT => {
                 vertex_shader = Some(get_shader_entry_point(gpu::ShaderStage::Vertex, spirv, ep_name));
-                stage_flags |= vk::ShaderStageFlags::VERTEX;
+                stage_flags |= VK_SHADER_STAGE_VERTEX_BIT;
             }
-            vk::ShaderStageFlags::FRAGMENT => {
+            VK_SHADER_STAGE_FRAGMENT_BIT => {
                 fragment_shader = Some(get_shader_entry_point(gpu::ShaderStage::Fragment, spirv, ep_name));
-                stage_flags |= vk::ShaderStageFlags::FRAGMENT;
+                stage_flags |= VK_SHADER_STAGE_FRAGMENT_BIT;
             }
-            vk::ShaderStageFlags::MESH_EXT => {
+            VK_SHADER_STAGE_MESH_EXT_BIT => {
                 mesh_shader = Some(get_shader_entry_point(gpu::ShaderStage::Mesh, spirv, ep_name));
-                stage_flags |= vk::ShaderStageFlags::MESH_EXT;
+                stage_flags |= VK_SHADER_STAGE_MESH_EXT_BIT;
             }
-            vk::ShaderStageFlags::TASK_EXT => {
+            VK_SHADER_STAGE_TASK_EXT_BIT => {
                 task_shader = Some(get_shader_entry_point(gpu::ShaderStage::Task, spirv, ep_name));
-                stage_flags |= vk::ShaderStageFlags::TASK_EXT;
+                stage_flags |= VK_SHADER_STAGE_TASK_EXT_BIT;
             }
             _ => {
                 panic!("unsupported shader stage in graphics pipeline: {:?}", shader.stage);
@@ -103,7 +103,7 @@ fn create_graphics_pipeline_from_archive(
         }
     }
 
-    let pre_rasterization_shaders = if stage_flags.contains(vk::ShaderStageFlags::MESH_EXT) {
+    let pre_rasterization_shaders = if stage_flags.contains(VK_SHADER_STAGE_MESH_EXT_BIT) {
         PreRasterizationShaders::MeshShading {
             task: task_shader,
             mesh: mesh_shader.expect("mesh shader missing in graphics pipeline"),

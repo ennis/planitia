@@ -1,6 +1,6 @@
 //! GPU bump allocator.
 use crate::helper::{Buffer, DeviceHelper};
-use ash::vk;
+use vulkan::*;
 use std::alloc::Layout;
 
 const ALLOC_ALIGNMENT: usize = 256;
@@ -10,12 +10,10 @@ const TEMP_BUFFER_SIZE: usize = 128 * 1024; // Allocate 128 KB chunks
 const DEDICATED_BUFFER_THRESHOLD_SIZE: usize = 4 * 1024; // Allocate dedicated buffers above 4 KB
 
 /// Usage flags of temporary buffers.
-const TEMP_BUFFER_USAGE: vk::BufferUsageFlags = vk::BufferUsageFlags::from_raw(
-    vk::BufferUsageFlags::TRANSFER_SRC.as_raw()
-        | vk::BufferUsageFlags::TRANSFER_DST.as_raw()
-        | vk::BufferUsageFlags::STORAGE_BUFFER.as_raw()
-        | vk::BufferUsageFlags::UNIFORM_BUFFER.as_raw(),
-);
+const TEMP_BUFFER_USAGE: VkBufferUsageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+        | VK_BUFFER_USAGE_TRANSFER_DST_BIT
+        | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+        | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -50,10 +48,10 @@ pub struct BumpAllocator {
 
 #[derive(Copy, Clone)]
 pub struct Alloc {
-    pub buffer: vk::Buffer,
+    pub buffer: VkBuffer,
     pub offset: usize,
     pub host_addr: *mut u8,
-    pub dev_addr: vk::DeviceAddress,
+    pub dev_addr: VkDeviceAddress,
 }
 
 unsafe impl Send for Alloc {}

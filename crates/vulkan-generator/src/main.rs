@@ -719,52 +719,133 @@ fn gen_vk_dispatch_table(
     Ok(())
 }
 
+fn is_pnext_out_struct(tymap: &TypeMap, rty: &str) -> bool {
+    tymap
+        .get(rty)
+        .map(|tyinfo| match tyinfo.category {
+            Category::Struct { base_out_struct: true, .. } => true,
+            _ => false,
+        })
+        .unwrap_or(false)
+}
+
+/*
+/// Some objects are passed as non-const pointers, which make them look like outparams if passed
+/// as the last parameter, but they aren't.
+fn looks_like_outparam_but_isnt(rty: &str) -> bool {
+    match rty {
+        "wl_display" => true,   // vkGetPhysicalDeviceWaylandPresentationSupportKHR
+        "ubm_device" => true,
+        "IDirectFB" => true,
+
+        _ => false,
+    }
+}*/
+
+fn is_outparam_blacklisted(cmd: &str) -> bool {
+    static RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^vkGetPhysicalDevice(\w*)PresentationSupport([A-Z0-9]*)$").unwrap());
+    RE.is_match(cmd)
+}
+
 fn gen_command_wrapper(out: &mut Writer, cmd: &CommandInfo, tymap: &TypeMap) -> io::Result<()> {
     let nparams = cmd.func.params.len();
     let vk_cmd_name = &cmd.name;
     let cmd_name = vk_cmd_name.strip_prefix("vk").unwrap();
     let return_type = cmd.func.proto.rust_type(true);
     writeln!(out, "#[inline(always)]")?;
-    let transform_outparam_to_result = {
-        nparams > 0 && {
-            let last = cmd.func.params.last().unwrap();
-            let outparam_ty = last.rust_type(false);
+
+    // check for outparams
+    let mut noutp = 0;
+
+    if !is_outparam_blacklisted(&cmd.name) {
+        for i in (0..cmd.func.params.len()).rev() {
+            let param = &cmd.func.params[i];
+            let ty = param.rust_type(false);
             // must be a pointer
-            outparam_ty != "*mut c_void"
-                && return_type == "VkResult"
-                && last.len_annotation.is_none()
-                && if let Some(rty) = outparam_ty.strip_prefix("*mut ") {
-                    // must not be a struct with pNext output
-                    tymap
-                        .get(rty)
-                        .map(|tyinfo| match tyinfo.category {
-                            Category::Struct { base_out_struct: true, .. } => false,
-                            _ => true,
-                        })
-                        .unwrap_or(true)
-                } else {
-                    false
-                }
+            if ty != "*mut c_void"
+                //&& return_type == "VkResult"
+                && param.len_annotation.is_none()
+                && let Some(rty) = ty.strip_prefix("*mut ")
+                && !is_pnext_out_struct(tymap, rty)
+            // && !looks_like_outparam_but_isnt(rty)
+            {
+                // valid outparam
+                noutp += 1;
+                continue;
+            }
+            break;
         }
-    };
-    if transform_outparam_to_result {
-        let last_param = cmd.func.params.last().unwrap();
-        let outparam_name = &last_param.name;
-        let outparam_type = last_param.rust_type(false).strip_prefix("*mut ").unwrap().to_string();
+    }
+
+    if noutp > 0 {
         write!(out, "pub unsafe fn {cmd_name}(&self")?;
-        for param in cmd.func.params.iter().take(nparams - 1) {
+        for param in cmd.func.params.iter().take(nparams - noutp) {
             write!(out, ", {}: {}", sanitize_ident(&param.name), param.rust_type(false))?;
         }
-        writeln!(out, ") -> Result<{outparam_type}, VkResult> {{")?;
-        indent(out);
-        writeln!(out, "let mut {outparam_name} = MaybeUninit::uninit();")?;
-        write!(out, "unsafe {{ (self.{cmd_name})(")?;
-        for param in cmd.func.params.iter().take(nparams - 1) {
-            write!(out, "{},", sanitize_ident(&param.name))?;
+        write!(out, ")")?;
+
+        let outparams = &cmd.func.params[nparams - noutp..];
+        //let outparam_name = &last_param.name;
+        let outparam_type = if noutp > 1 {
+            format!(
+                "({})",
+                outparams
+                    .iter()
+                    .map(|p| p.rust_type(false).strip_prefix("*mut ").unwrap().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        } else {
+            outparams[0].rust_type(false).strip_prefix("*mut ").unwrap().to_string()
+        };
+
+        if return_type == "VkResult" {
+            // wrap in Result<T, VkResult>
+            writeln!(out, " -> Result<{outparam_type}, VkResult> {{")?;
+            indent(out);
+            writeln!(out, "let mut __result = MaybeUninit::uninit();")?;
+            write!(out, "unsafe {{ (self.{cmd_name})(")?;
+            for param in cmd.func.params.iter().take(nparams - noutp) {
+                write!(out, "{},", sanitize_ident(&param.name))?;
+            }
+            if noutp > 1 {
+                for i in 0..noutp {
+                    write!(out, "&raw mut __result.as_mut_ptr().{i},")?;
+                }
+            } else {
+                write!(out, "__result.as_mut_ptr()")?;
+            }
+            writeln!(out, ").assume_init_on_success(__result) }}")?;
+            dedent(out);
+            writeln!(out, "}}")?;
+        } else {
+            // direct return
+            assert!(
+                return_type == "()",
+                "expected `void` or `VkResult` return type for command with outparams, got `{}` for outparams `{}`",
+                return_type,
+                outparam_type
+            );
+            writeln!(out, " -> {outparam_type} {{")?;
+            indent(out);
+            writeln!(out, "let mut __result = MaybeUninit::uninit();")?;
+            write!(out, "unsafe {{ (self.{cmd_name})(")?;
+            for param in cmd.func.params.iter().take(nparams - noutp) {
+                write!(out, "{},", sanitize_ident(&param.name))?;
+            }
+            if noutp > 1 {
+                for i in 0..noutp {
+                    write!(out, "&raw mut __result.as_mut_ptr().{i},")?;
+                }
+            } else {
+                write!(out, "__result.as_mut_ptr()")?;
+            }
+            write!(out, ");")?;
+            writeln!(out, "__result.assume_init() }}")?;
+            dedent(out);
+            writeln!(out, "}}")?;
         }
-        writeln!(out, "{outparam_name}.as_mut_ptr()).assume_init_on_success({outparam_name}) }}")?;
-        dedent(out);
-        writeln!(out, "}}")?;
     } else {
         write!(out, "pub unsafe fn {cmd_name}(&self")?;
         for param in cmd.func.params.iter() {

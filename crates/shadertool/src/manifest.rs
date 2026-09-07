@@ -2,8 +2,8 @@ use crate::get_file_mtime;
 use crate::manifest::ManifestError::{InvalidType, MissingField};
 use anyhow::{Context, anyhow};
 use log::error;
-use sharc::gpu_types::vk::PolygonMode;
-use sharc::gpu_types::{ColorBlendEquation, ColorTargetState, DepthStencilState, RasterizationState, vk};
+use sharc::gpu_types::vulkan::*;
+use sharc::gpu_types::{ColorBlendEquation, ColorTargetState, DepthStencilState, RasterizationState};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use toml::Value as TomlValue;
@@ -90,7 +90,7 @@ fn get_image_usages(usages: &TomlValue) -> Result<gpu::ImageUsage, Error> {
 /*
 #[derive(Clone, Default)]
 pub struct Resource {
-    pub format: vk::Format,
+    pub format: VkFormat,
     pub length: Option<u32>,
     pub width: Option<u32>,
     pub height: Option<u32>,
@@ -489,42 +489,42 @@ trait TomlExt {
     }
 }
 
-static POLYGON_MODES: &[(&str, PolygonMode)] =
-    &[("fill", PolygonMode::FILL), ("line", PolygonMode::LINE), ("point", PolygonMode::POINT)];
+static POLYGON_MODES: &[(&str, VkPolygonMode)] =
+    &[("fill", VK_POLYGON_MODE_FILL), ("line", VK_POLYGON_MODE_LINE), ("point", VK_POLYGON_MODE_POINT)];
 
-static CULL_MODES: &[(&str, vk::CullModeFlags)] = &[
-    ("none", vk::CullModeFlags::NONE),
-    ("front", vk::CullModeFlags::FRONT),
-    ("back", vk::CullModeFlags::BACK),
-    ("front_and_back", vk::CullModeFlags::FRONT_AND_BACK),
+static CULL_MODES: &[(&str, VkCullModeFlags)] = &[
+    ("none", VK_CULL_MODE_NONE),
+    ("front", VK_CULL_MODE_FRONT_BIT),
+    ("back", VK_CULL_MODE_BACK_BIT),
+    ("front_and_back", VK_CULL_MODE_FRONT_AND_BACK),
 ];
 
-static FORMATS: &[(&str, vk::Format)] = &[
-    ("RGBA8", vk::Format::R8G8B8A8_UNORM),
-    ("RGBA8UI", vk::Format::R8G8B8A8_UINT),
-    ("RGBA16UI", vk::Format::R16G16B16A16_UINT),
-    ("RGB10_A2", vk::Format::A2B10G10R10_UNORM_PACK32),
-    ("R32F", vk::Format::R32_SFLOAT),
-    ("RG32F", vk::Format::R32G32_SFLOAT),
-    ("RGBA32F", vk::Format::R32G32B32A32_SFLOAT),
-    ("D32F", vk::Format::D32_SFLOAT),
-    ("D32F_S8UI", vk::Format::D32_SFLOAT_S8_UINT),
+static FORMATS: &[(&str, VkFormat)] = &[
+    ("RGBA8", VK_FORMAT_R8G8B8A8_UNORM),
+    ("RGBA8UI", VK_FORMAT_R8G8B8A8_UINT),
+    ("RGBA16UI", VK_FORMAT_R16G16B16A16_UINT),
+    ("RGB10_A2", VK_FORMAT_A2B10G10R10_UNORM_PACK32),
+    ("R32F", VK_FORMAT_R32_SFLOAT),
+    ("RG32F", VK_FORMAT_R32G32_SFLOAT),
+    ("RGBA32F", VK_FORMAT_R32G32B32A32_SFLOAT),
+    ("D32F", VK_FORMAT_D32_SFLOAT),
+    ("D32F_S8UI", VK_FORMAT_D32_SFLOAT_S8_UINT),
 ];
 
-static COMPARE_OPS: &[(&str, vk::CompareOp)] =
-    &[("always", vk::CompareOp::ALWAYS), ("less", vk::CompareOp::LESS), ("lequal", vk::CompareOp::LESS_OR_EQUAL)];
+static COMPARE_OPS: &[(&str, VkCompareOp)] =
+    &[("always", VK_COMPARE_OP_ALWAYS), ("less", VK_COMPARE_OP_LESS), ("lequal", VK_COMPARE_OP_LESS_OR_EQUAL)];
 
-static BLEND_FACTORS: &[(&str, vk::BlendFactor)] = &[
-    ("zero", vk::BlendFactor::ZERO),
-    ("one", vk::BlendFactor::ONE),
-    ("src_alpha", vk::BlendFactor::SRC_ALPHA),
-    ("one_minus_src_alpha", vk::BlendFactor::ONE_MINUS_SRC_ALPHA),
+static BLEND_FACTORS: &[(&str, VkBlendFactor)] = &[
+    ("zero", VK_BLEND_FACTOR_ZERO),
+    ("one", VK_BLEND_FACTOR_ONE),
+    ("src_alpha", VK_BLEND_FACTOR_SRC_ALPHA),
+    ("one_minus_src_alpha", VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA),
 ];
 
-static BLEND_OPS: &[(&str, vk::BlendOp)] = &[
-    ("add", vk::BlendOp::ADD),
-    ("subtract", vk::BlendOp::SUBTRACT),
-    ("reverse_subtract", vk::BlendOp::REVERSE_SUBTRACT),
+static BLEND_OPS: &[(&str, VkBlendOp)] = &[
+    ("add", VK_BLEND_OP_ADD),
+    ("subtract", VK_BLEND_OP_SUBTRACT),
+    ("reverse_subtract", VK_BLEND_OP_REVERSE_SUBTRACT),
 ];
 
 impl TomlExt for toml::Value {
@@ -627,40 +627,40 @@ fn read_rasterizer_state(toml: &TomlValue, out: &mut RasterizationState) -> Resu
     Ok(())
 }
 /*
-fn get_format(fmtstr: &str) -> Option<vk::Format> {
+fn get_format(fmtstr: &str) -> Option<VkFormat> {
     match fmtstr {
-        "RGBA8" => Some(vk::Format::R8G8B8A8_UNORM),
-        "RGBA8UI" => Some(vk::Format::R8G8B8A8_UINT),
-        "RGBA16UI" => Some(vk::Format::R16G16B16A16_UINT),
-        "RGB10_A2" => Some(vk::Format::A2B10G10R10_UNORM_PACK32),
-        "R32F" => Some(vk::Format::R32_SFLOAT),
-        "RG32F" => Some(vk::Format::R32G32_SFLOAT),
-        "RGBA32F" => Some(vk::Format::R32G32B32A32_SFLOAT),
-        "D32F" => Some(vk::Format::D32_SFLOAT),
-        "D32F_S8UI" => Some(vk::Format::D32_SFLOAT_S8_UINT),
+        "RGBA8" => Some(VK_FORMAT_R8G8B8A8_UNORM),
+        "RGBA8UI" => Some(VK_FORMAT_R8G8B8A8_UINT),
+        "RGBA16UI" => Some(VK_FORMAT_R16G16B16A16_UINT),
+        "RGB10_A2" => Some(VK_FORMAT_A2B10G10R10_UNORM_PACK32),
+        "R32F" => Some(VK_FORMAT_R32_SFLOAT),
+        "RG32F" => Some(VK_FORMAT_R32G32_SFLOAT),
+        "RGBA32F" => Some(VK_FORMAT_R32G32B32A32_SFLOAT),
+        "D32F" => Some(VK_FORMAT_D32_SFLOAT),
+        "D32F_S8UI" => Some(VK_FORMAT_D32_SFLOAT_S8_UINT),
         _ => {
             None
         }
     }
 }
 
-fn get_blend_factor(factor_str: &str) -> Option<vk::BlendFactor> {
+fn get_blend_factor(factor_str: &str) -> Option<VkBlendFactor> {
     match factor_str {
-        "zero" => Some(vk::BlendFactor::ZERO),
-        "one" => Some(vk::BlendFactor::ONE),
-        "src_alpha" => Some(vk::BlendFactor::SRC_ALPHA),
-        "one_minus_src_alpha" => Some(vk::BlendFactor::ONE_MINUS_SRC_ALPHA),
+        "zero" => Some(VK_BLEND_FACTOR_ZERO),
+        "one" => Some(VK_BLEND_FACTOR_ONE),
+        "src_alpha" => Some(VK_BLEND_FACTOR_SRC_ALPHA),
+        "one_minus_src_alpha" => Some(VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA),
         _ => {
             None
         }
     }
 }
 
-fn get_blend_op(op_str: &str) -> Option<vk::BlendOp> {
+fn get_blend_op(op_str: &str) -> Option<VkBlendOp> {
     match op_str {
-        "add" => Some(vk::BlendOp::ADD),
-        "subtract" => Some(vk::BlendOp::SUBTRACT),
-        "reverse_subtract" => Some(vk::BlendOp::REVERSE_SUBTRACT),
+        "add" => Some(VK_BLEND_OP_ADD),
+        "subtract" => Some(VK_BLEND_OP_SUBTRACT),
+        "reverse_subtract" => Some(VK_BLEND_OP_REVERSE_SUBTRACT),
         _ => {
             None
         }
@@ -690,20 +690,20 @@ fn read_blend(toml: &TomlValue) -> anyhow::Result<Option<ColorBlendEquation>> {
         match str {
             "disabled" => Ok(None),
             "over" => Ok(Some(ColorBlendEquation {
-                src_color_blend_factor: vk::BlendFactor::SRC_ALPHA,
-                dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
-                color_blend_op: vk::BlendOp::ADD,
-                src_alpha_blend_factor: vk::BlendFactor::ONE,
-                dst_alpha_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
-                alpha_blend_op: vk::BlendOp::ADD,
+                src_color_blend_factor: VK_BLEND_FACTOR_SRC_ALPHA,
+                dst_color_blend_factor: VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                color_blend_op: VK_BLEND_OP_ADD,
+                src_alpha_blend_factor: VK_BLEND_FACTOR_ONE,
+                dst_alpha_blend_factor: VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                alpha_blend_op: VK_BLEND_OP_ADD,
             })),
             "over_premultiplied" => Ok(Some(ColorBlendEquation {
-                src_color_blend_factor: vk::BlendFactor::ONE,
-                dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
-                color_blend_op: vk::BlendOp::ADD,
-                src_alpha_blend_factor: vk::BlendFactor::ONE,
-                dst_alpha_blend_factor: vk::BlendFactor::ZERO,
-                alpha_blend_op: vk::BlendOp::ADD,
+                src_color_blend_factor: VK_BLEND_FACTOR_ONE,
+                dst_color_blend_factor: VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                color_blend_op: VK_BLEND_OP_ADD,
+                src_alpha_blend_factor: VK_BLEND_FACTOR_ONE,
+                dst_alpha_blend_factor: VK_BLEND_FACTOR_ZERO,
+                alpha_blend_op: VK_BLEND_OP_ADD,
             })),
             _ => Err(anyhow!("unknown predefined blend mode").context("in blend")),
         }

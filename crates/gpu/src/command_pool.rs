@@ -5,7 +5,7 @@ use std::ptr;
 use vulkan::*;
 
 
-/// Allocates command buffers in a `vk::CommandPool` and allows re-use of freed command buffers.
+/// Allocates command buffers in a `VkCommandPool` and allows re-use of freed command buffers.
 #[derive(Debug)]
 struct ThreadLocalCommandPool {
     queue_family: u32,

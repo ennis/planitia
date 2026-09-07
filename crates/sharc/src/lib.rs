@@ -17,7 +17,8 @@
 
 pub mod reflection;
 
-use gpu_types::{ImageUsage, vk, RasterizationState};
+use gpu_types::{ImageUsage, RasterizationState};
+use gpu_types::vulkan::*;
 use log::{debug, warn};
 use std::borrow::Cow;
 use std::ops::Deref;
@@ -93,7 +94,7 @@ pub enum ImageResourceSize {
 #[derive(Copy, Clone)]
 pub struct ImageResourceDesc {
     pub name: ZString<32>,
-    pub format: vk::Format,
+    pub format: VkFormat,
     pub usage: ImageUsage,
     pub size: ImageResourceSize,
 }
@@ -146,7 +147,7 @@ pub struct RootParamInfo {
     ///
     /// For array types, this is the type of array elements.
     /// For structs (i.e. non-scalar, non-vector, non-array types), this is UNDEFINED.
-    pub format: vk::Format,
+    pub format: VkFormat,
 }
 
 /// Describes a shader pipeline (graphics or compute).
@@ -189,7 +190,7 @@ impl PipelineKind {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Shader {
-    pub stage: vk::ShaderStageFlags,
+    pub stage: VkShaderStageFlags,
     pub entry_point: ZString<64>,
 }
 
@@ -240,8 +241,8 @@ pub struct ComputePipeline {
 #[derive(Clone, Copy, Default)]
 pub struct DepthStencilState {
     pub enable: bool,
-    pub format: vk::Format,
-    pub depth_compare_op: vk::CompareOp,
+    pub format: VkFormat,
+    pub depth_compare_op: VkCompareOp,
     pub depth_write_enable: bool,
 }*/
 
@@ -249,19 +250,19 @@ pub struct DepthStencilState {
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct ColorBlendEquation {
-    pub src_color_blend_factor: vk::BlendFactor,
-    pub dst_color_blend_factor: vk::BlendFactor,
-    pub color_blend_op: vk::BlendOp,
-    pub src_alpha_blend_factor: vk::BlendFactor,
-    pub dst_alpha_blend_factor: vk::BlendFactor,
-    pub alpha_blend_op: vk::BlendOp,
+    pub src_color_blend_factor: VkBlendFactor,
+    pub dst_color_blend_factor: VkBlendFactor,
+    pub color_blend_op: VkBlendOp,
+    pub src_alpha_blend_factor: VkBlendFactor,
+    pub dst_alpha_blend_factor: VkBlendFactor,
+    pub alpha_blend_op: VkBlendOp,
 }*/
 
 /*
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct ColorTarget {
-    pub format: vk::Format,
+    pub format: VkFormat,
     pub blend: Option<ColorBlendEquation>,
 }*/
 
@@ -446,14 +447,14 @@ mod tests {
 
         let color_targets = {
             let color_targets = &[writer.write(&ColorTargetState {
-                format: vk::Format::R8G8B8A8_UNORM,
+                format: VK_FORMAT_R8G8B8A8_UNORM,
                 blend_equation: Some(ColorBlendEquation {
-                    src_color_blend_factor: vk::BlendFactor::SRC_ALPHA,
-                    dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
-                    color_blend_op: vk::BlendOp::ADD,
-                    src_alpha_blend_factor: vk::BlendFactor::ONE,
-                    dst_alpha_blend_factor: vk::BlendFactor::ZERO,
-                    alpha_blend_op: vk::BlendOp::ADD,
+                    src_color_blend_factor: VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR,
+                    dst_color_blend_factor: VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                    color_blend_op: VK_BLEND_OP_ADD,
+                    src_alpha_blend_factor: VK_BLEND_FACTOR_ONE,
+                    dst_alpha_blend_factor: VK_BLEND_FACTOR_ZERO,
+                    alpha_blend_op: VK_BLEND_OP_ADD,
                 }),
                 ..
             })];
@@ -467,15 +468,15 @@ mod tests {
                     push_constants_size: 128,
                     // just some example state
                     rasterization: RasterizationState {
-                        polygon_mode: PolygonMode::FILL,
-                        cull_mode: CullModeFlags::BACK,
+                        polygon_mode: VK_POLYGON_MODE_FILL,
+                        cull_mode: VK_CULL_MODE_BACK_BIT,
                         front_face: Default::default(),
                         depth_clamp_enable: false,
                         conservative_rasterization_mode: Default::default(),
                     },
                     depth_stencil: Some(gpu_types::DepthStencilState {
-                        format: vk::Format::D32_SFLOAT,
-                        depth_compare_op: vk::CompareOp::ALWAYS,
+                        format: VK_FORMAT_D32_SFLOAT,
+                        depth_compare_op: VK_COMPARE_OP_ALWAYS,
                         depth_write_enable: true,
                         stencil_state: Default::default(),
                     }),

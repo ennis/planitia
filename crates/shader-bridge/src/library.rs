@@ -27,7 +27,7 @@ pub struct RootParamInfo {
     pub offset: u32,
     pub size: u32,
     /// Vulkan format of the root parameter.
-    pub format: vk::Format,
+    pub format: VkFormat,
     /// Optional render world binding associated with the root parameter.
     pub render_world_binding: Option<String>,
 }

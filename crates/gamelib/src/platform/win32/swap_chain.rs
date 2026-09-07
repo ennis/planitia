@@ -5,6 +5,8 @@ use gpu::{Device, SyncWait, vk};
 use log::warn;
 use std::cell::Cell;
 use std::mem::ManuallyDrop;
+use std::ptr;
+use gpu::vulkan::*;
 use windows::Win32::Foundation::{CloseHandle, GENERIC_ALL, HANDLE, HWND};
 use windows::Win32::Graphics::Direct3D12::{
     D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_FENCE_FLAG_SHARED, D3D12_RESOURCE_BARRIER, D3D12_RESOURCE_BARRIER_0,
@@ -37,7 +39,7 @@ pub(super) struct DxgiVulkanInteropSwapChain {
 
     // Fence state for synchronizing between D3D12 presentation and vulkan
     /// Vulkan side of the presentation fence
-    pub(super) fence_semaphore: vk::Semaphore,
+    pub(super) fence_semaphore: VkSemaphore,
     /// D3D12 side of the presentation fence
     pub(super) fence: ID3D12Fence,
     /// Fence shared handle (imported to vulkan)
@@ -77,7 +79,8 @@ impl Drop for DxgiVulkanInteropSwapChain {
             // Release the swap chain resources
             // FIXME: there should be a RAII wrapper for semaphores probably
             gpu::wait_idle();
-            gpu::Device::instance().raw().destroy_semaphore(self.fence_semaphore, None);
+            let device = gpu::Device::instance();
+            device.vk.DestroySemaphore(device.vkd, self.fence_semaphore, ptr::null());
             CloseHandle(self.fence_shared_handle).unwrap();
             for img in self.images.iter() {
                 CloseHandle(img.shared_handle).unwrap();
@@ -94,6 +97,7 @@ impl DxgiVulkanInteropSwapChain {
         usage: gpu::ImageUsage,
     ) -> DxgiVulkanInteropSwapChain {
         let gfx = GraphicsContext::current();
+        let device = gpu::Device::instance();
         let vk_format = dxgi_to_vk_format(format);
 
         // create the DXGI swap chain
@@ -120,7 +124,7 @@ impl DxgiVulkanInteropSwapChain {
                     gfx.d3d_device.CreateSharedHandle(&swap_chain_buffer, None, GENERIC_ALL.0, None).unwrap();
 
                 // import the buffer to a vulkan image with memory imported from the shared handle
-                let imported_image = Device::instance().create_imported_image_win32(
+                let imported_image = device.create_imported_image_win32(
                     &gpu::ImageCreateInfo {
                         memory_location: gpu::MemoryLocation::GpuOnly,
                         type_: gpu::ImageType::Image2D,
@@ -136,7 +140,7 @@ impl DxgiVulkanInteropSwapChain {
                     },
                     Default::default(),
                     Default::default(),
-                    vk::ExternalMemoryHandleTypeFlags::D3D12_RESOURCE_KHR,
+                    VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D12_RESOURCE_BIT,
                     shared_handle.0 as vk::HANDLE,
                     None,
                 );
@@ -192,9 +196,9 @@ impl DxgiVulkanInteropSwapChain {
             let fence = gfx.d3d_device.CreateFence(0, D3D12_FENCE_FLAG_SHARED).unwrap();
             let fence_shared_handle = gfx.d3d_device.CreateSharedHandle(&fence, None, GENERIC_ALL.0, None).unwrap();
             let fence_semaphore = gpu::Device::instance().create_imported_semaphore_win32(
-                vk::SemaphoreImportFlags::empty(),
-                vk::ExternalSemaphoreHandleTypeFlags::D3D12_FENCE,
-                fence_shared_handle.0 as vk::HANDLE,
+                0,
+                VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D12_FENCE_BIT,
+                vulkan::HANDLE(fence_shared_handle.0),
                 None,
             );
 
@@ -365,12 +369,12 @@ fn create_swap_chain(
     }
 }
 
-pub(super) fn dxgi_to_vk_format(format: DXGI_FORMAT) -> vk::Format {
+pub(super) fn dxgi_to_vk_format(format: DXGI_FORMAT) -> VkFormat {
     match format {
-        DXGI_FORMAT_R8G8B8A8_TYPELESS => vk::Format::R8G8B8A8_UNORM,
-        DXGI_FORMAT_R8G8B8A8_UNORM => vk::Format::R8G8B8A8_UNORM,
-        DXGI_FORMAT_B8G8R8A8_UNORM => vk::Format::B8G8R8A8_UNORM,
-        DXGI_FORMAT_R16G16B16A16_FLOAT => vk::Format::R16G16B16A16_SFLOAT,
+        DXGI_FORMAT_R8G8B8A8_TYPELESS => VK_FORMAT_R8G8B8A8_UNORM,
+        DXGI_FORMAT_R8G8B8A8_UNORM => VK_FORMAT_R8G8B8A8_UNORM,
+        DXGI_FORMAT_B8G8R8A8_UNORM => VK_FORMAT_B8G8R8A8_UNORM,
+        DXGI_FORMAT_R16G16B16A16_FLOAT => VK_FORMAT_R16G16B16A16_SFLOAT,
         _ => panic!("Unsupported DXGI format: {:?}", format),
     }
 }

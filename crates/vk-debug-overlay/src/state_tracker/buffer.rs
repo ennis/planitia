@@ -2,44 +2,44 @@ use crate::helper::HasPrivateData;
 use crate::Device;
 use ash::vk;
 use std::slice;
-use ash::vk::Handle;
+use ash::VkHandle;
 
 pub struct BufferData {
     pub  name: String,
-    pub device_address: vk::DeviceAddress,
+    pub device_address: VkDeviceAddress,
     pub size: u64,
 }
 
-impl HasPrivateData for vk::Buffer {
+impl HasPrivateData for VkBuffer {
     type PrivateData = BufferData;
 }
 
 impl Device {
     pub unsafe fn hook_create_buffer(
         &self,
-        device: vk::Device,
-        p_create_info: *const vk::BufferCreateInfo,
-        p_allocator: *const vk::AllocationCallbacks,
-        p_buffer: *mut vk::Buffer,
-    ) -> vk::Result {
+        device: VkDevice,
+        p_create_info: *const VkBufferCreateInfo,
+        p_allocator: *const VkAllocationCallbacks,
+        p_buffer: *mut VkBuffer,
+    ) -> VkResult {
         let r = (self.fp_v1_0().create_buffer)(device, p_create_info, p_allocator, p_buffer);
-        if r != vk::Result::SUCCESS {
+        if r != VK_SUCCESS {
             return r;
         }
 
         self.set_private_data(*p_buffer, BufferData { name: format!("Buffer_{:016x}", (*p_buffer).as_raw()), device_address: 0, size: (*p_create_info).size });
-        vk::Result::SUCCESS
+        VK_SUCCESS
     }
 
 
     pub unsafe fn hook_bind_buffer_memory_2(
         &self,
-        device: vk::Device,
+        device: VkDevice,
         bind_info_count: u32,
-        p_bind_infos: *const vk::BindBufferMemoryInfo<'_>,
-    ) -> vk::Result {
+        p_bind_infos: *const VkBindBufferMemoryInfo<'_>,
+    ) -> VkResult {
         let r = (self.fp_v1_1().bind_buffer_memory2)(device, bind_info_count, p_bind_infos);
-        if r != vk::Result::SUCCESS {
+        if r != VkResult::SUCCESS {
             return r;
         }
 
@@ -48,30 +48,30 @@ impl Device {
             self.register_buffer_address_range(bind_info.buffer);
         }
 
-        vk::Result::SUCCESS
+        VK_SUCCESS
     }
 
     pub unsafe fn hook_bind_buffer_memory(
         &self,
-        device: vk::Device,
-        buffer: vk::Buffer,
-        memory: vk::DeviceMemory,
-        memory_offset: vk::DeviceSize,
-    ) -> vk::Result {
+        device: VkDevice,
+        buffer: VkBuffer,
+        memory: VkDeviceMemory,
+        memory_offset: VkDeviceSize,
+    ) -> VkResult {
         let r = (self.fp_v1_0().bind_buffer_memory)(device, buffer, memory, memory_offset);
-        if r != vk::Result::SUCCESS {
+        if r != VK_SUCCESS {
             return r;
         }
 
         self.register_buffer_address_range(buffer);
-        vk::Result::SUCCESS
+        VK_SUCCESS
     }
 
     pub unsafe fn hook_destroy_buffer(
         &self,
-        device: vk::Device,
-        buffer: vk::Buffer,
-        p_allocator: *const vk::AllocationCallbacks,
+        device: VkDevice,
+        buffer: VkBuffer,
+        p_allocator: *const VkAllocationCallbacks,
     ) {
         let buf_data = self.take_private_data(buffer).unwrap();
 

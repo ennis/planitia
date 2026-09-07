@@ -1,10 +1,9 @@
 //! Helper utilities.
 use crate::dispatch::DeviceDispatch;
-use ash::prelude::VkResult;
-use ash::vk;
+use vulkan::*;
 use std::ffi::{c_void, CStr};
 use std::ops::Deref;
-use std::ptr;
+use std::{mem, ptr};
 use std::ptr::NonNull;
 
 // Implementation detail of shader_module
@@ -30,17 +29,17 @@ pub(crate) use include_bytes_as_u32;
 #[derive(Copy, Clone, Default)]
 pub struct Image {
     pub image: VkImage,
-    pub image_view: vk::ImageView,
-    pub memory: vk::DeviceMemory,
+    pub image_view: VkImageView,
+    pub memory: VkDeviceMemory,
 }
 
 #[derive(Default)]
 pub struct Buffer {
-    pub buffer: vk::Buffer,
-    pub memory: vk::DeviceMemory,
+    pub buffer: VkBuffer,
+    pub memory: VkDeviceMemory,
     pub ptr: *mut c_void,
     pub size: usize,
-    pub device_address: vk::DeviceAddress,
+    pub device_address: VkDeviceAddress,
 }
 
 unsafe impl Send for Buffer {}
@@ -48,38 +47,38 @@ unsafe impl Sync for Buffer {}
 
 #[derive(Copy, Clone, Default)]
 pub struct Pipeline {
-    pub pipeline: vk::Pipeline,
-    pub pipeline_layout: vk::PipelineLayout,
-    pub descriptor_set_layout: vk::DescriptorSetLayout,
+    pub pipeline: VkPipeline,
+    pub pipeline_layout: VkPipelineLayout,
+    pub descriptor_set_layout: VkDescriptorSetLayout,
 }
 
 pub struct GraphicsPipelineHelperCreateInfo<'a> {
     pub spirv: &'a [u32],
     pub vertex_entry: &'a CStr,
     pub fragment_entry: &'a CStr,
-    pub vertex_attributes: &'a [vk::VertexInputAttributeDescription],
+    pub vertex_attributes: &'a [VkVertexInputAttributeDescription],
     pub vertex_stride: usize,
-    pub bindings: &'a [vk::DescriptorSetLayoutBinding<'a>],
+    pub bindings: &'a [VkDescriptorSetLayoutBinding],
     pub push_constants_size: usize,
-    pub color_attachment_format: vk::Format,
+    pub color_attachment_format: VkFormat,
 }
 
 pub enum Descriptor {
-    Texture { binding: u32, image_view: vk::ImageView, image_layout: vk::ImageLayout },
-    Sampler { binding: u32, sampler: vk::Sampler },
+    Texture { binding: u32, image_view: VkImageView, image_layout: VkImageLayout },
+    Sampler { binding: u32, sampler: VkSampler },
 }
 
-pub trait HasPrivateData: vk::Handle + Copy {
+pub trait HasPrivateData: VulkanHandle + Copy {
     type PrivateData;
 }
 
 /// Device & command pool wrapper with useful utilities.
 pub struct DeviceHelper {
     pub dispatch: DeviceDispatch,
-    pub mem_props: vk::PhysicalDeviceMemoryProperties,
-    pub command_pool: vk::CommandPool,
-    pub queue: vk::Queue,
-    pub private_data_slot: vk::PrivateDataSlot,
+    pub mem_props: VkPhysicalDeviceMemoryProperties,
+    pub command_pool: VkCommandPool,
+    pub queue: VkQueue,
+    pub private_data_slot: VkPrivateDataSlot,
 }
 
 impl Deref for DeviceHelper {
@@ -93,35 +92,36 @@ impl Deref for DeviceHelper {
 impl DeviceHelper {
     pub unsafe fn new(
         dispatch: DeviceDispatch,
-        mem_props: vk::PhysicalDeviceMemoryProperties,
+        mem_props: VkPhysicalDeviceMemoryProperties,
         queue_family_index: u32,
     ) -> DeviceHelper {
+        let device = dispatch.device;
         let command_pool = dispatch
-            .create_command_pool(
-                &vk::CommandPoolCreateInfo {
-                    flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
-                    queue_family_index,
-                    ..Default::default()
+            .CreateCommandPool(device,
+                &VkCommandPoolCreateInfo {
+                    flags: VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+                    queueFamilyIndex: queue_family_index,
+                    ..
                 },
                 None,
             )
             .expect("create_command_pool failed");
-        let queue = dispatch.get_device_queue(queue_family_index, 0);
+        let queue = dispatch.GetDeviceQueue(device, queue_family_index, 0);
         dispatch.set_device_loader_data(queue);
         let private_data_slot = dispatch
-            .create_private_data_slot(&vk::PrivateDataSlotCreateInfo::default(), None)
+            .CreatePrivateDataSlot(device, &VkPrivateDataSlotCreateInfo::default(), ptr::null())
             .expect("create_private_data_slot failed");
         DeviceHelper { dispatch, mem_props, command_pool, queue, private_data_slot }
     }
 
     pub unsafe fn set_private_data<H: HasPrivateData>(&self, handle: H, data: H::PrivateData) -> *mut H::PrivateData {
         let data_ptr = Box::into_raw(Box::new(data)) as *mut c_void as u64;
-        self.dispatch.set_private_data(handle, self.private_data_slot, data_ptr).unwrap();
+        self.dispatch.SetPrivateData(self.device, handle, self.private_data_slot, data_ptr).unwrap();
         data_ptr as *mut H::PrivateData
     }
 
     pub unsafe fn get_private_data<H: HasPrivateData>(&self, handle: H) -> Option<NonNull<H::PrivateData>> {
-        let data_ptr = self.dispatch.get_private_data(handle, self.private_data_slot);
+        let data_ptr = self.dispatch.GetPrivateData(self.device, handle, self.private_data_slot);
         if data_ptr == 0 {
             None
         } else {
@@ -138,7 +138,7 @@ impl DeviceHelper {
     }
 
     pub unsafe fn take_private_data<H: HasPrivateData>(&self, handle: H) -> Option<Box<H::PrivateData>> {
-        let data_ptr = self.dispatch.get_private_data(handle, self.private_data_slot);
+        let data_ptr = self.dispatch.GetPrivateData(self.device, handle, self.private_data_slot);
         if data_ptr == 0 {
             None
         } else {
@@ -147,53 +147,56 @@ impl DeviceHelper {
         }
     }
 
-    pub fn find_memory_type(&self, type_filter: u32, required_flags: vk::MemoryPropertyFlags) -> u32 {
-        (0..self.mem_props.memory_type_count)
+    pub fn find_memory_type(&self, type_filter: u32, required_flags: VkMemoryPropertyFlags) -> u32 {
+        (0..self.mem_props.memoryTypeCount)
             .find(|&i| {
                 (type_filter & (1 << i)) != 0
-                    && self.mem_props.memory_types[i as usize].property_flags.contains(required_flags)
+                    && (self.mem_props.memoryTypes[i as usize].propertyFlags & required_flags == required_flags)
             })
             .expect("no compatible memory type found")
     }
 
-    pub unsafe fn allocate_command_buffers_helper(&self, count: usize) -> Vec<vk::CommandBuffer> {
-        let buffers = self
-            .allocate_command_buffers(&vk::CommandBufferAllocateInfo {
-                command_pool: self.command_pool,
-                level: vk::CommandBufferLevel::PRIMARY,
-                command_buffer_count: count as u32,
-                ..Default::default()
-            })
-            .unwrap();
+    pub unsafe fn allocate_command_buffers_helper(&self, count: usize) -> Vec<VkCommandBuffer> {
+        let allocate_info = VkCommandBufferAllocateInfo {
+            commandPool: self.command_pool,
+            level: VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            commandBufferCount: count as u32,
+            ..Default::default()
+        };
+        let mut buffers = Vec::with_capacity(count);
+            self
+            .AllocateCommandBuffers(self.device, &allocate_info, buffers.as_mut_ptr())
+            .check();
+        buffers.set_len(count);
         for b in buffers.iter() {
             self.set_device_loader_data(*b);
         }
         buffers
     }
 
-    pub unsafe fn wait_for_fence_and_reset(&self, fence: vk::Fence) {
-        self.wait_for_fences(&[fence], true, u64::MAX).unwrap();
-        self.reset_fences(&[fence]).unwrap();
+    pub unsafe fn wait_for_fence_and_reset(&self, fence: VkFence) {
+        self.WaitForFences(&[fence], true, u64::MAX).unwrap();
+        self.ResetFences(&[fence]).unwrap();
     }
 
-    pub unsafe fn reset_and_begin_command_buffer(&self, cmdbuf: vk::CommandBuffer) {
-        self.reset_command_buffer(cmdbuf, vk::CommandBufferResetFlags::empty()).unwrap();
-        self.begin_command_buffer(
+    pub unsafe fn reset_and_begin_command_buffer(&self, cmdbuf: VkCommandBuffer) {
+        self.ResetCommandBuffer(cmdbuf, VkCommandBufferResetFlags::empty()).unwrap();
+        self.BeginCommandBuffer(
             cmdbuf,
-            &vk::CommandBufferBeginInfo { flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT, ..Default::default() },
+            &VkCommandBufferBeginInfo { flags: VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, ..Default::default() },
         )
         .unwrap();
     }
 
     pub unsafe fn cmd_push_descriptors_helper(
         &self,
-        cmdbuf: vk::CommandBuffer,
-        pipeline_layout: vk::PipelineLayout,
+        cmdbuf: VkCommandBuffer,
+        pipeline_layout: VkPipelineLayout,
         descriptors: &[Descriptor],
     ) {
         union DescriptorInfo {
-            image: vk::DescriptorImageInfo,
-            buffer: vk::DescriptorBufferInfo,
+            image: VkDescriptorImageInfo,
+            buffer: VkDescriptorBufferInfo,
         }
 
         let mut descriptor_infos = Vec::with_capacity(descriptors.len());
@@ -203,43 +206,43 @@ impl DeviceHelper {
             match descriptor {
                 Descriptor::Texture { binding, image_view, image_layout } => {
                     descriptor_infos.push(DescriptorInfo {
-                        image: vk::DescriptorImageInfo {
-                            sampler: vk::Sampler::null(),
-                            image_view: *image_view,
-                            image_layout: *image_layout,
+                        image: VkDescriptorImageInfo {
+                            sampler: VkSampler::null(),
+                            imageView: *image_view,
+                            imageLayout: *image_layout,
                         },
                     });
-                    write_descriptors.push(vk::WriteDescriptorSet {
-                        dst_binding: *binding,
-                        descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
-                        descriptor_count: 1,
-                        p_image_info: &descriptor_infos.last().unwrap().image,
+                    write_descriptors.push(VkWriteDescriptorSet {
+                        dstBinding: *binding,
+                        descriptorType: VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                        descriptorCount: 1,
+                        pImageInfo: &descriptor_infos.last().unwrap().image,
                         ..Default::default()
                     });
                 }
                 Descriptor::Sampler { binding, sampler } => {
                     descriptor_infos.push(DescriptorInfo {
-                        image: vk::DescriptorImageInfo {
+                        image: VkDescriptorImageInfo {
                             sampler: *sampler,
-                            image_view: vk::ImageView::null(),
-                            image_layout: vk::ImageLayout::UNDEFINED,
+                            imageView: VkImageView::null(),
+                            imageLayout: VK_IMAGE_LAYOUT_UNDEFINED,
                         },
                     });
-                    write_descriptors.push(vk::WriteDescriptorSet {
-                        dst_binding: *binding,
-                        descriptor_type: vk::DescriptorType::SAMPLER,
-                        descriptor_count: 1,
-                        p_image_info: &descriptor_infos.last().unwrap().image,
+                    write_descriptors.push(VkWriteDescriptorSet {
+                        dstBinding: *binding,
+                        descriptorType: VK_DESCRIPTOR_TYPE_SAMPLER,
+                        descriptorCount: 1,
+                        pImageInfo: &descriptor_infos.last().unwrap().image,
                         ..Default::default()
                     });
                 }
             }
         }
 
-        (self.khr_push_descriptors.cmd_push_descriptor_set_khr)(
+        (self.khr_push_descriptors.CmdPushDescriptorSetKHR)(
             cmdbuf,
             // We don't have compute shaders for the moment
-            vk::PipelineBindPoint::GRAPHICS,
+            VK_PIPELINE_BIND_POINT_GRAPHICS,
             pipeline_layout,
             // and we won't need more than one descriptor set
             0,
@@ -248,62 +251,62 @@ impl DeviceHelper {
         );
     }
 
-    pub(crate) unsafe fn cmd_set_viewport_helper(&self, cmdbuf: vk::CommandBuffer, x: i32, y: i32, w: i32, h: i32) {
+    pub(crate) unsafe fn cmd_set_viewport_helper(&self, cmdbuf: VkCommandBuffer, x: i32, y: i32, w: i32, h: i32) {
         self.cmd_set_viewport(
             cmdbuf,
             0,
-            &[vk::Viewport {
+            &[VkViewport {
                 x: x as f32,
                 y: y as f32,
                 width: w as f32,
                 height: h as f32,
-                min_depth: 0.0,
-                max_depth: 1.0,
+                minDepth: 0.0,
+                maxDepth: 1.0,
             }],
         );
     }
 
-    pub(crate) unsafe fn cmd_set_scissor_helper(&self, cmdbuf: vk::CommandBuffer, x: i32, y: i32, w: i32, h: i32) {
+    pub(crate) unsafe fn cmd_set_scissor_helper(&self, cmdbuf: VkCommandBuffer, x: i32, y: i32, w: i32, h: i32) {
         self.cmd_set_scissor(
             cmdbuf,
             0,
-            &[vk::Rect2D { offset: vk::Offset2D { x, y }, extent: vk::Extent2D { width: w as u32, height: h as u32 } }],
+            &[VkRect2D { offset: VkOffset2D { x, y }, extent: VkExtent2D { width: w as u32, height: h as u32 } }],
         );
     }
 
     pub(crate) unsafe fn layout_barrier(
         &self,
-        cmdbuf: vk::CommandBuffer,
-        transitions: &[(VkImage, vk::ImageLayout, vk::ImageLayout)],
+        cmdbuf: VkCommandBuffer,
+        transitions: &[(VkImage, VkImageLayout, VkImageLayout)],
     ) {
         // We are heavy-handed on the pipeline stages & access flags,
         // as this is not remotely worth the trouble.
         let barriers = transitions
             .iter()
-            .map(|&(image, old_layout, new_layout)| vk::ImageMemoryBarrier {
-                old_layout,
-                new_layout,
-                src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
-                dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+            .map(|&(image, old_layout, new_layout)| VkImageMemoryBarrier {
+                oldLayout: old_layout,
+                newLayout: new_layout,
+                srcQueueFamilyIndex: VK_QUEUE_FAMILY_IGNORED,
+                dstQueueFamilyIndex: VK_QUEUE_FAMILY_IGNORED,
                 image,
-                subresource_range: vk::ImageSubresourceRange {
-                    aspect_mask: vk::ImageAspectFlags::COLOR,
-                    base_mip_level: 0,
-                    level_count: vk::REMAINING_MIP_LEVELS,
-                    base_array_layer: 0,
-                    layer_count: vk::REMAINING_ARRAY_LAYERS,
+                subresourceRange: VkImageSubresourceRange {
+                    aspectMask: VK_IMAGE_ASPECT_COLOR_BIT,
+                    baseMipLevel: 0,
+                    levelCount: VK_REMAINING_MIP_LEVELS,
+                    baseArrayLayer: 0,
+                    layerCount: VK_REMAINING_ARRAY_LAYERS,
                 },
-                src_access_mask: vk::AccessFlags::MEMORY_WRITE,
-                dst_access_mask: vk::AccessFlags::MEMORY_READ | vk::AccessFlags::MEMORY_WRITE,
-                ..Default::default()
+                srcAccessMask: VK_ACCESS_MEMORY_WRITE_BIT,
+                dstAccessMask: VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+                ..
             })
             .collect::<Vec<_>>();
 
         self.cmd_pipeline_barrier(
             cmdbuf,
-            vk::PipelineStageFlags::ALL_COMMANDS,
-            vk::PipelineStageFlags::ALL_COMMANDS,
-            vk::DependencyFlags::empty(),
+            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+            0,
             &[],
             &[],
             &barriers,
@@ -316,28 +319,28 @@ impl DeviceHelper {
     ) -> Pipeline {
         let shader_module = self
             .create_shader_module(
-                &vk::ShaderModuleCreateInfo {
-                    code_size: create_info.spirv.len() * 4,
-                    p_code: create_info.spirv.as_ptr(),
-                    ..Default::default()
+                &VkShaderModuleCreateInfo {
+                    codeSize: create_info.spirv.len() * 4,
+                    pCode: create_info.spirv.as_ptr(),
+                    ..
                 },
                 None,
             )
             .expect("failed to create shader module");
 
-        let push_constant_range = vk::PushConstantRange {
-            stage_flags: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+        let push_constant_range = VkPushConstantRange {
+            stageFlags: VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
             offset: 0,
             size: create_info.push_constants_size as u32,
         };
 
         let descriptor_set_layout = self
             .create_descriptor_set_layout(
-                &vk::DescriptorSetLayoutCreateInfo {
-                    flags: vk::DescriptorSetLayoutCreateFlags::PUSH_DESCRIPTOR_KHR,
-                    binding_count: create_info.bindings.len() as u32,
-                    p_bindings: create_info.bindings.as_ptr(),
-                    ..Default::default()
+                &VkDescriptorSetLayoutCreateInfo {
+                    flags: VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR,
+                    bindingCount: create_info.bindings.len() as u32,
+                    pBindings: create_info.bindings.as_ptr(),
+                    ..
                 },
                 None,
             )
@@ -345,109 +348,109 @@ impl DeviceHelper {
 
         let pipeline_layout = self
             .create_pipeline_layout(
-                &vk::PipelineLayoutCreateInfo {
-                    set_layout_count: 1,
-                    p_set_layouts: &descriptor_set_layout,
-                    push_constant_range_count: 1,
-                    p_push_constant_ranges: &push_constant_range,
-                    ..Default::default()
+                &VkPipelineLayoutCreateInfo {
+                    setLayoutCount: 1,
+                    pSetLayouts: &descriptor_set_layout,
+                    pushConstantRangeCount: 1,
+                    pPushConstantRanges: &push_constant_range,
+                    ..
                 },
                 None,
             )
             .unwrap();
         let shader_stages = [
-            vk::PipelineShaderStageCreateInfo {
-                stage: vk::ShaderStageFlags::VERTEX,
+            VkPipelineShaderStageCreateInfo {
+                stage: VK_SHADER_STAGE_VERTEX_BIT,
                 module: shader_module,
-                p_name: create_info.vertex_entry.as_ptr(),
+                pName: create_info.vertex_entry.as_ptr(),
                 ..Default::default()
             },
-            vk::PipelineShaderStageCreateInfo {
-                stage: vk::ShaderStageFlags::FRAGMENT,
+            VkPipelineShaderStageCreateInfo {
+                stage: VK_SHADER_STAGE_FRAGMENT_BIT,
                 module: shader_module,
-                p_name: create_info.fragment_entry.as_ptr(),
+                pName: create_info.fragment_entry.as_ptr(),
                 ..Default::default()
             },
         ];
 
-        let vertex_binding = vk::VertexInputBindingDescription {
+        let vertex_binding = VkVertexInputBindingDescription {
             binding: 0,
             stride: create_info.vertex_stride as u32,
-            input_rate: vk::VertexInputRate::VERTEX,
+            inputRate: VK_VERTEX_INPUT_RATE_VERTEX,
         };
-        let vertex_input_state = vk::PipelineVertexInputStateCreateInfo {
-            vertex_binding_description_count: 1,
-            p_vertex_binding_descriptions: &vertex_binding,
-            vertex_attribute_description_count: create_info.vertex_attributes.len() as u32,
-            p_vertex_attribute_descriptions: create_info.vertex_attributes.as_ptr(),
-            ..Default::default()
+        let vertex_input_state = VkPipelineVertexInputStateCreateInfo {
+            vertexBindingDescriptionCount: 1,
+            pVertexBindingDescriptions: &vertex_binding,
+            vertexAttributeDescriptionCount: create_info.vertex_attributes.len() as u32,
+            pVertexAttributeDescriptions: create_info.vertex_attributes.as_ptr(),
+            ..
         };
-        let input_assembly_state = vk::PipelineInputAssemblyStateCreateInfo {
-            topology: vk::PrimitiveTopology::TRIANGLE_LIST,
-            ..Default::default()
+        let input_assembly_state = VkPipelineInputAssemblyStateCreateInfo {
+            topology: VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            ..
         };
         let viewport_state =
-            vk::PipelineViewportStateCreateInfo { viewport_count: 1, scissor_count: 1, ..Default::default() };
+            VkPipelineViewportStateCreateInfo { viewportCount: 1, scissorCount: 1, .. };
 
-        let rasterization_state = vk::PipelineRasterizationStateCreateInfo {
-            polygon_mode: vk::PolygonMode::FILL,
-            cull_mode: vk::CullModeFlags::NONE,
-            front_face: vk::FrontFace::COUNTER_CLOCKWISE,
-            line_width: 1.0,
+        let rasterization_state = VkPipelineRasterizationStateCreateInfo {
+            polygonMode: VK_POLYGON_MODE_FILL,
+            cullMode: VK_CULL_MODE_NONE,
+            frontFace: VK_FRONT_FACE_COUNTER_CLOCKWISE,
+            lineWidth: 1.0,
             ..Default::default()
         };
 
-        let multisample_state = vk::PipelineMultisampleStateCreateInfo {
-            rasterization_samples: vk::SampleCountFlags::TYPE_1,
+        let multisample_state = VkPipelineMultisampleStateCreateInfo {
+            rasterizationSamples: VK_SAMPLE_COUNT_TYPE_1_BIT,
             ..Default::default()
         };
 
         // Standard "source-over" alpha compositing for the overlay.
-        let blend_attachment = vk::PipelineColorBlendAttachmentState {
-            blend_enable: vk::TRUE,
-            src_color_blend_factor: vk::BlendFactor::SRC_ALPHA,
-            dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
-            color_blend_op: vk::BlendOp::ADD,
-            src_alpha_blend_factor: vk::BlendFactor::ONE,
-            dst_alpha_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
-            alpha_blend_op: vk::BlendOp::ADD,
-            color_write_mask: vk::ColorComponentFlags::RGBA,
+        let blend_attachment = VkPipelineColorBlendAttachmentState {
+            blendEnable: VK_TRUE,
+            srcColorBlendFactor: VK_BLEND_FACTOR_SRC_ALPHA,
+            dstColorBlendFactor: VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+            colorBlendOp: VK_BLEND_OP_ADD,
+            srcAlphaBlendFactor: VK_BLEND_FACTOR_ONE,
+            dstAlphaBlendFactor: VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+            alphaBlendOp: VK_BLEND_OP_ADD,
+            colorWriteMask: 0xF,
         };
-        let color_blend_state = vk::PipelineColorBlendStateCreateInfo {
-            attachment_count: 1,
-            p_attachments: &blend_attachment,
+        let color_blend_state = VkPipelineColorBlendStateCreateInfo {
+            attachmentCount: 1,
+            pAttachments: &blend_attachment,
             ..Default::default()
         };
-        let dynamic_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
-        let dynamic_state = vk::PipelineDynamicStateCreateInfo {
-            dynamic_state_count: dynamic_states.len() as u32,
-            p_dynamic_states: dynamic_states.as_ptr(),
+        let dynamic_states = [VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR];
+        let dynamic_state = VkPipelineDynamicStateCreateInfo {
+            dynamicStateCount: dynamic_states.len() as u32,
+            pDynamicStates: dynamic_states.as_ptr(),
             ..Default::default()
         };
-        let mut rendering_info = vk::PipelineRenderingCreateInfo {
-            color_attachment_count: 1,
-            p_color_attachment_formats: &create_info.color_attachment_format,
+        let mut rendering_info = VkPipelineRenderingCreateInfo {
+            colorAttachmentCount: 1,
+            pColorAttachmentFormats: &create_info.color_attachment_format,
             ..Default::default()
         };
 
-        let pipeline_create_info = vk::GraphicsPipelineCreateInfo {
-            p_next: &mut rendering_info as *const _ as *const c_void,
-            p_stages: shader_stages.as_ptr(),
-            stage_count: shader_stages.len() as u32,
-            p_vertex_input_state: &vertex_input_state,
-            p_input_assembly_state: &input_assembly_state,
-            p_viewport_state: &viewport_state,
-            p_rasterization_state: &rasterization_state,
-            p_multisample_state: &multisample_state,
-            p_color_blend_state: &color_blend_state,
-            p_dynamic_state: &dynamic_state,
+        let pipeline_create_info = VkGraphicsPipelineCreateInfo {
+            pNext: &mut rendering_info as *const _ as *const c_void,
+            pStages: shader_stages.as_ptr(),
+            stageCount: shader_stages.len() as u32,
+            pVertexInputState: &vertex_input_state,
+            pInputAssemblyState: &input_assembly_state,
+            pViewportState: &viewport_state,
+            pRasterizationState: &rasterization_state,
+            pMultisampleState: &multisample_state,
+            pColorBlendState: &color_blend_state,
+            pDynamicState: &dynamic_state,
             layout: pipeline_layout,
-            render_pass: vk::RenderPass::null(),
-            ..Default::default()
+            renderPass: VkRenderPass::null(),
+            ..
         };
 
         let pipeline = self
-            .create_graphics_pipelines(vk::PipelineCache::null(), std::slice::from_ref(&pipeline_create_info), None)
+            .create_graphics_pipelines(VkPipelineCache::null(), std::slice::from_ref(&pipeline_create_info), None)
             .expect("failed to create graphics pipeline")[0];
 
         // The shader module is no longer needed once the pipeline is built.
@@ -460,34 +463,34 @@ impl DeviceHelper {
         &self,
         spirv: &[u32],
         entry_point: &CStr,
-        bindings: &[vk::DescriptorSetLayoutBinding],
+        bindings: &[VkDescriptorSetLayoutBinding],
         push_constants_size: usize,
     ) -> Pipeline {
         let shader_module = self
             .create_shader_module(
-                &vk::ShaderModuleCreateInfo {
-                    flags: Default::default(),
-                    code_size: spirv.len() * 4,
-                    p_code: spirv.as_ptr(),
-                    ..Default::default()
+                &VkShaderModuleCreateInfo {
+                    flags: 0,
+                    codeSize: spirv.len() * 4,
+                    pCode: spirv.as_ptr(),
+                    ..
                 },
                 None,
             )
             .expect("failed to create shader module");
 
-        let push_constant_range = vk::PushConstantRange {
-            stage_flags: vk::ShaderStageFlags::COMPUTE,
+        let push_constant_range = VkPushConstantRange {
+            stageFlags: VK_SHADER_STAGE_COMPUTE_BIT,
             offset: 0,
             size: push_constants_size as u32,
         };
 
         let descriptor_set_layout = self
             .create_descriptor_set_layout(
-                &vk::DescriptorSetLayoutCreateInfo {
-                    flags: vk::DescriptorSetLayoutCreateFlags::PUSH_DESCRIPTOR_KHR,
-                    binding_count: bindings.len() as u32,
-                    p_bindings: bindings.as_ptr(),
-                    ..Default::default()
+                &VkDescriptorSetLayoutCreateInfo {
+                    flags: VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR,
+                    bindingCount: bindings.len() as u32,
+                    pBindings: bindings.as_ptr(),
+                    ..
                 },
                 None,
             )
@@ -495,71 +498,71 @@ impl DeviceHelper {
 
         let pipeline_layout = self
             .create_pipeline_layout(
-                &vk::PipelineLayoutCreateInfo {
-                    set_layout_count: 1,
-                    p_set_layouts: &descriptor_set_layout,
-                    push_constant_range_count: 1,
-                    p_push_constant_ranges: &push_constant_range,
-                    ..Default::default()
+                &VkPipelineLayoutCreateInfo {
+                    setLayoutCount: 1,
+                    pSetLayouts: &descriptor_set_layout,
+                    pushConstantRangeCount: 1,
+                    pPushConstantRanges: &push_constant_range,
+                    ..
                 },
                 None,
             )
             .unwrap();
 
-        let compute_pipeline_create_info = vk::ComputePipelineCreateInfo {
-            stage: vk::PipelineShaderStageCreateInfo {
-                stage: vk::ShaderStageFlags::COMPUTE,
+        let compute_pipeline_create_info = VkComputePipelineCreateInfo {
+            stage: VkPipelineShaderStageCreateInfo {
+                stage: VK_SHADER_STAGE_COMPUTE_BIT,
                 module: shader_module,
-                p_name: entry_point.as_ptr(),
-                ..Default::default()
+                pName: entry_point.as_ptr(),
+                ..
             },
             layout: pipeline_layout,
-            ..Default::default()
+            ..
         };
 
-        let pipeline = self
-            .create_compute_pipelines(
-                vk::PipelineCache::null(),
-                std::slice::from_ref(&compute_pipeline_create_info),
-                None,
-            )
-            .expect("failed to create compute pipeline")[0];
-        self.destroy_shader_module(shader_module, None);
+        let mut pipeline = mem::zeroed();
+        self.CreateComputePipelines(
+                self.device,
+                VkPipelineCache::null(),
+                1,
+                &compute_pipeline_create_info,
+                ptr::null_mut(),
+                &mut pipeline
+            );
+        self.DestroyShaderModule(self.device, shader_module, ptr::null());
         Pipeline { pipeline_layout, descriptor_set_layout, pipeline }
     }
 
     pub(crate) unsafe fn create_color_image_helper(
         &self,
-        format: vk::Format,
+        format: VkFormat,
         width: u32,
         height: u32,
-        usage: vk::ImageUsageFlags,
+        usage: VkImageUsageFlags,
     ) -> Image {
         let d = &self.dispatch.device;
-
-        let create_info = vk::ImageCreateInfo {
-            image_type: vk::ImageType::TYPE_2D,
+        let create_info = VkImageCreateInfo {
+            imageType: VK_IMAGE_TYPE_2D,
             format,
-            extent: vk::Extent3D { width, height, depth: 1 },
-            mip_levels: 1,
-            array_layers: 1,
-            samples: vk::SampleCountFlags::TYPE_1,
+            extent: VkExtent3D { width, height, depth: 1 },
+            mipLevels: 1,
+            arrayLayers: 1,
+            samples: VK_SAMPLE_COUNT_1_BIT,
             tiling: VK_IMAGE_TILING_OPTIMAL,
             usage,
-            sharing_mode: vk::SharingMode::EXCLUSIVE,
-            initial_layout: vk::ImageLayout::UNDEFINED,
-            ..Default::default()
+            sharingMode: VK_SHARING_MODE_EXCLUSIVE,
+            initialLayout: VK_IMAGE_LAYOUT_UNDEFINED,
+            ..
         };
-
         let image = d.create_image(&create_info, None).unwrap();
         let img_req = d.get_image_memory_requirements(image);
-        let img_mem_type = self.find_memory_type(img_req.memory_type_bits, vk::MemoryPropertyFlags::DEVICE_LOCAL);
+        let img_mem_type = self.find_memory_type(img_req.memory_type_bits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
         let image_memory = d
             .allocate_memory(
-                &vk::MemoryAllocateInfo {
-                    allocation_size: img_req.size,
-                    memory_type_index: img_mem_type,
-                    ..Default::default()
+                &VkMemoryAllocateInfo {
+                    allocationSize: img_req.size,
+                    memoryTypeIndex: img_mem_type,
+                    ..
                 },
                 None,
             )
@@ -567,18 +570,18 @@ impl DeviceHelper {
         d.bind_image_memory(image, image_memory, 0).unwrap();
         let image_view = d
             .create_image_view(
-                &vk::ImageViewCreateInfo {
+                &VkImageViewCreateInfo {
                     image,
-                    view_type: vk::ImageViewType::TYPE_2D,
+                    viewType: VK_IMAGE_VIEW_TYPE_2D,
                     format: create_info.format,
-                    subresource_range: vk::ImageSubresourceRange {
-                        aspect_mask: vk::ImageAspectFlags::COLOR,
-                        base_mip_level: 0,
-                        level_count: 1,
-                        base_array_layer: 0,
-                        layer_count: 1,
+                    subresourceRange: VkImageSubresourceRange {
+                        aspectMask: VK_IMAGE_ASPECT_COLOR_BIT,
+                        baseMipLevel: 0,
+                        levelCount: 1,
+                        baseArrayLayer: 0,
+                        layerCount: 1,
                     },
-                    ..Default::default()
+                    ..
                 },
                 None,
             )
@@ -587,14 +590,14 @@ impl DeviceHelper {
     }
 
     pub(crate) unsafe fn destroy_image_helper(&self, image: Image) {
-        self.destroy_image_view(image.image_view, None);
-        self.destroy_image(image.image, None);
-        self.free_memory(image.memory, None);
+        self.DestroyImageView(self.device, image.image_view, ptr::null());
+        self.DestroyImage(self.device, image.image, ptr::null());
+        self.FreeMemory(self.device, image.memory, ptr::null());
     }
 
     pub(crate) unsafe fn create_buffer_from_data<T: Copy + 'static>(
         &self,
-        usage: vk::BufferUsageFlags,
+        usage: VkBufferUsageFlags,
         data: &[T],
     ) -> Buffer {
         let data_bytes = std::slice::from_raw_parts(data.as_ptr() as *const u8, data.len() * std::mem::size_of::<T>());
@@ -603,45 +606,45 @@ impl DeviceHelper {
 
     pub(crate) unsafe fn create_buffer_helper(
         &self,
-        usage: vk::BufferUsageFlags,
+        usage: VkBufferUsageFlags,
         byte_size: usize,
         initial_data: Option<&[u8]>,
     ) -> Buffer {
-        let create_info = vk::BufferCreateInfo {
+        let create_info = VkBufferCreateInfo {
             size: byte_size as u64,
             // We may not need TRANSFER_DST if there's no initial data,
             // but adding it most likely doesn't have any perf impact whatsoever
-            usage: usage | vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
-            sharing_mode: vk::SharingMode::EXCLUSIVE,
-            ..Default::default()
+            usage: usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+            sharingMode: VK_SHARING_MODE_EXCLUSIVE,
+            ..
         };
-        let required_flags = vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT;
+        let required_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
         let buffer = self.create_buffer(&create_info, None).unwrap();
         let buf_req = self.get_buffer_memory_requirements(buffer);
         let buf_mem_type = self.find_memory_type(buf_req.memory_type_bits, required_flags);
-        let allocate_flags = vk::MemoryAllocateFlagsInfo {
-            flags: vk::MemoryAllocateFlags::DEVICE_ADDRESS,
-            ..Default::default()
+        let allocate_flags = VkMemoryAllocateFlagsInfo {
+            flags: VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT,
+            ..
         };
         let buffer_memory = self
             .allocate_memory(
-                &vk::MemoryAllocateInfo {
-                    p_next: &allocate_flags as *const _ as *const c_void,
-                    allocation_size: buf_req.size,
-                    memory_type_index: buf_mem_type,
-                    ..Default::default()
+                &VkMemoryAllocateInfo {
+                    pNext: &allocate_flags as *const _ as *const c_void,
+                    allocationSize: buf_req.size,
+                    memoryTypeIndex: buf_mem_type,
+                    ..
                 },
                 None,
             )
             .unwrap();
-        self.bind_buffer_memory(buffer, buffer_memory, 0).unwrap();
-        let ptr = self.map_memory(buffer_memory, 0, buf_req.size, vk::MemoryMapFlags::empty()).unwrap();
+        self.BindBufferMemory(self.device, buffer, buffer_memory, 0).check();
+        let ptr = self.MapMemory(self.device, buffer_memory, 0, buf_req.size, 0).unwrap();
         if let Some(initial_data) = initial_data {
             ptr::copy_nonoverlapping(initial_data.as_ptr(), ptr.cast::<u8>(), initial_data.len());
         }
 
         let device_address =
-            self.get_buffer_device_address(&vk::BufferDeviceAddressInfo { buffer, ..Default::default() });
+            self.get_buffer_device_address(&VkBufferDeviceAddressInfo { buffer, ..Default::default() });
         Buffer { buffer, memory: buffer_memory, ptr, size: byte_size, device_address }
     }
 
@@ -650,94 +653,96 @@ impl DeviceHelper {
         self.free_memory(buffer.memory, None);
     }
 
-    pub(crate) unsafe fn submit_oneshot(&self, record_fn: impl FnOnce(&Self, vk::CommandBuffer)) {
-        let cmdbuf = self
-            .allocate_command_buffers(&vk::CommandBufferAllocateInfo {
-                command_pool: self.command_pool,
-                level: vk::CommandBufferLevel::PRIMARY,
-                command_buffer_count: 1,
-                ..Default::default()
-            })
-            .unwrap()[0];
+    pub(crate) unsafe fn submit_oneshot(&self, record_fn: impl FnOnce(&Self, VkCommandBuffer)) {
+        let mut cmdbuf = VkCommandBuffer::null();
+        self
+            .AllocateCommandBuffers(self.device, &VkCommandBufferAllocateInfo {
+                commandPool: self.command_pool,
+                level: VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                commandBufferCount: 1,
+                ..
+            }, &mut cmdbuf).check();
         self.set_device_loader_data(cmdbuf);
-        self.begin_command_buffer(
+        self.BeginCommandBuffer(
             cmdbuf,
-            &vk::CommandBufferBeginInfo { flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT, ..Default::default() },
+            &VkCommandBufferBeginInfo { flags: VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, ..Default::default() },
         )
-        .unwrap();
+        .check();
         record_fn(self, cmdbuf);
-        self.end_command_buffer(cmdbuf).unwrap();
-        self.queue_submit(
+        self.EndCommandBuffer(cmdbuf).check();
+        self.QueueSubmit(
             self.queue,
-            &[vk::SubmitInfo { command_buffer_count: 1, p_command_buffers: &cmdbuf, ..Default::default() }],
-            vk::Fence::null(),
+            1,
+            &VkSubmitInfo { commandBufferCount: 1, pCommandBuffers: &cmdbuf, ..Default::default() },
+            VkFence::null(),
         )
-        .unwrap();
+        .check();
     }
 
     pub(crate) unsafe fn queue_submit_helper(
         &self,
-        queue: vk::Queue,
-        cmd_buf: vk::CommandBuffer,
-        wait_semaphores: &[vk::Semaphore],
-        signal_semaphores: &[vk::Semaphore],
-        signal_fence: vk::Fence,
-    ) -> VkResult<()> {
+        queue: VkQueue,
+        cmd_buf: VkCommandBuffer,
+        wait_semaphores: &[VkSemaphore],
+        signal_semaphores: &[VkSemaphore],
+        signal_fence: VkFence,
+    ) -> VkResult {
         // It's a sad thing that we have to allocate memory dynamically for something that is probably
         // ignored by the driver, but here we are.
-        let wait_dst_stage_mask = vec![vk::PipelineStageFlags::ALL_COMMANDS; wait_semaphores.len()];
-        let submit_info = [vk::SubmitInfo {
-            wait_semaphore_count: wait_semaphores.len() as u32,
-            p_wait_semaphores: wait_semaphores.as_ptr(),
-            p_wait_dst_stage_mask: wait_dst_stage_mask.as_ptr(),
-            command_buffer_count: 1,
-            p_command_buffers: &cmd_buf,
-            signal_semaphore_count: signal_semaphores.len() as u32,
-            p_signal_semaphores: signal_semaphores.as_ptr(),
-            ..Default::default()
-        }];
-        self.queue_submit(queue, &submit_info, signal_fence)
+        let wait_dst_stage_mask = vec![VK_PIPELINE_STAGE_ALL_COMMANDS_BIT; wait_semaphores.len()];
+        let submit_info = VkSubmitInfo {
+            waitSemaphoreCount: wait_semaphores.len() as u32,
+            pWaitSemaphores: wait_semaphores.as_ptr(),
+            pWaitDstStageMask: wait_dst_stage_mask.as_ptr(),
+            commandBufferCount: 1,
+            pCommandBuffers: &cmd_buf,
+            signalSemaphoreCount: signal_semaphores.len() as u32,
+            pSignalSemaphores: signal_semaphores.as_ptr(),
+            ..
+        };
+        self.QueueSubmit(queue, 1, &submit_info, signal_fence)
     }
 
     pub(crate) unsafe fn queue_present_helper(
         &self,
-        queue: vk::Queue,
-        swapchain: vk::SwapchainKHR,
+        queue: VkQueue,
+        swapchain: VkSwapchainKHR,
         image_index: u32,
-        wait_semaphore: vk::Semaphore,
-    ) -> VkResult<()> {
-        let present_info = vk::PresentInfoKHR {
-            wait_semaphore_count: 1,
-            p_wait_semaphores: &wait_semaphore,
-            swapchain_count: 1,
-            p_swapchains: &swapchain,
-            p_image_indices: &image_index,
-            ..Default::default()
+        wait_semaphore: VkSemaphore,
+    ) -> VkResult {
+        let present_info = VkPresentInfoKHR {
+            waitSemaphoreCount: 1,
+            pWaitSemaphores: &wait_semaphore,
+            swapchainCount: 1,
+            pSwapchains: &swapchain,
+            pImageIndices: &image_index,
+            ..
         };
-        (self.khr_swapchain.queue_present_khr)(queue, &present_info).result()
+        self.khr_swapchain.QueuePresentKHR(queue, &present_info).check()
     }
 
     pub(crate) unsafe fn push_constants_helper<T: Copy + 'static>(
         &self,
-        cmd_buf: vk::CommandBuffer,
-        pipeline_layout: vk::PipelineLayout,
-        stages: vk::ShaderStageFlags,
+        cmd_buf: VkCommandBuffer,
+        pipeline_layout: VkPipelineLayout,
+        stages: VkShaderStageFlags,
         data: &T,
     ) {
-        self.cmd_push_constants(
+        self.CmdPushConstants(
             cmd_buf,
             pipeline_layout,
             stages,
             0,
-            std::slice::from_raw_parts(data as *const _ as *const u8, size_of::<T>()),
+            size_of::<T>() as u32,
+            data as *const _ as *const c_void,
         );
     }
 
     pub(crate) unsafe fn create_color_image_from_data(&self,
-                                               format: vk::Format,
+                                               format: VkFormat,
                                                width: u32,
                                                height: u32,
-                                               usage: vk::ImageUsageFlags,
+                                               usage: VkImageUsageFlags,
                                                       data: &[u8]) -> Image
     {
 
@@ -749,42 +754,42 @@ impl DeviceHelper {
         );
 
         // Staging buffer: host-visible, coherent.
-        let staging_buf = self.create_buffer_from_data(vk::BufferUsageFlags::TRANSFER_SRC, data);
+        let staging_buf = self.create_buffer_from_data(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, data);
 
         self.submit_oneshot(|device, upload_cmdbuf| {
             self.layout_barrier(
                 upload_cmdbuf,
-                &[(image.image, vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL)],
+                &[(image.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)],
             );
 
             device.cmd_copy_buffer_to_image(
                 upload_cmdbuf,
                 staging_buf.buffer,
                 image.image,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                &[vk::BufferImageCopy {
-                    buffer_offset: 0,
-                    buffer_row_length: 0,
-                    buffer_image_height: 0,
-                    image_subresource: vk::ImageSubresourceLayers {
-                        aspect_mask: vk::ImageAspectFlags::COLOR,
-                        mip_level: 0,
-                        base_array_layer: 0,
-                        layer_count: 1,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                &[VkBufferImageCopy {
+                    bufferOffset: 0,
+                    bufferRowLength: 0,
+                    bufferImageHeight: 0,
+                    imageSubresource: VkImageSubresourceLayers {
+                        aspectMask: VK_IMAGE_ASPECT_COLOR_BIT,
+                        mipLevel: 0,
+                        baseArrayLayer: 0,
+                        layerCount: 1,
                     },
-                    image_offset: vk::Offset3D { x: 0, y: 0, z: 0 },
-                    image_extent: vk::Extent3D { width, height, depth: 1 },
+                    imageOffset: VkOffset3D { x: 0, y: 0, z: 0 },
+                    imageExtent: VkExtent3D { width, height, depth: 1 },
                 }],
             );
 
             self.layout_barrier(
                 upload_cmdbuf,
-                &[(image.image, vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)],
+                &[(image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)],
             );
         });
 
         // Cleanup transient resources.
-        self.device_wait_idle().unwrap();
+        self.DeviceWaitIdle(self.device).check();
         self.destroy_buffer_helper(staging_buf);
         image
     }

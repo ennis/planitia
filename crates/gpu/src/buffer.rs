@@ -1,5 +1,5 @@
 use crate::{BufferRange, BufferUsage, Device, Ptr, ResourceAllocation, VulkanObject, vkcheck};
-use ash::vk::Handle;
+use ash::VkHandle;
 use gpu_allocator::MemoryLocation;
 use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
 use log::{trace, warn};
@@ -43,7 +43,6 @@ impl<T: ?Sized> Buffer<T> {
                 ..
             },
         );
-
         buffer.cast_unsized()
     }
 
@@ -273,7 +272,7 @@ impl<T: ?Sized> Drop for Buffer<T> {
         if !handle.is_null() {
             Device::instance().delete_after_current_frame(move |device| unsafe {
                 trace!("GPU: deleting buffer: {:?}", handle);
-                device.raw.destroy_buffer(handle, None);
+                device.vk.DestroyBuffer(device.vkd, handle, ptr::null());
                 device.free_memory(&mut allocation);
             });
         }
@@ -343,7 +342,6 @@ impl Device {
             };
         }
         let byte_size = elem_size as u64 * create_info.len as u64;
-
         // The following flags have no specific logic associated to them in Mesa drivers of desktop GPUs:
         // - VERTEX_BUFFER
         // - INDEX_BUFFER
@@ -375,11 +373,7 @@ impl Device {
                 pQueueFamilyIndices: ptr::null(),
                 ..
             };
-            let handle = {
-                let mut buffer = Default::default();
-                vkcheck!(self.vk.CreateBuffer(self.vkd, &vk_create_info, ptr::null(), &mut buffer));
-                buffer
-            };
+            let handle = self.vk.CreateBuffer(self.vkd, &vk_create_info, ptr::null()).unwrap();
             let mem_req = {
                 let mut mem_req = VkMemoryRequirements { size: 0, alignment: 0, memoryTypeBits: 0 };
                 self.vk.GetBufferMemoryRequirements(self.vkd, handle, &mut mem_req);
@@ -392,12 +386,12 @@ impl Device {
                 linear: true,
                 allocation_scheme: AllocationScheme::GpuAllocatorManaged,
             });
-            vkcheck!(self.vk.BindBufferMemory(
+            self.vk.BindBufferMemory(
                 self.vkd,
                 handle,
                 VkDeviceMemory(allocation.memory().as_raw()),
                 allocation.offset()
-            ));
+            ).check();
             let mapped_ptr = allocation.mapped_ptr();
             let allocation = ResourceAllocation::Allocation { allocation };
             let device_address = self

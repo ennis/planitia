@@ -24,9 +24,9 @@ impl CommandBuffer {
         static COLOR_SUBRESOURCES: &[VkImageSubresourceRange] = &[VkImageSubresourceRange {
             aspectMask: VK_IMAGE_ASPECT_COLOR_BIT,
             baseMipLevel: 0,
-            levelCount: vk::REMAINING_MIP_LEVELS,
+            levelCount: VK_REMAINING_MIP_LEVELS,
             baseArrayLayer: 0,
-            layerCount: vk::REMAINING_ARRAY_LAYERS,
+            layerCount: VK_REMAINING_ARRAY_LAYERS,
         }];
         unsafe {
             // SAFETY: FFI call and parameters are valid
@@ -46,9 +46,9 @@ impl CommandBuffer {
         static DEPTH_SUBRESOURCES: &[VkImageSubresourceRange] = &[VkImageSubresourceRange {
             aspectMask: VK_IMAGE_ASPECT_DEPTH_BIT,
             baseMipLevel: 0,
-            levelCount: vk::REMAINING_MIP_LEVELS,
+            levelCount: VK_REMAINING_MIP_LEVELS,
             baseArrayLayer: 0,
-            layerCount: vk::REMAINING_ARRAY_LAYERS,
+            layerCount: VK_REMAINING_ARRAY_LAYERS,
         }];
         unsafe {
             // SAFETY: FFI call and parameters are valid

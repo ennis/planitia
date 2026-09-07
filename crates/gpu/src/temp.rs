@@ -48,7 +48,7 @@ pub(crate) struct TempAlloc {
     /// Pointer to the CPU-mapped memory of the buffer.
     host_addr: *mut u8,
     /// Device address of the buffer.
-    dev_addr: vk::DeviceAddress,
+    dev_addr: VkDeviceAddress,
 }
 
 impl ThreadLocalAllocator {

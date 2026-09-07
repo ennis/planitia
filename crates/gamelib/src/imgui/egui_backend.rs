@@ -51,12 +51,12 @@ impl Renderer {
         let pipeline = create_pipeline();
 
         let sampler = gpu::register_sampler(&SamplerParams {
-            mag_filter: vk::Filter::LINEAR,
-            min_filter: vk::Filter::LINEAR,
-            mipmap_mode: vk::SamplerMipmapMode::NEAREST,
-            address_mode_u: vk::SamplerAddressMode::CLAMP_TO_EDGE,
-            address_mode_v: vk::SamplerAddressMode::CLAMP_TO_EDGE,
-            address_mode_w: vk::SamplerAddressMode::CLAMP_TO_EDGE,
+            mag_filter: VK_FILTER_LINEAR,
+            min_filter: VK_FILTER_LINEAR,
+            mipmap_mode: VK_SAMPLER_MIPMAP_MODE_NEAREST,
+            address_mode_u: VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            address_mode_v: VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            address_mode_w: VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
             ..
         });
 
@@ -64,10 +64,10 @@ impl Renderer {
     }
 
     pub fn update_textures(&mut self, cmd: &mut CommandBuffer, textures_delta: egui::TexturesDelta) {
-        let convert_filter = |min_filter: egui::TextureFilter| -> vk::Filter {
+        let convert_filter = |min_filter: egui::TextureFilter| -> VkFilter {
             match min_filter {
-                egui::TextureFilter::Nearest => vk::Filter::NEAREST,
-                egui::TextureFilter::Linear => vk::Filter::LINEAR,
+                egui::TextureFilter::Nearest => VK_FILTER_NEAREST,
+                egui::TextureFilter::Linear => VK_FILTER_LINEAR,
             }
         };
 
@@ -105,10 +105,10 @@ impl Renderer {
                 let sampler = gpu::register_sampler(&SamplerParams {
                     mag_filter: convert_filter(tex.options.magnification),
                     min_filter: convert_filter(tex.options.minification),
-                    mipmap_mode: vk::SamplerMipmapMode::NEAREST,
-                    address_mode_u: vk::SamplerAddressMode::CLAMP_TO_EDGE,
-                    address_mode_v: vk::SamplerAddressMode::CLAMP_TO_EDGE,
-                    address_mode_w: vk::SamplerAddressMode::CLAMP_TO_EDGE,
+                    mipmap_mode: VK_SAMPLER_MIPMAP_MODE_NEAREST,
+                    address_mode_u: VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                    address_mode_v: VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                    address_mode_w: VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
                     ..Default::default()
                 });
 
@@ -193,7 +193,7 @@ impl Renderer {
             let clip_max_y = clip_max_y.clamp(clip_min_y, height as i32);
 
             /*enc.bind_vertex_buffer(0, vertex_buffer.slice(..).as_bytes());
-            enc.bind_index_buffer(vk::IndexType::UINT32, index_buffer.slice(..).as_bytes());*/
+            enc.bind_index_buffer(VK_INDEX_TYPE_UINT32, index_buffer.slice(..).as_bytes());*/
             enc.set_scissor(clip_min_x, clip_min_y, (clip_max_x - clip_min_x) as u32, (clip_max_y - clip_min_y) as u32);
             enc.set_viewport(0.0, 0.0, width as f32, height as f32, 0.0, 1.0);
 
@@ -226,25 +226,25 @@ fn create_pipeline() -> GraphicsPipeline {
             buffers: &[VertexBufferLayoutDescription {
                 binding: 0,
                 stride: size_of::<EguiVertex>() as u32,
-                input_rate: vk::VertexInputRate::VERTEX,
+                input_rate: VK_VERTEX_INPUT_RATE_VERTEX,
             }],
             attributes: &[
                 VertexInputAttributeDescription {
                     location: 0,
                     binding: 0,
-                    format: vk::Format::R32G32_SFLOAT,
+                    format: VK_FORMAT_R32G32_SFLOAT,
                     offset: EguiVertex::ATTRIBUTES[0].offset,
                 },
                 VertexInputAttributeDescription {
                     location: 1,
                     binding: 0,
-                    format: vk::Format::R32G32_SFLOAT,
+                    format: VK_FORMAT_R32G32_SFLOAT,
                     offset: EguiVertex::ATTRIBUTES[1].offset,
                 },
                 VertexInputAttributeDescription {
                     location: 2,
                     binding: 0,
-                    format: vk::Format::R8G8B8A8_UINT,
+                    format: VK_FORMAT_R8G8B8A8_UINT,
                     offset: EguiVertex::ATTRIBUTES[2].offset,
                 },
             ],
@@ -253,9 +253,9 @@ fn create_pipeline() -> GraphicsPipeline {
             vertex: shaders::entry_points::egui_vertex,
         },
         rasterization: RasterizationState {
-            polygon_mode: vk::PolygonMode::FILL,
+            polygon_mode: VK_POLYGON_MODE_FILL,
             cull_mode: Default::default(),
-            front_face: vk::FrontFace::CLOCKWISE,
+            front_face: VK_FRONT_FACE_CLOCKWISE,
             ..Default::default()
         },
         depth_stencil: None,
@@ -265,12 +265,12 @@ fn create_pipeline() -> GraphicsPipeline {
             color_targets: &[ColorTargetState {
                 format: Format::R8G8B8A8_UNORM,
                 blend_equation: Some(ColorBlendEquation {
-                    src_color_blend_factor: vk::BlendFactor::ONE,
-                    dst_color_blend_factor: vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
-                    color_blend_op: vk::BlendOp::ADD,
-                    src_alpha_blend_factor: vk::BlendFactor::ONE_MINUS_DST_ALPHA,
-                    dst_alpha_blend_factor: vk::BlendFactor::ONE,
-                    alpha_blend_op: vk::BlendOp::ADD,
+                    src_color_blend_factor: VK_BLEND_FACTOR_ONE,
+                    dst_color_blend_factor: VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                    color_blend_op: VK_BLEND_OP_ADD,
+                    src_alpha_blend_factor: VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA,
+                    dst_alpha_blend_factor: VK_BLEND_FACTOR_ONE,
+                    alpha_blend_op: VK_BLEND_OP_ADD,
                 }),
                 ..Default::default()
             }],

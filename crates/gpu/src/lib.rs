@@ -97,7 +97,7 @@ pub enum Error {
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
     #[error("Vulkan error: {0}")]
-    Vulkan(#[from] vk::Result),
+    Vulkan(#[from] VkResult),
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -158,7 +158,7 @@ impl VulkanObject for GraphicsPipeline {
 #[derive(Clone)]
 pub struct ComputePipeline {
     pub(crate) pipeline: VkPipeline,
-    //pub(crate) pipeline_layout: vk::PipelineLayout,
+    //pub(crate) pipeline_layout: VkPipelineLayout,
     //_descriptor_set_layouts: Vec<DescriptorSetLayout>,
     /// See `GraphicsPipeline::bindless` for details.
     //pub(crate) bindless: bool,
@@ -204,7 +204,7 @@ impl VulkanObject for ComputePipeline {
 #[derive(Clone, Debug)]
 pub struct DescriptorSetLayout {
     last_submission_index: Option<Arc<AtomicU64>>,
-    pub handle: vk::DescriptorSetLayout,
+    pub handle: VkDescriptorSetLayout,
 }
 
 impl Drop for DescriptorSetLayout {
@@ -331,8 +331,8 @@ pub struct DepthStencilAttachment<'a> {
 }
 
 impl DepthStencilAttachment<'_> {
-    pub(crate) fn get_vk_clear_depth_stencil_value(&self) -> vk::ClearDepthStencilValue {
-        vk::ClearDepthStencilValue {
+    pub(crate) fn get_vk_clear_depth_stencil_value(&self) -> VkClearDepthStencilValue {
+        VkClearDepthStencilValue {
             depth: self.depth_clear.unwrap_or(0.0) as f32,
             stencil: self.stencil_clear.unwrap_or(0),
         }
@@ -396,7 +396,7 @@ pub struct ComputePipelineCreateInfo<'a> {
 #[derive(Copy, Clone)]
 pub(crate) struct BufferAddressRange {
     pub(crate) buffer: VkBuffer,
-    pub(crate) base: vk::DeviceAddress,
+    pub(crate) base: VkDeviceAddress,
     pub(crate) size: usize,
 }
 

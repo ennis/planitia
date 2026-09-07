@@ -1,13 +1,17 @@
 use crate::generated::*;
 
-pub trait Handle {
+pub trait VulkanHandle {
     const TYPE: VkObjectType;
+    fn as_raw(self) -> *mut ::core::ffi::c_void;
 }
 
 macro_rules! impl_handle {
     ($ty:ty, $object_type:expr) => {
-        impl Handle for $ty {
+        impl VulkanHandle for $ty {
             const TYPE: VkObjectType = $object_type;
+            fn as_raw(self) -> *mut ::core::ffi::c_void {
+                self.0 as *mut _
+            }
         }
     };
 }

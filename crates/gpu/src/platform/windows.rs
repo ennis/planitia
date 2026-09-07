@@ -36,7 +36,7 @@ unsafe fn import_external_memory(
     dedicated: Option<DedicatedAllocation>,
 ) -> VkDeviceMemory {
     // TODO proper error handling
-    let mut win32_handle_properties = vk::MemoryWin32HandlePropertiesKHR::default();
+    let mut win32_handle_properties = VkMemoryWin32HandlePropertiesKHR::default();
     device
         .platform_extensions
         .khr_external_memory_win32
@@ -48,10 +48,10 @@ unsafe fn import_external_memory(
         .find_compatible_memory_type(memory_type_bits, required_flags, preferred_flags)
         .expect("could not find a compatible memory type for importing external memory");
     let (_, handle_name_wstr) = handle_name_to_wstr(handle_name);
-    let mut dedicated_allocate_info: vk::MemoryDedicatedAllocateInfo;
+    let mut dedicated_allocate_info: VkMemoryDedicatedAllocateInfo;
     let mut p_dedicated_allocate_info = ptr::null();
     if let Some(dedicated) = dedicated {
-        dedicated_allocate_info = vk::MemoryDedicatedAllocateInfo {
+        dedicated_allocate_info = VkMemoryDedicatedAllocateInfo {
             image: Default::default(),
             buffer: Default::default(),
             ..Default::default()
@@ -66,14 +66,14 @@ unsafe fn import_external_memory(
         }
         p_dedicated_allocate_info = &dedicated_allocate_info as *const _ as *const c_void;
     }
-    let import_memory_win32_handle_info = vk::ImportMemoryWin32HandleInfoKHR {
+    let import_memory_win32_handle_info = VkImportMemoryWin32HandleInfoKHR {
         p_next: p_dedicated_allocate_info,
         handle_type,
         handle,
         name: handle_name_wstr,
         ..Default::default()
     };
-    let memory_allocate_info = vk::MemoryAllocateInfo {
+    let memory_allocate_info = VkMemoryAllocateInfo {
         p_next: &import_memory_win32_handle_info as *const _ as *const c_void,
         allocation_size: memory_requirements.size,
         memory_type_index,
@@ -87,32 +87,32 @@ impl Device {
     pub unsafe fn create_imported_image_win32(
         &self,
         image_info: &ImageCreateInfo,
-        required_memory_flags: vk::MemoryPropertyFlags,
-        preferred_memory_flags: vk::MemoryPropertyFlags,
-        win32_handle_type: vk::ExternalMemoryHandleTypeFlags,
+        required_memory_flags: VkMemoryPropertyFlags,
+        preferred_memory_flags: VkMemoryPropertyFlags,
+        win32_handle_type: VkExternalMemoryHandleTypeFlags,
         win32_handle: HANDLE,
         win32_handle_name: Option<&str>,
     ) -> Image {
         let external_memory_image_create_info =
-            vk::ExternalMemoryImageCreateInfo { handle_types: win32_handle_type, ..Default::default() };
-        let create_info = vk::ImageCreateInfo {
-            p_next: &external_memory_image_create_info as *const _ as *const c_void,
-            image_type: image_info.type_.to_vk_image_type(),
+            VkExternalMemoryImageCreateInfo { handleTypes: win32_handle_type, ..Default::default() };
+        let create_info = VkImageCreateInfo {
+            pNext: &external_memory_image_create_info as *const _ as *const c_void,
+            imageType: image_info.type_.to_vk_image_type(),
             format: image_info.format,
-            extent: vk::Extent3D { width: image_info.width, height: image_info.height, depth: image_info.depth },
-            mip_levels: image_info.mip_levels,
-            array_layers: image_info.array_layers,
+            extent: VkExtent3D { width: image_info.width, height: image_info.height, depth: image_info.depth },
+            mipLevels: image_info.mip_levels,
+            arrayLayers: image_info.array_layers,
             samples: get_vk_sample_count(image_info.samples),
             tiling: VK_IMAGE_TILING_OPTIMAL,
             usage: image_info.usage.to_vk_image_usage_flags(),
-            sharing_mode: vk::SharingMode::EXCLUSIVE,
-            queue_family_index_count: 0,
-            p_queue_family_indices: ptr::null(),
-            initial_layout: vk::ImageLayout::UNDEFINED,
-            ..Default::default()
+            sharingMode: VK_SHARING_MODE_EXCLUSIVE,
+            queueFamilyIndexCount: 0,
+            pQueueFamilyIndices: ptr::null(),
+            initialLayout: VK_IMAGE_LAYOUT_UNDEFINED,
+            ..
         };
-        let handle = self.raw.create_image(&create_info, None).expect("failed to create image");
-        let mem_req = self.raw.get_image_memory_requirements(handle);
+        let handle = self.vk.CreateImage(self.vkd, &create_info, ptr::null()).expect("failed to create image");
+        let mem_req = self.vk.GetImageMemoryRequirements(self.vkd, handle);
         let device_memory = import_external_memory(
             self,
             &mem_req,
@@ -123,28 +123,28 @@ impl Device {
             win32_handle_name,
             Some(DedicatedAllocation::Image(handle)),
         );
-        self.raw.bind_image_memory(handle, device_memory, 0).unwrap();
+        self.vk.BindImageMemory(self.vkd, handle, device_memory, 0).check();
         let descriptors = self.register_image_descriptors(handle, &create_info);
         let attachment_view = self.create_attachment_image_view(handle, image_info.format);
         // transition image to GENERAL
         {
             let mut cmd = CommandBuffer::new();
-            cmd.image_barrier(&vk::ImageMemoryBarrier2 {
-                src_stage_mask: vk::PipelineStageFlags2::NONE,
-                src_access_mask: vk::AccessFlags2::MEMORY_WRITE,
-                dst_stage_mask: vk::PipelineStageFlags2::ALL_COMMANDS,
-                dst_access_mask: vk::AccessFlags2::MEMORY_READ,
-                old_layout: vk::ImageLayout::UNDEFINED,
-                new_layout: vk::ImageLayout::GENERAL,
-                src_queue_family_index: vk::QUEUE_FAMILY_EXTERNAL,
-                dst_queue_family_index: self.queue_family,
+            cmd.image_barrier(&VkImageMemoryBarrier2 {
+                srcStageMask: 0,
+                srcAccessMask: VK_ACCESS_2_MEMORY_WRITE_BIT,
+                dstStageMask: VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                dstAccessMask: VK_ACCESS_2_MEMORY_READ_BIT,
+                oldLayout: VK_IMAGE_LAYOUT_UNDEFINED,
+                newLayout: VK_IMAGE_LAYOUT_GENERAL,
+                srcQueueFamilyIndex: vk::QUEUE_FAMILY_EXTERNAL,
+                dstQueueFamilyIndex: self.queue_family,
                 image: handle,
-                subresource_range: vk::ImageSubresourceRange {
-                    aspect_mask: aspects_for_format(image_info.format),
-                    base_mip_level: 0,
-                    level_count: image_info.mip_levels,
-                    base_array_layer: 0,
-                    layer_count: image_info.array_layers,
+                subresourceRange: VkImageSubresourceRange {
+                    aspectMask: aspects_for_format(image_info.format),
+                    baseMipLevel: 0,
+                    levelCount: image_info.mip_levels,
+                    baseArrayLayer: 0,
+                    layerCount: image_info.array_layers,
                 },
                 ..Default::default()
             });
@@ -195,11 +195,7 @@ impl Device {
             ..Default::default()
         };
         let handle = self.vk.CreateImage(self.vkd, &create_info, ptr::null()).expect("failed to create image");
-        let mem_req = {
-            let mut req = MaybeUninit::uninit();
-            self.vk.GetImageMemoryRequirements(self.vkd, handle, req.as_mut_ptr());
-            req.assume_init()
-        };
+        let mem_req = self.vk.GetImageMemoryRequirements(self.vkd, handle);
         let (_, handle_name_wstr) = handle_name_to_wstr(handle_name);
         let (required_memory_properties, preferred_memory_properties) = match memory_location {
             MemoryLocation::Unknown => Default::default(),
@@ -219,7 +215,7 @@ impl Device {
         };
         let memory_type_index = self
             .find_compatible_memory_type(
-                mem_req.memory_type_bits,
+                mem_req.memoryTypeBits,
                 required_memory_properties,
                 preferred_memory_properties,
             )
@@ -338,8 +334,8 @@ impl Device {
         };
         self.platform_extensions
             .khr_external_semaphore_win32
-            .ImportSemaphoreWin32HandleKHR(&import_semaphore_win32_handle_info)
-            .expect("vkImportSemaphoreWin32HandleKHR failed");
+            .ImportSemaphoreWin32HandleKHR(self.vkd, &import_semaphore_win32_handle_info)
+            .check();
         semaphore
     }
 }
@@ -359,9 +355,9 @@ impl PlatformExtensions {
         PLATFORM_DEVICE_EXTENSIONS
     }
 
-    pub(crate) fn load(_entry: &ash::Entry, instance: &ash::Instance, device: &ash::Device) -> PlatformExtensions {
-        let khr_external_memory_win32 = ash::khr::external_memory_win32::Device::new(instance, device);
-        let khr_external_semaphore_win32 = ash::khr::external_semaphore_win32::Device::new(instance, device);
+    pub(crate) fn load(instance: VkInstance, instance_fns: Vulkan_1_3_InstanceDispatch, device: VkDevice) -> PlatformExtensions {
+        let khr_external_memory_win32 = khr_external_memory_win32::DeviceDispatch::load_with(instance, device);
+        let khr_external_semaphore_win32 = khr_external_semaphore_win32::DeviceDispatch::load_with(instance, device);
         PlatformExtensions { khr_external_memory_win32, khr_external_semaphore_win32 }
     }
 }

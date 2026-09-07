@@ -15,15 +15,15 @@ const _: PFN_vkDestroyDevice = layer_vkDestroyDevice;
 
 #[unsafe(no_mangle)]
 pub(crate) unsafe extern "system" fn layer_vkCreateInstance(
-    p_create_info: *const vk::InstanceCreateInfo,
-    p_allocator: *const vk::AllocationCallbacks,
-    p_instance: *mut vk::Instance,
-) -> vk::Result {
+    p_create_info: *const VkInstanceCreateInfo,
+    p_allocator: *const VkAllocationCallbacks,
+    p_instance: *mut VkInstance,
+) -> VkResult {
     let create_info = *p_create_info;
 
     let chain_info = match get_instance_chain_info(&create_info, LayerFunction::LAYER_LINK_INFO) {
         Some(mut p) => p.as_mut(),
-        None => return vk::Result::ERROR_INITIALIZATION_FAILED,
+        None => return VK_ERROR_INITIALIZATION_FAILED,
     };
 
     // Consume the head of the layer-info linked list.
@@ -35,9 +35,9 @@ pub(crate) unsafe extern "system" fn layer_vkCreateInstance(
 
     // Call down the chain.
     let create_instance: vk::PFN_vkCreateInstance =
-        mem::transmute(gipa(vk::Instance::null(), c"vkCreateInstance".as_ptr()));
+        mem::transmute(gipa(VkInstance::null(), c"vkCreateInstance".as_ptr()));
     let res = create_instance(p_create_info, p_allocator, p_instance);
-    if res != vk::Result::SUCCESS {
+    if res != VK_RESULT_SUCCESS {
         return res;
     }
 
@@ -58,13 +58,13 @@ pub(crate) unsafe extern "system" fn layer_vkCreateInstance(
 
     INSTANCE_MAP.insert(instance, dispatch);
 
-    vk::Result::SUCCESS
+    VK_SUCCESS
 }
 
 #[unsafe(no_mangle)]
 pub(crate) unsafe extern "system" fn layer_vkDestroyInstance(
-    instance: vk::Instance,
-    p_allocator: *const vk::AllocationCallbacks,
+    instance: VkInstance,
+    p_allocator: *const VkAllocationCallbacks,
 ) {
     if let Some((_, layer_instance)) = INSTANCE_MAP.remove(&instance) {
         if let Ok(phy_devices) = layer_instance.d.enumerate_physical_devices() {
@@ -85,17 +85,17 @@ pub(crate) unsafe extern "system" fn layer_vkDestroyInstance(
 
 #[unsafe(no_mangle)]
 pub(crate) unsafe extern "system" fn layer_vkCreateDevice(
-    physical_device: vk::PhysicalDevice,
-    p_create_info: *const vk::DeviceCreateInfo,
-    p_allocator: *const vk::AllocationCallbacks,
-    p_device: *mut vk::Device,
-) -> vk::Result {
+    physical_device: VkPhysicalDevice,
+    p_create_info: *const VkDeviceCreateInfo,
+    p_allocator: *const VkAllocationCallbacks,
+    p_device: *mut VkDevice,
+) -> VkResult {
     let instance = *PHY_TO_INSTANCE.get(&physical_device).expect("unknown physical device");
     let instance_dispatch = INSTANCE_MAP.get(&instance).expect("unknown instance");
 
     let chain_info = match get_device_chain_info(&*p_create_info, LayerFunction::LAYER_LINK_INFO) {
         Some(mut p) => p.as_mut(),
-        None => return vk::Result::ERROR_INITIALIZATION_FAILED,
+        None => return VK_ERROR_INITIALIZATION_FAILED,
     };
 
     let layer_info = *chain_info.u.p_layer_info;
@@ -106,12 +106,12 @@ pub(crate) unsafe extern "system" fn layer_vkCreateDevice(
 
     let set_device_loader_data = match get_device_chain_info(&*p_create_info, LayerFunction::LOADER_DATA_CALLBACK) {
         Some(mut p) => p.as_mut().u.pfn_set_device_loader_data.expect("pfnSetDeviceLoaderData is null"),
-        None => return vk::Result::ERROR_INITIALIZATION_FAILED,
+        None => return VK_ERROR_INITIALIZATION_FAILED,
     };
 
     // Create the device.
     let res = (instance_dispatch.d.fp_v1_0().create_device)(physical_device, p_create_info, p_allocator, p_device);
-    if res != vk::Result::SUCCESS {
+    if res != VK_SUCCESS {
         return res;
     }
 
@@ -127,13 +127,13 @@ pub(crate) unsafe extern "system" fn layer_vkCreateDevice(
     );
     DEVICE_STATE.insert(device.key(), device_state);
     //eprintln!("[planitia-layer] vkCreateDevice {:?}", device);
-    vk::Result::SUCCESS
+    VK_SUCCESS
 }
 
 #[unsafe(no_mangle)]
 pub(crate) unsafe extern "system" fn layer_vkDestroyDevice(
-    device: vk::Device,
-    p_allocator: *const vk::AllocationCallbacks,
+    device: VkDevice,
+    p_allocator: *const VkAllocationCallbacks,
 ) {
     if let Some((_, device_state)) = DEVICE_STATE.remove(&device.key()) {
         //eprintln!("[planitia-layer] vkDestroyDevice {:?}", device);

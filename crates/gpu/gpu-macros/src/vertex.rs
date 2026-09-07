@@ -70,7 +70,7 @@ pub(crate) fn derive_vertex(input: proc_macro::TokenStream) -> syn::Result<Token
             const BUFFER_DESC: &'static #CRATE::VertexBufferLayoutDescription = &#CRATE::VertexBufferLayoutDescription {
                 binding: 0,
                 stride: ::core::mem::size_of::<#struct_name>() as u32,
-                input_rate: #CRATE::vk::VertexInputRate::VERTEX,
+                input_rate: #CRATE::VK_VERTEX_INPUT_RATE_VERTEX,
             };
         }
     })

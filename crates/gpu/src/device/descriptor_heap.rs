@@ -1,7 +1,7 @@
 use crate::Device;
 use crate::device::{RESOURCE_DESCRIPTOR_HEAP_SIZE, SAMPLER_DESCRIPTOR_HEAP_SIZE};
 use ash::vk;
-use ash::vk::Handle;
+use ash::VkHandle;
 use gpu_allocator::MemoryLocation;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme, Allocator};
 use std::ffi::c_void;
@@ -55,7 +55,7 @@ struct DescriptorHeapInfo {
     alloc: Allocation,
     buffer: VkBuffer,
     ptr: *mut c_void,
-    device_addr: vk::DeviceAddress,
+    device_addr: VkDeviceAddress,
     /// Offset to the beginning of descriptors (skips the reserved range).
     start_offset: usize,
     /// Stride between consecutive descriptors.
@@ -114,8 +114,8 @@ fn allocate_descriptor_heap_memory(
     byte_size: usize,
     descriptor_heap_properties: &VkPhysicalDeviceDescriptorHeapPropertiesEXT,
 ) -> DescriptorHeapInfo {
-    let mut usage_flags = vk::BufferUsageFlags::from_raw(VK_BUFFER_USAGE_DESCRIPTOR_HEAP_BIT_EXT);
-    usage_flags |= vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS;
+    let mut usage_flags = VkBufferUsageFlags::from_raw(VK_BUFFER_USAGE_DESCRIPTOR_HEAP_BIT_EXT);
+    usage_flags |= VK_BUFFER_USAGE_FLAGS_SHADER_DEVICE_ADDRESS;
     let alignment = match heap_type {
         DescriptorHeapType::Resource => descriptor_heap_properties.resourceHeapAlignment,
         DescriptorHeapType::Sampler => descriptor_heap_properties.samplerHeapAlignment,
@@ -145,17 +145,17 @@ fn allocate_descriptor_heap_memory(
     let buffer;
     let device_addr;
     unsafe {
-        let info = vk::BufferCreateInfo {
+        let info = VkBufferCreateInfo {
             size: byte_size as u64,
             usage: usage_flags,
-            sharing_mode: vk::SharingMode::EXCLUSIVE,
+            sharing_mode: VK_SHARING_MODE_EXCLUSIVE,
             ..Default::default()
         };
         buffer = device.create_buffer(&info, None).expect("failed to create descriptor heap buffer");
         device
             .bind_buffer_memory(buffer, alloc.memory(), alloc.offset())
             .expect("failed to bind memory for descriptor heap buffer");
-        device_addr = device.get_buffer_device_address(&vk::BufferDeviceAddressInfo { buffer, ..Default::default() });
+        device_addr = device.get_buffer_device_address(&VkBufferDeviceAddressInfo { buffer, ..Default::default() });
     }
     let ptr = alloc.mapped_ptr().expect("failed to map descriptor heap memory").as_ptr();
 

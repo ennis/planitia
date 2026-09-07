@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use color_print::{cprint, cprintln, cwrite};
 use sharc::archive::Offset;
-use sharc::gpu_types::{vk, RasterizationState, DepthStencilState, ColorTargetState};
+use sharc::gpu_types::{vulkan::*, RasterizationState, DepthStencilState, ColorTargetState};
 use sharc::reflection::{ParamLocation, Signature};
 use std::path::Path;
 
@@ -160,10 +160,10 @@ impl<'a> Printer<'a> {
     fn print_rasterization_state(&mut self, rs: &RasterizationState) {
         cprint!("{}<bold>Rasterization</>:  ", Indent(self.indent));
         let cull_mode = match rs.cull_mode {
-            vk::CullModeFlags::FRONT => "FRONT",
-            vk::CullModeFlags::BACK => "BACK",
-            vk::CullModeFlags::FRONT_AND_BACK => "FRONT_AND_BACK",
-            vk::CullModeFlags::NONE => "NONE",
+            VK_CULL_MODE_FRONT_BIT => "FRONT",
+            VK_CULL_MODE_BACK_BIT => "BACK",
+            VK_CULL_MODE_FRONT_AND_BACK => "FRONT_AND_BACK",
+            VK_CULL_MODE_NONE => "NONE",
             _ => "INVALID",
         };
         cprintln!("Cull Mode:<cyan>{}</>  Polygon Mode:<cyan>{:?}</>", cull_mode, rs.polygon_mode);

@@ -14,11 +14,11 @@ use std::ptr;
 /// This is used in `RenderPass::bind_pipeline`.
 pub struct RenderEncoder<'a> {
     parent: &'a mut CommandBuffer,
-    render_area: vk::Rect2D,
+    render_area: VkRect2D,
 }
 
 /// Represents an indirect draw command.
-// This must match the layout of `vk::DrawIndirectCommand` exactly.
+// This must match the layout of `VkDrawIndirectCommand` exactly.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct DrawIndirectCommand {
@@ -29,7 +29,7 @@ pub struct DrawIndirectCommand {
 }
 
 /// Represents an indirect draw command.
-// This must match the layout of `vk::DrawIndexedIndirectCommand` exactly.
+// This must match the layout of `VkDrawIndexedIndirectCommand` exactly.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct DrawIndexedIndirectCommand {
@@ -39,7 +39,7 @@ pub struct DrawIndexedIndirectCommand {
     pub vertex_offset: i32,
     pub first_instance: u32,
 }
-const _: () = assert!(size_of::<DrawIndexedIndirectCommand>() == size_of::<vk::DrawIndexedIndirectCommand>());
+const _: () = assert!(size_of::<DrawIndexedIndirectCommand>() == size_of::<VkDrawIndexedIndirectCommand>());
 
 impl<'a> RenderEncoder<'a> {
     #[inline]
@@ -84,7 +84,7 @@ impl<'a> RenderEncoder<'a> {
         unsafe {
             Device::instance().raw.cmd_bind_pipeline(
                 self.parent.cmdbuf,
-                vk::PipelineBindPoint::GRAPHICS,
+                VK_PIPELINE_BIND_POINT_GRAPHICS,
                 pipeline.pipeline,
             );
         }
@@ -97,7 +97,7 @@ impl<'a> RenderEncoder<'a> {
             Device::instance().raw.cmd_set_viewport(
                 self.parent.cmdbuf,
                 0,
-                &[vk::Viewport { x, y, width, height, min_depth, max_depth }],
+                &[VkViewport { x, y, width, height, min_depth, max_depth }],
             );
         }
     }
@@ -121,7 +121,7 @@ impl<'a> RenderEncoder<'a> {
             Device::instance().raw.cmd_set_scissor(
                 self.parent.cmdbuf,
                 0,
-                &[vk::Rect2D { offset: vk::Offset2D { x, y }, extent: vk::Extent2D { width, height } }],
+                &[VkRect2D { offset: VkOffset2D { x, y }, extent: VkExtent2D { width, height } }],
             );
         }
     }
@@ -158,17 +158,17 @@ impl<'a> RenderEncoder<'a> {
         unsafe {
             Device::instance().raw.cmd_clear_attachments(
                 self.parent.cmdbuf,
-                &[vk::ClearAttachment {
-                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                &[VkClearAttachment {
+                    aspect_mask: VK_IMAGE_ASPECT_FLAGS_COLOR,
                     color_attachment: attachment,
-                    clear_value: vk::ClearValue { color: color.into() },
+                    clear_value: VkClearValue { color: color.into() },
                 }],
-                &[vk::ClearRect {
+                &[VkClearRect {
                     base_array_layer: 0,
                     layer_count: 1,
-                    rect: vk::Rect2D {
-                        offset: vk::Offset2D { x: rect.min.x, y: rect.min.y },
-                        extent: vk::Extent2D { width: rect.width(), height: rect.height() },
+                    rect: VkRect2D {
+                        offset: VkOffset2D { x: rect.min.x, y: rect.min.y },
+                        extent: VkExtent2D { width: rect.width(), height: rect.height() },
                     },
                 }],
             );
@@ -180,17 +180,17 @@ impl<'a> RenderEncoder<'a> {
         unsafe {
             Device::instance().raw.cmd_clear_attachments(
                 self.parent.cmdbuf,
-                &[vk::ClearAttachment {
-                    aspect_mask: vk::ImageAspectFlags::DEPTH,
+                &[VkClearAttachment {
+                    aspect_mask: VK_IMAGE_ASPECT_FLAGS_DEPTH,
                     color_attachment: 0,
-                    clear_value: vk::ClearValue { depth_stencil: vk::ClearDepthStencilValue { depth, stencil: 0 } },
+                    clear_value: VkClearValue { depth_stencil: VkClearDepthStencilValue { depth, stencil: 0 } },
                 }],
-                &[vk::ClearRect {
+                &[VkClearRect {
                     base_array_layer: 0,
                     layer_count: 1,
-                    rect: vk::Rect2D {
-                        offset: vk::Offset2D { x: rect.min.x, y: rect.min.y },
-                        extent: vk::Extent2D { width: rect.width(), height: rect.height() },
+                    rect: VkRect2D {
+                        offset: VkOffset2D { x: rect.min.x, y: rect.min.y },
+                        extent: VkExtent2D { width: rect.width(), height: rect.height() },
                     },
                 }],
             );
@@ -279,7 +279,7 @@ impl<'a> RenderEncoder<'a> {
             if let Some(vb) = vertex_buffer {
                 device.cmd_bind_vertex_buffers(self.parent.cmdbuf, 0, &[vb.handle()], &[0]);
             }
-            device.cmd_bind_index_buffer(self.parent.cmdbuf, index_buffer.handle(), 0, vk::IndexType::UINT32);
+            device.cmd_bind_index_buffer(self.parent.cmdbuf, index_buffer.handle(), 0, VK_INDEX_TYPE_UINT32);
             device.cmd_set_primitive_topology(self.parent.cmdbuf, topology.to_vk_primitive_topology());
             device.cmd_draw_indexed(
                 self.parent.cmdbuf,
@@ -332,14 +332,14 @@ impl<'a> RenderEncoder<'a> {
             if let Some(vb) = vertex_buffer {
                 device.cmd_bind_vertex_buffers(self.parent.cmdbuf, 0, &[vb.handle()], &[0]);
             }
-            device.cmd_bind_index_buffer(self.parent.cmdbuf, index_buffer.handle(), 0, vk::IndexType::UINT32);
+            device.cmd_bind_index_buffer(self.parent.cmdbuf, index_buffer.handle(), 0, VK_INDEX_TYPE_UINT32);
             device.cmd_set_primitive_topology(self.parent.cmdbuf, topology.to_vk_primitive_topology());
             device.cmd_draw_indexed_indirect(
                 self.parent.cmdbuf,
                 commands.handle(),
-                draw_range.start as u64 * size_of::<vk::DrawIndexedIndirectCommand>() as u64,
+                draw_range.start as u64 * size_of::<VkDrawIndexedIndirectCommand>() as u64,
                 draw_range.len() as u32,
-                size_of::<vk::DrawIndexedIndirectCommand>() as u32,
+                size_of::<VkDrawIndexedIndirectCommand>() as u32,
             );
         }
     }
@@ -408,9 +408,9 @@ impl CommandBuffer {
             } else {
                 panic!("render_area must be specified if no attachments are specified");
             }
-            vk::Rect2D {
-                offset: vk::Offset2D { x: 0, y: 0 },
-                extent: vk::Extent2D { width: extent.width, height: extent.height },
+            VkRect2D {
+                offset: VkOffset2D { x: 0, y: 0 },
+                extent: VkExtent2D { width: extent.width, height: extent.height },
             }
         };
 
@@ -418,13 +418,13 @@ impl CommandBuffer {
         let color_attachment_infos: Vec<_> = color_attachments
             .iter()
             .map(|a| {
-                vk::RenderingAttachmentInfo {
+                VkRenderingAttachmentInfo {
                     image_view: a.image.attachment_view,
-                    image_layout: vk::ImageLayout::GENERAL,
-                    resolve_mode: vk::ResolveModeFlags::NONE,
-                    load_op: if a.clear.is_some() { vk::AttachmentLoadOp::CLEAR } else { vk::AttachmentLoadOp::LOAD },
-                    store_op: vk::AttachmentStoreOp::STORE,
-                    clear_value: vk::ClearValue { color: a.get_vk_clear_color_value() },
+                    image_layout: VK_IMAGE_LAYOUT_GENERAL,
+                    resolve_mode: VK_RESOLVE_MODE_FLAGS_NONE,
+                    load_op: if a.clear.is_some() { VK_ATTACHMENT_LOAD_OP_CLEAR } else { VK_ATTACHMENT_LOAD_OP_LOAD },
+                    store_op: VK_ATTACHMENT_STORE_OP_STORE,
+                    clear_value: VkClearValue { color: a.get_vk_clear_color_value() },
                     // TODO multisampling resolve
                     ..Default::default()
                 }
@@ -435,33 +435,33 @@ impl CommandBuffer {
         let p_depth_attachment;
         let p_stencil_attachment;
         if let Some(ref depth) = depth_stencil_attachment {
-            depth_attachment = vk::RenderingAttachmentInfo {
+            depth_attachment = VkRenderingAttachmentInfo {
                 image_view: depth.image.attachment_view,
-                image_layout: vk::ImageLayout::GENERAL,
-                resolve_mode: vk::ResolveModeFlags::NONE,
+                image_layout: VK_IMAGE_LAYOUT_GENERAL,
+                resolve_mode: VK_RESOLVE_MODE_FLAGS_NONE,
                 load_op: if depth.depth_clear.is_some() {
-                    vk::AttachmentLoadOp::CLEAR
+                    VK_ATTACHMENT_LOAD_OP_CLEAR
                 } else {
-                    vk::AttachmentLoadOp::LOAD
+                    VK_ATTACHMENT_LOAD_OP_LOAD
                 },
-                store_op: vk::AttachmentStoreOp::STORE,
-                clear_value: vk::ClearValue { depth_stencil: depth.get_vk_clear_depth_stencil_value() },
+                store_op: VK_ATTACHMENT_STORE_OP_STORE,
+                clear_value: VkClearValue { depth_stencil: depth.get_vk_clear_depth_stencil_value() },
                 // TODO multisampling resolve
                 ..Default::default()
             };
             p_depth_attachment = &depth_attachment as *const _;
             if is_depth_and_stencil_format(depth.image.format()) {
-                stencil_attachment = vk::RenderingAttachmentInfo {
+                stencil_attachment = VkRenderingAttachmentInfo {
                     image_view: depth.image.attachment_view,
-                    image_layout: vk::ImageLayout::GENERAL,
-                    resolve_mode: vk::ResolveModeFlags::NONE,
+                    image_layout: VK_IMAGE_LAYOUT_GENERAL,
+                    resolve_mode: VK_RESOLVE_MODE_FLAGS_NONE,
                     load_op: if depth.stencil_clear.is_some() {
-                        vk::AttachmentLoadOp::CLEAR
+                        VK_ATTACHMENT_LOAD_OP_CLEAR
                     } else {
-                        vk::AttachmentLoadOp::LOAD
+                        VK_ATTACHMENT_LOAD_OP_LOAD
                     },
-                    store_op: vk::AttachmentStoreOp::STORE,
-                    clear_value: vk::ClearValue { depth_stencil: depth.get_vk_clear_depth_stencil_value() },
+                    store_op: VK_ATTACHMENT_STORE_OP_STORE,
+                    clear_value: VkClearValue { depth_stencil: depth.get_vk_clear_depth_stencil_value() },
                     // TODO multisampling resolve
                     ..Default::default()
                 };
@@ -474,7 +474,7 @@ impl CommandBuffer {
             p_stencil_attachment = ptr::null();
         };
 
-        let rendering_info = vk::RenderingInfo {
+        let rendering_info = VkRenderingInfo {
             flags: Default::default(),
             render_area,
             layer_count: 1, // TODO?

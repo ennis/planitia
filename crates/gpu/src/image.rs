@@ -204,17 +204,17 @@ impl Image {
     }
 
     // Returns the handle of the default image view.
-    //pub fn view_handle(&self) -> vk::ImageView {
+    //pub fn view_handle(&self) -> VkImageView {
     //    self.descriptors.image_view
     //}
 
     /*    /// Returns a descriptor for sampling this image in a shader.
-    pub fn texture_descriptor(&self, layout: vk::ImageLayout) -> Descriptor<'_> {
+    pub fn texture_descriptor(&self, layout: VkImageLayout) -> Descriptor<'_> {
         Descriptor::SampledImage { image: self, layout }
     }
 
     /// Returns a descriptor for accessing this image as a storage image in a shader.
-    pub fn storage_image_descriptor(&self, layout: vk::ImageLayout) -> Descriptor<'_> {
+    pub fn storage_image_descriptor(&self, layout: VkImageLayout) -> Descriptor<'_> {
         Descriptor::StorageImage { image: self, layout }
     }*/
 
@@ -301,8 +301,8 @@ pub(crate) struct ImageResourceDescriptors {
     pub(crate) storage: ResourceDescriptorIndex,
     pub(crate) stencil_texture: ResourceDescriptorIndex,
     pub(crate) stencil_storage: ResourceDescriptorIndex,
-    pub(crate) image_view: vk::ImageView,
-    pub(crate) stencil_view: vk::ImageView,
+    pub(crate) image_view: VkImageView,
+    pub(crate) stencil_view: VkImageView,
 }*/
 
 #[derive(Copy, Clone, Debug, Default)]
