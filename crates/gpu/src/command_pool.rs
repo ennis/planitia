@@ -1,9 +1,9 @@
-use gpu::Device;
+use gpu::{vkcallnc, Device};
 use std::cell::RefCell;
 use std::mem::MaybeUninit;
 use std::ptr;
 use vulkan::*;
-
+use crate::vkcall;
 
 /// Allocates command buffers in a `VkCommandPool` and allows re-use of freed command buffers.
 #[derive(Debug)]
@@ -23,7 +23,7 @@ impl ThreadLocalCommandPool {
             queueFamilyIndex: queue_family_index,
             ..
         };
-        let command_pool = device.vk.CreateCommandPool(device.vkd, &create_info, ptr::null()).unwrap();
+        vkcall!(device.fns.CreateCommandPool(device.vkd, &create_info, ptr::null(), @out let command_pool));
         ThreadLocalCommandPool { queue_family: queue_family_index, command_pool, pending: vec![] }
     }
 
@@ -41,9 +41,8 @@ impl ThreadLocalCommandPool {
                 commandBufferCount: 1,
                 ..
             };
-            let mut cmd = MaybeUninit::uninit();
-            device.vk.AllocateCommandBuffers(device.vkd, &allocate_info, cmd.as_mut_ptr()).check();
-            cmd.assume_init()
+            vkcall!(device.fns.AllocateCommandBuffers(device.vkd, &allocate_info, @out let cmd));
+            cmd
         }
     }
 
@@ -69,7 +68,7 @@ impl ThreadLocalCommandPool {
                 // So we don't care and free command buffers anyway. Ideally the driver should be
                 // in charge of optimizing this (because it should know best), but Vulkan forces that onto
                 // the application instead...
-                device.vk.FreeCommandBuffers(device.vkd, self.command_pool, 1, &*cmdbuf);
+                device.fns.FreeCommandBuffers(device.vkd, self.command_pool, 1, &*cmdbuf);
                 false
             } else {
                 true

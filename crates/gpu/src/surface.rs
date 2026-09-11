@@ -1,6 +1,6 @@
 #[cfg(windows)]
 mod platform {
-    use crate::Instance;
+    use crate::{vkcall, Instance};
     use crate::instance::get_vulkan_entry;
     use raw_window_handle::RawWindowHandle;
     use std::ptr;
@@ -27,9 +27,8 @@ mod platform {
         };
         unsafe {
             let vk_instance = Instance::get().instance;
-            KHR_WIN32_SURFACE
-                .CreateWin32SurfaceKHR(vk_instance, &create_info, ptr::null())
-                .expect("failed to create win32 surface")
+            vkcall!(KHR_WIN32_SURFACE.CreateWin32SurfaceKHR(vk_instance, &create_info, ptr::null(), @out let surface));
+            surface
         }
     }
 }

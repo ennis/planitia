@@ -14,7 +14,7 @@ impl CommandBuffer {
         let device = Device::instance();
         unsafe {
             // SAFETY: FFI call and parameters are valid
-            device.vk.CmdFillBuffer(self.cmdbuf, range.buffer.handle(), range.byte_offset, range.byte_size, data);
+            device.fns.CmdFillBuffer(self.cmdbuf, range.buffer.handle(), range.byte_offset, range.byte_size, data);
         }
     }
 
@@ -30,7 +30,7 @@ impl CommandBuffer {
         }];
         unsafe {
             // SAFETY: FFI call and parameters are valid
-            device.vk.CmdClearColorImage(
+            device.fns.CmdClearColorImage(
                 self.cmdbuf,
                 image.handle(),
                 VK_IMAGE_LAYOUT_GENERAL,
@@ -52,7 +52,7 @@ impl CommandBuffer {
         }];
         unsafe {
             // SAFETY: FFI call and parameters are valid
-            device.vk.CmdClearDepthStencilImage(
+            device.fns.CmdClearDepthStencilImage(
                 self.cmdbuf,
                 image.handle(),
                 VK_IMAGE_LAYOUT_GENERAL,
@@ -91,7 +91,7 @@ impl CommandBuffer {
         }];
         // SAFETY: FFI call and parameters are valid
         unsafe {
-            device.vk.CmdCopyImage(
+            device.fns.CmdCopyImage(
                 self.cmdbuf,
                 source.image.handle(),
                 VK_IMAGE_LAYOUT_GENERAL,
@@ -117,7 +117,7 @@ impl CommandBuffer {
         assert!(dst_offset + size <= destination.byte_size());
         // SAFETY: FFI call and parameters are valid
         unsafe {
-            device.vk.CmdCopyBuffer(
+            device.fns.CmdCopyBuffer(
                 self.cmdbuf,
                 source.handle(),
                 destination.handle(),
@@ -152,7 +152,7 @@ impl CommandBuffer {
         }];
         // SAFETY: FFI call and parameters are valid
         unsafe {
-            device.vk.CmdCopyBufferToImage(
+            device.fns.CmdCopyBufferToImage(
                 self.cmdbuf,
                 source.buffer.handle(),
                 destination.image.handle(),
@@ -186,7 +186,7 @@ impl CommandBuffer {
         }];
         // SAFETY: FFI call and parameters are valid
         unsafe {
-            device.vk.CmdCopyImageToBuffer(
+            device.fns.CmdCopyImageToBuffer(
                 self.cmdbuf,
                 source.image.handle(),
                 VK_IMAGE_LAYOUT_GENERAL,
@@ -226,7 +226,7 @@ impl CommandBuffer {
         }];
         // SAFETY: command buffer is OK, params OK
         unsafe {
-            device.vk.CmdBlitImage(
+            device.fns.CmdBlitImage(
                 self.cmdbuf,
                 src.handle(),
                 VK_IMAGE_LAYOUT_GENERAL,

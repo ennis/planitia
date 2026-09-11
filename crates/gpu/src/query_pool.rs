@@ -1,5 +1,6 @@
 use crate::{Device, VulkanObject};
 use std::ptr;
+use gpu::vkcall;
 use vulkan::*;
 
 /// Query pools.
@@ -15,8 +16,8 @@ impl QueryPool {
         let device = Device::instance();
         let create_info = VkQueryPoolCreateInfo { queryType: query_type, queryCount: pool_size as u32, .. };
         unsafe {
-            let pool = device.vk.CreateQueryPool(device.vkd, &create_info, ptr::null()).unwrap();
-            device.vk.ResetQueryPool(device.vkd, pool, 0, pool_size as u32);
+            vkcall!(let _ = device.fns.CreateQueryPool(device.vkd, &create_info, ptr::null(), @out let pool));
+            device.fns.ResetQueryPool(device.vkd, pool, 0, pool_size as u32);
             QueryPool { pool, ty: query_type, size: pool_size }
         }
     }
@@ -25,7 +26,7 @@ impl QueryPool {
         let device = Device::instance();
         unsafe {
             device
-                .vk
+                .fns
                 .GetQueryPoolResults(
                     device.vkd,
                     self.pool,
@@ -44,7 +45,7 @@ impl QueryPool {
     pub fn reset(&self) {
         let device = Device::instance();
         unsafe {
-            device.vk.ResetQueryPool(device.vkd, self.pool, 0, self.size as u32);
+            device.fns.ResetQueryPool(device.vkd, self.pool, 0, self.size as u32);
         }
     }
 }
@@ -54,7 +55,7 @@ impl Drop for QueryPool {
         let device = Device::instance();
         let pool = self.pool;
         device.delete_after_current_frame(move |device| unsafe {
-            device.vk.DestroyQueryPool(device.vkd, pool, ptr::null());
+            device.fns.DestroyQueryPool(device.vkd, pool, ptr::null());
         });
     }
 }

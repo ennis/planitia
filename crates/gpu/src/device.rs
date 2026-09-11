@@ -8,7 +8,7 @@ use crate::{
     BufferAddressRange, BufferUsage, ComputePipeline, ComputePipelineCreateInfo, Error, FrameIndex, GraphicsPipeline,
     GraphicsPipelineCreateInfo, Instance, PreRasterizationShaders, Ptr, SUBGROUP_SIZE, SamplerParams,
     SamplerParamsHashable, ShaderReflection, VulkanObject, get_vulkan_entry, is_depth_and_stencil_format, signal,
-    vkcheck,
+    vkarraycall, vkarraycallnc, vkcallnc, vkcheck, vkcall,
 };
 use ash::vk::Handle;
 use gpu::device::descriptor_heap::SamplerDescriptorHandle;
@@ -83,9 +83,8 @@ pub(crate) struct DeviceSubmissionState {
 
 pub struct Device {
     /// Underlying vulkan device
-    //pub(crate) raw: ash::Device,
     pub vkd: VkDevice,
-    pub vk: Vulkan_1_4_DeviceDispatch,
+    pub fns: Vulkan_1_4_DeviceDispatch,
     /// Common device extensions.
     pub(crate) ext: DeviceExtensions,
     /// Platform-specific extension functions
@@ -100,19 +99,10 @@ pub struct Device {
     // --- descriptor heap ---
     /// semaphores ready for reuse.
     pub(crate) semaphores: Mutex<Vec<VkSemaphore>>,
-    // Index of the next submission not yet created.
-    //pub(crate) next_create_ticket: AtomicU64,
     /// The index of the frame being recorded, or, equivalently, the next frame index to be signalled.
     pub(crate) frame_index: AtomicU64,
     /// Destructors (or other function calls) that are delayed until associated command buffers
     /// have completed execution.
-    ///
-    /// Note that the deletion queue is sorted by create_ticket, which is not necessarily the same as
-    /// submission order, in case the user submits command buffers out-of-order.
-    /// This means that even if a submission has completed execution, deletion of the associated
-    /// resources are delayed until all submissions **with a lower create_ticket** have also completed.
-    /// This is necessary to avoid unsound scenarios where resources are deleted while still in use
-    /// by the GPU, due to command buffers being submitted out-of-order.
     deletion_queue: Mutex<Vec<DeleteQueueEntry>>,
     pub(crate) sampler_cache: Mutex<HashMap<SamplerParamsHashable, SamplerDescriptorHandle>>,
 }
@@ -275,12 +265,11 @@ unsafe fn select_physical_device(instance: &Instance) -> PhysicalDeviceAndProper
     let mut selected_phy_properties = VkPhysicalDeviceProperties { .. };
     //let mut selected_phy_features = Default::default();
     for phy in physical_devices {
-        let props = instance.fns.GetPhysicalDeviceProperties(phy);
-        let _features = instance.fns.GetPhysicalDeviceFeatures(phy);
+        vkcallnc!(instance.fns.GetPhysicalDeviceProperties(phy, @out let props));
+        vkcallnc!(instance.fns.GetPhysicalDeviceFeatures(phy, @out let _features));
         if props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU {
             selected_phy = Some(phy);
             selected_phy_properties = props;
-            //selected_phy_features = features;
         }
     }
     // TODO implement fallbacks
@@ -291,6 +280,7 @@ unsafe fn select_physical_device(instance: &Instance) -> PhysicalDeviceAndProper
     }
 }
 
+/*
 // TODO nuke this
 unsafe fn find_queue_family(
     instance: &Instance,
@@ -329,7 +319,7 @@ unsafe fn find_queue_family(
         index += 1;
     }
     best_queue_family.expect("could not find a compatible queue")
-}
+}*/
 
 #[cfg(windows)]
 const DEVICE_EXTENSION_COUNT: usize = 14;
@@ -426,13 +416,15 @@ impl Device {
         let entry = get_vulkan_entry();
         let instance = Instance::get();
         let dd = Vulkan_1_4_DeviceDispatch::load_with(|proc| instance.fns.GetDeviceProcAddr(device, proc.as_ptr()));
-        let queue = dd.GetDeviceQueue(device, graphics_queue_family_index, 0);
+        vkcallnc!(dd.GetDeviceQueue(device, graphics_queue_family_index, 0, @out let queue));
+
         let timeline = {
             let timeline_create_info =
                 VkSemaphoreTypeCreateInfo { semaphoreType: VK_SEMAPHORE_TYPE_TIMELINE, initialValue: 0, .. };
             let semaphore_create_info =
                 VkSemaphoreCreateInfo { pNext: &timeline_create_info as *const _ as *const c_void, .. };
-            dd.CreateSemaphore(device, &semaphore_create_info, ptr::null()).unwrap()
+            vkcallnc!(dd.CreateSemaphore(device, &semaphore_create_info, ptr::null(), @out let timeline));
+            timeline
         };
         let mut allocator = {
             let ash_instance = ash::Instance::load_with(
@@ -473,7 +465,7 @@ impl Device {
             entry.GetInstanceProcAddr(instance.instance, proc.as_ptr())
         });
         let descriptor_heaps = DescriptorHeaps::new(&mut allocator, device, &dd, &descriptor_heap_properties);
-        let memory_properties = instance.fns.GetPhysicalDeviceMemoryProperties(physical_device);
+        vkcallnc!(instance.fns.GetPhysicalDeviceMemoryProperties(physical_device, @out let memory_properties));
 
         // ------ info dump ------
         let device_name = CStr::from_ptr(physical_device_properties.properties.deviceName.as_ptr()).to_string_lossy();
@@ -499,8 +491,7 @@ impl Device {
         info!("        timestampPeriod: {}", physical_device_properties.properties.limits.timestampPeriod);
 
         Ok(Device {
-            //raw: device,
-            vk: dd,
+            fns: dd,
             vkd: device,
             ext: DeviceExtensions {
                 swapchain: khr_swapchain,
@@ -540,7 +531,9 @@ impl Device {
     /// Returns the list of supported swapchain formats for the given surface.
     pub unsafe fn get_surface_formats(&self, surface: VkSurfaceKHR) -> Vec<VkSurfaceFormatKHR> {
         let instance = Instance::get();
-        let mut count = 0;
+        vkarraycall!(instance.khr_surface.GetPhysicalDeviceSurfaceFormatsKHR(self.thread_safe.physical_device, surface, @count let count, @out let surface_formats));
+        surface_formats
+        /*let mut count = 0;
         instance
             .khr_surface
             .GetPhysicalDeviceSurfaceFormatsKHR(self.thread_safe.physical_device, surface, &mut count, ptr::null_mut())
@@ -556,7 +549,7 @@ impl Device {
             )
             .check();
         surface_formats.set_len(count as usize);
-        surface_formats
+        surface_formats*/
     }
 
     /// Returns one supported surface format. Use if you don't care about the format of your swapchain.
@@ -571,25 +564,25 @@ impl Device {
     pub unsafe fn with_surface(present_surface: Option<VkSurfaceKHR>) -> Result<Device, DeviceCreateError> {
         let instance = Instance::get();
         let phy = select_physical_device(instance);
-        let queue_family_properties = {
-            let mut count = 0;
-            instance.fns.GetPhysicalDeviceQueueFamilyProperties(phy.physical_device, &mut count, ptr::null_mut());
-            let mut qfps = Vec::with_capacity(count as usize);
-            instance.fns.GetPhysicalDeviceQueueFamilyProperties(phy.physical_device, &mut count, qfps.as_mut_ptr());
-            qfps.set_len(count as usize);
-            qfps
-        };
-        let graphics_queue_family = find_queue_family(
-            instance,
-            phy.physical_device,
-            &queue_family_properties,
-            VK_QUEUE_GRAPHICS_BIT,
-            present_surface,
-        );
+        vkarraycallnc!(instance.fns.GetPhysicalDeviceQueueFamilyProperties(phy.physical_device, @count let count, @out let queue_family_properties));
+        // Find the first queue family with GRAPHICS|COMPUTE
+        let qf = queue_family_properties
+            .iter()
+            .position(|qf| {
+                qf.queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)
+                    == (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)
+            })
+            .expect("failed to create Vulkan device: could not find a queue supporting graphics and compute")
+            as u32;
+        // check that it supports presentation, to silence validation warnings
+        if let Some(surface) = present_surface {
+            vkcall!(instance.khr_surface.GetPhysicalDeviceSurfaceSupportKHR(phy.physical_device, qf, surface, @out let supported));
+            assert!(supported == VK_TRUE, "selected graphics+compute queue does not support presentation");
+        }
         let queue_priorities = [1.0f32];
         let device_queue_create_infos = &[VkDeviceQueueCreateInfo {
             flags: 0,
-            queueFamilyIndex: graphics_queue_family,
+            queueFamilyIndex: qf,
             queueCount: 1,
             pQueuePriorities: queue_priorities.as_ptr(),
             ..
@@ -733,11 +726,9 @@ impl Device {
         // ------ END SHOPPING LIST ------
 
         // ------ Create device ------
-        let device = instance
-            .fns
-            .CreateDevice(phy.physical_device, &device_create_info, ptr::null_mut())
-            .expect("failed to create Vulkan device");
-        Self::from_existing(phy.physical_device, device, graphics_queue_family)
+
+        vkcall!(instance.fns.CreateDevice(phy.physical_device, &device_create_info, ptr::null_mut(), @out let device));
+        Self::from_existing(phy.physical_device, device, qf)
     }
 }
 
@@ -763,7 +754,8 @@ impl Device {
 
     pub(crate) fn get_last_completed_frame_index(&self) -> u64 {
         unsafe {
-            let mut value = self.vk.GetSemaphoreCounterValue(self.vkd, self.thread_safe.frame_timeline).unwrap();
+            vkcall!(self.fns.GetSemaphoreCounterValue(self.vkd, self.thread_safe.frame_timeline, @out let value));
+            //let mut value = self.fns.GetSemaphoreCounterValue(self.vkd, self.thread_safe.frame_timeline).unwrap();
             if value == u64::MAX {
                 // We've likely lost the device.
                 panic!("GetSemaphoreCounterValue returned an invalid value, possible device lost");
@@ -805,7 +797,7 @@ impl Device {
                 self.allocator.lock().unwrap().free(allocation).expect("failed to free memory")
             }
             ResourceAllocation::DeviceMemory { device_memory } => unsafe {
-                self.vk.FreeMemory(self.vkd, device_memory, ptr::null());
+                self.fns.FreeMemory(self.vkd, device_memory, ptr::null());
             },
             ResourceAllocation::None => {
                 // nothing to do
@@ -864,7 +856,8 @@ impl Device {
         // Otherwise create a new one
         unsafe {
             let create_info = VkSemaphoreCreateInfo { .. };
-            self.vk.CreateSemaphore(self.vkd, &create_info, ptr::null()).unwrap()
+            vkcall!(self.fns.CreateSemaphore(self.vkd, &create_info, ptr::null(), @out let semaphore));
+            semaphore
         }
     }
 
@@ -954,19 +947,20 @@ impl Device {
             basePipelineIndex: 0,
             ..
         };
-        let pipeline = unsafe {
-            let mut pipeline = VkPipeline::null();
-            vkcheck!(self.vk.CreateComputePipelines(
-                self.vkd,
-                VkPipelineCache::null(),
-                1,
-                &cpci,
-                ptr::null(),
-                &mut pipeline
-            ));
-            pipeline
-        };
-        Ok(ComputePipeline { pipeline, reflection: create_info.shader.refl_params })
+        unsafe {
+            vkcall!(self.fns.CreateComputePipelines(self.vkd, VkPipelineCache::null(), 1, &cpci, ptr::null(), @out let pipeline));
+            Ok(ComputePipeline { pipeline, reflection: create_info.shader.refl_params })
+        }
+        //let mut pipeline = VkPipeline::null();
+        //vkcheck!(self.fns.CreateComputePipelines(
+        //    self.vkd,
+        //    VkPipelineCache::null(),
+        //    1,
+        //    &cpci,
+        //    ptr::null(),
+        //    &mut pipeline
+        //));
+        //pipeline
     }
 
     /// Creates a graphics pipeline.
@@ -1262,19 +1256,22 @@ impl Device {
             ..
         };
 
-        let pipeline = unsafe {
-            let mut pipeline = VkPipeline::null();
-            vkcheck!(self.vk.CreateGraphicsPipelines(
-                self.vkd,
-                VkPipelineCache::null(),
-                1,
-                &pipeline_create_info,
-                ptr::null(),
-                &mut pipeline,
-            ));
-            pipeline
-        };
-        Ok(GraphicsPipeline { pipeline, stage_reflection })
+        unsafe {
+            vkcall!(self.fns.CreateGraphicsPipelines(self.vkd, VkPipelineCache::null(), 1, &pipeline_create_info, ptr::null(), @out let pipeline));
+            Ok(GraphicsPipeline { pipeline, stage_reflection })
+        }
+        //let pipeline = unsafe {
+        //    let mut pipeline = VkPipeline::null();
+        //    vkcheck!(self.fns.CreateGraphicsPipelines(
+        //        self.vkd,
+        //        VkPipelineCache::null(),
+        //        1,
+        //        &pipeline_create_info,
+        //        ptr::null(),
+        //        &mut pipeline,
+        //    ));
+        //    pipeline
+        //};
     }
 }
 
@@ -1282,7 +1279,7 @@ impl Device {
 pub fn wait_idle() {
     let device = Device::instance();
     unsafe {
-        vkcheck!(device.vk.DeviceWaitIdle(device.vkd));
+        vkcheck!(device.fns.DeviceWaitIdle(device.vkd));
     }
 }
 
@@ -1296,7 +1293,7 @@ pub fn wait_for_frame(frame_index: FrameIndex, timeout: Option<Duration>) {
             pValues: &frame_index,
             ..
         };
-        vkcheck!(device.vk.WaitSemaphores(
+        vkcheck!(device.fns.WaitSemaphores(
             device.vkd,
             &wait_info,
             timeout.map(|d| d.as_nanos() as u64).unwrap_or(u64::MAX)
@@ -1448,17 +1445,15 @@ pub fn get_calibrated_timestamp_pair() -> (u64, u64) {
         VkCalibratedTimestampInfoKHR { timeDomain: VK_TIME_DOMAIN_CLOCK_MONOTONIC_KHR, .. },
     ];
 
-    let _ = unsafe {
-        device
-            .ext
-            .calibrated_timestamps
-            .GetCalibratedTimestampsKHR(
-                device.vkd,
-                TIMESTAMP_INFOS.len() as u32,
-                TIMESTAMP_INFOS.as_ptr(),
-                timestamps.as_mut_ptr(),
-            )
-            .unwrap()
+    let mut _max_deviation = 0;
+    unsafe {
+        vkcheck!(device.ext.calibrated_timestamps.GetCalibratedTimestampsKHR(
+            device.vkd,
+            TIMESTAMP_INFOS.len() as u32,
+            TIMESTAMP_INFOS.as_ptr(),
+            timestamps.as_mut_ptr(),
+            &mut _max_deviation,
+        ));
     };
 
     let device_timestamp = timestamps[0];

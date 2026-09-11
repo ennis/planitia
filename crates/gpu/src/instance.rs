@@ -1,3 +1,4 @@
+use crate::vkcall;
 use ash::vk;
 use core::ptr;
 use std::ffi::CStr;
@@ -55,7 +56,7 @@ fn create_vulkan_instance() -> Instance {
             ppEnabledExtensionNames: extension_names.as_ptr(),
             ..
         };
-        let instance = entry.CreateInstance(&instance_create_info, ptr::null()).unwrap();
+        vkcall!(entry.CreateInstance(&instance_create_info, ptr::null(), @out let instance));
         let fns = Vulkan_1_3_InstanceDispatch::load_with(|name| entry.GetInstanceProcAddr(instance, name.as_ptr()));
         let khr_surface =
             khr_surface::InstanceDispatch::load_with(|name| entry.GetInstanceProcAddr(instance, name.as_ptr()));

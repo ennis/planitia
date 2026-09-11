@@ -76,7 +76,7 @@ impl Drop for DxgiVulkanInteropSwapChain {
             // FIXME: there should be a RAII wrapper for semaphores probably
             gpu::wait_idle();
             let device = gpu::Device::instance();
-            device.vk.DestroySemaphore(device.vkd, self.fence_semaphore, ptr::null());
+            device.fns.DestroySemaphore(device.vkd, self.fence_semaphore, ptr::null());
             CloseHandle(self.fence_shared_handle).unwrap();
             for img in self.images.iter() {
                 CloseHandle(img.shared_handle).unwrap();

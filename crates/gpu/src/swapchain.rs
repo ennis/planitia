@@ -1,6 +1,8 @@
 use crate::device::{get_preferred_present_mode, get_preferred_swap_extent};
 use crate::image::ImageDescriptors;
-use crate::{CommandBuffer, Device, Image, ImageType, ImageUsage, ResourceAllocation, Size3D};
+use crate::{
+    CommandBuffer, Device, Image, ImageType, ImageUsage, ResourceAllocation, Size3D, vkarraycall, vkcall,
+};
 use gpu_allocator::MemoryLocation;
 use log::info;
 use std::ptr;
@@ -73,13 +75,10 @@ impl Device {
         // on the semaphore (not that the wait has completed).
         let ready = {
             let create_info = VkSemaphoreCreateInfo { .. };
-            self.vk.CreateSemaphore(self.vkd, &create_info, ptr::null()).unwrap()
+            vkcall!(self.fns.CreateSemaphore(self.vkd, &create_info, ptr::null(), @out let ready));
+            ready
         };
-        let index = self
-            .ext
-            .swapchain
-            .AcquireNextImageKHR(self.vkd, swap_chain.handle, timeout.as_nanos() as u64, ready, VkFence::null())
-            .unwrap();
+        vkcall!(self.ext.swapchain.AcquireNextImageKHR(self.vkd, swap_chain.handle, timeout.as_nanos() as u64, ready, VkFence::null(), @out let index));
 
         // wait (GPU side) for the image to be ready
         crate::wait(ready, 0);
@@ -111,7 +110,7 @@ impl Device {
             crate::submit(cmd);
         }
         self.delete_after_current_frame(move |this| {
-            this.vk.DestroySemaphore(this.vkd, ready, ptr::null());
+            this.fns.DestroySemaphore(this.vkd, ready, ptr::null());
         });
         (index as usize, img)
     }
@@ -120,22 +119,8 @@ impl Device {
     pub unsafe fn resize_swapchain(&self, swapchain: &mut SwapChain, width: u32, height: u32) {
         let instance = crate::Instance::get();
         let phy = self.thread_safe.physical_device;
-        let capabilities =
-            instance.khr_surface.GetPhysicalDeviceSurfaceCapabilitiesKHR(phy, swapchain.surface).unwrap();
-        let present_modes = {
-            let mut count = 0;
-            instance
-                .khr_surface
-                .GetPhysicalDeviceSurfacePresentModesKHR(phy, swapchain.surface, &mut count, ptr::null_mut())
-                .check();
-            let mut modes = Vec::with_capacity(count as usize);
-            instance
-                .khr_surface
-                .GetPhysicalDeviceSurfacePresentModesKHR(phy, swapchain.surface, &mut count, modes.as_mut_ptr())
-                .check();
-            modes.set_len(count as usize);
-            modes
-        };
+        vkcall!(instance.khr_surface.GetPhysicalDeviceSurfaceCapabilitiesKHR(phy, swapchain.surface, @out let capabilities));
+        vkarraycall!(instance.khr_surface.GetPhysicalDeviceSurfacePresentModesKHR(phy, swapchain.surface, @count let count, @out let present_modes));
         let present_mode = get_preferred_present_mode(&present_modes);
         let image_extent = get_preferred_swap_extent((width, height), &capabilities);
         let image_count =
@@ -167,7 +152,7 @@ impl Device {
             oldSwapchain: swapchain.handle,
             ..
         };
-        let new_handle = self.ext.swapchain.CreateSwapchainKHR(self.vkd, &create_info, ptr::null()).unwrap();
+        vkcall!(self.ext.swapchain.CreateSwapchainKHR(self.vkd, &create_info, ptr::null(), @out let new_handle));
         // destroy the old swapchain if it exists
         if swapchain.handle != VkSwapchainKHR::null() {
             // FIXME the images may be in use, we should wait for the device to be idle
@@ -181,17 +166,8 @@ impl Device {
             self.recycle_binary_semaphore(render_finished);
         }
         swapchain.images = Vec::with_capacity(image_count as usize);
-        let images = {
-            let mut count = 0;
-            self.ext.swapchain.GetSwapchainImagesKHR(self.vkd, swapchain.handle, &mut count, ptr::null_mut()).check();
-            let mut images = Vec::with_capacity(count as usize);
-            self.ext
-                .swapchain
-                .GetSwapchainImagesKHR(self.vkd, swapchain.handle, &mut count, images.as_mut_ptr())
-                .check();
-            images.set_len(count as usize);
-            images
-        };
+
+        vkarraycall!(self.ext.swapchain.GetSwapchainImagesKHR(self.vkd, swapchain.handle, @count let count, @out let images));
         for image in images {
             let render_finished = self.get_or_create_semaphore();
             swapchain.images.push(SwapchainImage {

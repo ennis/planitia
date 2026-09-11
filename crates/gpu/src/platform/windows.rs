@@ -1,6 +1,7 @@
 use crate::device::{ResourceAllocation, get_vk_sample_count};
-use crate::{CommandBuffer, Device, Image, ImageCreateInfo, Size3D, aspects_for_format};
+use crate::{CommandBuffer, Device, Image, ImageCreateInfo, Size3D, aspects_for_format, vkcallnc};
 //use ash::vk::{HANDLE, SECURITY_ATTRIBUTES};
+use gpu::vkcall;
 use gpu_allocator::MemoryLocation;
 use std::ffi::{OsStr, c_void};
 use std::ptr;
@@ -74,7 +75,8 @@ unsafe fn import_external_memory(
         memoryTypeIndex: memory_type_index,
         ..
     };
-    let device_memory = device.vk.AllocateMemory(device.vkd, &memory_allocate_info, ptr::null()).unwrap();
+
+    vkcall!(device.fns.AllocateMemory(device.vkd, &memory_allocate_info, ptr::null(), @out let device_memory));
     device_memory
 }
 
@@ -88,8 +90,7 @@ impl Device {
         win32_handle: HANDLE,
         win32_handle_name: Option<&str>,
     ) -> Image {
-        let external_memory_image_create_info =
-            VkExternalMemoryImageCreateInfo { handleTypes: win32_handle_type, .. };
+        let external_memory_image_create_info = VkExternalMemoryImageCreateInfo { handleTypes: win32_handle_type, .. };
         let create_info = VkImageCreateInfo {
             pNext: &external_memory_image_create_info as *const _ as *const c_void,
             imageType: image_info.type_.to_vk_image_type(),
@@ -106,8 +107,8 @@ impl Device {
             initialLayout: VK_IMAGE_LAYOUT_UNDEFINED,
             ..
         };
-        let handle = self.vk.CreateImage(self.vkd, &create_info, ptr::null()).expect("failed to create image");
-        let mem_req = self.vk.GetImageMemoryRequirements(self.vkd, handle);
+        vkcall!(self.fns.CreateImage(self.vkd, &create_info, ptr::null(), @out let handle));
+        vkcallnc!(self.fns.GetImageMemoryRequirements(self.vkd, handle, @out let mem_req));
         let device_memory = import_external_memory(
             self,
             &mem_req,
@@ -118,7 +119,7 @@ impl Device {
             win32_handle_name,
             Some(DedicatedAllocation::Image(handle)),
         );
-        self.vk.BindImageMemory(self.vkd, handle, device_memory, 0).check();
+        self.fns.BindImageMemory(self.vkd, handle, device_memory, 0).check();
         let descriptors = self.register_image_descriptors(handle, &create_info);
         let attachment_view = self.create_attachment_image_view(handle, image_info.format);
         // transition image to GENERAL
@@ -188,8 +189,10 @@ impl Device {
             pQueueFamilyIndices: ptr::null(),
             ..
         };
-        let handle = self.vk.CreateImage(self.vkd, &create_info, ptr::null()).expect("failed to create image");
-        let mem_req = self.vk.GetImageMemoryRequirements(self.vkd, handle);
+        vkcall!(self.fns.CreateImage(self.vkd, &create_info, ptr::null(), @out let handle));
+        vkcallnc!(self.fns.GetImageMemoryRequirements(self.vkd, handle, @out let mem_req));
+        //let handle = self.fns.CreateImage(self.vkd, &create_info, ptr::null()).expect("failed to create image");
+        //let mem_req = self.fns.GetImageMemoryRequirements(self.vkd, handle);
         let (_, handle_name_wstr) = handle_name_to_wstr(handle_name);
         let (required_memory_properties, preferred_memory_properties) = match memory_location {
             MemoryLocation::Unknown => Default::default(),
@@ -231,20 +234,22 @@ impl Device {
             memoryTypeIndex: memory_type_index,
             ..
         };
-        let device_memory = self
-            .vk
-            .AllocateMemory(self.vkd, &memory_allocate_info, ptr::null())
-            .expect("failed to allocate exported memory");
+        vkcall!(self.fns.AllocateMemory(self.vkd, &memory_allocate_info, ptr::null(), @out let device_memory));
+        //let device_memory = self
+        //    .fns
+        //    .AllocateMemory(self.vkd, &memory_allocate_info, ptr::null())
+        //    .expect("failed to allocate exported memory");
         // retrieve the win32 handle
         let get_win32_handle_info =
             VkMemoryGetWin32HandleInfoKHR { memory: device_memory, handleType: handle_type, .. };
         // TODO proper error handling
-        let win32_handle = self
-            .platform_extensions
-            .khr_external_memory_win32
-            .GetMemoryWin32HandleKHR(self.vkd, &get_win32_handle_info)
-            .unwrap();
-        self.vk.BindImageMemory(self.vkd, handle, device_memory, 0).check();
+        vkcall!(self.platform_extensions.khr_external_memory_win32.GetMemoryWin32HandleKHR(self.vkd, &get_win32_handle_info, @out let win32_handle));
+        //let win32_handle = self
+        //    .platform_extensions
+        //    .khr_external_memory_win32
+        //    .GetMemoryWin32HandleKHR(self.vkd, &get_win32_handle_info)
+        //    .unwrap();
+        self.fns.BindImageMemory(self.vkd, handle, device_memory, 0).check();
         let descriptors = self.register_image_descriptors(handle, &create_info);
         let attachment_view = self.create_attachment_image_view(handle, image_info.format);
         let image = Image {
@@ -286,13 +291,9 @@ impl Device {
         };
         let semaphore_create_info =
             VkSemaphoreCreateInfo { pNext: &export_semaphore_create_info as *const _ as *const c_void, .. };
-        let semaphore = self.vk.CreateSemaphore(self.vkd, &semaphore_create_info, ptr::null()).unwrap();
+        vkcall!(self.fns.CreateSemaphore(self.vkd, &semaphore_create_info, ptr::null(), @out let semaphore));
         let get_win32_handle_info = VkSemaphoreGetWin32HandleInfoKHR { semaphore, handleType: handle_type, .. };
-        let handle = self
-            .platform_extensions
-            .khr_external_semaphore_win32
-            .GetSemaphoreWin32HandleKHR(self.vkd, &get_win32_handle_info)
-            .unwrap();
+        vkcall!(self.platform_extensions.khr_external_semaphore_win32.GetSemaphoreWin32HandleKHR(self.vkd, &get_win32_handle_info, @out let handle));
         (semaphore, handle)
     }
 
@@ -314,7 +315,7 @@ impl Device {
             pNext: if is_timeline { &timeline_create_info as *const _ as *const c_void } else { ptr::null() },
             ..
         };
-        let semaphore = self.vk.CreateSemaphore(self.vkd, &semaphore_create_info, ptr::null()).unwrap();
+        vkcall!(self.fns.CreateSemaphore(self.vkd, &semaphore_create_info, ptr::null(), @out let semaphore));
         let import_semaphore_win32_handle_info = VkImportSemaphoreWin32HandleInfoKHR {
             semaphore,
             flags: import_flags, // ?????

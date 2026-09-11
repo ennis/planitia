@@ -1001,3 +1001,16 @@ end_frame.
 # VK_EXT_descriptor_heap 
 
 How do we map global variables in slang to PushData?
+
+
+# Vulkan API bindings
+
+- (maybe) load all commands at once? if cmd not available, redirect to a function that panics
+  - loading every extension manually is a pain
+- passing dispatch tables everywhere is a pain
+  - store them globally
+  - issue: device functions pointers tied to a specified device driver
+     - can't avoid device dispatch tables
+- (maybe) get rid of return-value transforms
+  - feels brittle
+  - replace by a macro

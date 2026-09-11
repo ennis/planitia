@@ -1,8 +1,5 @@
 use crate::device::get_vk_sample_count;
-use crate::{
-    BufferUntyped, ColorAttachment, CommandBuffer, DepthStencilAttachment, Device, Format, ResourceAllocation, Size3D,
-    StorageImageHandle, TextureHandle, VulkanObject, aspects_for_format, upload_image_data,
-};
+use crate::{aspects_for_format, upload_image_data, vkcall, BufferUntyped, ColorAttachment, CommandBuffer, DepthStencilAttachment, Device, Format, ResourceAllocation, Size3D, StorageImageHandle, TextureHandle, VulkanObject, vkcallnc};
 use ash::vk;
 use ash::vk::Handle;
 use gpu::ImageCopyView;
@@ -85,7 +82,7 @@ impl Drop for Image {
                 if descriptors.stencil_image != u32::MAX {
                     device.free_resource_descriptor(descriptors.stencil_image);
                 }
-                device.vk.DestroyImage(device.vkd, handle, ptr::null());
+                device.fns.DestroyImage(device.vkd, handle, ptr::null());
                 device.free_memory(&mut allocation);
             });
         }
@@ -372,7 +369,10 @@ impl Device {
             },
             ..
         };
-        unsafe { self.vk.CreateImageView(self.vkd, &create_info, ptr::null()).unwrap() }
+        unsafe {
+            vkcall!(self.fns.CreateImageView(self.vkd, &create_info, ptr::null(), @out let view));
+            view
+        }
     }
 
     /// Creates a new image resource.
@@ -393,8 +393,10 @@ impl Device {
                 initialLayout: VK_IMAGE_LAYOUT_UNDEFINED,
                 ..
             };
-            let handle = self.vk.CreateImage(self.vkd, &create_info, ptr::null()).unwrap();
-            let mem_req = self.vk.GetImageMemoryRequirements(self.vkd, handle);
+            //let handle = self.fns.CreateImage(self.vkd, &create_info, ptr::null()).unwrap();
+            //let mem_req = self.fns.GetImageMemoryRequirements(self.vkd, handle);
+            vkcall!(self.fns.CreateImage(self.vkd, &create_info, ptr::null(), @out let handle));
+            vkcallnc!(self.fns.GetImageMemoryRequirements(self.vkd, handle, @out let mem_req));
             let allocation = self.allocate_memory_or_panic(&AllocationCreateDesc {
                 name: "",
                 // SAFETY: ash has a compatible layout for all Vulkan structs
@@ -403,7 +405,7 @@ impl Device {
                 linear: true,
                 allocation_scheme: AllocationScheme::GpuAllocatorManaged,
             });
-            self.vk
+            self.fns
                 .BindImageMemory(self.vkd, handle, VkDeviceMemory(allocation.memory().as_raw()), allocation.offset())
                 .check();
             let descriptors = self.register_image_descriptors(handle, &create_info);

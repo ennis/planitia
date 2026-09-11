@@ -5,6 +5,7 @@ use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme, 
 use std::ffi::c_void;
 use std::sync::Mutex;
 use std::{mem, ptr};
+use gpu::vkcallnc;
 use vulkan::*;
 
 /// Simple free list to allocate indices.
@@ -110,77 +111,72 @@ fn allocate_descriptor_heap_memory(
     byte_size: usize,
     descriptor_heap_properties: &VkPhysicalDeviceDescriptorHeapPropertiesEXT,
 ) -> DescriptorHeapInfo {
-    let mut usage_flags = VK_BUFFER_USAGE_DESCRIPTOR_HEAP_BIT_EXT;
-    usage_flags |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-    let alignment = match heap_type {
-        DescriptorHeapType::Resource => descriptor_heap_properties.resourceHeapAlignment,
-        DescriptorHeapType::Sampler => descriptor_heap_properties.samplerHeapAlignment,
-    };
-    let max_size = match heap_type {
-        DescriptorHeapType::Resource => descriptor_heap_properties.maxResourceHeapSize,
-        DescriptorHeapType::Sampler => descriptor_heap_properties.maxSamplerHeapSize,
-    } as usize;
-    assert!(
-        byte_size <= max_size,
-        "requested descriptor heap size exceeds the maximum supported size of {max_size} for {heap_type:?} heap"
-    );
-    let alloc = {
-        let alloc_desc = AllocationCreateDesc {
-            name: "descriptor heap".into(),
-            requirements: unsafe {
-                mem::transmute(VkMemoryRequirements { size: byte_size as u64, alignment, memoryTypeBits: u32::MAX })
-            },
-            location: MemoryLocation::CpuToGpu,
-            linear: true,
-            allocation_scheme: AllocationScheme::GpuAllocatorManaged,
-        };
-        allocator.allocate(&alloc_desc).expect("failed to allocate descriptor heap memory")
-    };
-    let buffer;
-    let device_addr;
     unsafe {
-        let info = VkBufferCreateInfo {
+        let mut usage_flags = VK_BUFFER_USAGE_DESCRIPTOR_HEAP_BIT_EXT;
+        usage_flags |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+        let alignment = match heap_type {
+            DescriptorHeapType::Resource => descriptor_heap_properties.resourceHeapAlignment,
+            DescriptorHeapType::Sampler => descriptor_heap_properties.samplerHeapAlignment,
+        };
+        let max_size = match heap_type {
+            DescriptorHeapType::Resource => descriptor_heap_properties.maxResourceHeapSize,
+            DescriptorHeapType::Sampler => descriptor_heap_properties.maxSamplerHeapSize,
+        } as usize;
+        assert!(
+            byte_size <= max_size,
+            "requested descriptor heap size exceeds the maximum supported size of {max_size} for {heap_type:?} heap"
+        );
+        let alloc = {
+            let alloc_desc = AllocationCreateDesc {
+                name: "descriptor heap".into(),
+                requirements: mem::transmute(VkMemoryRequirements { size: byte_size as u64, alignment, memoryTypeBits: u32::MAX }),
+                location: MemoryLocation::CpuToGpu,
+                linear: true,
+                allocation_scheme: AllocationScheme::GpuAllocatorManaged,
+            };
+            allocator.allocate(&alloc_desc).expect("failed to allocate descriptor heap memory")
+        };
+        let create_info = VkBufferCreateInfo {
             size: byte_size as u64,
             usage: usage_flags,
             sharingMode: VK_SHARING_MODE_EXCLUSIVE,
             ..
         };
-        buffer = device_fns.CreateBuffer(device, &info, ptr::null()).expect("failed to create descriptor heap buffer");
+        vkcallnc!(device_fns.CreateBuffer(device, &create_info, ptr::null(), @out let buffer));
         device_fns.BindBufferMemory(device, buffer, unsafe { mem::transmute(alloc.memory()) }, alloc.offset()).check();
-        device_addr = device_fns.GetBufferDeviceAddress(device, &VkBufferDeviceAddressInfo { buffer, .. });
-    }
-    let ptr = alloc.mapped_ptr().expect("failed to map descriptor heap memory").as_ptr();
-
-    let start_offset;
-    let stride;
-    let alignment;
-    match heap_type {
-        DescriptorHeapType::Resource => {
-            alignment = descriptor_heap_properties.imageDescriptorAlignment as usize;
-            start_offset =
-                descriptor_heap_properties.minResourceHeapReservedRange.next_multiple_of(alignment as u64) as usize;
-            stride = descriptor_heap_properties.imageDescriptorSize as usize;
+        let device_addr = device_fns.GetBufferDeviceAddress(device, &VkBufferDeviceAddressInfo { buffer, .. });
+        let ptr = alloc.mapped_ptr().expect("failed to map descriptor heap memory").as_ptr();
+        let start_offset;
+        let stride;
+        let alignment;
+        match heap_type {
+            DescriptorHeapType::Resource => {
+                alignment = descriptor_heap_properties.imageDescriptorAlignment as usize;
+                start_offset =
+                    descriptor_heap_properties.minResourceHeapReservedRange.next_multiple_of(alignment as u64) as usize;
+                stride = descriptor_heap_properties.imageDescriptorSize as usize;
+            }
+            DescriptorHeapType::Sampler => {
+                start_offset = descriptor_heap_properties
+                    .minSamplerHeapReservedRange
+                    .next_multiple_of(descriptor_heap_properties.samplerDescriptorAlignment)
+                    as usize;
+                stride = descriptor_heap_properties.samplerDescriptorSize as usize;
+                alignment = descriptor_heap_properties.samplerDescriptorAlignment as usize;
+            }
         }
-        DescriptorHeapType::Sampler => {
-            start_offset = descriptor_heap_properties
-                .minSamplerHeapReservedRange
-                .next_multiple_of(descriptor_heap_properties.samplerDescriptorAlignment)
-                as usize;
-            stride = descriptor_heap_properties.samplerDescriptorSize as usize;
-            alignment = descriptor_heap_properties.samplerDescriptorAlignment as usize;
+        let index_offset = (start_offset / stride) as u32;
+        DescriptorHeapInfo {
+            alloc,
+            buffer,
+            ptr,
+            device_addr,
+            start_offset,
+            stride,
+            alignment,
+            index_offset,
+            size: byte_size,
         }
-    }
-    let index_offset = (start_offset / stride) as u32;
-    DescriptorHeapInfo {
-        alloc,
-        buffer,
-        ptr,
-        device_addr,
-        start_offset,
-        stride,
-        alignment,
-        index_offset,
-        size: byte_size,
     }
 }
 

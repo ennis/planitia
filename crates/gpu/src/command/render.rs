@@ -48,11 +48,11 @@ impl<'a> RenderEncoder<'a> {
         unsafe {
             match db {
                 Some(db) => {
-                    device.vk.CmdSetDepthBiasEnable(self.parent.cmdbuf, VK_TRUE);
-                    device.vk.CmdSetDepthBias(self.parent.cmdbuf, db.constant_factor, db.clamp, db.slope_factor);
+                    device.fns.CmdSetDepthBiasEnable(self.parent.cmdbuf, VK_TRUE);
+                    device.fns.CmdSetDepthBias(self.parent.cmdbuf, db.constant_factor, db.clamp, db.slope_factor);
                 }
                 None => {
-                    device.vk.CmdSetDepthBiasEnable(self.parent.cmdbuf, VK_FALSE);
+                    device.fns.CmdSetDepthBiasEnable(self.parent.cmdbuf, VK_FALSE);
                 }
             }
         }
@@ -67,7 +67,7 @@ impl<'a> RenderEncoder<'a> {
         // SAFETY: TBD, but the pipeline should live at least until the current frame has finished executing
         let device = Device::instance();
         unsafe {
-            device.vk.CmdBindPipeline(self.parent.cmdbuf, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipeline);
+            device.fns.CmdBindPipeline(self.parent.cmdbuf, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipeline);
         }
     }
 
@@ -76,7 +76,7 @@ impl<'a> RenderEncoder<'a> {
     pub fn set_viewport(&mut self, x: f32, y: f32, width: f32, height: f32, min_depth: f32, max_depth: f32) {
         let device = Device::instance();
         unsafe {
-            device.vk.CmdSetViewport(
+            device.fns.CmdSetViewport(
                 self.parent.cmdbuf,
                 0,
                 1,
@@ -102,7 +102,7 @@ impl<'a> RenderEncoder<'a> {
     pub fn set_scissor(&mut self, x: i32, y: i32, width: u32, height: u32) {
         let device = Device::instance();
         unsafe {
-            device.vk.CmdSetScissor(
+            device.fns.CmdSetScissor(
                 self.parent.cmdbuf,
                 0,
                 1,
@@ -142,7 +142,7 @@ impl<'a> RenderEncoder<'a> {
     pub fn clear_color_rect(&mut self, attachment: u32, color: ClearColorValue, rect: Rect2D) {
         let device = Device::instance();
         unsafe {
-            device.vk.CmdClearAttachments(
+            device.fns.CmdClearAttachments(
                 self.parent.cmdbuf,
                 1,
                 &VkClearAttachment {
@@ -167,7 +167,7 @@ impl<'a> RenderEncoder<'a> {
     pub fn clear_depth_rect(&mut self, depth: f32, rect: Rect2D) {
         let device = Device::instance();
         unsafe {
-            device.vk.CmdClearAttachments(
+            device.fns.CmdClearAttachments(
                 self.parent.cmdbuf,
                 1,
                 &VkClearAttachment {
@@ -242,10 +242,10 @@ impl<'a> RenderEncoder<'a> {
             if let Some(vertex_buffer) = vertex_buffer {
                 let buffers = [vertex_buffer.handle()];
                 let offsets = [0];
-                device.vk.CmdBindVertexBuffers(self.parent.cmdbuf, 0, 1, buffers.as_ptr(), offsets.as_ptr());
+                device.fns.CmdBindVertexBuffers(self.parent.cmdbuf, 0, 1, buffers.as_ptr(), offsets.as_ptr());
             }
-            device.vk.CmdSetPrimitiveTopology(self.parent.cmdbuf, topology.to_vk_primitive_topology());
-            device.vk.CmdDraw(
+            device.fns.CmdSetPrimitiveTopology(self.parent.cmdbuf, topology.to_vk_primitive_topology());
+            device.fns.CmdDraw(
                 self.parent.cmdbuf,
                 vertices.len() as u32,
                 instances.len() as u32,
@@ -272,11 +272,11 @@ impl<'a> RenderEncoder<'a> {
             if let Some(vertex_buffer) = vertex_buffer {
                 let buffers = [vertex_buffer.handle()];
                 let offsets = [0];
-                device.vk.CmdBindVertexBuffers(self.parent.cmdbuf, 0, 1, buffers.as_ptr(), offsets.as_ptr());
+                device.fns.CmdBindVertexBuffers(self.parent.cmdbuf, 0, 1, buffers.as_ptr(), offsets.as_ptr());
             }
-            device.vk.CmdBindIndexBuffer(self.parent.cmdbuf, index_buffer.handle(), 0, VK_INDEX_TYPE_UINT32);
-            device.vk.CmdSetPrimitiveTopology(self.parent.cmdbuf, topology.to_vk_primitive_topology());
-            device.vk.CmdDrawIndexed(
+            device.fns.CmdBindIndexBuffer(self.parent.cmdbuf, index_buffer.handle(), 0, VK_INDEX_TYPE_UINT32);
+            device.fns.CmdSetPrimitiveTopology(self.parent.cmdbuf, topology.to_vk_primitive_topology());
+            device.fns.CmdDrawIndexed(
                 self.parent.cmdbuf,
                 index_range.len() as u32,
                 instances.len() as u32,
@@ -301,10 +301,10 @@ impl<'a> RenderEncoder<'a> {
             if let Some(vertex_buffer) = vertex_buffer {
                 let buffers = [vertex_buffer.handle()];
                 let offsets = [0];
-                device.vk.CmdBindVertexBuffers(self.parent.cmdbuf, 0, 1, buffers.as_ptr(), offsets.as_ptr());
+                device.fns.CmdBindVertexBuffers(self.parent.cmdbuf, 0, 1, buffers.as_ptr(), offsets.as_ptr());
             }
-            device.vk.CmdSetPrimitiveTopology(self.parent.cmdbuf, topology.to_vk_primitive_topology());
-            device.vk.CmdDrawIndirect(
+            device.fns.CmdSetPrimitiveTopology(self.parent.cmdbuf, topology.to_vk_primitive_topology());
+            device.fns.CmdDrawIndirect(
                 self.parent.cmdbuf,
                 commands.handle(),
                 draw_range.start as u64 * size_of::<DrawIndirectCommand>() as u64,
@@ -329,11 +329,11 @@ impl<'a> RenderEncoder<'a> {
             if let Some(vertex_buffer) = vertex_buffer {
                 let buffers = [vertex_buffer.handle()];
                 let offsets = [0];
-                device.vk.CmdBindVertexBuffers(self.parent.cmdbuf, 0, 1, buffers.as_ptr(), offsets.as_ptr());
+                device.fns.CmdBindVertexBuffers(self.parent.cmdbuf, 0, 1, buffers.as_ptr(), offsets.as_ptr());
             }
-            device.vk.CmdBindIndexBuffer(self.parent.cmdbuf, index_buffer.handle(), 0, VK_INDEX_TYPE_UINT32);
-            device.vk.CmdSetPrimitiveTopology(self.parent.cmdbuf, topology.to_vk_primitive_topology());
-            device.vk.CmdDrawIndexedIndirect(
+            device.fns.CmdBindIndexBuffer(self.parent.cmdbuf, index_buffer.handle(), 0, VK_INDEX_TYPE_UINT32);
+            device.fns.CmdSetPrimitiveTopology(self.parent.cmdbuf, topology.to_vk_primitive_topology());
+            device.fns.CmdDrawIndexedIndirect(
                 self.parent.cmdbuf,
                 commands.handle(),
                 draw_range.start as u64 * size_of::<VkDrawIndexedIndirectCommand>() as u64,
@@ -366,7 +366,7 @@ impl<'a> RenderEncoder<'a> {
     fn do_finish(&mut self) {
         unsafe {
             let device = Device::instance();
-            device.vk.CmdEndRendering(self.parent.cmdbuf);
+            device.fns.CmdEndRendering(self.parent.cmdbuf);
         }
     }
 }
@@ -483,7 +483,7 @@ impl CommandBuffer {
         };
         unsafe {
             let device = Device::instance();
-            device.vk.CmdBeginRendering(self.cmdbuf, &rendering_info);
+            device.fns.CmdBeginRendering(self.cmdbuf, &rendering_info);
         }
 
         let mut encoder = RenderEncoder { parent: self, render_area };

@@ -1,4 +1,5 @@
-use crate::{BufferRange, BufferUsage, Device, Ptr, ResourceAllocation, VulkanObject, vkcheck};
+use crate::{BufferRange, BufferUsage, Device, Ptr, ResourceAllocation, VulkanObject, vkcallnc, vkcheck, vkcall};
+use ash::vk::Handle;
 use gpu_allocator::MemoryLocation;
 use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
 use log::{trace, warn};
@@ -11,7 +12,6 @@ use std::ops::RangeBounds;
 use std::os::raw::c_void;
 use std::ptr::NonNull;
 use std::{mem, ptr, slice};
-use ash::vk::Handle;
 use vulkan::*;
 
 /// A buffer of GPU-visible memory, optionally mapped in host memory, without any associated type.
@@ -272,7 +272,7 @@ impl<T: ?Sized> Drop for Buffer<T> {
         if !handle.is_null() {
             Device::instance().delete_after_current_frame(move |device| unsafe {
                 trace!("GPU: deleting buffer: {:?}", handle);
-                device.vk.DestroyBuffer(device.vkd, handle, ptr::null());
+                device.fns.DestroyBuffer(device.vkd, handle, ptr::null());
                 device.free_memory(&mut allocation);
             });
         }
@@ -373,8 +373,10 @@ impl Device {
                 pQueueFamilyIndices: ptr::null(),
                 ..
             };
-            let handle = self.vk.CreateBuffer(self.vkd, &vk_create_info, ptr::null()).unwrap();
-            let mem_req = self.vk.GetBufferMemoryRequirements(self.vkd, handle);
+
+            vkcall!(self.fns.CreateBuffer(self.vkd, &vk_create_info, ptr::null(), @out let handle));
+            vkcallnc!(self.fns.GetBufferMemoryRequirements(self.vkd, handle, @out let mem_req));
+
             let allocation = self.allocate_memory_or_panic(&AllocationCreateDesc {
                 name: "", // unfortunately we don't have a name yet, it is set after creation
                 requirements: unsafe { mem::transmute(mem_req) },
@@ -382,17 +384,16 @@ impl Device {
                 linear: true,
                 allocation_scheme: AllocationScheme::GpuAllocatorManaged,
             });
-            self.vk.BindBufferMemory(
+            vkcheck!(self.fns.BindBufferMemory(
                 self.vkd,
                 handle,
                 VkDeviceMemory(allocation.memory().as_raw()),
                 allocation.offset()
-            ).check();
+            ));
             let mapped_ptr = allocation.mapped_ptr();
             let allocation = ResourceAllocation::Allocation { allocation };
-            let device_address = self
-                .vk
-                .GetBufferDeviceAddress(self.vkd, &VkBufferDeviceAddressInfo { buffer: handle, .. });
+            let device_address =
+                self.fns.GetBufferDeviceAddress(self.vkd, &VkBufferDeviceAddressInfo { buffer: handle, .. });
             trace!("GPU: create_buffer {handle:?}");
             BufferUntyped {
                 allocation,

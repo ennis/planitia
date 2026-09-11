@@ -125,9 +125,9 @@ impl CommandBuffer {
                 flags: VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
                 ..
             };
-            device.vk.BeginCommandBuffer(cmdbuf, &info).check();
+            device.fns.BeginCommandBuffer(cmdbuf, &info).check();
             // setup default dynamic state so validation layers don't complain
-            device.vk.CmdSetDepthBiasEnable(cmdbuf, VK_FALSE);
+            device.fns.CmdSetDepthBiasEnable(cmdbuf, VK_FALSE);
             device.bind_descriptor_heaps(cmdbuf);
         }
         CommandBuffer {
@@ -180,7 +180,7 @@ impl CommandBuffer {
     pub(crate) unsafe fn image_barrier(&mut self, barrier: &VkImageMemoryBarrier2) {
         let device = Device::instance();
         unsafe {
-            device.vk.CmdPipelineBarrier2(
+            device.fns.CmdPipelineBarrier2(
                 self.cmdbuf,
                 &VkDependencyInfo {
                     dependencyFlags: 0,
@@ -261,7 +261,7 @@ impl CommandBuffer {
             ..
         };
         unsafe {
-            device.vk.CmdPipelineBarrier2(
+            device.fns.CmdPipelineBarrier2(
                 self.cmdbuf,
                 &VkDependencyInfo {
                     dependencyFlags: Default::default(),
@@ -281,7 +281,7 @@ impl CommandBuffer {
     pub unsafe fn update_buffer(&mut self, buffer: &BufferUntyped, offset: usize, data: &[u8]) {
         let device = Device::instance();
         unsafe {
-            device.vk.CmdUpdateBuffer(self.cmdbuf, buffer.handle(), offset as VkDeviceSize, data.len() as VkDeviceSize, data.as_ptr() as *const c_void);
+            device.fns.CmdUpdateBuffer(self.cmdbuf, buffer.handle(), offset as VkDeviceSize, data.len() as VkDeviceSize, data.as_ptr() as *const c_void);
         }
     }
 
@@ -289,7 +289,7 @@ impl CommandBuffer {
     pub fn bind_compute_pipeline(&mut self, pipeline: &ComputePipeline) {
         let device = Device::instance();
         unsafe {
-            device.vk.CmdBindPipeline(self.cmdbuf, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.pipeline);
+            device.fns.CmdBindPipeline(self.cmdbuf, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.pipeline);
         }
     }
 
@@ -312,7 +312,7 @@ impl CommandBuffer {
         let device = Device::instance();
         unsafe {
             self.set_push_data(self.cmdbuf, root_params.into());
-            device.vk.CmdDispatch(self.cmdbuf, group_count_x, group_count_y, group_count_z);
+            device.fns.CmdDispatch(self.cmdbuf, group_count_x, group_count_y, group_count_z);
         }
     }
 
@@ -352,7 +352,7 @@ impl CommandBuffer {
         assert!((index as usize) < query_pool.size, "query index out of bounds");
         assert!(query_pool.ty == VK_QUERY_TYPE_TIMESTAMP, "query pool type must be TIMESTAMP");
         unsafe {
-            Device::instance().vk.CmdWriteTimestamp2(
+            Device::instance().fns.CmdWriteTimestamp2(
                 self.cmdbuf,
                 VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
                 query_pool.pool,
@@ -483,7 +483,7 @@ fn sync(waits: &[SyncWait], signals: &[SyncSignal]) {
     };
     unsafe {
         //trace!("GPU: QueueSubmit (synchronization)");
-        vkcheck!(device.vk.QueueSubmit(submission_state.queue, 1, &submit_info, VkFence::null()));
+        vkcheck!(device.fns.QueueSubmit(submission_state.queue, 1, &submit_info, VkFence::null()));
     }
 }
 
@@ -534,7 +534,7 @@ pub fn submit(mut cmd: CommandBuffer) {
     cmd.barrier(BarrierFlags::empty());
     // finish recording the command buffer & put it for delayed deletion
     unsafe {
-        device.vk.EndCommandBuffer(cmd.cmdbuf).check();
+        device.fns.EndCommandBuffer(cmd.cmdbuf).check();
     }
     command_pool::defer_free_command_buffer(cmd.cmdbuf, frame_index_submitted);
 
@@ -561,7 +561,7 @@ pub fn submit(mut cmd: CommandBuffer) {
         // SAFETY: apart from Vulkan handles being valid, Vulkan specifies that access to the
         //         queue object should be externally synchronized, which is realized here by the
         //         lock on submission_state.
-        vkcheck!(device.vk.QueueSubmit(submission_state.queue, 1, &submit_info, VkFence::null()));
+        vkcheck!(device.fns.QueueSubmit(submission_state.queue, 1, &submit_info, VkFence::null()));
         submission_state.active_submissions.push_back(ActiveSubmission { frame_index: frame_index_submitted });
     };
     cmd.submitted = true;

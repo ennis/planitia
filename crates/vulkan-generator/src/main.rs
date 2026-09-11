@@ -786,25 +786,25 @@ fn gen_command_wrapper(out: &mut Writer, cmd: &CommandInfo, tymap: &TypeMap) -> 
     // check for outparams
     let mut noutp = 0;
 
-    if !is_outparam_blacklisted(&cmd.name) {
-        for i in (0..cmd.func.params.len()).rev() {
-            let param = &cmd.func.params[i];
-            let ty = param.rust_type(false);
-            // must be a pointer
-            if ty != "*mut c_void"
-                //&& return_type == "VkResult"
-                && param.len_annotation.is_none()
-                && let Some(rty) = ty.strip_prefix("*mut ")
-                && !is_pnext_out_struct(tymap, rty)
-            // && !looks_like_outparam_but_isnt(rty)
-            {
-                // valid outparam
-                noutp += 1;
-                continue;
-            }
-            break;
-        }
-    }
+    //if !is_outparam_blacklisted(&cmd.name) {
+    //    for i in (0..cmd.func.params.len()).rev() {
+    //        let param = &cmd.func.params[i];
+    //        let ty = param.rust_type(false);
+    //        // must be a pointer
+    //        if ty != "*mut c_void"
+    //            //&& return_type == "VkResult"
+    //            && param.len_annotation.is_none()
+    //            && let Some(rty) = ty.strip_prefix("*mut ")
+    //            && !is_pnext_out_struct(tymap, rty)
+    //        // && !looks_like_outparam_but_isnt(rty)
+    //        {
+    //            // valid outparam
+    //            noutp += 1;
+    //            continue;
+    //        }
+    //        break;
+    //    }
+    //}
 
     if noutp > 0 {
         write!(out, "pub unsafe fn {cmd_name}(&self")?;
