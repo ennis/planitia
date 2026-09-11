@@ -3,7 +3,7 @@ use crate::query_pool::QueryPool;
 use crate::{
     Buffer, BufferRangeUntyped, BufferUntyped, ColorAttachment, ComputePipeline, DepthStencilAttachment, Device, Image,
     ImageCopyBuffer, ImageCopyView, ImageCreateInfo, Ptr, ShaderReflection, SwapChain, VulkanObject, command_pool,
-    query_pool, vk,
+    query_pool,
 };
 use arrayvec::ArrayVec;
 use ash::prelude::VkResult;
@@ -123,7 +123,7 @@ impl CommandBuffer {
         unsafe {
             let info = VkCommandBufferBeginInfo {
                 flags: VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-                ..Default::default()
+                ..
             };
             device.vk.BeginCommandBuffer(cmdbuf, &info).check();
             // setup default dynamic state so validation layers don't complain
@@ -611,11 +611,11 @@ pub fn present(swap_chain: &mut SwapChain, index: usize) {
             pResults: ptr::null_mut(),
             ..
         };
-        let _ = device
+        device
             .ext
             .swapchain
             .QueuePresentKHR(submission_state.queue, &present_info)
-            .map(|_| ());
+            .check();
     }
 }
 

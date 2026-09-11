@@ -1,6 +1,5 @@
 #![feature(default_field_values)]
 mod build;
-//mod dump;
 mod archive_writer;
 mod dump2;
 mod header;
@@ -10,7 +9,6 @@ mod reflection;
 use anyhow::anyhow;
 use color_print::{ceprintln, cprintln};
 use log::warn;
-pub use manifest::*;
 use scoped_tls::scoped_thread_local;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -18,12 +16,13 @@ use std::{fs, io};
 use std::collections::HashMap;
 use thiserror::Error;
 use gpu_types::reflection as refl;
-
-
+use gpu_types::vulkan::*;
 use crate::archive_writer::build_and_write_archive;
 use crate::build::{compile_slang_module, create_slang_session};
+
 pub use dump2::dump_archive_file;
-use sharc::gpu_types::vulkan::*;
+pub use manifest::*;
+pub use gpu_types;
 
 
 /// Arena allocator to allocate compilation results.

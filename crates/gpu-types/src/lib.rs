@@ -874,26 +874,20 @@ impl_index_data!(u32, VK_INDEX_TYPE_UINT32);
 
 /// Primitive topology.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[repr(i32)]
 pub enum PrimitiveTopology {
-    TriangleList,
-    TriangleStrip,
-    LineList,
-    LineStrip,
-    PointList,
-    PatchList,
+    TriangleList = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+    TriangleStrip = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
+    LineList = VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
+    LineStrip = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP,
+    PointList = VK_PRIMITIVE_TOPOLOGY_POINT_LIST,
+    PatchList = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,
 }
 
 impl PrimitiveTopology {
     /// Converts this enum to a `VkPrimitiveTopology` enum.
     pub const fn to_vk_primitive_topology(self) -> VkPrimitiveTopology {
-        match self {
-            Self::TriangleList => VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-            Self::TriangleStrip => VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
-            Self::LineList => VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
-            Self::LineStrip => VK_PRIMITIVE_TOPOLOGY_LINE_STRIP,
-            Self::PointList => VK_PRIMITIVE_TOPOLOGY_POINT_LIST,
-            Self::PatchList => VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,
-        }
+        self as VkPrimitiveTopology
     }
 }
 

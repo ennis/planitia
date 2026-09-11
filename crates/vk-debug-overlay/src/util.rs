@@ -7,7 +7,7 @@ where
     N: VkTaggedStructure,
 {
     let base_in_struct = prev as *const _ as *const VkBaseInStructure;
-    let mut p_next = (*base_in_struct).p_next;
+    let mut p_next = (*base_in_struct).pNext;
     while let Some(base) = p_next.as_ref() {
         if base.s_type == N::STRUCTURE_TYPE {
             return Some(p_next.cast::<N>());

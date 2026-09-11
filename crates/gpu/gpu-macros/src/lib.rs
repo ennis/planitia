@@ -8,8 +8,6 @@ use proc_macro2::{Span, TokenStream};
 use quote::{ToTokens, TokenStreamExt};
 use syn::spanned::Spanned;
 
-//mod arguments;
-mod attachments;
 mod vertex;
 mod shader_module;
 mod descriptor_mapping;
@@ -36,14 +34,6 @@ fn expect_struct_fields<'a>(input: &'a syn::DeriveInput, derive_name: &str) -> s
 #[proc_macro_derive(Vertex, attributes(normalized))]
 pub fn vertex_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     match vertex::derive_vertex(input) {
-        Ok(tokens) => tokens.into(),
-        Err(e) => e.into_compile_error().into(),
-    }
-}
-
-#[proc_macro_derive(Attachments, attributes(attachment))]
-pub fn attachments_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    match attachments::derive_attachments(input) {
         Ok(tokens) => tokens.into(),
         Err(e) => e.into_compile_error().into(),
     }

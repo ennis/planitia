@@ -31,19 +31,23 @@
 use crate::{PFN_vkVoidFunction, Vulkan_1_0_EntryDispatch, Vulkan_1_1_EntryDispatch};
 use libloading::Library;
 use std::error::Error;
-use std::fmt;
+use std::{fmt, mem};
 
 impl Vulkan_1_0_EntryDispatch {
     pub fn load() -> Result<Vulkan_1_0_EntryDispatch, LoadError> {
         let lib = load_vulkan_lib()?;
-        unsafe { Ok(Self::load_with(|proc| get_proc_addr(&lib, proc))) }
+        let dispatch = unsafe { Self::load_with(|proc| get_proc_addr(&lib, proc)) };
+        mem::forget(lib);
+        Ok(dispatch)
     }
 }
 
 impl Vulkan_1_1_EntryDispatch {
     pub fn load() -> Result<Vulkan_1_1_EntryDispatch, LoadError> {
         let lib = load_vulkan_lib()?;
-        unsafe { Ok(Self::load_with(|proc| get_proc_addr(&lib, proc))) }
+        let dispatch = unsafe { Self::load_with(|proc| get_proc_addr(&lib, proc)) };
+        mem::forget(lib);
+        Ok(dispatch)
     }
 }
 

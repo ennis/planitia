@@ -1,7 +1,6 @@
 //! Temporary buffers.
 
 use crate::{BufferCreateInfo, BufferUntyped, BufferUsage, Device, FrameIndex, Ptr, flush, present};
-use ash::vk;
 use gpu_allocator::MemoryLocation;
 use gpu_types::Data;
 use log::trace;
@@ -10,6 +9,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::ptr;
+use vulkan::*;
 
 /// Alignment of temp buffer allocations.
 const ALLOC_ALIGNMENT: usize = 256;
@@ -62,7 +62,7 @@ impl ThreadLocalAllocator {
         // Retire the current chunk.
         if let Some(buf) = self.current.take() {
             let frame_index = crate::get_frame_index();
-            trace!("alloc_buffer: retire {:p} frame_index={}", buf.handle, frame_index);
+            trace!("alloc_buffer: retire {:x} frame_index={}", buf.handle.0, frame_index);
             self.retired.push_back((frame_index, buf));
         }
         let last_completed_frame = crate::get_last_completed_frame_index();
@@ -78,7 +78,7 @@ impl ThreadLocalAllocator {
             }
         }
         if let Some(free_buf) = free_buf.as_ref() {
-            trace!("alloc_buffer: reusing {:p}", free_buf.handle);
+            trace!("alloc_buffer: reusing {:x}", free_buf.handle.0);
         }
         self.offset = 0;
         // Reuse the free chunk if there's one, or allocate a new one.

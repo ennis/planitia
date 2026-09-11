@@ -1,16 +1,11 @@
 use crate::Device;
 use crate::device::{RESOURCE_DESCRIPTOR_HEAP_SIZE, SAMPLER_DESCRIPTOR_HEAP_SIZE};
-use ash::vk;
-use ash::VkHandle;
 use gpu_allocator::MemoryLocation;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme, Allocator};
 use std::ffi::c_void;
 use std::sync::Mutex;
-use vulkan::{
-    VK_BUFFER_USAGE_DESCRIPTOR_HEAP_BIT_EXT, VkBindHeapInfoEXT, VkCommandBuffer, VkDeviceAddressRangeEXT,
-    VkHostAddressRangeEXT, VkPhysicalDeviceDescriptorHeapPropertiesEXT, VkResourceDescriptorInfoEXT,
-    VkSamplerCreateInfo,
-};
+use std::{mem, ptr};
+use vulkan::*;
 
 /// Simple free list to allocate indices.
 struct FreeList {
@@ -109,13 +104,14 @@ enum DescriptorHeapType {
 
 fn allocate_descriptor_heap_memory(
     allocator: &mut Allocator,
-    device: &ash::Device,
+    device: VkDevice,
+    device_fns: &Vulkan_1_4_DeviceDispatch,
     heap_type: DescriptorHeapType,
     byte_size: usize,
     descriptor_heap_properties: &VkPhysicalDeviceDescriptorHeapPropertiesEXT,
 ) -> DescriptorHeapInfo {
-    let mut usage_flags = VkBufferUsageFlags::from_raw(VK_BUFFER_USAGE_DESCRIPTOR_HEAP_BIT_EXT);
-    usage_flags |= VK_BUFFER_USAGE_FLAGS_SHADER_DEVICE_ADDRESS;
+    let mut usage_flags = VK_BUFFER_USAGE_DESCRIPTOR_HEAP_BIT_EXT;
+    usage_flags |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     let alignment = match heap_type {
         DescriptorHeapType::Resource => descriptor_heap_properties.resourceHeapAlignment,
         DescriptorHeapType::Sampler => descriptor_heap_properties.samplerHeapAlignment,
@@ -124,18 +120,16 @@ fn allocate_descriptor_heap_memory(
         DescriptorHeapType::Resource => descriptor_heap_properties.maxResourceHeapSize,
         DescriptorHeapType::Sampler => descriptor_heap_properties.maxSamplerHeapSize,
     } as usize;
-
     assert!(
         byte_size <= max_size,
-        "requested descriptor heap size exceeds the maximum supported size of {} for {:?} heap",
-        max_size,
-        heap_type
+        "requested descriptor heap size exceeds the maximum supported size of {max_size} for {heap_type:?} heap"
     );
-
     let alloc = {
         let alloc_desc = AllocationCreateDesc {
             name: "descriptor heap".into(),
-            requirements: VkMemoryRequirements { size: byte_size as u64, alignment, memory_type_bits: u32::MAX },
+            requirements: unsafe {
+                mem::transmute(VkMemoryRequirements { size: byte_size as u64, alignment, memoryTypeBits: u32::MAX })
+            },
             location: MemoryLocation::CpuToGpu,
             linear: true,
             allocation_scheme: AllocationScheme::GpuAllocatorManaged,
@@ -148,14 +142,12 @@ fn allocate_descriptor_heap_memory(
         let info = VkBufferCreateInfo {
             size: byte_size as u64,
             usage: usage_flags,
-            sharing_mode: VK_SHARING_MODE_EXCLUSIVE,
-            ..Default::default()
+            sharingMode: VK_SHARING_MODE_EXCLUSIVE,
+            ..
         };
-        buffer = device.create_buffer(&info, None).expect("failed to create descriptor heap buffer");
-        device
-            .bind_buffer_memory(buffer, alloc.memory(), alloc.offset())
-            .expect("failed to bind memory for descriptor heap buffer");
-        device_addr = device.get_buffer_device_address(&VkBufferDeviceAddressInfo { buffer, ..Default::default() });
+        buffer = device_fns.CreateBuffer(device, &info, ptr::null()).expect("failed to create descriptor heap buffer");
+        device_fns.BindBufferMemory(device, buffer, unsafe { mem::transmute(alloc.memory()) }, alloc.offset()).check();
+        device_addr = device_fns.GetBufferDeviceAddress(device, &VkBufferDeviceAddressInfo { buffer, .. });
     }
     let ptr = alloc.mapped_ptr().expect("failed to map descriptor heap memory").as_ptr();
 
@@ -178,9 +170,7 @@ fn allocate_descriptor_heap_memory(
             alignment = descriptor_heap_properties.samplerDescriptorAlignment as usize;
         }
     }
-
     let index_offset = (start_offset / stride) as u32;
-
     DescriptorHeapInfo {
         alloc,
         buffer,
@@ -210,13 +200,15 @@ pub(crate) struct DescriptorHeaps {
 impl DescriptorHeaps {
     pub(super) fn new(
         allocator: &mut Allocator,
-        device: &ash::Device,
+        device: VkDevice,
+        device_fns: &Vulkan_1_4_DeviceDispatch,
         descriptor_heap_properties: &VkPhysicalDeviceDescriptorHeapPropertiesEXT,
     ) -> DescriptorHeaps {
         // allocate descriptor heap memory
         let resource_heap = allocate_descriptor_heap_memory(
             allocator,
             device,
+            device_fns,
             DescriptorHeapType::Resource,
             RESOURCE_DESCRIPTOR_HEAP_SIZE,
             &descriptor_heap_properties,
@@ -224,6 +216,7 @@ impl DescriptorHeaps {
         let sampler_heap = allocate_descriptor_heap_memory(
             allocator,
             device,
+            device_fns,
             DescriptorHeapType::Sampler,
             SAMPLER_DESCRIPTOR_HEAP_SIZE,
             &descriptor_heap_properties,
@@ -303,7 +296,7 @@ impl Device {
             // Write the descriptor
             // SAFETY: access to the descriptor set is externally synchronized via `self.write_lock`
             let _lock = self.descriptor_heaps.write_lock.lock().unwrap();
-            (self.ext.descriptor_heap.WriteResourceDescriptorsEXT)(
+            self.ext.descriptor_heap.WriteResourceDescriptorsEXT(
                 self.vkd,
                 1,
                 info,

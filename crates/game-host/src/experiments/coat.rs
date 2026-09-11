@@ -1,7 +1,6 @@
 use crate::experiments::lines::{Line, LineVertex};
 use crate::{SceneInfo, SceneInfoUniforms};
 use color::srgba8;
-use gamelib::app::FileDialogOptions;
 use gamelib::asset::Handle;
 use gamelib::input::InputEvent;
 use gamelib::render::pipeline_cache::{get_compute_pipeline, get_graphics_pipeline};

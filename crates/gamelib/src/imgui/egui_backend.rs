@@ -11,6 +11,7 @@ use gpu::{
     BARRIER_TEXTURE, BarrierFlags, ColorAttachment, Device, ImageCopyView, Offset3D, PushDataSource, SamplerHandle,
     Size3D, TextureHandle, Vertex,
 };
+use gpu::vulkan::*;
 use log::debug;
 
 #[gpu::shader_module("assets/gamelib/shaders/egui.slang")]
@@ -81,7 +82,7 @@ impl Renderer {
 
             match tex.image {
                 ImageData::Color(ref color_image) => {
-                    format = Format::R8G8B8A8_UNORM;
+                    format = VK_FORMAT_R8G8B8A8_UNORM;
                     data = pixels_as_byte_slice(&color_image.pixels);
                 }
             }
@@ -263,7 +264,7 @@ fn create_pipeline() -> GraphicsPipeline {
             shader: shaders::entry_points::egui_fragment,
             multisample: Default::default(),
             color_targets: &[ColorTargetState {
-                format: Format::R8G8B8A8_UNORM,
+                format: VK_FORMAT_R8G8B8A8_UNORM,
                 blend_equation: Some(ColorBlendEquation {
                     src_color_blend_factor: VK_BLEND_FACTOR_ONE,
                     dst_color_blend_factor: VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,

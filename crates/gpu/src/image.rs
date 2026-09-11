@@ -370,7 +370,7 @@ impl Device {
                 baseArrayLayer: 0,
                 layerCount: 1,
             },
-            ..Default::default()
+            ..
         };
         unsafe { self.vk.CreateImageView(self.vkd, &create_info, ptr::null()).unwrap() }
     }
@@ -394,11 +394,7 @@ impl Device {
                 ..
             };
             let handle = self.vk.CreateImage(self.vkd, &create_info, ptr::null()).unwrap();
-            let mem_req = {
-                let mut req = MaybeUninit::uninit();
-                self.vk.GetImageMemoryRequirements(self.vkd, handle, req.as_mut_ptr());
-                req.assume_init()
-            };
+            let mem_req = self.vk.GetImageMemoryRequirements(self.vkd, handle);
             let allocation = self.allocate_memory_or_panic(&AllocationCreateDesc {
                 name: "",
                 // SAFETY: ash has a compatible layout for all Vulkan structs
@@ -480,7 +476,7 @@ impl Device {
                 baseArrayLayer: 0,
                 layerCount: create_info.arrayLayers,
             },
-            ..Default::default()
+            ..
         };
         let aspects = aspects_for_format(create_info.format);
         let main_view: VkImageViewCreateInfo; // color or depth aspect
@@ -505,7 +501,7 @@ impl Device {
                 storage_descriptor = self.allocate_image_descriptor(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, &main_view);
             }
         }
-        if aspects & VK_IMAGE_ASPECT_STENCIL_BIT {
+        if (aspects & VK_IMAGE_ASPECT_STENCIL_BIT) != 0 {
             stencil_view = view_for_aspect(VK_IMAGE_ASPECT_STENCIL_BIT);
             if create_info.usage & VK_IMAGE_USAGE_SAMPLED_BIT != 0 {
                 // STENCIL aspect, SAMPLED access

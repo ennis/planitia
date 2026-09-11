@@ -11,6 +11,7 @@ use crate::paint::{
 };
 use color::{Srgba8, srgba8};
 use gpu::PrimitiveTopology::TriangleList;
+use gpu::vulkan::VK_FORMAT_R8G8B8A8_UNORM;
 use gpu::{CommandBuffer, Format, Ptr, PushDataSource};
 use log::{error, warn};
 use math::{Mat3, Rect, Vec2, Vec3, Vec4, rect_transform, vec2, vec3};
@@ -287,7 +288,7 @@ pub fn render_scene(render_target: &gpu::Image, scene: PaintScene) {
 
     // Check target format.
     assert!(
-        matches!(render_target.format(), Format::R8G8B8A8_UNORM),
+        render_target.format() == VK_FORMAT_R8G8B8A8_UNORM,
         "unsupported color target format: {:?}",
         render_target.format()
     );

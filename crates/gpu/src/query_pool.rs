@@ -1,21 +1,22 @@
 use crate::{Device, VulkanObject};
-use ash::vk;
+use std::ptr;
+use vulkan::*;
 
 /// Query pools.
 #[derive(Debug)]
 pub struct QueryPool {
-    pub(crate) pool: VK_QueryPool,
-    pub(crate) ty: VK_QueryType,
+    pub(crate) pool: VkQueryPool,
+    pub(crate) ty: VkQueryType,
     pub(crate) size: usize,
 }
 
 impl QueryPool {
     pub fn new(query_type: VkQueryType, pool_size: usize) -> QueryPool {
         let device = Device::instance();
-        let create_info = &VkQueryPoolCreateInfo { query_type, query_count: pool_size as u32, ..Default::default() };
+        let create_info = VkQueryPoolCreateInfo { queryType: query_type, queryCount: pool_size as u32, .. };
         unsafe {
-            let pool = device.raw.create_query_pool(&create_info, None).unwrap();
-            device.raw.reset_query_pool(pool, 0, pool_size as u32);
+            let pool = device.vk.CreateQueryPool(device.vkd, &create_info, ptr::null()).unwrap();
+            device.vk.ResetQueryPool(device.vkd, pool, 0, pool_size as u32);
             QueryPool { pool, ty: query_type, size: pool_size }
         }
     }
@@ -24,22 +25,26 @@ impl QueryPool {
         let device = Device::instance();
         unsafe {
             device
-                .raw
-                .get_query_pool_results(
+                .vk
+                .GetQueryPoolResults(
+                    device.vkd,
                     self.pool,
                     first_query,
-                    &mut results[..],
+                    results.len() as u32,
+                    results.len() * size_of::<T>(),
+                    results.as_mut_ptr() as *mut std::ffi::c_void,
+                    size_of::<T>() as u64,
                     // FIXME: flags depend on the query type
-                    VK_QUERY_RESULT_TYPE_64_BIT | VK_QUERY_RESULT_WAIT_BIT,
+                    VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT,
                 )
-                .expect("Failed to get query results");
+                .check();
         }
     }
 
     pub fn reset(&self) {
         let device = Device::instance();
         unsafe {
-            device.raw.reset_query_pool(self.pool, 0, self.size as u32);
+            device.vk.ResetQueryPool(device.vkd, self.pool, 0, self.size as u32);
         }
     }
 }
@@ -49,7 +54,7 @@ impl Drop for QueryPool {
         let device = Device::instance();
         let pool = self.pool;
         device.delete_after_current_frame(move |device| unsafe {
-            device.raw.destroy_query_pool(pool, None);
+            device.vk.DestroyQueryPool(device.vkd, pool, ptr::null());
         });
     }
 }

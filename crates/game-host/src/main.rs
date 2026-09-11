@@ -20,6 +20,7 @@ use std::path::Path;
 //use egui_demo_lib::{View, WidgetGallery};
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::{Image, Ptr, PushDataSource, root_params};
+use gpu::vulkan::*;
 use log::debug;
 use math::{Camera, Mat4, Vec2, Vec3, rect_xywh, vec2};
 use ron::ser::PrettyConfig;
@@ -128,7 +129,7 @@ fn create_depth_buffer(width: u32, height: u32) -> Image {
     Image::new(gpu::ImageCreateInfo {
         width,
         height,
-        format: gpu::Format::D32_SFLOAT_S8_UINT,
+        format: VK_FORMAT_D32_SFLOAT_S8_UINT,
         usage: gpu::ImageUsage::DEPTH_STENCIL_ATTACHMENT | gpu::ImageUsage::TRANSFER_DST | gpu::ImageUsage::SAMPLED,
         ..
     })

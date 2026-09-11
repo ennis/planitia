@@ -23,6 +23,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 use std::path::Path;
 use std::{fmt, ptr};
+use gpu::vulkan::*;
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -214,15 +215,15 @@ impl OutlineExperiment {
                 first_instance: 0,
             }]),
             angle_texture: RenderTarget::new(
-                gpu::Format::R16G16B16A16_UINT,
+                VK_FORMAT_R16G16B16A16_UINT,
                 gpu::ImageUsage::SAMPLED | gpu::ImageUsage::STORAGE | gpu::ImageUsage::COLOR_ATTACHMENT,
             ),
             normal_texture: RenderTarget::new(
-                gpu::Format::A2B10G10R10_UNORM_PACK32,
+                VK_FORMAT_A2B10G10R10_UNORM_PACK32,
                 gpu::ImageUsage::SAMPLED | gpu::ImageUsage::STORAGE | gpu::ImageUsage::COLOR_ATTACHMENT,
             ),
             shading_texture: RenderTarget::new(
-                gpu::Format::R8G8B8A8_UNORM,
+                VK_FORMAT_R8G8B8A8_UNORM,
                 gpu::ImageUsage::SAMPLED | gpu::ImageUsage::STORAGE | gpu::ImageUsage::COLOR_ATTACHMENT,
             ),
             lock_view: false,

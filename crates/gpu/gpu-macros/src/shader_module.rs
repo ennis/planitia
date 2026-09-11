@@ -1,8 +1,10 @@
-use std::slice;
+#![allow(non_upper_case_globals)]
 use gpu_types::reflection as refl;
 use gpu_types::reflection::{AccessKind, ScalarType};
-use proc_macro2::{Ident, TokenStream};
+use gpu_types::vulkan::*;
+use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote, TokenStreamExt};
+use std::slice;
 
 macro_rules! return_error {
     ($span:expr, $msg:literal) => {
@@ -333,9 +335,7 @@ pub(crate) fn shader_module_impl(
 
     // Convert SPIR-V bytecode to u32 array
     let bytecode_str = {
-        let spirv_bytes = unsafe {
-            slice::from_raw_parts(module.spirv.as_ptr() as *const u8, module.spirv.len() * 4)
-        };
+        let spirv_bytes = unsafe { slice::from_raw_parts(module.spirv.as_ptr() as *const u8, module.spirv.len() * 4) };
         syn::LitByteStr::new(&spirv_bytes, shader_path_lit.span())
     };
 
@@ -370,11 +370,11 @@ pub(crate) fn shader_module_impl(
         let workgroup_size = ep.workgroup_size;
 
         let stage = match ep.stage {
-            gpu_types::VK_SHADER_STAGE_VERTEX_BIT => format_ident!("Vertex"),
-            gpu_types::VK_SHADER_STAGE_FRAGMENT_BIT => format_ident!("Fragment"),
-            gpu_types::VK_SHADER_STAGE_MESH_EXT_BIT => format_ident!("Mesh"),
-            gpu_types::VK_SHADER_STAGE_TASK_EXT_BIT => format_ident!("Task"),
-            gpu_types::VK_SHADER_STAGE_COMPUTE_BIT => format_ident!("Compute"),
+            VK_SHADER_STAGE_VERTEX_BIT => format_ident!("Vertex"),
+            VK_SHADER_STAGE_FRAGMENT_BIT => format_ident!("Fragment"),
+            VK_SHADER_STAGE_MESH_BIT_EXT => format_ident!("Mesh"),
+            VK_SHADER_STAGE_TASK_BIT_EXT => format_ident!("Task"),
+            VK_SHADER_STAGE_COMPUTE_BIT => format_ident!("Compute"),
             _ => continue,
         };
 
@@ -428,11 +428,11 @@ pub(crate) fn shader_module_impl(
             eprintln!("entry_point {} stage {:?}", entry_point.name, entry_point.stage);
             let ep_name_ident = format_ident!("{}", entry_point.name);
             match entry_point.stage {
-                gpu_types::VK_SHADER_STAGE_VERTEX_BIT => vertex = Some(ep_name_ident),
-                gpu_types::VK_SHADER_STAGE_FRAGMENT_BIT => fragment = Some(ep_name_ident),
-                gpu_types::VK_SHADER_STAGE_MESH_EXT_BIT => mesh = Some(ep_name_ident),
-                gpu_types::VK_SHADER_STAGE_TASK_EXT_BIT => task = Some(ep_name_ident),
-                gpu_types::VK_SHADER_STAGE_COMPUTE_BIT => compute = Some(ep_name_ident),
+                VK_SHADER_STAGE_VERTEX_BIT => vertex = Some(ep_name_ident),
+                VK_SHADER_STAGE_FRAGMENT_BIT => fragment = Some(ep_name_ident),
+                VK_SHADER_STAGE_MESH_BIT_EXT => mesh = Some(ep_name_ident),
+                VK_SHADER_STAGE_TASK_BIT_EXT => task = Some(ep_name_ident),
+                VK_SHADER_STAGE_COMPUTE_BIT => compute = Some(ep_name_ident),
                 _ => {}
             }
         }
@@ -643,49 +643,275 @@ pub(crate) fn shader_module_impl(
     Ok(output)
 }
 
-fn vk_polygon_mode_tokens(polygon_mode: gpu_types::VkPolygonMode) -> TokenStream {
-    let polygon_mode_str = format!("{polygon_mode:?}");
-    let polygon_mode_ident = format_ident!("VK_POLYGON_MODE_{polygon_mode_str}");
-    quote!(gpu::vulkan::#polygon_mode_ident)
+macro_rules! enum_to_ident {
+    ($value:expr; $($variants:ident),* $(,)?) => {
+        match $value {
+            $($variants => Ident::new(stringify!($variants), Span::call_site()),)*
+            _ => panic!("invalid enum value: {}", $value),
+        }
+    }
 }
 
-fn vk_cull_mode_tokens(cull_mode: gpu_types::VkCullModeFlags) -> TokenStream {
+fn vk_polygon_mode_tokens(polygon_mode: VkPolygonMode) -> TokenStream {
+    let v = enum_to_ident! {polygon_mode; VK_POLYGON_MODE_FILL, VK_POLYGON_MODE_LINE, VK_POLYGON_MODE_POINT};
+    quote!(gpu::vulkan::#v)
+}
+
+fn vk_cull_mode_tokens(cull_mode: VkCullModeFlags) -> TokenStream {
     let mut flags = vec![];
-    if cull_mode.contains(gpu_types::VK_CULL_MODE_FLAGS_FRONT) {
+    if cull_mode & VK_CULL_MODE_FRONT_BIT != 0 {
         flags.push(format_ident!("VK_CULL_MODE_FRONT_BIT"));
     }
-    if cull_mode.contains(gpu_types::VK_CULL_MODE_FLAGS_BACK) {
+    if cull_mode & VK_CULL_MODE_BACK_BIT != 0 {
         flags.push(format_ident!("VK_CULL_MODE_BACK_BIT"));
     }
     quote!(gpu::vulkan::VK_CULL_MODE_NONE #( | gpu::vulkan::#flags)*)
 }
 
-fn vk_front_face_tokens(front_face: gpu_types::VkFrontFace) -> TokenStream {
-    let front_face_str = format!("{front_face:?}");
-    let front_face_ident = format_ident!("{front_face_str}");
-    quote!(gpu::VkFrontFace::#front_face_ident)
+fn vk_front_face_tokens(front_face: VkFrontFace) -> TokenStream {
+    let v = enum_to_ident! {
+        front_face; VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_FRONT_FACE_CLOCKWISE
+    };
+    quote!(gpu::vulkan::#v)
 }
 
-fn vk_format_tokens(format: gpu_types::VkFormat) -> TokenStream {
-    let format_str = format!("{format:?}");
-    let format_ident = format_ident!("VK_FORMAT_{format_str}");
-    quote!(gpu::vulkan::#format_ident)
+fn vk_format_tokens(format: VkFormat) -> TokenStream {
+    let v = enum_to_ident! {format;
+        VK_FORMAT_UNDEFINED,
+        VK_FORMAT_R4G4_UNORM_PACK8,
+        VK_FORMAT_R4G4B4A4_UNORM_PACK16,
+        VK_FORMAT_B4G4R4A4_UNORM_PACK16,
+        VK_FORMAT_R5G6B5_UNORM_PACK16,
+        VK_FORMAT_B5G6R5_UNORM_PACK16,
+        VK_FORMAT_R5G5B5A1_UNORM_PACK16,
+        VK_FORMAT_B5G5R5A1_UNORM_PACK16,
+        VK_FORMAT_A1R5G5B5_UNORM_PACK16,
+        VK_FORMAT_R8_UNORM,
+        VK_FORMAT_R8_SNORM,
+        VK_FORMAT_R8_USCALED,
+        VK_FORMAT_R8_SSCALED,
+        VK_FORMAT_R8_UINT,
+        VK_FORMAT_R8_SINT,
+        VK_FORMAT_R8_SRGB,
+        VK_FORMAT_R8G8_UNORM,
+        VK_FORMAT_R8G8_SNORM,
+        VK_FORMAT_R8G8_USCALED,
+        VK_FORMAT_R8G8_SSCALED,
+        VK_FORMAT_R8G8_UINT,
+        VK_FORMAT_R8G8_SINT,
+        VK_FORMAT_R8G8_SRGB,
+        VK_FORMAT_R8G8B8_UNORM,
+        VK_FORMAT_R8G8B8_SNORM,
+        VK_FORMAT_R8G8B8_USCALED,
+        VK_FORMAT_R8G8B8_SSCALED,
+        VK_FORMAT_R8G8B8_UINT,
+        VK_FORMAT_R8G8B8_SINT,
+        VK_FORMAT_R8G8B8_SRGB,
+        VK_FORMAT_B8G8R8_UNORM,
+        VK_FORMAT_B8G8R8_SNORM,
+        VK_FORMAT_B8G8R8_USCALED,
+        VK_FORMAT_B8G8R8_SSCALED,
+        VK_FORMAT_B8G8R8_UINT,
+        VK_FORMAT_B8G8R8_SINT,
+        VK_FORMAT_B8G8R8_SRGB,
+        VK_FORMAT_R8G8B8A8_UNORM,
+        VK_FORMAT_R8G8B8A8_SNORM,
+        VK_FORMAT_R8G8B8A8_USCALED,
+        VK_FORMAT_R8G8B8A8_SSCALED,
+        VK_FORMAT_R8G8B8A8_UINT,
+        VK_FORMAT_R8G8B8A8_SINT,
+        VK_FORMAT_R8G8B8A8_SRGB,
+        VK_FORMAT_B8G8R8A8_UNORM,
+        VK_FORMAT_B8G8R8A8_SNORM,
+        VK_FORMAT_B8G8R8A8_USCALED,
+        VK_FORMAT_B8G8R8A8_SSCALED,
+        VK_FORMAT_B8G8R8A8_UINT,
+        VK_FORMAT_B8G8R8A8_SINT,
+        VK_FORMAT_B8G8R8A8_SRGB,
+        VK_FORMAT_A8B8G8R8_UNORM_PACK32,
+        VK_FORMAT_A8B8G8R8_SNORM_PACK32,
+        VK_FORMAT_A8B8G8R8_USCALED_PACK32,
+        VK_FORMAT_A8B8G8R8_SSCALED_PACK32,
+        VK_FORMAT_A8B8G8R8_UINT_PACK32,
+        VK_FORMAT_A8B8G8R8_SINT_PACK32,
+        VK_FORMAT_A8B8G8R8_SRGB_PACK32,
+        VK_FORMAT_A2R10G10B10_UNORM_PACK32,
+        VK_FORMAT_A2R10G10B10_SNORM_PACK32,
+        VK_FORMAT_A2R10G10B10_USCALED_PACK32,
+        VK_FORMAT_A2R10G10B10_SSCALED_PACK32,
+        VK_FORMAT_A2R10G10B10_UINT_PACK32,
+        VK_FORMAT_A2R10G10B10_SINT_PACK32,
+        VK_FORMAT_A2B10G10R10_UNORM_PACK32,
+        VK_FORMAT_A2B10G10R10_SNORM_PACK32,
+        VK_FORMAT_A2B10G10R10_USCALED_PACK32,
+        VK_FORMAT_A2B10G10R10_SSCALED_PACK32,
+        VK_FORMAT_A2B10G10R10_UINT_PACK32,
+        VK_FORMAT_A2B10G10R10_SINT_PACK32,
+        VK_FORMAT_R16_UNORM,
+        VK_FORMAT_R16_SNORM,
+        VK_FORMAT_R16_USCALED,
+        VK_FORMAT_R16_SSCALED,
+        VK_FORMAT_R16_UINT,
+        VK_FORMAT_R16_SINT,
+        VK_FORMAT_R16_SFLOAT,
+        VK_FORMAT_R16G16_UNORM,
+        VK_FORMAT_R16G16_SNORM,
+        VK_FORMAT_R16G16_USCALED,
+        VK_FORMAT_R16G16_SSCALED,
+        VK_FORMAT_R16G16_UINT,
+        VK_FORMAT_R16G16_SINT,
+        VK_FORMAT_R16G16_SFLOAT,
+        VK_FORMAT_R16G16B16_UNORM,
+        VK_FORMAT_R16G16B16_SNORM,
+        VK_FORMAT_R16G16B16_USCALED,
+        VK_FORMAT_R16G16B16_SSCALED,
+        VK_FORMAT_R16G16B16_UINT,
+        VK_FORMAT_R16G16B16_SINT,
+        VK_FORMAT_R16G16B16_SFLOAT,
+        VK_FORMAT_R16G16B16A16_UNORM,
+        VK_FORMAT_R16G16B16A16_SNORM,
+        VK_FORMAT_R16G16B16A16_USCALED,
+        VK_FORMAT_R16G16B16A16_SSCALED,
+        VK_FORMAT_R16G16B16A16_UINT,
+        VK_FORMAT_R16G16B16A16_SINT,
+        VK_FORMAT_R16G16B16A16_SFLOAT,
+        VK_FORMAT_R32_UINT,
+        VK_FORMAT_R32_SINT,
+        VK_FORMAT_R32_SFLOAT,
+        VK_FORMAT_R32G32_UINT,
+        VK_FORMAT_R32G32_SINT,
+        VK_FORMAT_R32G32_SFLOAT,
+        VK_FORMAT_R32G32B32_UINT,
+        VK_FORMAT_R32G32B32_SINT,
+        VK_FORMAT_R32G32B32_SFLOAT,
+        VK_FORMAT_R32G32B32A32_UINT,
+        VK_FORMAT_R32G32B32A32_SINT,
+        VK_FORMAT_R32G32B32A32_SFLOAT,
+        VK_FORMAT_R64_UINT,
+        VK_FORMAT_R64_SINT,
+        VK_FORMAT_R64_SFLOAT,
+        VK_FORMAT_R64G64_UINT,
+        VK_FORMAT_R64G64_SINT,
+        VK_FORMAT_R64G64_SFLOAT,
+        VK_FORMAT_R64G64B64_UINT,
+        VK_FORMAT_R64G64B64_SINT,
+        VK_FORMAT_R64G64B64_SFLOAT,
+        VK_FORMAT_R64G64B64A64_UINT,
+        VK_FORMAT_R64G64B64A64_SINT,
+        VK_FORMAT_R64G64B64A64_SFLOAT,
+        VK_FORMAT_B10G11R11_UFLOAT_PACK32,
+        VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,
+        VK_FORMAT_D16_UNORM,
+        VK_FORMAT_X8_D24_UNORM_PACK32,
+        VK_FORMAT_D32_SFLOAT,
+        VK_FORMAT_S8_UINT,
+        VK_FORMAT_D16_UNORM_S8_UINT,
+        VK_FORMAT_D24_UNORM_S8_UINT,
+        VK_FORMAT_D32_SFLOAT_S8_UINT,
+        VK_FORMAT_BC1_RGB_UNORM_BLOCK,
+        VK_FORMAT_BC1_RGB_SRGB_BLOCK,
+        VK_FORMAT_BC1_RGBA_UNORM_BLOCK,
+        VK_FORMAT_BC1_RGBA_SRGB_BLOCK,
+        VK_FORMAT_BC2_UNORM_BLOCK,
+        VK_FORMAT_BC2_SRGB_BLOCK,
+        VK_FORMAT_BC3_UNORM_BLOCK,
+        VK_FORMAT_BC3_SRGB_BLOCK,
+        VK_FORMAT_BC4_UNORM_BLOCK,
+        VK_FORMAT_BC4_SNORM_BLOCK,
+        VK_FORMAT_BC5_UNORM_BLOCK,
+        VK_FORMAT_BC5_SNORM_BLOCK,
+        VK_FORMAT_BC6H_UFLOAT_BLOCK,
+        VK_FORMAT_BC6H_SFLOAT_BLOCK,
+        VK_FORMAT_BC7_UNORM_BLOCK,
+        VK_FORMAT_BC7_SRGB_BLOCK,
+        VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK,
+        VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK,
+        VK_FORMAT_ETC2_R8G8B8A1_UNORM_BLOCK,
+        VK_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK,
+        VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK,
+        VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK,
+        VK_FORMAT_EAC_R11_UNORM_BLOCK,
+        VK_FORMAT_EAC_R11_SNORM_BLOCK,
+        VK_FORMAT_EAC_R11G11_UNORM_BLOCK,
+        VK_FORMAT_EAC_R11G11_SNORM_BLOCK,
+        VK_FORMAT_ASTC_4x4_UNORM_BLOCK,
+        VK_FORMAT_ASTC_4x4_SRGB_BLOCK,
+        VK_FORMAT_ASTC_5x4_UNORM_BLOCK,
+        VK_FORMAT_ASTC_5x4_SRGB_BLOCK,
+        VK_FORMAT_ASTC_5x5_UNORM_BLOCK,
+        VK_FORMAT_ASTC_5x5_SRGB_BLOCK,
+        VK_FORMAT_ASTC_6x5_UNORM_BLOCK,
+        VK_FORMAT_ASTC_6x5_SRGB_BLOCK,
+        VK_FORMAT_ASTC_6x6_UNORM_BLOCK,
+        VK_FORMAT_ASTC_6x6_SRGB_BLOCK,
+        VK_FORMAT_ASTC_8x5_UNORM_BLOCK,
+        VK_FORMAT_ASTC_8x5_SRGB_BLOCK,
+        VK_FORMAT_ASTC_8x6_UNORM_BLOCK,
+        VK_FORMAT_ASTC_8x6_SRGB_BLOCK,
+        VK_FORMAT_ASTC_8x8_UNORM_BLOCK,
+        VK_FORMAT_ASTC_8x8_SRGB_BLOCK,
+        VK_FORMAT_ASTC_10x5_UNORM_BLOCK,
+        VK_FORMAT_ASTC_10x5_SRGB_BLOCK,
+        VK_FORMAT_ASTC_10x6_UNORM_BLOCK,
+        VK_FORMAT_ASTC_10x6_SRGB_BLOCK,
+        VK_FORMAT_ASTC_10x8_UNORM_BLOCK,
+        VK_FORMAT_ASTC_10x8_SRGB_BLOCK,
+        VK_FORMAT_ASTC_10x10_UNORM_BLOCK,
+        VK_FORMAT_ASTC_10x10_SRGB_BLOCK,
+        VK_FORMAT_ASTC_12x10_UNORM_BLOCK,
+        VK_FORMAT_ASTC_12x10_SRGB_BLOCK,
+        VK_FORMAT_ASTC_12x12_UNORM_BLOCK,
+        VK_FORMAT_ASTC_12x12_SRGB_BLOCK
+    };
+    quote!(gpu::vulkan::#v)
 }
 
-fn vk_blend_factor_tokens(blend_factor: gpu_types::VkBlendFactor) -> TokenStream {
-    let blend_factor_str = format!("{blend_factor:?}");
-    let blend_factor_ident = format_ident!("VK_BLEND_FACTOR_{blend_factor_str}");
-    quote!(gpu::vulkan::#blend_factor_ident)
+fn vk_blend_factor_tokens(blend_factor: VkBlendFactor) -> TokenStream {
+    let v = enum_to_ident! { blend_factor;
+        VK_BLEND_FACTOR_ZERO,
+        VK_BLEND_FACTOR_ONE,
+        VK_BLEND_FACTOR_SRC_COLOR,
+        VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR,
+        VK_BLEND_FACTOR_DST_COLOR,
+        VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR,
+        VK_BLEND_FACTOR_SRC_ALPHA,
+        VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+        VK_BLEND_FACTOR_DST_ALPHA,
+        VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA,
+        VK_BLEND_FACTOR_CONSTANT_COLOR,
+        VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR,
+        VK_BLEND_FACTOR_CONSTANT_ALPHA,
+        VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA,
+        VK_BLEND_FACTOR_SRC_ALPHA_SATURATE,
+        VK_BLEND_FACTOR_SRC1_COLOR,
+        VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR,
+        VK_BLEND_FACTOR_SRC1_ALPHA,
+        VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA
+    };
+    quote!(gpu::vulkan::#v)
 }
 
-fn vk_blend_op_tokens(blend_op: gpu_types::VkBlendOp) -> TokenStream {
-    let blend_op_str = format!("{blend_op:?}");
-    let blend_op_ident = format_ident!("VK_BLEND_OP_{blend_op_str}");
-    quote!(gpu::vulkan::#blend_op_ident)
+fn vk_blend_op_tokens(blend_op: VkBlendOp) -> TokenStream {
+    let v = enum_to_ident! {blend_op;
+        VK_BLEND_OP_ADD,
+        VK_BLEND_OP_SUBTRACT,
+        VK_BLEND_OP_REVERSE_SUBTRACT,
+        VK_BLEND_OP_MIN,
+        VK_BLEND_OP_MAX
+    };
+    quote!(gpu::vulkan::#v)
 }
 
-fn vk_compare_op_tokens(compare_op: gpu_types::VkCompareOp) -> TokenStream {
-    let compare_op_str = format!("{compare_op:?}");
-    let compare_op_ident = format_ident!("VK_COMPARE_OP_{compare_op_str}");
-    quote!(gpu::vulkan::#compare_op_ident)
+fn vk_compare_op_tokens(compare_op: VkCompareOp) -> TokenStream {
+    let v = enum_to_ident! {compare_op;
+        VK_COMPARE_OP_NEVER,
+        VK_COMPARE_OP_LESS,
+        VK_COMPARE_OP_EQUAL,
+        VK_COMPARE_OP_LESS_OR_EQUAL,
+        VK_COMPARE_OP_GREATER,
+        VK_COMPARE_OP_NOT_EQUAL,
+        VK_COMPARE_OP_GREATER_OR_EQUAL,
+        VK_COMPARE_OP_ALWAYS
+    };
+    quote!(gpu::vulkan::#v)
 }

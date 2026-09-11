@@ -1,10 +1,10 @@
-use crate::{gpu_span, WindowInputState, span};
 use crate::platform::RenderTargetImage;
 use crate::platform::win32::graphics::GraphicsContext;
 use crate::platform::win32::swap_chain::{DxgiVulkanInteropSwapChain, dxgi_to_vk_format};
 use crate::platform::win32::{Error, get_hwnd};
 use crate::util::env_flag;
-use gpu::vk;
+use crate::{WindowInputState, gpu_span, span};
+use gpu::vulkan::{VK_COLOR_SPACE_SRGB_NONLINEAR_KHR, VkSurfaceFormatKHR};
 use log::{error, info};
 use std::cell::Cell;
 use std::env;
@@ -100,12 +100,12 @@ impl Window {
                 ))
             } else {
                 let device = gpu::Device::instance();
-                let surface = gpu::get_vulkan_surface(inner.window_handle().unwrap().as_raw());
+                let surface = gpu::create_vulkan_surface(inner.window_handle().unwrap().as_raw());
                 let swapchain = device.create_swapchain(
                     surface,
                     VkSurfaceFormatKHR {
                         format: dxgi_to_vk_format(SWAP_CHAIN_FORMAT),
-                        color_space: gpu::VkColorSpaceKHR::SRGB_NONLINEAR,
+                        colorSpace: VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
                     },
                     width,
                     height,
@@ -135,14 +135,7 @@ impl Window {
             SwapChainImpl::Vulkan(swap_chain) => {
                 let device = gpu::Device::instance();
                 unsafe {
-                    let (index, image) =
-                        match device.acquire_next_swapchain_image(swap_chain, Duration::from_millis(1000)) {
-                            Ok(result) => result,
-                            Err(err) => {
-                                error!("failed to acquire next swap chain image: {err}");
-                                return None;
-                            }
-                        };
+                    let (index, image) = device.acquire_next_swapchain_image(swap_chain, Duration::from_millis(1000));
                     self.swap_chain_image_index.set(index);
                     Some(image)
                 }

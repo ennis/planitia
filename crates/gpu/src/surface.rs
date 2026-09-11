@@ -1,19 +1,20 @@
 #[cfg(windows)]
 mod platform {
-    use crate::instance::{get_vulkan_entry, get_vulkan_instance};
-    use ash::khr::win32_surface::Instance as Win32Surface;
-    use ash::vk;
-    use ash::vk::{HINSTANCE, HWND};
+    use crate::Instance;
+    use crate::instance::get_vulkan_entry;
     use raw_window_handle::RawWindowHandle;
+    use std::ptr;
     use std::sync::LazyLock;
+    use vulkan::*;
 
-    static VK_KHR_SURFACE_WIN32: LazyLock<Win32Surface> = LazyLock::new(create_vk_khr_surface);
+    pub fn create_vulkan_surface(handle: RawWindowHandle) -> VkSurfaceKHR {
+        static KHR_WIN32_SURFACE: LazyLock<khr_win32_surface::InstanceDispatch> = LazyLock::new(|| unsafe {
+            khr_win32_surface::InstanceDispatch::load_with(|name| {
+                let instance = Instance::get().instance;
+                get_vulkan_entry().GetInstanceProcAddr(instance, name.as_ptr())
+            })
+        });
 
-    fn create_vk_khr_surface() -> Win32Surface {
-        Win32Surface::new(get_vulkan_entry(), get_vulkan_instance())
-    }
-
-    pub fn get_vulkan_surface(handle: RawWindowHandle) -> VkSurfaceKHR {
         let win32_handle = match handle {
             RawWindowHandle::Win32(h) => h,
             _ => panic!("incompatible window handle"),
@@ -22,12 +23,15 @@ mod platform {
             flags: Default::default(),
             hinstance: win32_handle.hinstance.unwrap().get() as HINSTANCE,
             hwnd: win32_handle.hwnd.get() as HWND,
-            ..Default::default()
+            ..
         };
         unsafe {
-            VK_KHR_SURFACE_WIN32.create_win32_surface(&create_info, None).expect("failed to create win32 surface")
+            let vk_instance = Instance::get().instance;
+            KHR_WIN32_SURFACE
+                .CreateWin32SurfaceKHR(vk_instance, &create_info, ptr::null())
+                .expect("failed to create win32 surface")
         }
     }
 }
 
-pub use self::platform::get_vulkan_surface;
+pub use self::platform::create_vulkan_surface;

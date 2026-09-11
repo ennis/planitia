@@ -131,6 +131,8 @@ use crate::basetypes::*;
 use std::ffi::*;
 use std::mem::MaybeUninit;
 use std::ptr;
+use crate::zero;
+use crate::TaggedStructure;
 
 "#;
 
@@ -297,6 +299,7 @@ fn gen_type(out: &mut Writer, tyinfo: &TypeInfo, tymap: &TypeMap) -> io::Result<
             };
             write!(out, "pub {kind} {name} {{\n")?;
             indent(out);
+            let mut s_type = None;
             for member in children_tagged(tyinfo.node, "member") {
                 if !api_check(member) {
                     continue;
@@ -307,8 +310,8 @@ fn gen_type(out: &mut Writer, tyinfo: &TypeInfo, tymap: &TypeMap) -> io::Result<
                 //       Parse the C syntax directly instead.
                 let values = member.attribute("values");
                 let optional = member.attribute("optional").unwrap_or("false").split(',').collect::<Vec<_>>();
-                let last_opt = optional.last().map(|&s| s == "true").unwrap_or(false);
-                let len = member.attribute("len");
+                //let last_opt = optional.last().map(|&s| s == "true").unwrap_or(false);
+                //let len = member.attribute("len");
                 write!(out, "pub ")?;
                 let text = node_text(&member);
                 let decl = parse_c_declarator(&text).unwrap();
@@ -319,48 +322,58 @@ fn gen_type(out: &mut Writer, tyinfo: &TypeInfo, tymap: &TypeMap) -> io::Result<
                 if !is_union {
                     match decl.name.as_str() {
                         // sType field
-                        "sType" if values.is_some() => write!(out, " = {}", values.unwrap())?,
-                        // pNext is always defaultable to null
-                        "pNext" => {
-                            write!(out, " = {}", if decl.is_const_ptr() { "ptr::null()" } else { "ptr::null_mut()" })?
+                        "sType" if values.is_some() => {
+                            s_type = Some(values.unwrap().to_string());
+                            write!(out, " = {}", s_type.as_ref().unwrap())?
                         }
-                        // pointers with len attributes are defaultable to null (if len == 0)
-                        _ if len.is_some() && decl.is_ptr() => {
-                            write!(out, " = {}", if decl.is_const_ptr() { "ptr::null()" } else { "ptr::null_mut()" })?
-                        }
-                        // otherwise, decide based on the "optional" field and whether the field is a
-                        // pointer, and also some heuristics
-                        _other if last_opt => {
-                            if decl.is_const_ptr() {
-                                write!(out, " = ptr::null()")?;
-                            } else if decl.is_ptr() {
-                                write!(out, " = ptr::null_mut()")?;
-                            } else if let Some(info) = tymap.get(&decl.inner_ty) {
-                                match info.category {
-                                    Category::Handle(_) => {
-                                        let ty = decl.inner_ty;
-                                        write!(out, " = {ty}::null()")?;
-                                    }
-                                    Category::FuncPointer(_) => {
-                                        // This is a function pointer, modeled as `Option<fn()>` in rust.
-                                        // The NULL pointer is `None`.
-                                        write!(out, " = None")?;
-                                    }
-                                    Category::Bitmask(_) | Category::Enum => {
-                                        // Bitmasks and enums are just integers, so we can default to 0.
-                                        write!(out, " = 0")?;
-                                    }
-                                    _ => {}
-                                }
-                            } else {
-                                // heuristics
-                                match decl.inner_ty.as_str() {
-                                    "LPCWSTR" => write!(out, " = ptr::null()")?, // *const u16
-                                    _ => {}
-                                }
-                            }
-                        }
-                        _ => {}
+                        _ => {
+                            // the "zero" bit pattern is valid for every field of every struct in the Vulkan API,
+                            // so don't bother trying to write a nice expression, just use mem::zeroed().
+                            // FIXME: while this is convenient, those initializers have a big impact on compile time
+                            //        (they show up a lot in rustc self-profile). It would be preferable to
+                            //        emit a simple constant that doesn't trigger complex ctfe & type-checking
+                            //        (see https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_transform/trivial_const/fn.trivial_const.html)
+                            write!(out, " = unsafe {{ zero() }}")?; // `zero()` defined at crate level
+                        } //// pNext is always defaultable to null
+                          //"pNext" => {
+                          //    write!(out, " = {}", if decl.is_const_ptr() { "ptr::null()" } else { "ptr::null_mut()" })?
+                          //}
+                          //// pointers with len attributes are defaultable to null (if len == 0)
+                          //_ if len.is_some() && decl.is_ptr() => {
+                          //    write!(out, " = {}", if decl.is_const_ptr() { "ptr::null()" } else { "ptr::null_mut()" })?
+                          //}
+                          //// otherwise, decide based on the "optional" field and whether the field is a
+                          //// pointer, and also some heuristics
+                          //_other if last_opt => {
+                          //    if decl.is_const_ptr() {
+                          //        write!(out, " = ptr::null()")?;
+                          //    } else if decl.is_ptr() {
+                          //        write!(out, " = ptr::null_mut()")?;
+                          //    } else if let Some(info) = tymap.get(&decl.inner_ty) {
+                          //        match info.category {
+                          //            Category::Handle(_) => {
+                          //                let ty = decl.inner_ty;
+                          //                write!(out, " = {ty}::null()")?;
+                          //            }
+                          //            Category::FuncPointer(_) => {
+                          //                // This is a function pointer, modeled as `Option<fn()>` in rust.
+                          //                // The NULL pointer is `None`.
+                          //                write!(out, " = None")?;
+                          //            }
+                          //            Category::Bitmask(_) | Category::Enum => {
+                          //                // Bitmasks and enums are just integers, so we can default to 0.
+                          //                write!(out, " = 0")?;
+                          //            }
+                          //            _ => {}
+                          //        }
+                          //    } else {
+                          //        // heuristics
+                          //        match decl.inner_ty.as_str() {
+                          //            "LPCWSTR" => write!(out, " = ptr::null()")?, // *const u16
+                          //            _ => {}
+                          //        }
+                          //    }
+                          //}
                     }
                 }
                 writeln!(out, ",")?;
@@ -376,6 +389,21 @@ fn gen_type(out: &mut Writer, tyinfo: &TypeInfo, tymap: &TypeMap) -> io::Result<
             // contract to each command's "unsafe" contract.
             writeln!(out, "unsafe impl Send for {name} {{}}")?;
             writeln!(out, "unsafe impl Sync for {name} {{}}")?;
+            match &tyinfo.category {
+                Category::Struct { base_in_struct, base_out_struct } => {
+                    if (*base_in_struct || *base_out_struct)
+                        && name != "VkBaseInStructure"
+                        && name != "VkBaseOutStructure"
+                    {
+                        let s_type = s_type.unwrap();
+                        writeln!(
+                            out,
+                            "impl TaggedStructure for {name} {{ const S_TYPE : VkStructureType = {s_type}; }}"
+                        )?;
+                    }
+                }
+                _ => {}
+            }
         }
         _ => {}
     }
@@ -496,7 +524,7 @@ fn parse_command<'a, 'input>(
 ) -> Option<CommandInfo<'a, 'input>> {
     if let Some(alias) = node.attribute("alias") {
         let name = node.attribute("name").unwrap();
-        let alias_info = command_infos.get(alias).unwrap().clone();
+        let alias_info = command_infos.get(alias).unwrap();
         Some(CommandInfo {
             node,
             name: name.to_string(),
@@ -867,6 +895,8 @@ fn gen_command_wrapper(out: &mut Writer, cmd: &CommandInfo, tymap: &TypeMap) -> 
     Ok(())
 }
 
+// TODO: consider bundling (device|instance) + the dispatch tables together, like ash.
+//       This would remove one parameter to every function call.
 fn gen_core_dispatch_tables(out: &mut Writer, registry: Node, cmds: &CommandMap, tymap: &TypeMap) -> io::Result<()> {
     // PAIN: Within vk.xml, Vulkan API versions are divided in smaller features (VK_{BASE,GRAPHICS,COMPUTE}_VERSION_*_*),
     //       and form a dependency tree via the "depends" attribute. However, this is useless for
@@ -954,6 +984,12 @@ fn gen_ext_dispatch_tables(out: &mut Writer, registry: Node, cmds: &CommandMap, 
         let mut instance_fns = vec![];
         let mut device_fns = vec![];
         for req in children_tagged(ext, "require") {
+            let depends = req.attribute("depends");
+            if let Some(_depends) = depends {
+                // PAIN: Some extensions depend on other extensions, which may not be enabled.
+                continue;
+            }
+
             for cmd in children_tagged(req, "command") {
                 let info = &cmds[cmd.attribute("name").unwrap()];
                 if !info.generated.get() {
@@ -1181,7 +1217,7 @@ fn c_type_to_rust(ty: &str, return_type: bool) -> &str {
     }
 }
 
-fn sanitize_ident(ident: &str) -> Cow<str> {
+fn sanitize_ident(ident: &str) -> Cow<'_, str> {
     match ident {
         "type" | "mod" | "ref" | "self" | "super" | "crate" => Cow::Owned(format!("r#{}", ident)),
         _ => Cow::Borrowed(ident),

@@ -56,12 +56,10 @@ mod query_pool;
 
 use std::ptr;
 use gpu_types::reflection::ShaderReflection;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use vulkan::*;
 
 // Reexports
-
-pub use ash::{self, vk};
+pub use vulkan;
 pub use gpu_allocator::MemoryLocation;
 pub use gpu_types::*;
 
@@ -85,19 +83,18 @@ pub mod prelude {
         Format, FragmentState, GraphicsPipeline, GraphicsPipelineCreateInfo, Image, ImageCreateInfo, ImageType,
         ImageUsage, MemoryLocation, Point2D, PreRasterizationShaders, RasterizationState, Rect2D, RenderEncoder,
         SamplerParams, ShaderCode, ShaderEntryPoint, ShaderSource, Size2D, StencilState, Vertex,
-        VertexBufferLayoutDescription, VertexInputAttributeDescription, VertexInputState, vk,
+        VertexBufferLayoutDescription, VertexInputAttributeDescription, VertexInputState,
     };
 }
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("failed to create device")]
-    DeviceCreationFailed(#[from] DeviceCreateError),
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
-    #[error("Vulkan error: {0}")]
-    Vulkan(#[from] VkResult),
+    #[error("Vulkan error: {0:?}")]
+    Vulkan(VkResult),
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -105,7 +102,7 @@ pub enum Error {
 /// Trait implemented by wrappers of Vulkan API objects.
 pub trait VulkanObject {
     /// The Vulkan API handle type associated with the object.
-    type Handle: vk::Handle;
+    type Handle: VulkanHandle;
     /// Returns the Vulkan API handle of the object.
     fn handle(&self) -> Self::Handle;
 }

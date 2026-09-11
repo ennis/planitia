@@ -1,10 +1,11 @@
 use crate::paint::Srgba8;
-use gpu::{vk, ImageAspect, ImageCopyView, ImageCreateInfo, BarrierFlags, MemoryLocation, Size3D, BARRIER_TEXTURE};
+use gpu::{ImageAspect, ImageCopyView, ImageCreateInfo, BarrierFlags, MemoryLocation, Size3D, BARRIER_TEXTURE};
 use log::debug;
 use math::{IRect, U16Vec2, irect_xywh, u16vec2};
 use std::cell::RefCell;
 use std::ops::{Index, IndexMut, Range};
 use std::slice;
+use gpu::vulkan::*;
 
 /// Texture atlas.
 pub struct Atlas {
@@ -40,7 +41,7 @@ impl Atlas {
                 width,
                 height,
                 depth: 1,
-                format: gpu::Format::R8G8B8A8_UNORM,
+                format: VK_FORMAT_R8G8B8A8_UNORM,
                 usage: gpu::ImageUsage::SAMPLED | gpu::ImageUsage::TRANSFER_DST,
                 mip_levels: 1,
                 array_layers: 1,

@@ -21,7 +21,7 @@ impl ThreadLocalCommandPool {
         let create_info = VkCommandPoolCreateInfo {
             flags: VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
             queueFamilyIndex: queue_family_index,
-            ..Default::default()
+            ..
         };
         let command_pool = device.vk.CreateCommandPool(device.vkd, &create_info, ptr::null()).unwrap();
         ThreadLocalCommandPool { queue_family: queue_family_index, command_pool, pending: vec![] }
@@ -39,7 +39,7 @@ impl ThreadLocalCommandPool {
                 commandPool: self.command_pool,
                 level: VK_COMMAND_BUFFER_LEVEL_PRIMARY,
                 commandBufferCount: 1,
-                ..Default::default()
+                ..
             };
             let mut cmd = MaybeUninit::uninit();
             device.vk.AllocateCommandBuffers(device.vkd, &allocate_info, cmd.as_mut_ptr()).check();

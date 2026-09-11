@@ -1,5 +1,4 @@
 use crate::{BufferRange, BufferUsage, Device, Ptr, ResourceAllocation, VulkanObject, vkcheck};
-use ash::VkHandle;
 use gpu_allocator::MemoryLocation;
 use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
 use log::{trace, warn};
@@ -12,6 +11,7 @@ use std::ops::RangeBounds;
 use std::os::raw::c_void;
 use std::ptr::NonNull;
 use std::{mem, ptr, slice};
+use ash::vk::Handle;
 use vulkan::*;
 
 /// A buffer of GPU-visible memory, optionally mapped in host memory, without any associated type.
@@ -374,11 +374,7 @@ impl Device {
                 ..
             };
             let handle = self.vk.CreateBuffer(self.vkd, &vk_create_info, ptr::null()).unwrap();
-            let mem_req = {
-                let mut mem_req = VkMemoryRequirements { size: 0, alignment: 0, memoryTypeBits: 0 };
-                self.vk.GetBufferMemoryRequirements(self.vkd, handle, &mut mem_req);
-                mem_req
-            };
+            let mem_req = self.vk.GetBufferMemoryRequirements(self.vkd, handle);
             let allocation = self.allocate_memory_or_panic(&AllocationCreateDesc {
                 name: "", // unfortunately we don't have a name yet, it is set after creation
                 requirements: unsafe { mem::transmute(mem_req) },
@@ -396,7 +392,7 @@ impl Device {
             let allocation = ResourceAllocation::Allocation { allocation };
             let device_address = self
                 .vk
-                .GetBufferDeviceAddress(self.vkd, &VkBufferDeviceAddressInfo { buffer: handle, ..Default::default() });
+                .GetBufferDeviceAddress(self.vkd, &VkBufferDeviceAddressInfo { buffer: handle, .. });
             trace!("GPU: create_buffer {handle:?}");
             BufferUntyped {
                 allocation,

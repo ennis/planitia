@@ -1,7 +1,6 @@
 use crate::device::{get_preferred_present_mode, get_preferred_swap_extent};
 use crate::image::ImageDescriptors;
-use crate::{CommandBuffer, Device, Image, ImageType, ImageUsage, ResourceAllocation, Size3D, vk_khr_surface};
-use ash::vk;
+use crate::{CommandBuffer, Device, Image, ImageType, ImageUsage, ResourceAllocation, Size3D};
 use gpu_allocator::MemoryLocation;
 use log::info;
 use std::ptr;
@@ -73,7 +72,7 @@ impl Device {
         // `get_or_create_semaphore` only guarantees that a wait operation has been submitted
         // on the semaphore (not that the wait has completed).
         let ready = {
-            let create_info = VkSemaphoreCreateInfo { ..Default::default() };
+            let create_info = VkSemaphoreCreateInfo { .. };
             self.vk.CreateSemaphore(self.vkd, &create_info, ptr::null()).unwrap()
         };
         let index = self
@@ -156,13 +155,13 @@ impl Device {
             imageExtent: image_extent,
             imageArrayLayers: 1,
             // TODO: this should be a parameter
-            imageUsage: VK_IMAGE_USAGE_FLAGS_COLOR_ATTACHMENT | VK_IMAGE_USAGE_FLAGS_TRANSFER_DST,
+            imageUsage: VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
             imageSharingMode: VK_SHARING_MODE_EXCLUSIVE,
             queueFamilyIndexCount: 0,
             pQueueFamilyIndices: ptr::null(),
-            preTransform: VkSurfaceTransformFlagsKHR::IDENTITY,
+            preTransform: VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
             // TODO: this should be a parameter
-            compositeAlpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
+            compositeAlpha: VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
             presentMode: present_mode,
             clipped: VK_TRUE,
             oldSwapchain: swapchain.handle,

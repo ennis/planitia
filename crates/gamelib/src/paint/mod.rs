@@ -20,7 +20,8 @@ use crate::paint::atlas::Atlas;
 use crate::paint::text::{GlyphCache, GlyphEntry, GlyphId};
 use crate::render::RenderTarget;
 use color::Srgba8;
-use gpu::{ImageUsage, Vertex as GpuVertex, vk};
+use gpu::{ImageUsage, Vertex as GpuVertex};
+use gpu::vulkan::*;
 use math::{U16Vec2, UVec2, Vec2, u16vec2, uvec2, vec2};
 
 /// Blend mode.

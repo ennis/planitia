@@ -2,19 +2,35 @@ use crate::generated::*;
 
 pub trait VulkanHandle {
     const TYPE: VkObjectType;
-    fn as_raw(self) -> *mut ::core::ffi::c_void;
+    fn as_raw(self) -> u64;
+}
+
+pub trait VulkanDispatchableHandle: VulkanHandle {
+    fn as_raw_ptr(self) -> *mut ::core::ffi::c_void;
 }
 
 macro_rules! impl_handle {
     ($ty:ty, $object_type:expr) => {
         impl VulkanHandle for $ty {
             const TYPE: VkObjectType = $object_type;
-            fn as_raw(self) -> *mut ::core::ffi::c_void {
-                self.0 as *mut _
+            fn as_raw(self) -> u64 {
+                self.0 as u64
             }
         }
     };
 }
+
+macro_rules! impl_dispatchable_handle {
+    ($ty:ty, $object_type:expr) => {
+        impl VulkanDispatchableHandle for $ty {
+            fn as_raw_ptr(self) -> *mut ::core::ffi::c_void {
+                self.0 as *mut _
+            }
+        }
+    };
+    () => {};
+}
+
 impl_handle!(VkInstance, VK_OBJECT_TYPE_INSTANCE);
 impl_handle!(VkPhysicalDevice, VK_OBJECT_TYPE_PHYSICAL_DEVICE);
 impl_handle!(VkDevice, VK_OBJECT_TYPE_DEVICE);
@@ -40,3 +56,8 @@ impl_handle!(VkDescriptorPool, VK_OBJECT_TYPE_DESCRIPTOR_POOL);
 impl_handle!(VkDescriptorSet, VK_OBJECT_TYPE_DESCRIPTOR_SET);
 impl_handle!(VkFramebuffer, VK_OBJECT_TYPE_FRAMEBUFFER);
 impl_handle!(VkCommandPool, VK_OBJECT_TYPE_COMMAND_POOL);
+impl_dispatchable_handle!(VkInstance, VK_OBJECT_TYPE_INSTANCE);
+impl_dispatchable_handle!(VkPhysicalDevice, VK_OBJECT_TYPE_PHYSICAL_DEVICE);
+impl_dispatchable_handle!(VkDevice, VK_OBJECT_TYPE_DEVICE);
+impl_dispatchable_handle!(VkQueue, VK_OBJECT_TYPE_QUEUE);
+impl_dispatchable_handle!(VkCommandBuffer, VK_OBJECT_TYPE_COMMAND_BUFFER);

@@ -14,8 +14,6 @@ use color::Srgba8;
 use color_print::cwriteln;
 use env_logger::fmt::style::AnsiColor;
 use futures::future::AbortHandle;
-use gpu::vk;
-use gpu::VkHandle;
 use keyboard_types::{Key, KeyState, Modifiers, NamedKey};
 use log::{debug, error, info, warn};
 use math::{IVec2, Vec2, vec2};
@@ -33,6 +31,7 @@ use std::sync::{LazyLock, OnceLock};
 use std::{array, mem, ptr};
 use threadbound::ThreadBound;
 use tracy_client::SpanLocation;
+use gpu::vulkan::*;
 
 /// Maximum number of GPU frames in flight.
 ///
@@ -743,10 +742,7 @@ fn load_renderdoc_dll() {
 
 /// Gets a pointer to a VkInstance for RenderDoc captures.
 unsafe fn rdoc_instance_ptr() -> *mut c_void {
-    unsafe {
-        let instance = gpu::get_vulkan_instance().handle().as_raw() as *mut *mut c_void;
-        ptr::read(instance)
-    }
+    gpu::Instance::get().instance.0 as *mut c_void
 }
 
 /// Initializes `env_logger` with a custom format.

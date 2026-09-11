@@ -8,6 +8,7 @@ use gpu::{Buffer, BufferCreateInfo, Image, ImageUsage, BarrierFlags, PrimitiveTo
 use math::{IVec2, Vec3};
 use std::path::Path;
 use gamelib::error::ExcResult;
+use gpu::vulkan::*;
 
 static_assets! {
     static BASE_RENDER: gpu::GraphicsPipeline = "/shaders/game_shaders.sharc#automaton_base_render";
@@ -126,26 +127,26 @@ impl AutomatonExperiment {
             point_count: 0,
             vertex_count: 0,
             shading_texture: RenderTarget::new(
-                gpu::Format::R8G8B8A8_UNORM,
+                VK_FORMAT_R8G8B8A8_UNORM,
                 ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
             ),
             normal_texture: RenderTarget::new(
-                gpu::Format::A2B10G10R10_UNORM_PACK32,
+                VK_FORMAT_A2B10G10R10_UNORM_PACK32,
                 ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
             ),
-            depth_texture: RenderTarget::new(gpu::Format::D32_SFLOAT_S8_UINT, ImageUsage::DEPTH_STENCIL_ATTACHMENT),
+            depth_texture: RenderTarget::new(VK_FORMAT_D32_SFLOAT_S8_UINT, ImageUsage::DEPTH_STENCIL_ATTACHMENT),
             aux_texture: RenderTarget::new(
-                gpu::Format::R16G16B16A16_UINT,
+                VK_FORMAT_R16G16B16A16_UINT,
                 ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
             ),
             contour_target: RenderTarget::new(
-                gpu::Format::R32G32B32A32_SFLOAT,
+                VK_FORMAT_R32G32B32A32_SFLOAT,
                 ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
             ),
-            trails_0: RenderTarget::new(gpu::Format::R32G32B32A32_SFLOAT, ImageUsage::STORAGE | ImageUsage::SAMPLED),
-            trails_1: RenderTarget::new(gpu::Format::R32G32B32A32_SFLOAT, ImageUsage::STORAGE | ImageUsage::SAMPLED),
-            edge_x: RenderTarget::new(gpu::Format::R8_SNORM, ImageUsage::STORAGE | ImageUsage::SAMPLED),
-            edge_y: RenderTarget::new(gpu::Format::R32_SFLOAT, ImageUsage::STORAGE | ImageUsage::SAMPLED),
+            trails_0: RenderTarget::new(VK_FORMAT_R32G32B32A32_SFLOAT, ImageUsage::STORAGE | ImageUsage::SAMPLED),
+            trails_1: RenderTarget::new(VK_FORMAT_R32G32B32A32_SFLOAT, ImageUsage::STORAGE | ImageUsage::SAMPLED),
+            edge_x: RenderTarget::new(VK_FORMAT_R8_SNORM, ImageUsage::STORAGE | ImageUsage::SAMPLED),
+            edge_y: RenderTarget::new(VK_FORMAT_R32_SFLOAT, ImageUsage::STORAGE | ImageUsage::SAMPLED),
             emitters: Buffer::new(BufferCreateInfo { len: EMITTERS_COUNT, .. }),
             sim_step: 0,
             max_sim_steps: 30,
