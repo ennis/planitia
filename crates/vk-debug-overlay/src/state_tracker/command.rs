@@ -1,19 +1,11 @@
 //! Command tracking.
-
 use crate::Device;
-use crate::bump::Alloc;
 use crate::event::EId;
 use crate::helper::HasPrivateData;
-use ash::vk;
-use ash::vk::Handle;
 use std::ffi::{CStr, CString};
 use std::fmt::Formatter;
-use std::sync::Arc;
 use std::{fmt, ptr, slice};
-use vulkan_headers::vulkan::vulkan::{
-    VkBindHeapInfoEXT, VkCommandBuffer, VkDevice, VkHostAddressRangeEXT, VkPushDataInfoEXT,
-    VkResourceDescriptorInfoEXT, VkResult, VkSamplerCreateInfo,
-};
+use vulkan::*;
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum CmdKind {
@@ -134,8 +126,7 @@ impl Device {
         if result != VK_SUCCESS {
             return result;
         }
-        let command_buffers =
-            slice::from_raw_parts(p_command_buffers, (*p_allocate_info).command_buffer_count as usize);
+        let command_buffers = slice::from_raw_parts(p_command_buffers, (*p_allocate_info).commandBufferCount as usize);
         for cmd_buf in command_buffers {
             self.set_private_data(*cmd_buf, CommandBufferData::new());
         }
@@ -153,24 +144,24 @@ impl Device {
         for cmd_buf in command_buffers {
             self.take_private_data(*cmd_buf);
         }
-        (self.fp_v1_0().free_command_buffers)(device, command_pool, command_buffer_count, p_command_buffers)
+        self.FreeCommandBuffers(device, command_pool, command_buffer_count, p_command_buffers)
     }
 
     pub unsafe fn hook_cmd_begin_debug_utils_label(
         &self,
         command_buffer: VkCommandBuffer,
-        p_label_info: *const VkDebugUtilsLabelEXT<'_>,
+        p_label_info: *const VkDebugUtilsLabelEXT,
     ) {
         let d = self.get_private_data_mut(command_buffer).unwrap();
-        let label: CString = CStr::from_ptr((*p_label_info).p_label_name).into();
+        let label: CString = CStr::from_ptr((*p_label_info).pLabelName).into();
         d.regions.push(label);
-        (self.ext_debug_utils.cmd_begin_debug_utils_label_ext)(command_buffer, p_label_info)
+        self.CmdBeginDebugUtilsLabelEXT(command_buffer, p_label_info)
     }
 
     pub unsafe fn hook_cmd_end_debug_utils_label(&self, command_buffer: VkCommandBuffer) {
         let d = self.get_private_data_mut(command_buffer).unwrap();
         d.regions.pop();
-        (self.ext_debug_utils.cmd_end_debug_utils_label_ext)(command_buffer)
+        self.CmdEndDebugUtilsLabelEXT(command_buffer)
     }
 
     pub unsafe fn hook_begin_command_buffer(
@@ -181,11 +172,11 @@ impl Device {
         let d = self.get_private_data_mut(command_buffer).unwrap();
         d.commands.clear();
         d.push.clear();
-        (self.fp_v1_0().begin_command_buffer)(command_buffer, p_begin_info)
+        self.BeginCommandBuffer(command_buffer, p_begin_info)
     }
 
     pub unsafe fn hook_end_command_buffer(&self, command_buffer: VkCommandBuffer) -> VkResult {
-        (self.fp_v1_0().end_command_buffer)(command_buffer)
+        self.EndCommandBuffer(command_buffer)
     }
 
     pub unsafe fn hook_cmd_push_data_ext(
@@ -193,13 +184,13 @@ impl Device {
         command_buffer: VkCommandBuffer,
         p_push_data_info: *const VkPushDataInfoEXT,
     ) {
-        let d = self.get_private_data_mut(VkCommandBuffer::from_raw(command_buffer as u64)).unwrap();
+        let d = self.get_private_data_mut(command_buffer).unwrap();
         let offset = (*p_push_data_info).offset as usize;
         let size = (*p_push_data_info).data.size;
         let ptr = (*p_push_data_info).data.address;
         d.push.resize(offset + size, 0xCC);
         ptr::copy_nonoverlapping(ptr as *const u8, d.push.as_mut_ptr().add(offset), size);
-        (self.ext_descriptor_heap.cmd_push_data)(command_buffer, p_push_data_info);
+        self.CmdPushDataEXT(command_buffer, p_push_data_info);
     }
 
     pub unsafe fn hook_cmd_bind_resource_heap_ext(
@@ -207,7 +198,7 @@ impl Device {
         commandBuffer: VkCommandBuffer,
         pBindInfo: *const VkBindHeapInfoEXT,
     ) {
-        (self.ext_descriptor_heap.cmd_bind_resource_heap)(commandBuffer, pBindInfo);
+        self.CmdBindResourceHeapEXT(commandBuffer, pBindInfo);
     }
 
     pub unsafe fn hook_cmd_bind_sampler_heap_ext(
@@ -215,7 +206,7 @@ impl Device {
         commandBuffer: VkCommandBuffer,
         pBindInfo: *const VkBindHeapInfoEXT,
     ) {
-        (self.ext_descriptor_heap.cmd_bind_sampler_heap)(commandBuffer, pBindInfo);
+        self.CmdBindSamplerHeapEXT(commandBuffer, pBindInfo);
     }
 
     pub unsafe fn hook_write_resource_descriptors_ext(
@@ -225,7 +216,7 @@ impl Device {
         pResources: *const VkResourceDescriptorInfoEXT,
         pDescriptors: *const VkHostAddressRangeEXT,
     ) -> VkResult {
-        (self.ext_descriptor_heap.write_resource_descriptors)(device, resourceCount, pResources, pDescriptors)
+        self.WriteResourceDescriptorsEXT(device, resourceCount, pResources, pDescriptors)
     }
 
     pub unsafe fn hook_write_sampler_descriptors_ext(
@@ -235,7 +226,7 @@ impl Device {
         pSamplers: *const VkSamplerCreateInfo,
         pDescriptors: *const VkHostAddressRangeEXT,
     ) -> VkResult {
-        (self.ext_descriptor_heap.write_sampler_descriptors)(device, samplerCount, pSamplers, pDescriptors)
+        self.WriteSamplerDescriptorsEXT(device, samplerCount, pSamplers, pDescriptors)
     }
 
     unsafe fn wrap_command<R>(&self, cmd_buf: VkCommandBuffer, kind: CmdKind, f: impl FnOnce(&Self) -> R) -> R {
@@ -269,7 +260,7 @@ impl Device {
             VK_PIPELINE_BIND_POINT_COMPUTE => d.compute = pipeline,
             _ => panic!("invalid bind point"),
         };
-        (self.fp_v1_0().cmd_bind_pipeline)(command_buffer, pipeline_bind_point, pipeline)
+        self.CmdBindPipeline(command_buffer, pipeline_bind_point, pipeline)
     }
 
     pub unsafe fn hook_cmd_draw(
@@ -283,9 +274,7 @@ impl Device {
         self.wrap_command(
             command_buffer,
             CmdKind::Draw { first_vertex, vertex_count, first_instance, instance_count },
-            |this| {
-                (this.fp_v1_0().cmd_draw)(command_buffer, vertex_count, instance_count, first_vertex, first_instance)
-            },
+            |this| this.CmdDraw(command_buffer, vertex_count, instance_count, first_vertex, first_instance),
         );
     }
 
@@ -302,7 +291,7 @@ impl Device {
             command_buffer,
             CmdKind::DrawIndexed { first_index, index_count, vertex_offset, first_instance, instance_count },
             |this| {
-                (this.fp_v1_0().cmd_draw_indexed)(
+                this.CmdDrawIndexed(
                     command_buffer,
                     index_count,
                     instance_count,
@@ -323,7 +312,7 @@ impl Device {
         stride: u32,
     ) {
         self.wrap_command(command_buffer, CmdKind::DrawIndirect { draw_count, stride }, |this| {
-            (this.fp_v1_0().cmd_draw_indirect)(command_buffer, buffer, offset, draw_count, stride)
+            this.CmdDrawIndirect(command_buffer, buffer, offset, draw_count, stride)
         });
     }
 
@@ -335,7 +324,7 @@ impl Device {
         group_count_z: u32,
     ) {
         self.wrap_command(command_buffer, CmdKind::Dispatch { group_count_x, group_count_y, group_count_z }, |this| {
-            (this.fp_v1_0().cmd_dispatch)(command_buffer, group_count_x, group_count_y, group_count_z)
+            this.CmdDispatch(command_buffer, group_count_x, group_count_y, group_count_z)
         });
         let d = self.get_private_data_mut(command_buffer).unwrap();
         let n = d.commands.len() - 1;
@@ -350,18 +339,18 @@ impl Device {
     ) {
         let d = self.get_private_data_mut(command_buffer).unwrap();
         d.render_pass_begin = d.commands.len();
-        (self.fp_v1_0().cmd_begin_render_pass)(command_buffer, p_render_pass_begin, contents);
+        self.CmdBeginRenderPass(command_buffer, p_render_pass_begin, contents);
     }
 
     pub unsafe fn hook_cmd_begin_render_pass2(
         &self,
         command_buffer: VkCommandBuffer,
-        p_render_pass_begin: *const VkRenderPassBeginInfo<'_>,
-        p_subpass_begin_info: *const VkSubpassBeginInfo<'_>,
+        p_render_pass_begin: *const VkRenderPassBeginInfo,
+        p_subpass_begin_info: *const VkSubpassBeginInfo,
     ) {
         let d = self.get_private_data_mut(command_buffer).unwrap();
         d.render_pass_begin = d.commands.len();
-        (self.fp_v1_2().cmd_begin_render_pass2)(command_buffer, p_render_pass_begin, p_subpass_begin_info);
+        self.CmdBeginRenderPass2(command_buffer, p_render_pass_begin, p_subpass_begin_info);
     }
 
     pub unsafe fn hook_cmd_begin_rendering(
@@ -374,21 +363,20 @@ impl Device {
 
         // record color+depth attachment formats for building command EIDs
         let color_attachments = slice::from_raw_parts(
-            (*p_rendering_info).p_color_attachments,
-            (*p_rendering_info).color_attachment_count as usize,
+            (*p_rendering_info).pColorAttachments,
+            (*p_rendering_info).colorAttachmentCount as usize,
         );
         d.color_formats = color_attachments
             .iter()
-            .map(|a| a.image_view)
+            .map(|a| a.imageView)
             .map(|iv| self.get_private_data_ref(iv).unwrap().format)
             .collect();
-        d.depth_format = if !(*p_rendering_info).p_depth_attachment.is_null() {
-            self.get_private_data_ref((*(*p_rendering_info).p_depth_attachment).image_view).unwrap().format
+        d.depth_format = if !(*p_rendering_info).pDepthAttachment.is_null() {
+            self.get_private_data_ref((*(*p_rendering_info).pDepthAttachment).imageView).unwrap().format
         } else {
-            vk::Format::UNDEFINED
+            VK_FORMAT_UNDEFINED
         };
-
-        (self.fp_v1_3().cmd_begin_rendering)(command_buffer, p_rendering_info);
+        self.CmdBeginRendering(command_buffer, p_rendering_info);
     }
 
     unsafe fn end_rendering_common(&self, cmd_buf: VkCommandBuffer) {
@@ -400,20 +388,20 @@ impl Device {
 
     pub unsafe fn hook_cmd_end_render_pass(&self, command_buffer: VkCommandBuffer) {
         self.end_rendering_common(command_buffer);
-        (self.fp_v1_0().cmd_end_render_pass)(command_buffer);
+        self.CmdEndRenderPass(command_buffer);
     }
 
     pub unsafe fn hook_cmd_end_render_pass2(
         &self,
         command_buffer: VkCommandBuffer,
-        p_subpass_end_info: *const VkSubpassEndInfo<'_>,
+        p_subpass_end_info: *const VkSubpassEndInfo,
     ) {
         self.end_rendering_common(command_buffer);
-        (self.fp_v1_2().cmd_end_render_pass2)(command_buffer, p_subpass_end_info);
+        self.CmdEndRenderPass2(command_buffer, p_subpass_end_info);
     }
 
     pub unsafe fn hook_cmd_end_rendering(&self, command_buffer: VkCommandBuffer) {
         self.end_rendering_common(command_buffer);
-        (self.fp_v1_3().cmd_end_rendering)(command_buffer);
+        self.CmdEndRendering(command_buffer);
     }
 }

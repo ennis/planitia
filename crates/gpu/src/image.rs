@@ -405,9 +405,7 @@ impl Device {
                 linear: true,
                 allocation_scheme: AllocationScheme::GpuAllocatorManaged,
             });
-            self.fns
-                .BindImageMemory(self.vkd, handle, VkDeviceMemory(allocation.memory().as_raw()), allocation.offset())
-                .check();
+            vkcall!(self.fns.BindImageMemory(self.vkd, handle, VkDeviceMemory(allocation.memory().as_raw()), allocation.offset()));
             let descriptors = self.register_image_descriptors(handle, &create_info);
             let attachment_view = self.create_attachment_image_view(handle, image_info.format);
             self.transition_image_to_general(handle, aspects_for_format(image_info.format));

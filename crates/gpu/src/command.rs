@@ -3,7 +3,7 @@ use crate::query_pool::QueryPool;
 use crate::{
     Buffer, BufferRangeUntyped, BufferUntyped, ColorAttachment, ComputePipeline, DepthStencilAttachment, Device, Image,
     ImageCopyBuffer, ImageCopyView, ImageCreateInfo, Ptr, ShaderReflection, SwapChain, VulkanObject, command_pool,
-    query_pool,
+    query_pool, vkcall,
 };
 use arrayvec::ArrayVec;
 use ash::prelude::VkResult;
@@ -121,11 +121,8 @@ impl CommandBuffer {
         trace!("GPU: create CommandBuffer, frame_index_created={}", frame_index_created);
         let cmdbuf = command_pool::allocate_command_buffer();
         unsafe {
-            let info = VkCommandBufferBeginInfo {
-                flags: VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-                ..
-            };
-            device.fns.BeginCommandBuffer(cmdbuf, &info).check();
+            let info = VkCommandBufferBeginInfo { flags: VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, .. };
+            vkcall!(device.fns.BeginCommandBuffer(cmdbuf, &info));
             // setup default dynamic state so validation layers don't complain
             device.fns.CmdSetDepthBiasEnable(cmdbuf, VK_FALSE);
             device.bind_descriptor_heaps(cmdbuf);
@@ -223,11 +220,8 @@ impl CommandBuffer {
                     size = size_of::<T>();
                 }
             };
-            let push_data_info = VkPushDataInfoEXT {
-                offset: 0,
-                data: VkHostAddressRangeConstEXT { address, size },
-                ..
-            };
+            let push_data_info =
+                VkPushDataInfoEXT { offset: 0, data: VkHostAddressRangeConstEXT { address, size }, .. };
             device.ext.descriptor_heap.CmdPushDataEXT(cmdbuf, &push_data_info);
         }
     }
@@ -281,7 +275,13 @@ impl CommandBuffer {
     pub unsafe fn update_buffer(&mut self, buffer: &BufferUntyped, offset: usize, data: &[u8]) {
         let device = Device::instance();
         unsafe {
-            device.fns.CmdUpdateBuffer(self.cmdbuf, buffer.handle(), offset as VkDeviceSize, data.len() as VkDeviceSize, data.as_ptr() as *const c_void);
+            device.fns.CmdUpdateBuffer(
+                self.cmdbuf,
+                buffer.handle(),
+                offset as VkDeviceSize,
+                data.len() as VkDeviceSize,
+                data.as_ptr() as *const c_void,
+            );
         }
     }
 
@@ -323,11 +323,7 @@ impl CommandBuffer {
             let label = CString::new(label).unwrap();
             device.ext.debug_utils.CmdBeginDebugUtilsLabelEXT(
                 self.cmdbuf,
-                &VkDebugUtilsLabelEXT {
-                    pLabelName: label.as_ptr(),
-                    color: [0.0, 0.0, 0.0, 0.0],
-                    ..
-                },
+                &VkDebugUtilsLabelEXT { pLabelName: label.as_ptr(), color: [0.0, 0.0, 0.0, 0.0], .. },
             );
         }
     }
@@ -534,7 +530,7 @@ pub fn submit(mut cmd: CommandBuffer) {
     cmd.barrier(BarrierFlags::empty());
     // finish recording the command buffer & put it for delayed deletion
     unsafe {
-        device.fns.EndCommandBuffer(cmd.cmdbuf).check();
+        vkcall!(device.fns.EndCommandBuffer(cmd.cmdbuf));
     }
     command_pool::defer_free_command_buffer(cmd.cmdbuf, frame_index_submitted);
 
@@ -611,11 +607,7 @@ pub fn present(swap_chain: &mut SwapChain, index: usize) {
             pResults: ptr::null_mut(),
             ..
         };
-        device
-            .ext
-            .swapchain
-            .QueuePresentKHR(submission_state.queue, &present_info)
-            .check();
+        vkcall!(device.ext.swapchain.QueuePresentKHR(submission_state.queue, &present_info));
     }
 }
 

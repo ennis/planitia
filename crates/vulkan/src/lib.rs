@@ -1,4 +1,5 @@
-﻿#![feature(default_field_values)]
+﻿//! Vulkan bindings generated from vk.xml.
+#![feature(default_field_values)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]

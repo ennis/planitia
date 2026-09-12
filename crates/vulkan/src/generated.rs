@@ -474,6 +474,7 @@ pub const VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO: i32 = 48;
 pub type VkSubpassContents = i32;
 pub const VK_SUBPASS_CONTENTS_INLINE: i32 = 0;
 pub const VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS: i32 = 1;
+pub type VkResult = i32;
 pub const VK_SUCCESS: i32 = 0;
 pub const VK_NOT_READY: i32 = 1;
 pub const VK_TIMEOUT: i32 = 2;
@@ -3201,7 +3202,7 @@ pub type PFN_vkCmdResetQueryPool = unsafe extern "system" fn(commandBuffer: VkCo
 pub type PFN_vkCmdWriteTimestamp = unsafe extern "system" fn(commandBuffer: VkCommandBuffer, pipelineStage: VkPipelineStageFlagBits, queryPool: VkQueryPool, query: u32) -> ();
 pub type PFN_vkCmdCopyQueryPoolResults = unsafe extern "system" fn(commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, firstQuery: u32, queryCount: u32, dstBuffer: VkBuffer, dstOffset: VkDeviceSize, stride: VkDeviceSize, flags: VkQueryResultFlags) -> ();
 pub type PFN_vkCmdExecuteCommands = unsafe extern "system" fn(commandBuffer: VkCommandBuffer, commandBufferCount: u32, pCommandBuffers: *const VkCommandBuffer) -> ();
-pub const VK_ERROR_VALIDATION_FAILED: VkResult = VkResult(-1000011001);
+pub const VK_ERROR_VALIDATION_FAILED: VkResult = -1000011001;
 // Feature: VK_COMPUTE_VERSION_1_0
 /// <https://docs.vulkan.org/refpages/latest/refpages/source/VkDispatchIndirectCommand.html>
 #[repr(C)]
@@ -4065,7 +4066,7 @@ pub type PFN_vkCmdSetViewport = unsafe extern "system" fn(commandBuffer: VkComma
 pub type PFN_vkCmdSetScissor = unsafe extern "system" fn(commandBuffer: VkCommandBuffer, firstScissor: u32, scissorCount: u32, pScissors: *const VkRect2D) -> ();
 pub type PFN_vkCmdSetLineWidth = unsafe extern "system" fn(commandBuffer: VkCommandBuffer, lineWidth: f32) -> ();
 pub type PFN_vkCmdSetDepthBias = unsafe extern "system" fn(commandBuffer: VkCommandBuffer, depthBiasConstantFactor: f32, depthBiasClamp: f32, depthBiasSlopeFactor: f32) -> ();
-pub type PFN_vkCmdSetBlendConstants = unsafe extern "system" fn(commandBuffer: VkCommandBuffer, blendConstants: [f32; 4 as usize]) -> ();
+pub type PFN_vkCmdSetBlendConstants = unsafe extern "system" fn(commandBuffer: VkCommandBuffer, blendConstants: *mut f32) -> ();
 pub type PFN_vkCmdSetDepthBounds = unsafe extern "system" fn(commandBuffer: VkCommandBuffer, minDepthBounds: f32, maxDepthBounds: f32) -> ();
 pub type PFN_vkCmdSetStencilCompareMask = unsafe extern "system" fn(commandBuffer: VkCommandBuffer, faceMask: VkStencilFaceFlags, compareMask: u32) -> ();
 pub type PFN_vkCmdSetStencilWriteMask = unsafe extern "system" fn(commandBuffer: VkCommandBuffer, faceMask: VkStencilFaceFlags, writeMask: u32) -> ();
@@ -4474,7 +4475,7 @@ pub type PFN_vkGetPhysicalDeviceImageFormatProperties2 = unsafe extern "system" 
 pub type PFN_vkGetPhysicalDeviceQueueFamilyProperties2 = unsafe extern "system" fn(physicalDevice: VkPhysicalDevice, pQueueFamilyPropertyCount: *mut u32, pQueueFamilyProperties: *mut VkQueueFamilyProperties2) -> ();
 pub type PFN_vkGetPhysicalDeviceMemoryProperties2 = unsafe extern "system" fn(physicalDevice: VkPhysicalDevice, pMemoryProperties: *mut VkPhysicalDeviceMemoryProperties2) -> ();
 pub type PFN_vkGetPhysicalDeviceSparseImageFormatProperties2 = unsafe extern "system" fn(physicalDevice: VkPhysicalDevice, pFormatInfo: *const VkPhysicalDeviceSparseImageFormatInfo2, pPropertyCount: *mut u32, pProperties: *mut VkSparseImageFormatProperties2) -> ();
-pub const VK_ERROR_OUT_OF_POOL_MEMORY: VkResult = VkResult(-1000069000);
+pub const VK_ERROR_OUT_OF_POOL_MEMORY: VkResult = -1000069000;
 pub const VK_FORMAT_FEATURE_TRANSFER_SRC_BIT: VkFormatFeatureFlagBits = 0x4000;
 pub const VK_FORMAT_FEATURE_TRANSFER_DST_BIT: VkFormatFeatureFlagBits = 0x8000;
 pub const VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT: VkImageCreateFlagBits = 0x20;
@@ -4706,7 +4707,7 @@ pub type PFN_vkGetPhysicalDeviceExternalBufferProperties = unsafe extern "system
 pub const VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO: VkStructureType = 1000072000;
 pub const VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO: VkStructureType = 1000072001;
 pub const VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO: VkStructureType = 1000072002;
-pub const VK_ERROR_INVALID_EXTERNAL_HANDLE: VkResult = VkResult(-1000072003);
+pub const VK_ERROR_INVALID_EXTERNAL_HANDLE: VkResult = -1000072003;
 /// <https://docs.vulkan.org/refpages/latest/refpages/source/VkExternalMemoryImageCreateInfo.html>
 #[repr(C)]
 #[cfg_attr(feature = "debug", derive(Debug))]
@@ -5506,7 +5507,7 @@ pub const VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT: VkBufferUsageFlagBits = 0x2
 pub const VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT: VkBufferCreateFlagBits = 0x10;
 pub const VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT: VkMemoryAllocateFlagBits = 0x2;
 pub const VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT: VkMemoryAllocateFlagBits = 0x4;
-pub const VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS: VkResult = VkResult(-1000257000);
+pub const VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS: VkResult = -1000257000;
 /// <https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDeviceBufferDeviceAddressFeatures.html>
 #[repr(C)]
 #[cfg_attr(feature = "debug", derive(Debug))]
@@ -5653,7 +5654,7 @@ pub const VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_IN
 pub const VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_LAYOUT_SUPPORT: VkStructureType = 1000161004;
 pub const VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT: VkDescriptorPoolCreateFlagBits = 0x2;
 pub const VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT: VkDescriptorSetLayoutCreateFlagBits = 0x2;
-pub const VK_ERROR_FRAGMENTATION: VkResult = VkResult(-1000161000);
+pub const VK_ERROR_FRAGMENTATION: VkResult = -1000161000;
 /// <https://docs.vulkan.org/refpages/latest/refpages/source/VkDescriptorSetLayoutBindingFlagsCreateInfo.html>
 #[repr(C)]
 #[cfg_attr(feature = "debug", derive(Debug))]
@@ -6692,7 +6693,7 @@ impl TaggedStructure for VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures 
 pub const VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES: VkStructureType = 1000297000;
 pub const VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT: VkPipelineCreateFlagBits = 0x100;
 pub const VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT: VkPipelineCreateFlagBits = 0x200;
-pub const VK_PIPELINE_COMPILE_REQUIRED: VkResult = VkResult(1000297000);
+pub const VK_PIPELINE_COMPILE_REQUIRED: VkResult = 1000297000;
 pub const VK_PIPELINE_CACHE_CREATE_EXTERNALLY_SYNCHRONIZED_BIT: VkPipelineCacheCreateFlagBits = 0x1;
 /// <https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDevicePipelineCreationCacheControlFeatures.html>
 #[repr(C)]
@@ -7182,7 +7183,7 @@ impl TaggedStructure for VkPhysicalDeviceVulkan14Properties { const S_TYPE : VkS
 pub const VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO: VkStructureType = 1000174000;
 pub const VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GLOBAL_PRIORITY_QUERY_FEATURES: VkStructureType = 1000388000;
 pub const VK_STRUCTURE_TYPE_QUEUE_FAMILY_GLOBAL_PRIORITY_PROPERTIES: VkStructureType = 1000388001;
-pub const VK_ERROR_NOT_PERMITTED: VkResult = VkResult(-1000174001);
+pub const VK_ERROR_NOT_PERMITTED: VkResult = -1000174001;
 /// <https://docs.vulkan.org/refpages/latest/refpages/source/VkDeviceQueueGlobalPriorityCreateInfo.html>
 #[repr(C)]
 #[cfg_attr(feature = "debug", derive(Debug))]
@@ -7947,8 +7948,8 @@ pub type PFN_vkCmdSetRenderingInputAttachmentIndices = unsafe extern "system" fn
 // Extension: VK_KHR_surface (1)
 pub const VK_KHR_SURFACE_SPEC_VERSION: u32 = 25;
 pub const VK_KHR_SURFACE_EXTENSION_NAME: &'static str = "VK_KHR_surface";
-pub const VK_ERROR_SURFACE_LOST_KHR: VkResult = VkResult(-1000000000);
-pub const VK_ERROR_NATIVE_WINDOW_IN_USE_KHR: VkResult = VkResult(-1000000001);
+pub const VK_ERROR_SURFACE_LOST_KHR: VkResult = -1000000000;
+pub const VK_ERROR_NATIVE_WINDOW_IN_USE_KHR: VkResult = -1000000001;
 pub const VK_OBJECT_TYPE_SURFACE_KHR: VkObjectType = 1000000000;
 non_dispatchable_handle!(VkSurfaceKHR);
 pub type VkSurfaceTransformFlagsKHR = VkFlags;
@@ -7992,8 +7993,8 @@ pub const VK_KHR_SWAPCHAIN_EXTENSION_NAME: &'static str = "VK_KHR_swapchain";
 pub const VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR: VkStructureType = 1000001000;
 pub const VK_STRUCTURE_TYPE_PRESENT_INFO_KHR: VkStructureType = 1000001001;
 pub const VK_IMAGE_LAYOUT_PRESENT_SRC_KHR: VkImageLayout = 1000001002;
-pub const VK_SUBOPTIMAL_KHR: VkResult = VkResult(1000001003);
-pub const VK_ERROR_OUT_OF_DATE_KHR: VkResult = VkResult(-1000001004);
+pub const VK_SUBOPTIMAL_KHR: VkResult = 1000001003;
+pub const VK_ERROR_OUT_OF_DATE_KHR: VkResult = -1000001004;
 pub const VK_OBJECT_TYPE_SWAPCHAIN_KHR: VkObjectType = 1000001000;
 pub type VkSwapchainCreateFlagsKHR = VkFlags;
 /// <https://docs.vulkan.org/refpages/latest/refpages/source/VkSwapchainCreateInfoKHR.html>
@@ -8256,7 +8257,7 @@ pub type PFN_vkCreateDisplayPlaneSurfaceKHR = unsafe extern "system" fn(instance
 pub const VK_KHR_DISPLAY_SWAPCHAIN_SPEC_VERSION: u32 = 10;
 pub const VK_KHR_DISPLAY_SWAPCHAIN_EXTENSION_NAME: &'static str = "VK_KHR_display_swapchain";
 pub const VK_STRUCTURE_TYPE_DISPLAY_PRESENT_INFO_KHR: VkStructureType = 1000003000;
-pub const VK_ERROR_INCOMPATIBLE_DISPLAY_KHR: VkResult = VkResult(-1000003001);
+pub const VK_ERROR_INCOMPATIBLE_DISPLAY_KHR: VkResult = -1000003001;
 /// <https://docs.vulkan.org/refpages/latest/refpages/source/VkDisplayPresentInfoKHR.html>
 #[repr(C)]
 #[cfg_attr(feature = "debug", derive(Debug))]
@@ -8408,7 +8409,7 @@ pub const VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_EXT: VkDebugRep
 // Extension: VK_NV_glsl_shader (13)
 pub const VK_NV_GLSL_SHADER_SPEC_VERSION: u32 = 1;
 pub const VK_NV_GLSL_SHADER_EXTENSION_NAME: &'static str = "VK_NV_glsl_shader";
-pub const VK_ERROR_INVALID_SHADER_NV: VkResult = VkResult(-1000012000);
+pub const VK_ERROR_INVALID_SHADER_NV: VkResult = -1000012000;
 // Extension: VK_EXT_depth_range_unrestricted (14)
 pub const VK_EXT_DEPTH_RANGE_UNRESTRICTED_SPEC_VERSION: u32 = 1;
 pub const VK_EXT_DEPTH_RANGE_UNRESTRICTED_EXTENSION_NAME: &'static str = "VK_EXT_depth_range_unrestricted";
@@ -8522,12 +8523,12 @@ pub const VK_OBJECT_TYPE_VIDEO_SESSION_KHR: VkObjectType = 1000023000;
 pub const VK_OBJECT_TYPE_VIDEO_SESSION_PARAMETERS_KHR: VkObjectType = 1000023001;
 pub const VK_QUERY_TYPE_RESULT_STATUS_ONLY_KHR: VkQueryType = 1000023000;
 pub const VK_QUERY_RESULT_WITH_STATUS_BIT_KHR: VkQueryResultFlagBits = 0x10;
-pub const VK_ERROR_IMAGE_USAGE_NOT_SUPPORTED_KHR: VkResult = VkResult(-1000023000);
-pub const VK_ERROR_VIDEO_PICTURE_LAYOUT_NOT_SUPPORTED_KHR: VkResult = VkResult(-1000023001);
-pub const VK_ERROR_VIDEO_PROFILE_OPERATION_NOT_SUPPORTED_KHR: VkResult = VkResult(-1000023002);
-pub const VK_ERROR_VIDEO_PROFILE_FORMAT_NOT_SUPPORTED_KHR: VkResult = VkResult(-1000023003);
-pub const VK_ERROR_VIDEO_PROFILE_CODEC_NOT_SUPPORTED_KHR: VkResult = VkResult(-1000023004);
-pub const VK_ERROR_VIDEO_STD_VERSION_NOT_SUPPORTED_KHR: VkResult = VkResult(-1000023005);
+pub const VK_ERROR_IMAGE_USAGE_NOT_SUPPORTED_KHR: VkResult = -1000023000;
+pub const VK_ERROR_VIDEO_PICTURE_LAYOUT_NOT_SUPPORTED_KHR: VkResult = -1000023001;
+pub const VK_ERROR_VIDEO_PROFILE_OPERATION_NOT_SUPPORTED_KHR: VkResult = -1000023002;
+pub const VK_ERROR_VIDEO_PROFILE_FORMAT_NOT_SUPPORTED_KHR: VkResult = -1000023003;
+pub const VK_ERROR_VIDEO_PROFILE_CODEC_NOT_SUPPORTED_KHR: VkResult = -1000023004;
+pub const VK_ERROR_VIDEO_STD_VERSION_NOT_SUPPORTED_KHR: VkResult = -1000023005;
 non_dispatchable_handle!(VkVideoSessionKHR);
 non_dispatchable_handle!(VkVideoSessionParametersKHR);
 pub type VkVideoCodecOperationFlagsKHR = VkFlags;
@@ -13447,7 +13448,7 @@ pub type PFN_vkBindImageMemory2KHR = PFN_vkBindImageMemory2;
 // Extension: VK_EXT_image_drm_format_modifier (159)
 pub const VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_SPEC_VERSION: u32 = 2;
 pub const VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME: &'static str = "VK_EXT_image_drm_format_modifier";
-pub const VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT: VkResult = VkResult(-1000158000);
+pub const VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT: VkResult = -1000158000;
 pub const VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT: VkStructureType = 1000158000;
 pub const VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT: VkStructureType = 1000158002;
 pub const VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT: VkStructureType = 1000158003;
@@ -14750,7 +14751,7 @@ pub const VK_STRUCTURE_TYPE_PRESENT_TIMING_SURFACE_CAPABILITIES_EXT: VkStructure
 pub const VK_STRUCTURE_TYPE_SWAPCHAIN_CALIBRATED_TIMESTAMP_INFO_EXT: VkStructureType = 1000208009;
 pub const VK_TIME_DOMAIN_PRESENT_STAGE_LOCAL_EXT: VkTimeDomainKHR = 1000208000;
 pub const VK_TIME_DOMAIN_SWAPCHAIN_LOCAL_EXT: VkTimeDomainKHR = 1000208001;
-pub const VK_ERROR_PRESENT_TIMING_QUEUE_FULL_EXT: VkResult = VkResult(-1000208000);
+pub const VK_ERROR_PRESENT_TIMING_QUEUE_FULL_EXT: VkResult = -1000208000;
 pub const VK_SWAPCHAIN_CREATE_PRESENT_TIMING_BIT_EXT: VkSwapchainCreateFlagBitsKHR = 0x200;
 /// <https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDevicePresentTimingFeaturesEXT.html>
 #[repr(C)]
@@ -15344,7 +15345,7 @@ unsafe impl Send for VkPhysicalDeviceFragmentShadingRateKHR {}
 unsafe impl Sync for VkPhysicalDeviceFragmentShadingRateKHR {}
 impl TaggedStructure for VkPhysicalDeviceFragmentShadingRateKHR { const S_TYPE : VkStructureType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_KHR; }
 pub type PFN_vkGetPhysicalDeviceFragmentShadingRatesKHR = unsafe extern "system" fn(physicalDevice: VkPhysicalDevice, pFragmentShadingRateCount: *mut u32, pFragmentShadingRates: *mut VkPhysicalDeviceFragmentShadingRateKHR) -> VkResult;
-pub type PFN_vkCmdSetFragmentShadingRateKHR = unsafe extern "system" fn(commandBuffer: VkCommandBuffer, pFragmentSize: *const VkExtent2D, combinerOps: [VkFragmentShadingRateCombinerOpKHR; 2 as usize]) -> ();
+pub type PFN_vkCmdSetFragmentShadingRateKHR = unsafe extern "system" fn(commandBuffer: VkCommandBuffer, pFragmentSize: *const VkExtent2D, combinerOps: *mut VkFragmentShadingRateCombinerOpKHR) -> ();
 pub const VK_FORMAT_FEATURE_2_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR: VkFormatFeatureFlagBits2 = 0x40000000;
 pub const VK_STRUCTURE_TYPE_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR: VkStructureType = 1000044006;
 pub const VK_PIPELINE_CREATE_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR: VkPipelineCreateFlagBits = 0x200000;
@@ -15897,7 +15898,7 @@ pub const VK_EXT_FULL_SCREEN_EXCLUSIVE_SPEC_VERSION: u32 = 4;
 pub const VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME: &'static str = "VK_EXT_full_screen_exclusive";
 pub const VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_INFO_EXT: VkStructureType = 1000255000;
 pub const VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_FULL_SCREEN_EXCLUSIVE_EXT: VkStructureType = 1000255002;
-pub const VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT: VkResult = VkResult(-1000255000);
+pub const VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT: VkResult = -1000255000;
 /// <https://docs.vulkan.org/refpages/latest/refpages/source/VkSurfaceFullScreenExclusiveInfoEXT.html>
 #[repr(C)]
 #[cfg_attr(feature = "debug", derive(Debug))]
@@ -16077,10 +16078,10 @@ pub type PFN_vkCmdSetStencilOpEXT = PFN_vkCmdSetStencilOp;
 pub const VK_KHR_DEFERRED_HOST_OPERATIONS_SPEC_VERSION: u32 = 4;
 pub const VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME: &'static str = "VK_KHR_deferred_host_operations";
 pub const VK_OBJECT_TYPE_DEFERRED_OPERATION_KHR: VkObjectType = 1000268000;
-pub const VK_THREAD_IDLE_KHR: VkResult = VkResult(1000268000);
-pub const VK_THREAD_DONE_KHR: VkResult = VkResult(1000268001);
-pub const VK_OPERATION_DEFERRED_KHR: VkResult = VkResult(1000268002);
-pub const VK_OPERATION_NOT_DEFERRED_KHR: VkResult = VkResult(1000268003);
+pub const VK_THREAD_IDLE_KHR: VkResult = 1000268000;
+pub const VK_THREAD_DONE_KHR: VkResult = 1000268001;
+pub const VK_OPERATION_DEFERRED_KHR: VkResult = 1000268002;
+pub const VK_OPERATION_NOT_DEFERRED_KHR: VkResult = 1000268003;
 non_dispatchable_handle!(VkDeferredOperationKHR);
 pub type PFN_vkCreateDeferredOperationKHR = unsafe extern "system" fn(device: VkDevice, pAllocator: *const VkAllocationCallbacks, pDeferredOperation: *mut VkDeferredOperationKHR) -> VkResult;
 pub type PFN_vkDestroyDeferredOperationKHR = unsafe extern "system" fn(device: VkDevice, operation: VkDeferredOperationKHR, pAllocator: *const VkAllocationCallbacks) -> ();
@@ -17017,7 +17018,7 @@ pub const VK_IMAGE_LAYOUT_VIDEO_ENCODE_SRC_KHR: VkImageLayout = 1000299001;
 pub const VK_IMAGE_LAYOUT_VIDEO_ENCODE_DPB_KHR: VkImageLayout = 1000299002;
 pub const VK_QUERY_TYPE_VIDEO_ENCODE_FEEDBACK_KHR: VkQueryType = 1000299000;
 pub const VK_QUERY_RESULT_STATUS_INSUFFICIENT_BITSTREAM_BUFFER_RANGE_KHR: VkQueryResultStatusKHR = -1000299000;
-pub const VK_ERROR_INVALID_VIDEO_STD_PARAMETERS_KHR: VkResult = VkResult(-1000299000);
+pub const VK_ERROR_INVALID_VIDEO_STD_PARAMETERS_KHR: VkResult = -1000299000;
 pub type VkVideoEncodeFlagsKHR = VkFlags;
 /// <https://docs.vulkan.org/refpages/latest/refpages/source/VkVideoEncodeInfoKHR.html>
 #[repr(C)]
@@ -18557,7 +18558,7 @@ pub struct VkPipelineFragmentShadingRateEnumStateCreateInfoNV {
 unsafe impl Send for VkPipelineFragmentShadingRateEnumStateCreateInfoNV {}
 unsafe impl Sync for VkPipelineFragmentShadingRateEnumStateCreateInfoNV {}
 impl TaggedStructure for VkPipelineFragmentShadingRateEnumStateCreateInfoNV { const S_TYPE : VkStructureType = VK_STRUCTURE_TYPE_PIPELINE_FRAGMENT_SHADING_RATE_ENUM_STATE_CREATE_INFO_NV; }
-pub type PFN_vkCmdSetFragmentShadingRateEnumNV = unsafe extern "system" fn(commandBuffer: VkCommandBuffer, shadingRate: VkFragmentShadingRateNV, combinerOps: [VkFragmentShadingRateCombinerOpKHR; 2 as usize]) -> ();
+pub type PFN_vkCmdSetFragmentShadingRateEnumNV = unsafe extern "system" fn(commandBuffer: VkCommandBuffer, shadingRate: VkFragmentShadingRateNV, combinerOps: *mut VkFragmentShadingRateCombinerOpKHR) -> ();
 // Extension: VK_NV_ray_tracing_motion_blur (328)
 pub const VK_NV_RAY_TRACING_MOTION_BLUR_SPEC_VERSION: u32 = 1;
 pub const VK_NV_RAY_TRACING_MOTION_BLUR_EXTENSION_NAME: &'static str = "VK_NV_ray_tracing_motion_blur";
@@ -18899,7 +18900,7 @@ pub const VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT: VkStructureType = 100
 pub const VK_STRUCTURE_TYPE_SUBRESOURCE_LAYOUT_2_EXT: VkStructureType = VK_STRUCTURE_TYPE_SUBRESOURCE_LAYOUT_2;
 pub const VK_STRUCTURE_TYPE_IMAGE_SUBRESOURCE_2_EXT: VkStructureType = VK_STRUCTURE_TYPE_IMAGE_SUBRESOURCE_2;
 pub const VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_PROPERTIES_EXT: VkStructureType = 1000338004;
-pub const VK_ERROR_COMPRESSION_EXHAUSTED_EXT: VkResult = VkResult(-1000338000);
+pub const VK_ERROR_COMPRESSION_EXHAUSTED_EXT: VkResult = -1000338000;
 /// <https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDeviceImageCompressionControlFeaturesEXT.html>
 #[repr(C)]
 #[cfg_attr(feature = "debug", derive(Debug))]
@@ -22462,7 +22463,7 @@ pub const VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_OBJECT_PROPERTIES_EXT: VkStru
 pub const VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT: VkStructureType = 1000482002;
 pub const VK_STRUCTURE_TYPE_SHADER_REQUIRED_SUBGROUP_SIZE_CREATE_INFO_EXT: VkStructureType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO;
 pub const VK_OBJECT_TYPE_SHADER_EXT: VkObjectType = 1000482000;
-pub const VK_INCOMPATIBLE_SHADER_BINARY_EXT: VkResult = VkResult(1000482000);
+pub const VK_INCOMPATIBLE_SHADER_BINARY_EXT: VkResult = 1000482000;
 #[deprecated(note = "use VK_INCOMPATIBLE_SHADER_BINARY_EXT instead")]
 pub const VK_ERROR_INCOMPATIBLE_SHADER_BINARY_EXT: VkResult = VK_INCOMPATIBLE_SHADER_BINARY_EXT;
 non_dispatchable_handle!(VkShaderEXT);
@@ -22541,8 +22542,8 @@ pub const VK_STRUCTURE_TYPE_PIPELINE_CREATE_INFO_KHR: VkStructureType = 10004830
 pub const VK_STRUCTURE_TYPE_DEVICE_PIPELINE_BINARY_INTERNAL_CACHE_CONTROL_KHR: VkStructureType = 1000483008;
 pub const VK_STRUCTURE_TYPE_PIPELINE_BINARY_HANDLES_INFO_KHR: VkStructureType = 1000483009;
 pub const VK_OBJECT_TYPE_PIPELINE_BINARY_KHR: VkObjectType = 1000483000;
-pub const VK_PIPELINE_BINARY_MISSING_KHR: VkResult = VkResult(1000483000);
-pub const VK_ERROR_NOT_ENOUGH_SPACE_KHR: VkResult = VkResult(-1000483000);
+pub const VK_PIPELINE_BINARY_MISSING_KHR: VkResult = 1000483000;
+pub const VK_ERROR_NOT_ENOUGH_SPACE_KHR: VkResult = -1000483000;
 pub const VK_PIPELINE_CREATE_2_CAPTURE_DATA_BIT_KHR: VkPipelineCreateFlagBits2 = 0x80000000;
 /// <https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDevicePipelineBinaryFeaturesKHR.html>
 #[repr(C)]
@@ -28341,10 +28342,10 @@ unsafe impl Sync for VkPhysicalDevicePrivateDataBaseHandleFeaturesNV {}
 impl TaggedStructure for VkPhysicalDevicePrivateDataBaseHandleFeaturesNV { const S_TYPE : VkStructureType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIVATE_DATA_BASE_HANDLE_FEATURES_NV; }
 // Vulkan 1_0
 dispatch_table! { Vulkan_1_0_EntryDispatch;
-    CreateInstance,PFN_vkCreateInstance,c"vkCreateInstance";
-    GetInstanceProcAddr,PFN_vkGetInstanceProcAddr,c"vkGetInstanceProcAddr";
-    EnumerateInstanceExtensionProperties,PFN_vkEnumerateInstanceExtensionProperties,c"vkEnumerateInstanceExtensionProperties";
-    EnumerateInstanceLayerProperties,PFN_vkEnumerateInstanceLayerProperties,c"vkEnumerateInstanceLayerProperties";
+    CreateInstance(pCreateInfo: *const VkInstanceCreateInfo, pAllocator: *const VkAllocationCallbacks, pInstance: *mut VkInstance) -> VkResult,PFN_vkCreateInstance,c"vkCreateInstance";
+    GetInstanceProcAddr(instance: VkInstance, pName: *const c_char) -> PFN_vkVoidFunction,PFN_vkGetInstanceProcAddr,c"vkGetInstanceProcAddr";
+    EnumerateInstanceExtensionProperties(pLayerName: *const c_char, pPropertyCount: *mut u32, pProperties: *mut VkExtensionProperties) -> VkResult,PFN_vkEnumerateInstanceExtensionProperties,c"vkEnumerateInstanceExtensionProperties";
+    EnumerateInstanceLayerProperties(pPropertyCount: *mut u32, pProperties: *mut VkLayerProperties) -> VkResult,PFN_vkEnumerateInstanceLayerProperties,c"vkEnumerateInstanceLayerProperties";
 }
 impl Vulkan_1_0_EntryDispatch {
     #[inline(always)]
@@ -28365,19 +28366,19 @@ impl Vulkan_1_0_EntryDispatch {
     }
 }
 dispatch_table! { Vulkan_1_0_InstanceDispatch;
-    DestroyInstance,PFN_vkDestroyInstance,c"vkDestroyInstance";
-    EnumeratePhysicalDevices,PFN_vkEnumeratePhysicalDevices,c"vkEnumeratePhysicalDevices";
-    GetPhysicalDeviceFeatures,PFN_vkGetPhysicalDeviceFeatures,c"vkGetPhysicalDeviceFeatures";
-    GetPhysicalDeviceFormatProperties,PFN_vkGetPhysicalDeviceFormatProperties,c"vkGetPhysicalDeviceFormatProperties";
-    GetPhysicalDeviceImageFormatProperties,PFN_vkGetPhysicalDeviceImageFormatProperties,c"vkGetPhysicalDeviceImageFormatProperties";
-    GetPhysicalDeviceProperties,PFN_vkGetPhysicalDeviceProperties,c"vkGetPhysicalDeviceProperties";
-    GetPhysicalDeviceQueueFamilyProperties,PFN_vkGetPhysicalDeviceQueueFamilyProperties,c"vkGetPhysicalDeviceQueueFamilyProperties";
-    GetPhysicalDeviceMemoryProperties,PFN_vkGetPhysicalDeviceMemoryProperties,c"vkGetPhysicalDeviceMemoryProperties";
-    GetDeviceProcAddr,PFN_vkGetDeviceProcAddr,c"vkGetDeviceProcAddr";
-    CreateDevice,PFN_vkCreateDevice,c"vkCreateDevice";
-    EnumerateDeviceExtensionProperties,PFN_vkEnumerateDeviceExtensionProperties,c"vkEnumerateDeviceExtensionProperties";
-    EnumerateDeviceLayerProperties,PFN_vkEnumerateDeviceLayerProperties,c"vkEnumerateDeviceLayerProperties";
-    GetPhysicalDeviceSparseImageFormatProperties,PFN_vkGetPhysicalDeviceSparseImageFormatProperties,c"vkGetPhysicalDeviceSparseImageFormatProperties";
+    DestroyInstance(instance: VkInstance, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyInstance,c"vkDestroyInstance";
+    EnumeratePhysicalDevices(instance: VkInstance, pPhysicalDeviceCount: *mut u32, pPhysicalDevices: *mut VkPhysicalDevice) -> VkResult,PFN_vkEnumeratePhysicalDevices,c"vkEnumeratePhysicalDevices";
+    GetPhysicalDeviceFeatures(physicalDevice: VkPhysicalDevice, pFeatures: *mut VkPhysicalDeviceFeatures) -> (),PFN_vkGetPhysicalDeviceFeatures,c"vkGetPhysicalDeviceFeatures";
+    GetPhysicalDeviceFormatProperties(physicalDevice: VkPhysicalDevice, format: VkFormat, pFormatProperties: *mut VkFormatProperties) -> (),PFN_vkGetPhysicalDeviceFormatProperties,c"vkGetPhysicalDeviceFormatProperties";
+    GetPhysicalDeviceImageFormatProperties(physicalDevice: VkPhysicalDevice, format: VkFormat, r#type: VkImageType, tiling: VkImageTiling, usage: VkImageUsageFlags, flags: VkImageCreateFlags, pImageFormatProperties: *mut VkImageFormatProperties) -> VkResult,PFN_vkGetPhysicalDeviceImageFormatProperties,c"vkGetPhysicalDeviceImageFormatProperties";
+    GetPhysicalDeviceProperties(physicalDevice: VkPhysicalDevice, pProperties: *mut VkPhysicalDeviceProperties) -> (),PFN_vkGetPhysicalDeviceProperties,c"vkGetPhysicalDeviceProperties";
+    GetPhysicalDeviceQueueFamilyProperties(physicalDevice: VkPhysicalDevice, pQueueFamilyPropertyCount: *mut u32, pQueueFamilyProperties: *mut VkQueueFamilyProperties) -> (),PFN_vkGetPhysicalDeviceQueueFamilyProperties,c"vkGetPhysicalDeviceQueueFamilyProperties";
+    GetPhysicalDeviceMemoryProperties(physicalDevice: VkPhysicalDevice, pMemoryProperties: *mut VkPhysicalDeviceMemoryProperties) -> (),PFN_vkGetPhysicalDeviceMemoryProperties,c"vkGetPhysicalDeviceMemoryProperties";
+    GetDeviceProcAddr(device: VkDevice, pName: *const c_char) -> PFN_vkVoidFunction,PFN_vkGetDeviceProcAddr,c"vkGetDeviceProcAddr";
+    CreateDevice(physicalDevice: VkPhysicalDevice, pCreateInfo: *const VkDeviceCreateInfo, pAllocator: *const VkAllocationCallbacks, pDevice: *mut VkDevice) -> VkResult,PFN_vkCreateDevice,c"vkCreateDevice";
+    EnumerateDeviceExtensionProperties(physicalDevice: VkPhysicalDevice, pLayerName: *const c_char, pPropertyCount: *mut u32, pProperties: *mut VkExtensionProperties) -> VkResult,PFN_vkEnumerateDeviceExtensionProperties,c"vkEnumerateDeviceExtensionProperties";
+    EnumerateDeviceLayerProperties(physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkLayerProperties) -> VkResult,PFN_vkEnumerateDeviceLayerProperties,c"vkEnumerateDeviceLayerProperties";
+    GetPhysicalDeviceSparseImageFormatProperties(physicalDevice: VkPhysicalDevice, format: VkFormat, r#type: VkImageType, samples: VkSampleCountFlagBits, usage: VkImageUsageFlags, tiling: VkImageTiling, pPropertyCount: *mut u32, pProperties: *mut VkSparseImageFormatProperties) -> (),PFN_vkGetPhysicalDeviceSparseImageFormatProperties,c"vkGetPhysicalDeviceSparseImageFormatProperties";
 }
 impl Vulkan_1_0_InstanceDispatch {
     #[inline(always)]
@@ -28434,126 +28435,126 @@ impl Vulkan_1_0_InstanceDispatch {
     }
 }
 dispatch_table! { Vulkan_1_0_DeviceDispatch;
-    DestroyDevice,PFN_vkDestroyDevice,c"vkDestroyDevice";
-    GetDeviceQueue,PFN_vkGetDeviceQueue,c"vkGetDeviceQueue";
-    QueueSubmit,PFN_vkQueueSubmit,c"vkQueueSubmit";
-    QueueWaitIdle,PFN_vkQueueWaitIdle,c"vkQueueWaitIdle";
-    DeviceWaitIdle,PFN_vkDeviceWaitIdle,c"vkDeviceWaitIdle";
-    AllocateMemory,PFN_vkAllocateMemory,c"vkAllocateMemory";
-    FreeMemory,PFN_vkFreeMemory,c"vkFreeMemory";
-    MapMemory,PFN_vkMapMemory,c"vkMapMemory";
-    UnmapMemory,PFN_vkUnmapMemory,c"vkUnmapMemory";
-    FlushMappedMemoryRanges,PFN_vkFlushMappedMemoryRanges,c"vkFlushMappedMemoryRanges";
-    InvalidateMappedMemoryRanges,PFN_vkInvalidateMappedMemoryRanges,c"vkInvalidateMappedMemoryRanges";
-    GetDeviceMemoryCommitment,PFN_vkGetDeviceMemoryCommitment,c"vkGetDeviceMemoryCommitment";
-    BindBufferMemory,PFN_vkBindBufferMemory,c"vkBindBufferMemory";
-    BindImageMemory,PFN_vkBindImageMemory,c"vkBindImageMemory";
-    GetBufferMemoryRequirements,PFN_vkGetBufferMemoryRequirements,c"vkGetBufferMemoryRequirements";
-    GetImageMemoryRequirements,PFN_vkGetImageMemoryRequirements,c"vkGetImageMemoryRequirements";
-    GetImageSparseMemoryRequirements,PFN_vkGetImageSparseMemoryRequirements,c"vkGetImageSparseMemoryRequirements";
-    QueueBindSparse,PFN_vkQueueBindSparse,c"vkQueueBindSparse";
-    CreateFence,PFN_vkCreateFence,c"vkCreateFence";
-    DestroyFence,PFN_vkDestroyFence,c"vkDestroyFence";
-    ResetFences,PFN_vkResetFences,c"vkResetFences";
-    GetFenceStatus,PFN_vkGetFenceStatus,c"vkGetFenceStatus";
-    WaitForFences,PFN_vkWaitForFences,c"vkWaitForFences";
-    CreateSemaphore,PFN_vkCreateSemaphore,c"vkCreateSemaphore";
-    DestroySemaphore,PFN_vkDestroySemaphore,c"vkDestroySemaphore";
-    CreateQueryPool,PFN_vkCreateQueryPool,c"vkCreateQueryPool";
-    DestroyQueryPool,PFN_vkDestroyQueryPool,c"vkDestroyQueryPool";
-    GetQueryPoolResults,PFN_vkGetQueryPoolResults,c"vkGetQueryPoolResults";
-    CreateBuffer,PFN_vkCreateBuffer,c"vkCreateBuffer";
-    DestroyBuffer,PFN_vkDestroyBuffer,c"vkDestroyBuffer";
-    CreateImage,PFN_vkCreateImage,c"vkCreateImage";
-    DestroyImage,PFN_vkDestroyImage,c"vkDestroyImage";
-    GetImageSubresourceLayout,PFN_vkGetImageSubresourceLayout,c"vkGetImageSubresourceLayout";
-    CreateImageView,PFN_vkCreateImageView,c"vkCreateImageView";
-    DestroyImageView,PFN_vkDestroyImageView,c"vkDestroyImageView";
-    CreateCommandPool,PFN_vkCreateCommandPool,c"vkCreateCommandPool";
-    DestroyCommandPool,PFN_vkDestroyCommandPool,c"vkDestroyCommandPool";
-    ResetCommandPool,PFN_vkResetCommandPool,c"vkResetCommandPool";
-    AllocateCommandBuffers,PFN_vkAllocateCommandBuffers,c"vkAllocateCommandBuffers";
-    FreeCommandBuffers,PFN_vkFreeCommandBuffers,c"vkFreeCommandBuffers";
-    BeginCommandBuffer,PFN_vkBeginCommandBuffer,c"vkBeginCommandBuffer";
-    EndCommandBuffer,PFN_vkEndCommandBuffer,c"vkEndCommandBuffer";
-    ResetCommandBuffer,PFN_vkResetCommandBuffer,c"vkResetCommandBuffer";
-    CmdCopyBuffer,PFN_vkCmdCopyBuffer,c"vkCmdCopyBuffer";
-    CmdCopyImage,PFN_vkCmdCopyImage,c"vkCmdCopyImage";
-    CmdCopyBufferToImage,PFN_vkCmdCopyBufferToImage,c"vkCmdCopyBufferToImage";
-    CmdCopyImageToBuffer,PFN_vkCmdCopyImageToBuffer,c"vkCmdCopyImageToBuffer";
-    CmdUpdateBuffer,PFN_vkCmdUpdateBuffer,c"vkCmdUpdateBuffer";
-    CmdFillBuffer,PFN_vkCmdFillBuffer,c"vkCmdFillBuffer";
-    CmdPipelineBarrier,PFN_vkCmdPipelineBarrier,c"vkCmdPipelineBarrier";
-    CmdBeginQuery,PFN_vkCmdBeginQuery,c"vkCmdBeginQuery";
-    CmdEndQuery,PFN_vkCmdEndQuery,c"vkCmdEndQuery";
-    CmdResetQueryPool,PFN_vkCmdResetQueryPool,c"vkCmdResetQueryPool";
-    CmdWriteTimestamp,PFN_vkCmdWriteTimestamp,c"vkCmdWriteTimestamp";
-    CmdCopyQueryPoolResults,PFN_vkCmdCopyQueryPoolResults,c"vkCmdCopyQueryPoolResults";
-    CmdExecuteCommands,PFN_vkCmdExecuteCommands,c"vkCmdExecuteCommands";
-    CreateEvent,PFN_vkCreateEvent,c"vkCreateEvent";
-    DestroyEvent,PFN_vkDestroyEvent,c"vkDestroyEvent";
-    GetEventStatus,PFN_vkGetEventStatus,c"vkGetEventStatus";
-    SetEvent,PFN_vkSetEvent,c"vkSetEvent";
-    ResetEvent,PFN_vkResetEvent,c"vkResetEvent";
-    CreateBufferView,PFN_vkCreateBufferView,c"vkCreateBufferView";
-    DestroyBufferView,PFN_vkDestroyBufferView,c"vkDestroyBufferView";
-    CreateShaderModule,PFN_vkCreateShaderModule,c"vkCreateShaderModule";
-    DestroyShaderModule,PFN_vkDestroyShaderModule,c"vkDestroyShaderModule";
-    CreatePipelineCache,PFN_vkCreatePipelineCache,c"vkCreatePipelineCache";
-    DestroyPipelineCache,PFN_vkDestroyPipelineCache,c"vkDestroyPipelineCache";
-    GetPipelineCacheData,PFN_vkGetPipelineCacheData,c"vkGetPipelineCacheData";
-    MergePipelineCaches,PFN_vkMergePipelineCaches,c"vkMergePipelineCaches";
-    CreateComputePipelines,PFN_vkCreateComputePipelines,c"vkCreateComputePipelines";
-    DestroyPipeline,PFN_vkDestroyPipeline,c"vkDestroyPipeline";
-    CreatePipelineLayout,PFN_vkCreatePipelineLayout,c"vkCreatePipelineLayout";
-    DestroyPipelineLayout,PFN_vkDestroyPipelineLayout,c"vkDestroyPipelineLayout";
-    CreateSampler,PFN_vkCreateSampler,c"vkCreateSampler";
-    DestroySampler,PFN_vkDestroySampler,c"vkDestroySampler";
-    CreateDescriptorSetLayout,PFN_vkCreateDescriptorSetLayout,c"vkCreateDescriptorSetLayout";
-    DestroyDescriptorSetLayout,PFN_vkDestroyDescriptorSetLayout,c"vkDestroyDescriptorSetLayout";
-    CreateDescriptorPool,PFN_vkCreateDescriptorPool,c"vkCreateDescriptorPool";
-    DestroyDescriptorPool,PFN_vkDestroyDescriptorPool,c"vkDestroyDescriptorPool";
-    ResetDescriptorPool,PFN_vkResetDescriptorPool,c"vkResetDescriptorPool";
-    AllocateDescriptorSets,PFN_vkAllocateDescriptorSets,c"vkAllocateDescriptorSets";
-    FreeDescriptorSets,PFN_vkFreeDescriptorSets,c"vkFreeDescriptorSets";
-    UpdateDescriptorSets,PFN_vkUpdateDescriptorSets,c"vkUpdateDescriptorSets";
-    CmdBindPipeline,PFN_vkCmdBindPipeline,c"vkCmdBindPipeline";
-    CmdBindDescriptorSets,PFN_vkCmdBindDescriptorSets,c"vkCmdBindDescriptorSets";
-    CmdClearColorImage,PFN_vkCmdClearColorImage,c"vkCmdClearColorImage";
-    CmdDispatch,PFN_vkCmdDispatch,c"vkCmdDispatch";
-    CmdDispatchIndirect,PFN_vkCmdDispatchIndirect,c"vkCmdDispatchIndirect";
-    CmdSetEvent,PFN_vkCmdSetEvent,c"vkCmdSetEvent";
-    CmdResetEvent,PFN_vkCmdResetEvent,c"vkCmdResetEvent";
-    CmdWaitEvents,PFN_vkCmdWaitEvents,c"vkCmdWaitEvents";
-    CmdPushConstants,PFN_vkCmdPushConstants,c"vkCmdPushConstants";
-    CreateGraphicsPipelines,PFN_vkCreateGraphicsPipelines,c"vkCreateGraphicsPipelines";
-    CreateFramebuffer,PFN_vkCreateFramebuffer,c"vkCreateFramebuffer";
-    DestroyFramebuffer,PFN_vkDestroyFramebuffer,c"vkDestroyFramebuffer";
-    CreateRenderPass,PFN_vkCreateRenderPass,c"vkCreateRenderPass";
-    DestroyRenderPass,PFN_vkDestroyRenderPass,c"vkDestroyRenderPass";
-    GetRenderAreaGranularity,PFN_vkGetRenderAreaGranularity,c"vkGetRenderAreaGranularity";
-    CmdSetViewport,PFN_vkCmdSetViewport,c"vkCmdSetViewport";
-    CmdSetScissor,PFN_vkCmdSetScissor,c"vkCmdSetScissor";
-    CmdSetLineWidth,PFN_vkCmdSetLineWidth,c"vkCmdSetLineWidth";
-    CmdSetDepthBias,PFN_vkCmdSetDepthBias,c"vkCmdSetDepthBias";
-    CmdSetBlendConstants,PFN_vkCmdSetBlendConstants,c"vkCmdSetBlendConstants";
-    CmdSetDepthBounds,PFN_vkCmdSetDepthBounds,c"vkCmdSetDepthBounds";
-    CmdSetStencilCompareMask,PFN_vkCmdSetStencilCompareMask,c"vkCmdSetStencilCompareMask";
-    CmdSetStencilWriteMask,PFN_vkCmdSetStencilWriteMask,c"vkCmdSetStencilWriteMask";
-    CmdSetStencilReference,PFN_vkCmdSetStencilReference,c"vkCmdSetStencilReference";
-    CmdBindIndexBuffer,PFN_vkCmdBindIndexBuffer,c"vkCmdBindIndexBuffer";
-    CmdBindVertexBuffers,PFN_vkCmdBindVertexBuffers,c"vkCmdBindVertexBuffers";
-    CmdDraw,PFN_vkCmdDraw,c"vkCmdDraw";
-    CmdDrawIndexed,PFN_vkCmdDrawIndexed,c"vkCmdDrawIndexed";
-    CmdDrawIndirect,PFN_vkCmdDrawIndirect,c"vkCmdDrawIndirect";
-    CmdDrawIndexedIndirect,PFN_vkCmdDrawIndexedIndirect,c"vkCmdDrawIndexedIndirect";
-    CmdBlitImage,PFN_vkCmdBlitImage,c"vkCmdBlitImage";
-    CmdClearDepthStencilImage,PFN_vkCmdClearDepthStencilImage,c"vkCmdClearDepthStencilImage";
-    CmdClearAttachments,PFN_vkCmdClearAttachments,c"vkCmdClearAttachments";
-    CmdResolveImage,PFN_vkCmdResolveImage,c"vkCmdResolveImage";
-    CmdBeginRenderPass,PFN_vkCmdBeginRenderPass,c"vkCmdBeginRenderPass";
-    CmdNextSubpass,PFN_vkCmdNextSubpass,c"vkCmdNextSubpass";
-    CmdEndRenderPass,PFN_vkCmdEndRenderPass,c"vkCmdEndRenderPass";
+    DestroyDevice(device: VkDevice, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyDevice,c"vkDestroyDevice";
+    GetDeviceQueue(device: VkDevice, queueFamilyIndex: u32, queueIndex: u32, pQueue: *mut VkQueue) -> (),PFN_vkGetDeviceQueue,c"vkGetDeviceQueue";
+    QueueSubmit(queue: VkQueue, submitCount: u32, pSubmits: *const VkSubmitInfo, fence: VkFence) -> VkResult,PFN_vkQueueSubmit,c"vkQueueSubmit";
+    QueueWaitIdle(queue: VkQueue) -> VkResult,PFN_vkQueueWaitIdle,c"vkQueueWaitIdle";
+    DeviceWaitIdle(device: VkDevice) -> VkResult,PFN_vkDeviceWaitIdle,c"vkDeviceWaitIdle";
+    AllocateMemory(device: VkDevice, pAllocateInfo: *const VkMemoryAllocateInfo, pAllocator: *const VkAllocationCallbacks, pMemory: *mut VkDeviceMemory) -> VkResult,PFN_vkAllocateMemory,c"vkAllocateMemory";
+    FreeMemory(device: VkDevice, memory: VkDeviceMemory, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkFreeMemory,c"vkFreeMemory";
+    MapMemory(device: VkDevice, memory: VkDeviceMemory, offset: VkDeviceSize, size: VkDeviceSize, flags: VkMemoryMapFlags, ppData: *mut *mut c_void) -> VkResult,PFN_vkMapMemory,c"vkMapMemory";
+    UnmapMemory(device: VkDevice, memory: VkDeviceMemory) -> (),PFN_vkUnmapMemory,c"vkUnmapMemory";
+    FlushMappedMemoryRanges(device: VkDevice, memoryRangeCount: u32, pMemoryRanges: *const VkMappedMemoryRange) -> VkResult,PFN_vkFlushMappedMemoryRanges,c"vkFlushMappedMemoryRanges";
+    InvalidateMappedMemoryRanges(device: VkDevice, memoryRangeCount: u32, pMemoryRanges: *const VkMappedMemoryRange) -> VkResult,PFN_vkInvalidateMappedMemoryRanges,c"vkInvalidateMappedMemoryRanges";
+    GetDeviceMemoryCommitment(device: VkDevice, memory: VkDeviceMemory, pCommittedMemoryInBytes: *mut VkDeviceSize) -> (),PFN_vkGetDeviceMemoryCommitment,c"vkGetDeviceMemoryCommitment";
+    BindBufferMemory(device: VkDevice, buffer: VkBuffer, memory: VkDeviceMemory, memoryOffset: VkDeviceSize) -> VkResult,PFN_vkBindBufferMemory,c"vkBindBufferMemory";
+    BindImageMemory(device: VkDevice, image: VkImage, memory: VkDeviceMemory, memoryOffset: VkDeviceSize) -> VkResult,PFN_vkBindImageMemory,c"vkBindImageMemory";
+    GetBufferMemoryRequirements(device: VkDevice, buffer: VkBuffer, pMemoryRequirements: *mut VkMemoryRequirements) -> (),PFN_vkGetBufferMemoryRequirements,c"vkGetBufferMemoryRequirements";
+    GetImageMemoryRequirements(device: VkDevice, image: VkImage, pMemoryRequirements: *mut VkMemoryRequirements) -> (),PFN_vkGetImageMemoryRequirements,c"vkGetImageMemoryRequirements";
+    GetImageSparseMemoryRequirements(device: VkDevice, image: VkImage, pSparseMemoryRequirementCount: *mut u32, pSparseMemoryRequirements: *mut VkSparseImageMemoryRequirements) -> (),PFN_vkGetImageSparseMemoryRequirements,c"vkGetImageSparseMemoryRequirements";
+    QueueBindSparse(queue: VkQueue, bindInfoCount: u32, pBindInfo: *const VkBindSparseInfo, fence: VkFence) -> VkResult,PFN_vkQueueBindSparse,c"vkQueueBindSparse";
+    CreateFence(device: VkDevice, pCreateInfo: *const VkFenceCreateInfo, pAllocator: *const VkAllocationCallbacks, pFence: *mut VkFence) -> VkResult,PFN_vkCreateFence,c"vkCreateFence";
+    DestroyFence(device: VkDevice, fence: VkFence, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyFence,c"vkDestroyFence";
+    ResetFences(device: VkDevice, fenceCount: u32, pFences: *const VkFence) -> VkResult,PFN_vkResetFences,c"vkResetFences";
+    GetFenceStatus(device: VkDevice, fence: VkFence) -> VkResult,PFN_vkGetFenceStatus,c"vkGetFenceStatus";
+    WaitForFences(device: VkDevice, fenceCount: u32, pFences: *const VkFence, waitAll: VkBool32, timeout: u64) -> VkResult,PFN_vkWaitForFences,c"vkWaitForFences";
+    CreateSemaphore(device: VkDevice, pCreateInfo: *const VkSemaphoreCreateInfo, pAllocator: *const VkAllocationCallbacks, pSemaphore: *mut VkSemaphore) -> VkResult,PFN_vkCreateSemaphore,c"vkCreateSemaphore";
+    DestroySemaphore(device: VkDevice, semaphore: VkSemaphore, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroySemaphore,c"vkDestroySemaphore";
+    CreateQueryPool(device: VkDevice, pCreateInfo: *const VkQueryPoolCreateInfo, pAllocator: *const VkAllocationCallbacks, pQueryPool: *mut VkQueryPool) -> VkResult,PFN_vkCreateQueryPool,c"vkCreateQueryPool";
+    DestroyQueryPool(device: VkDevice, queryPool: VkQueryPool, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyQueryPool,c"vkDestroyQueryPool";
+    GetQueryPoolResults(device: VkDevice, queryPool: VkQueryPool, firstQuery: u32, queryCount: u32, dataSize: usize, pData: *mut c_void, stride: VkDeviceSize, flags: VkQueryResultFlags) -> VkResult,PFN_vkGetQueryPoolResults,c"vkGetQueryPoolResults";
+    CreateBuffer(device: VkDevice, pCreateInfo: *const VkBufferCreateInfo, pAllocator: *const VkAllocationCallbacks, pBuffer: *mut VkBuffer) -> VkResult,PFN_vkCreateBuffer,c"vkCreateBuffer";
+    DestroyBuffer(device: VkDevice, buffer: VkBuffer, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyBuffer,c"vkDestroyBuffer";
+    CreateImage(device: VkDevice, pCreateInfo: *const VkImageCreateInfo, pAllocator: *const VkAllocationCallbacks, pImage: *mut VkImage) -> VkResult,PFN_vkCreateImage,c"vkCreateImage";
+    DestroyImage(device: VkDevice, image: VkImage, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyImage,c"vkDestroyImage";
+    GetImageSubresourceLayout(device: VkDevice, image: VkImage, pSubresource: *const VkImageSubresource, pLayout: *mut VkSubresourceLayout) -> (),PFN_vkGetImageSubresourceLayout,c"vkGetImageSubresourceLayout";
+    CreateImageView(device: VkDevice, pCreateInfo: *const VkImageViewCreateInfo, pAllocator: *const VkAllocationCallbacks, pView: *mut VkImageView) -> VkResult,PFN_vkCreateImageView,c"vkCreateImageView";
+    DestroyImageView(device: VkDevice, imageView: VkImageView, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyImageView,c"vkDestroyImageView";
+    CreateCommandPool(device: VkDevice, pCreateInfo: *const VkCommandPoolCreateInfo, pAllocator: *const VkAllocationCallbacks, pCommandPool: *mut VkCommandPool) -> VkResult,PFN_vkCreateCommandPool,c"vkCreateCommandPool";
+    DestroyCommandPool(device: VkDevice, commandPool: VkCommandPool, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyCommandPool,c"vkDestroyCommandPool";
+    ResetCommandPool(device: VkDevice, commandPool: VkCommandPool, flags: VkCommandPoolResetFlags) -> VkResult,PFN_vkResetCommandPool,c"vkResetCommandPool";
+    AllocateCommandBuffers(device: VkDevice, pAllocateInfo: *const VkCommandBufferAllocateInfo, pCommandBuffers: *mut VkCommandBuffer) -> VkResult,PFN_vkAllocateCommandBuffers,c"vkAllocateCommandBuffers";
+    FreeCommandBuffers(device: VkDevice, commandPool: VkCommandPool, commandBufferCount: u32, pCommandBuffers: *const VkCommandBuffer) -> (),PFN_vkFreeCommandBuffers,c"vkFreeCommandBuffers";
+    BeginCommandBuffer(commandBuffer: VkCommandBuffer, pBeginInfo: *const VkCommandBufferBeginInfo) -> VkResult,PFN_vkBeginCommandBuffer,c"vkBeginCommandBuffer";
+    EndCommandBuffer(commandBuffer: VkCommandBuffer) -> VkResult,PFN_vkEndCommandBuffer,c"vkEndCommandBuffer";
+    ResetCommandBuffer(commandBuffer: VkCommandBuffer, flags: VkCommandBufferResetFlags) -> VkResult,PFN_vkResetCommandBuffer,c"vkResetCommandBuffer";
+    CmdCopyBuffer(commandBuffer: VkCommandBuffer, srcBuffer: VkBuffer, dstBuffer: VkBuffer, regionCount: u32, pRegions: *const VkBufferCopy) -> (),PFN_vkCmdCopyBuffer,c"vkCmdCopyBuffer";
+    CmdCopyImage(commandBuffer: VkCommandBuffer, srcImage: VkImage, srcImageLayout: VkImageLayout, dstImage: VkImage, dstImageLayout: VkImageLayout, regionCount: u32, pRegions: *const VkImageCopy) -> (),PFN_vkCmdCopyImage,c"vkCmdCopyImage";
+    CmdCopyBufferToImage(commandBuffer: VkCommandBuffer, srcBuffer: VkBuffer, dstImage: VkImage, dstImageLayout: VkImageLayout, regionCount: u32, pRegions: *const VkBufferImageCopy) -> (),PFN_vkCmdCopyBufferToImage,c"vkCmdCopyBufferToImage";
+    CmdCopyImageToBuffer(commandBuffer: VkCommandBuffer, srcImage: VkImage, srcImageLayout: VkImageLayout, dstBuffer: VkBuffer, regionCount: u32, pRegions: *const VkBufferImageCopy) -> (),PFN_vkCmdCopyImageToBuffer,c"vkCmdCopyImageToBuffer";
+    CmdUpdateBuffer(commandBuffer: VkCommandBuffer, dstBuffer: VkBuffer, dstOffset: VkDeviceSize, dataSize: VkDeviceSize, pData: *const c_void) -> (),PFN_vkCmdUpdateBuffer,c"vkCmdUpdateBuffer";
+    CmdFillBuffer(commandBuffer: VkCommandBuffer, dstBuffer: VkBuffer, dstOffset: VkDeviceSize, size: VkDeviceSize, data: u32) -> (),PFN_vkCmdFillBuffer,c"vkCmdFillBuffer";
+    CmdPipelineBarrier(commandBuffer: VkCommandBuffer, srcStageMask: VkPipelineStageFlags, dstStageMask: VkPipelineStageFlags, dependencyFlags: VkDependencyFlags, memoryBarrierCount: u32, pMemoryBarriers: *const VkMemoryBarrier, bufferMemoryBarrierCount: u32, pBufferMemoryBarriers: *const VkBufferMemoryBarrier, imageMemoryBarrierCount: u32, pImageMemoryBarriers: *const VkImageMemoryBarrier) -> (),PFN_vkCmdPipelineBarrier,c"vkCmdPipelineBarrier";
+    CmdBeginQuery(commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, query: u32, flags: VkQueryControlFlags) -> (),PFN_vkCmdBeginQuery,c"vkCmdBeginQuery";
+    CmdEndQuery(commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, query: u32) -> (),PFN_vkCmdEndQuery,c"vkCmdEndQuery";
+    CmdResetQueryPool(commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, firstQuery: u32, queryCount: u32) -> (),PFN_vkCmdResetQueryPool,c"vkCmdResetQueryPool";
+    CmdWriteTimestamp(commandBuffer: VkCommandBuffer, pipelineStage: VkPipelineStageFlagBits, queryPool: VkQueryPool, query: u32) -> (),PFN_vkCmdWriteTimestamp,c"vkCmdWriteTimestamp";
+    CmdCopyQueryPoolResults(commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, firstQuery: u32, queryCount: u32, dstBuffer: VkBuffer, dstOffset: VkDeviceSize, stride: VkDeviceSize, flags: VkQueryResultFlags) -> (),PFN_vkCmdCopyQueryPoolResults,c"vkCmdCopyQueryPoolResults";
+    CmdExecuteCommands(commandBuffer: VkCommandBuffer, commandBufferCount: u32, pCommandBuffers: *const VkCommandBuffer) -> (),PFN_vkCmdExecuteCommands,c"vkCmdExecuteCommands";
+    CreateEvent(device: VkDevice, pCreateInfo: *const VkEventCreateInfo, pAllocator: *const VkAllocationCallbacks, pEvent: *mut VkEvent) -> VkResult,PFN_vkCreateEvent,c"vkCreateEvent";
+    DestroyEvent(device: VkDevice, event: VkEvent, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyEvent,c"vkDestroyEvent";
+    GetEventStatus(device: VkDevice, event: VkEvent) -> VkResult,PFN_vkGetEventStatus,c"vkGetEventStatus";
+    SetEvent(device: VkDevice, event: VkEvent) -> VkResult,PFN_vkSetEvent,c"vkSetEvent";
+    ResetEvent(device: VkDevice, event: VkEvent) -> VkResult,PFN_vkResetEvent,c"vkResetEvent";
+    CreateBufferView(device: VkDevice, pCreateInfo: *const VkBufferViewCreateInfo, pAllocator: *const VkAllocationCallbacks, pView: *mut VkBufferView) -> VkResult,PFN_vkCreateBufferView,c"vkCreateBufferView";
+    DestroyBufferView(device: VkDevice, bufferView: VkBufferView, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyBufferView,c"vkDestroyBufferView";
+    CreateShaderModule(device: VkDevice, pCreateInfo: *const VkShaderModuleCreateInfo, pAllocator: *const VkAllocationCallbacks, pShaderModule: *mut VkShaderModule) -> VkResult,PFN_vkCreateShaderModule,c"vkCreateShaderModule";
+    DestroyShaderModule(device: VkDevice, shaderModule: VkShaderModule, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyShaderModule,c"vkDestroyShaderModule";
+    CreatePipelineCache(device: VkDevice, pCreateInfo: *const VkPipelineCacheCreateInfo, pAllocator: *const VkAllocationCallbacks, pPipelineCache: *mut VkPipelineCache) -> VkResult,PFN_vkCreatePipelineCache,c"vkCreatePipelineCache";
+    DestroyPipelineCache(device: VkDevice, pipelineCache: VkPipelineCache, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyPipelineCache,c"vkDestroyPipelineCache";
+    GetPipelineCacheData(device: VkDevice, pipelineCache: VkPipelineCache, pDataSize: *mut usize, pData: *mut c_void) -> VkResult,PFN_vkGetPipelineCacheData,c"vkGetPipelineCacheData";
+    MergePipelineCaches(device: VkDevice, dstCache: VkPipelineCache, srcCacheCount: u32, pSrcCaches: *const VkPipelineCache) -> VkResult,PFN_vkMergePipelineCaches,c"vkMergePipelineCaches";
+    CreateComputePipelines(device: VkDevice, pipelineCache: VkPipelineCache, createInfoCount: u32, pCreateInfos: *const VkComputePipelineCreateInfo, pAllocator: *const VkAllocationCallbacks, pPipelines: *mut VkPipeline) -> VkResult,PFN_vkCreateComputePipelines,c"vkCreateComputePipelines";
+    DestroyPipeline(device: VkDevice, pipeline: VkPipeline, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyPipeline,c"vkDestroyPipeline";
+    CreatePipelineLayout(device: VkDevice, pCreateInfo: *const VkPipelineLayoutCreateInfo, pAllocator: *const VkAllocationCallbacks, pPipelineLayout: *mut VkPipelineLayout) -> VkResult,PFN_vkCreatePipelineLayout,c"vkCreatePipelineLayout";
+    DestroyPipelineLayout(device: VkDevice, pipelineLayout: VkPipelineLayout, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyPipelineLayout,c"vkDestroyPipelineLayout";
+    CreateSampler(device: VkDevice, pCreateInfo: *const VkSamplerCreateInfo, pAllocator: *const VkAllocationCallbacks, pSampler: *mut VkSampler) -> VkResult,PFN_vkCreateSampler,c"vkCreateSampler";
+    DestroySampler(device: VkDevice, sampler: VkSampler, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroySampler,c"vkDestroySampler";
+    CreateDescriptorSetLayout(device: VkDevice, pCreateInfo: *const VkDescriptorSetLayoutCreateInfo, pAllocator: *const VkAllocationCallbacks, pSetLayout: *mut VkDescriptorSetLayout) -> VkResult,PFN_vkCreateDescriptorSetLayout,c"vkCreateDescriptorSetLayout";
+    DestroyDescriptorSetLayout(device: VkDevice, descriptorSetLayout: VkDescriptorSetLayout, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyDescriptorSetLayout,c"vkDestroyDescriptorSetLayout";
+    CreateDescriptorPool(device: VkDevice, pCreateInfo: *const VkDescriptorPoolCreateInfo, pAllocator: *const VkAllocationCallbacks, pDescriptorPool: *mut VkDescriptorPool) -> VkResult,PFN_vkCreateDescriptorPool,c"vkCreateDescriptorPool";
+    DestroyDescriptorPool(device: VkDevice, descriptorPool: VkDescriptorPool, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyDescriptorPool,c"vkDestroyDescriptorPool";
+    ResetDescriptorPool(device: VkDevice, descriptorPool: VkDescriptorPool, flags: VkDescriptorPoolResetFlags) -> VkResult,PFN_vkResetDescriptorPool,c"vkResetDescriptorPool";
+    AllocateDescriptorSets(device: VkDevice, pAllocateInfo: *const VkDescriptorSetAllocateInfo, pDescriptorSets: *mut VkDescriptorSet) -> VkResult,PFN_vkAllocateDescriptorSets,c"vkAllocateDescriptorSets";
+    FreeDescriptorSets(device: VkDevice, descriptorPool: VkDescriptorPool, descriptorSetCount: u32, pDescriptorSets: *const VkDescriptorSet) -> VkResult,PFN_vkFreeDescriptorSets,c"vkFreeDescriptorSets";
+    UpdateDescriptorSets(device: VkDevice, descriptorWriteCount: u32, pDescriptorWrites: *const VkWriteDescriptorSet, descriptorCopyCount: u32, pDescriptorCopies: *const VkCopyDescriptorSet) -> (),PFN_vkUpdateDescriptorSets,c"vkUpdateDescriptorSets";
+    CmdBindPipeline(commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, pipeline: VkPipeline) -> (),PFN_vkCmdBindPipeline,c"vkCmdBindPipeline";
+    CmdBindDescriptorSets(commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, layout: VkPipelineLayout, firstSet: u32, descriptorSetCount: u32, pDescriptorSets: *const VkDescriptorSet, dynamicOffsetCount: u32, pDynamicOffsets: *const u32) -> (),PFN_vkCmdBindDescriptorSets,c"vkCmdBindDescriptorSets";
+    CmdClearColorImage(commandBuffer: VkCommandBuffer, image: VkImage, imageLayout: VkImageLayout, pColor: *const VkClearColorValue, rangeCount: u32, pRanges: *const VkImageSubresourceRange) -> (),PFN_vkCmdClearColorImage,c"vkCmdClearColorImage";
+    CmdDispatch(commandBuffer: VkCommandBuffer, groupCountX: u32, groupCountY: u32, groupCountZ: u32) -> (),PFN_vkCmdDispatch,c"vkCmdDispatch";
+    CmdDispatchIndirect(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize) -> (),PFN_vkCmdDispatchIndirect,c"vkCmdDispatchIndirect";
+    CmdSetEvent(commandBuffer: VkCommandBuffer, event: VkEvent, stageMask: VkPipelineStageFlags) -> (),PFN_vkCmdSetEvent,c"vkCmdSetEvent";
+    CmdResetEvent(commandBuffer: VkCommandBuffer, event: VkEvent, stageMask: VkPipelineStageFlags) -> (),PFN_vkCmdResetEvent,c"vkCmdResetEvent";
+    CmdWaitEvents(commandBuffer: VkCommandBuffer, eventCount: u32, pEvents: *const VkEvent, srcStageMask: VkPipelineStageFlags, dstStageMask: VkPipelineStageFlags, memoryBarrierCount: u32, pMemoryBarriers: *const VkMemoryBarrier, bufferMemoryBarrierCount: u32, pBufferMemoryBarriers: *const VkBufferMemoryBarrier, imageMemoryBarrierCount: u32, pImageMemoryBarriers: *const VkImageMemoryBarrier) -> (),PFN_vkCmdWaitEvents,c"vkCmdWaitEvents";
+    CmdPushConstants(commandBuffer: VkCommandBuffer, layout: VkPipelineLayout, stageFlags: VkShaderStageFlags, offset: u32, size: u32, pValues: *const c_void) -> (),PFN_vkCmdPushConstants,c"vkCmdPushConstants";
+    CreateGraphicsPipelines(device: VkDevice, pipelineCache: VkPipelineCache, createInfoCount: u32, pCreateInfos: *const VkGraphicsPipelineCreateInfo, pAllocator: *const VkAllocationCallbacks, pPipelines: *mut VkPipeline) -> VkResult,PFN_vkCreateGraphicsPipelines,c"vkCreateGraphicsPipelines";
+    CreateFramebuffer(device: VkDevice, pCreateInfo: *const VkFramebufferCreateInfo, pAllocator: *const VkAllocationCallbacks, pFramebuffer: *mut VkFramebuffer) -> VkResult,PFN_vkCreateFramebuffer,c"vkCreateFramebuffer";
+    DestroyFramebuffer(device: VkDevice, framebuffer: VkFramebuffer, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyFramebuffer,c"vkDestroyFramebuffer";
+    CreateRenderPass(device: VkDevice, pCreateInfo: *const VkRenderPassCreateInfo, pAllocator: *const VkAllocationCallbacks, pRenderPass: *mut VkRenderPass) -> VkResult,PFN_vkCreateRenderPass,c"vkCreateRenderPass";
+    DestroyRenderPass(device: VkDevice, renderPass: VkRenderPass, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyRenderPass,c"vkDestroyRenderPass";
+    GetRenderAreaGranularity(device: VkDevice, renderPass: VkRenderPass, pGranularity: *mut VkExtent2D) -> (),PFN_vkGetRenderAreaGranularity,c"vkGetRenderAreaGranularity";
+    CmdSetViewport(commandBuffer: VkCommandBuffer, firstViewport: u32, viewportCount: u32, pViewports: *const VkViewport) -> (),PFN_vkCmdSetViewport,c"vkCmdSetViewport";
+    CmdSetScissor(commandBuffer: VkCommandBuffer, firstScissor: u32, scissorCount: u32, pScissors: *const VkRect2D) -> (),PFN_vkCmdSetScissor,c"vkCmdSetScissor";
+    CmdSetLineWidth(commandBuffer: VkCommandBuffer, lineWidth: f32) -> (),PFN_vkCmdSetLineWidth,c"vkCmdSetLineWidth";
+    CmdSetDepthBias(commandBuffer: VkCommandBuffer, depthBiasConstantFactor: f32, depthBiasClamp: f32, depthBiasSlopeFactor: f32) -> (),PFN_vkCmdSetDepthBias,c"vkCmdSetDepthBias";
+    CmdSetBlendConstants(commandBuffer: VkCommandBuffer, blendConstants: *mut f32) -> (),PFN_vkCmdSetBlendConstants,c"vkCmdSetBlendConstants";
+    CmdSetDepthBounds(commandBuffer: VkCommandBuffer, minDepthBounds: f32, maxDepthBounds: f32) -> (),PFN_vkCmdSetDepthBounds,c"vkCmdSetDepthBounds";
+    CmdSetStencilCompareMask(commandBuffer: VkCommandBuffer, faceMask: VkStencilFaceFlags, compareMask: u32) -> (),PFN_vkCmdSetStencilCompareMask,c"vkCmdSetStencilCompareMask";
+    CmdSetStencilWriteMask(commandBuffer: VkCommandBuffer, faceMask: VkStencilFaceFlags, writeMask: u32) -> (),PFN_vkCmdSetStencilWriteMask,c"vkCmdSetStencilWriteMask";
+    CmdSetStencilReference(commandBuffer: VkCommandBuffer, faceMask: VkStencilFaceFlags, reference: u32) -> (),PFN_vkCmdSetStencilReference,c"vkCmdSetStencilReference";
+    CmdBindIndexBuffer(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, indexType: VkIndexType) -> (),PFN_vkCmdBindIndexBuffer,c"vkCmdBindIndexBuffer";
+    CmdBindVertexBuffers(commandBuffer: VkCommandBuffer, firstBinding: u32, bindingCount: u32, pBuffers: *const VkBuffer, pOffsets: *const VkDeviceSize) -> (),PFN_vkCmdBindVertexBuffers,c"vkCmdBindVertexBuffers";
+    CmdDraw(commandBuffer: VkCommandBuffer, vertexCount: u32, instanceCount: u32, firstVertex: u32, firstInstance: u32) -> (),PFN_vkCmdDraw,c"vkCmdDraw";
+    CmdDrawIndexed(commandBuffer: VkCommandBuffer, indexCount: u32, instanceCount: u32, firstIndex: u32, vertexOffset: i32, firstInstance: u32) -> (),PFN_vkCmdDrawIndexed,c"vkCmdDrawIndexed";
+    CmdDrawIndirect(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, drawCount: u32, stride: u32) -> (),PFN_vkCmdDrawIndirect,c"vkCmdDrawIndirect";
+    CmdDrawIndexedIndirect(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, drawCount: u32, stride: u32) -> (),PFN_vkCmdDrawIndexedIndirect,c"vkCmdDrawIndexedIndirect";
+    CmdBlitImage(commandBuffer: VkCommandBuffer, srcImage: VkImage, srcImageLayout: VkImageLayout, dstImage: VkImage, dstImageLayout: VkImageLayout, regionCount: u32, pRegions: *const VkImageBlit, filter: VkFilter) -> (),PFN_vkCmdBlitImage,c"vkCmdBlitImage";
+    CmdClearDepthStencilImage(commandBuffer: VkCommandBuffer, image: VkImage, imageLayout: VkImageLayout, pDepthStencil: *const VkClearDepthStencilValue, rangeCount: u32, pRanges: *const VkImageSubresourceRange) -> (),PFN_vkCmdClearDepthStencilImage,c"vkCmdClearDepthStencilImage";
+    CmdClearAttachments(commandBuffer: VkCommandBuffer, attachmentCount: u32, pAttachments: *const VkClearAttachment, rectCount: u32, pRects: *const VkClearRect) -> (),PFN_vkCmdClearAttachments,c"vkCmdClearAttachments";
+    CmdResolveImage(commandBuffer: VkCommandBuffer, srcImage: VkImage, srcImageLayout: VkImageLayout, dstImage: VkImage, dstImageLayout: VkImageLayout, regionCount: u32, pRegions: *const VkImageResolve) -> (),PFN_vkCmdResolveImage,c"vkCmdResolveImage";
+    CmdBeginRenderPass(commandBuffer: VkCommandBuffer, pRenderPassBegin: *const VkRenderPassBeginInfo, contents: VkSubpassContents) -> (),PFN_vkCmdBeginRenderPass,c"vkCmdBeginRenderPass";
+    CmdNextSubpass(commandBuffer: VkCommandBuffer, contents: VkSubpassContents) -> (),PFN_vkCmdNextSubpass,c"vkCmdNextSubpass";
+    CmdEndRenderPass(commandBuffer: VkCommandBuffer) -> (),PFN_vkCmdEndRenderPass,c"vkCmdEndRenderPass";
 }
 impl Vulkan_1_0_DeviceDispatch {
     #[inline(always)]
@@ -28965,7 +28966,7 @@ impl Vulkan_1_0_DeviceDispatch {
         unsafe { (self.CmdSetDepthBias)(commandBuffer, depthBiasConstantFactor, depthBiasClamp, depthBiasSlopeFactor) }
     }
     #[inline(always)]
-    pub unsafe fn CmdSetBlendConstants(&self, commandBuffer: VkCommandBuffer, blendConstants: [f32; 4 as usize]) -> () {
+    pub unsafe fn CmdSetBlendConstants(&self, commandBuffer: VkCommandBuffer, blendConstants: *mut f32) -> () {
         unsafe { (self.CmdSetBlendConstants)(commandBuffer, blendConstants) }
     }
     #[inline(always)]
@@ -29040,7 +29041,7 @@ impl Vulkan_1_0_DeviceDispatch {
 // Vulkan 1_1
 dispatch_table! { Vulkan_1_1_EntryDispatch;
     [inherit: Vulkan_1_0_EntryDispatch]
-    EnumerateInstanceVersion,PFN_vkEnumerateInstanceVersion,c"vkEnumerateInstanceVersion";
+    EnumerateInstanceVersion(pApiVersion: *mut u32) -> VkResult,PFN_vkEnumerateInstanceVersion,c"vkEnumerateInstanceVersion";
 }
 impl Vulkan_1_1_EntryDispatch {
     #[inline(always)]
@@ -29050,17 +29051,17 @@ impl Vulkan_1_1_EntryDispatch {
 }
 dispatch_table! { Vulkan_1_1_InstanceDispatch;
     [inherit: Vulkan_1_0_InstanceDispatch]
-    EnumeratePhysicalDeviceGroups,PFN_vkEnumeratePhysicalDeviceGroups,c"vkEnumeratePhysicalDeviceGroups";
-    GetPhysicalDeviceFeatures2,PFN_vkGetPhysicalDeviceFeatures2,c"vkGetPhysicalDeviceFeatures2";
-    GetPhysicalDeviceProperties2,PFN_vkGetPhysicalDeviceProperties2,c"vkGetPhysicalDeviceProperties2";
-    GetPhysicalDeviceFormatProperties2,PFN_vkGetPhysicalDeviceFormatProperties2,c"vkGetPhysicalDeviceFormatProperties2";
-    GetPhysicalDeviceImageFormatProperties2,PFN_vkGetPhysicalDeviceImageFormatProperties2,c"vkGetPhysicalDeviceImageFormatProperties2";
-    GetPhysicalDeviceQueueFamilyProperties2,PFN_vkGetPhysicalDeviceQueueFamilyProperties2,c"vkGetPhysicalDeviceQueueFamilyProperties2";
-    GetPhysicalDeviceMemoryProperties2,PFN_vkGetPhysicalDeviceMemoryProperties2,c"vkGetPhysicalDeviceMemoryProperties2";
-    GetPhysicalDeviceSparseImageFormatProperties2,PFN_vkGetPhysicalDeviceSparseImageFormatProperties2,c"vkGetPhysicalDeviceSparseImageFormatProperties2";
-    GetPhysicalDeviceExternalBufferProperties,PFN_vkGetPhysicalDeviceExternalBufferProperties,c"vkGetPhysicalDeviceExternalBufferProperties";
-    GetPhysicalDeviceExternalFenceProperties,PFN_vkGetPhysicalDeviceExternalFenceProperties,c"vkGetPhysicalDeviceExternalFenceProperties";
-    GetPhysicalDeviceExternalSemaphoreProperties,PFN_vkGetPhysicalDeviceExternalSemaphoreProperties,c"vkGetPhysicalDeviceExternalSemaphoreProperties";
+    EnumeratePhysicalDeviceGroups(instance: VkInstance, pPhysicalDeviceGroupCount: *mut u32, pPhysicalDeviceGroupProperties: *mut VkPhysicalDeviceGroupProperties) -> VkResult,PFN_vkEnumeratePhysicalDeviceGroups,c"vkEnumeratePhysicalDeviceGroups";
+    GetPhysicalDeviceFeatures2(physicalDevice: VkPhysicalDevice, pFeatures: *mut VkPhysicalDeviceFeatures2) -> (),PFN_vkGetPhysicalDeviceFeatures2,c"vkGetPhysicalDeviceFeatures2";
+    GetPhysicalDeviceProperties2(physicalDevice: VkPhysicalDevice, pProperties: *mut VkPhysicalDeviceProperties2) -> (),PFN_vkGetPhysicalDeviceProperties2,c"vkGetPhysicalDeviceProperties2";
+    GetPhysicalDeviceFormatProperties2(physicalDevice: VkPhysicalDevice, format: VkFormat, pFormatProperties: *mut VkFormatProperties2) -> (),PFN_vkGetPhysicalDeviceFormatProperties2,c"vkGetPhysicalDeviceFormatProperties2";
+    GetPhysicalDeviceImageFormatProperties2(physicalDevice: VkPhysicalDevice, pImageFormatInfo: *const VkPhysicalDeviceImageFormatInfo2, pImageFormatProperties: *mut VkImageFormatProperties2) -> VkResult,PFN_vkGetPhysicalDeviceImageFormatProperties2,c"vkGetPhysicalDeviceImageFormatProperties2";
+    GetPhysicalDeviceQueueFamilyProperties2(physicalDevice: VkPhysicalDevice, pQueueFamilyPropertyCount: *mut u32, pQueueFamilyProperties: *mut VkQueueFamilyProperties2) -> (),PFN_vkGetPhysicalDeviceQueueFamilyProperties2,c"vkGetPhysicalDeviceQueueFamilyProperties2";
+    GetPhysicalDeviceMemoryProperties2(physicalDevice: VkPhysicalDevice, pMemoryProperties: *mut VkPhysicalDeviceMemoryProperties2) -> (),PFN_vkGetPhysicalDeviceMemoryProperties2,c"vkGetPhysicalDeviceMemoryProperties2";
+    GetPhysicalDeviceSparseImageFormatProperties2(physicalDevice: VkPhysicalDevice, pFormatInfo: *const VkPhysicalDeviceSparseImageFormatInfo2, pPropertyCount: *mut u32, pProperties: *mut VkSparseImageFormatProperties2) -> (),PFN_vkGetPhysicalDeviceSparseImageFormatProperties2,c"vkGetPhysicalDeviceSparseImageFormatProperties2";
+    GetPhysicalDeviceExternalBufferProperties(physicalDevice: VkPhysicalDevice, pExternalBufferInfo: *const VkPhysicalDeviceExternalBufferInfo, pExternalBufferProperties: *mut VkExternalBufferProperties) -> (),PFN_vkGetPhysicalDeviceExternalBufferProperties,c"vkGetPhysicalDeviceExternalBufferProperties";
+    GetPhysicalDeviceExternalFenceProperties(physicalDevice: VkPhysicalDevice, pExternalFenceInfo: *const VkPhysicalDeviceExternalFenceInfo, pExternalFenceProperties: *mut VkExternalFenceProperties) -> (),PFN_vkGetPhysicalDeviceExternalFenceProperties,c"vkGetPhysicalDeviceExternalFenceProperties";
+    GetPhysicalDeviceExternalSemaphoreProperties(physicalDevice: VkPhysicalDevice, pExternalSemaphoreInfo: *const VkPhysicalDeviceExternalSemaphoreInfo, pExternalSemaphoreProperties: *mut VkExternalSemaphoreProperties) -> (),PFN_vkGetPhysicalDeviceExternalSemaphoreProperties,c"vkGetPhysicalDeviceExternalSemaphoreProperties";
 }
 impl Vulkan_1_1_InstanceDispatch {
     #[inline(always)]
@@ -29110,22 +29111,22 @@ impl Vulkan_1_1_InstanceDispatch {
 }
 dispatch_table! { Vulkan_1_1_DeviceDispatch;
     [inherit: Vulkan_1_0_DeviceDispatch]
-    BindBufferMemory2,PFN_vkBindBufferMemory2,c"vkBindBufferMemory2";
-    BindImageMemory2,PFN_vkBindImageMemory2,c"vkBindImageMemory2";
-    GetDeviceGroupPeerMemoryFeatures,PFN_vkGetDeviceGroupPeerMemoryFeatures,c"vkGetDeviceGroupPeerMemoryFeatures";
-    CmdSetDeviceMask,PFN_vkCmdSetDeviceMask,c"vkCmdSetDeviceMask";
-    GetImageMemoryRequirements2,PFN_vkGetImageMemoryRequirements2,c"vkGetImageMemoryRequirements2";
-    GetBufferMemoryRequirements2,PFN_vkGetBufferMemoryRequirements2,c"vkGetBufferMemoryRequirements2";
-    GetImageSparseMemoryRequirements2,PFN_vkGetImageSparseMemoryRequirements2,c"vkGetImageSparseMemoryRequirements2";
-    TrimCommandPool,PFN_vkTrimCommandPool,c"vkTrimCommandPool";
-    GetDeviceQueue2,PFN_vkGetDeviceQueue2,c"vkGetDeviceQueue2";
-    CmdDispatchBase,PFN_vkCmdDispatchBase,c"vkCmdDispatchBase";
-    CreateDescriptorUpdateTemplate,PFN_vkCreateDescriptorUpdateTemplate,c"vkCreateDescriptorUpdateTemplate";
-    DestroyDescriptorUpdateTemplate,PFN_vkDestroyDescriptorUpdateTemplate,c"vkDestroyDescriptorUpdateTemplate";
-    UpdateDescriptorSetWithTemplate,PFN_vkUpdateDescriptorSetWithTemplate,c"vkUpdateDescriptorSetWithTemplate";
-    GetDescriptorSetLayoutSupport,PFN_vkGetDescriptorSetLayoutSupport,c"vkGetDescriptorSetLayoutSupport";
-    CreateSamplerYcbcrConversion,PFN_vkCreateSamplerYcbcrConversion,c"vkCreateSamplerYcbcrConversion";
-    DestroySamplerYcbcrConversion,PFN_vkDestroySamplerYcbcrConversion,c"vkDestroySamplerYcbcrConversion";
+    BindBufferMemory2(device: VkDevice, bindInfoCount: u32, pBindInfos: *const VkBindBufferMemoryInfo) -> VkResult,PFN_vkBindBufferMemory2,c"vkBindBufferMemory2";
+    BindImageMemory2(device: VkDevice, bindInfoCount: u32, pBindInfos: *const VkBindImageMemoryInfo) -> VkResult,PFN_vkBindImageMemory2,c"vkBindImageMemory2";
+    GetDeviceGroupPeerMemoryFeatures(device: VkDevice, heapIndex: u32, localDeviceIndex: u32, remoteDeviceIndex: u32, pPeerMemoryFeatures: *mut VkPeerMemoryFeatureFlags) -> (),PFN_vkGetDeviceGroupPeerMemoryFeatures,c"vkGetDeviceGroupPeerMemoryFeatures";
+    CmdSetDeviceMask(commandBuffer: VkCommandBuffer, deviceMask: u32) -> (),PFN_vkCmdSetDeviceMask,c"vkCmdSetDeviceMask";
+    GetImageMemoryRequirements2(device: VkDevice, pInfo: *const VkImageMemoryRequirementsInfo2, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetImageMemoryRequirements2,c"vkGetImageMemoryRequirements2";
+    GetBufferMemoryRequirements2(device: VkDevice, pInfo: *const VkBufferMemoryRequirementsInfo2, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetBufferMemoryRequirements2,c"vkGetBufferMemoryRequirements2";
+    GetImageSparseMemoryRequirements2(device: VkDevice, pInfo: *const VkImageSparseMemoryRequirementsInfo2, pSparseMemoryRequirementCount: *mut u32, pSparseMemoryRequirements: *mut VkSparseImageMemoryRequirements2) -> (),PFN_vkGetImageSparseMemoryRequirements2,c"vkGetImageSparseMemoryRequirements2";
+    TrimCommandPool(device: VkDevice, commandPool: VkCommandPool, flags: VkCommandPoolTrimFlags) -> (),PFN_vkTrimCommandPool,c"vkTrimCommandPool";
+    GetDeviceQueue2(device: VkDevice, pQueueInfo: *const VkDeviceQueueInfo2, pQueue: *mut VkQueue) -> (),PFN_vkGetDeviceQueue2,c"vkGetDeviceQueue2";
+    CmdDispatchBase(commandBuffer: VkCommandBuffer, baseGroupX: u32, baseGroupY: u32, baseGroupZ: u32, groupCountX: u32, groupCountY: u32, groupCountZ: u32) -> (),PFN_vkCmdDispatchBase,c"vkCmdDispatchBase";
+    CreateDescriptorUpdateTemplate(device: VkDevice, pCreateInfo: *const VkDescriptorUpdateTemplateCreateInfo, pAllocator: *const VkAllocationCallbacks, pDescriptorUpdateTemplate: *mut VkDescriptorUpdateTemplate) -> VkResult,PFN_vkCreateDescriptorUpdateTemplate,c"vkCreateDescriptorUpdateTemplate";
+    DestroyDescriptorUpdateTemplate(device: VkDevice, descriptorUpdateTemplate: VkDescriptorUpdateTemplate, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyDescriptorUpdateTemplate,c"vkDestroyDescriptorUpdateTemplate";
+    UpdateDescriptorSetWithTemplate(device: VkDevice, descriptorSet: VkDescriptorSet, descriptorUpdateTemplate: VkDescriptorUpdateTemplate, pData: *const c_void) -> (),PFN_vkUpdateDescriptorSetWithTemplate,c"vkUpdateDescriptorSetWithTemplate";
+    GetDescriptorSetLayoutSupport(device: VkDevice, pCreateInfo: *const VkDescriptorSetLayoutCreateInfo, pSupport: *mut VkDescriptorSetLayoutSupport) -> (),PFN_vkGetDescriptorSetLayoutSupport,c"vkGetDescriptorSetLayoutSupport";
+    CreateSamplerYcbcrConversion(device: VkDevice, pCreateInfo: *const VkSamplerYcbcrConversionCreateInfo, pAllocator: *const VkAllocationCallbacks, pYcbcrConversion: *mut VkSamplerYcbcrConversion) -> VkResult,PFN_vkCreateSamplerYcbcrConversion,c"vkCreateSamplerYcbcrConversion";
+    DestroySamplerYcbcrConversion(device: VkDevice, ycbcrConversion: VkSamplerYcbcrConversion, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroySamplerYcbcrConversion,c"vkDestroySamplerYcbcrConversion";
 }
 impl Vulkan_1_1_DeviceDispatch {
     #[inline(always)]
@@ -29196,19 +29197,19 @@ impl Vulkan_1_1_DeviceDispatch {
 // Vulkan 1_2
 dispatch_table! { Vulkan_1_2_DeviceDispatch;
     [inherit: Vulkan_1_1_DeviceDispatch]
-    ResetQueryPool,PFN_vkResetQueryPool,c"vkResetQueryPool";
-    GetSemaphoreCounterValue,PFN_vkGetSemaphoreCounterValue,c"vkGetSemaphoreCounterValue";
-    WaitSemaphores,PFN_vkWaitSemaphores,c"vkWaitSemaphores";
-    SignalSemaphore,PFN_vkSignalSemaphore,c"vkSignalSemaphore";
-    GetBufferDeviceAddress,PFN_vkGetBufferDeviceAddress,c"vkGetBufferDeviceAddress";
-    GetBufferOpaqueCaptureAddress,PFN_vkGetBufferOpaqueCaptureAddress,c"vkGetBufferOpaqueCaptureAddress";
-    GetDeviceMemoryOpaqueCaptureAddress,PFN_vkGetDeviceMemoryOpaqueCaptureAddress,c"vkGetDeviceMemoryOpaqueCaptureAddress";
-    CmdDrawIndirectCount,PFN_vkCmdDrawIndirectCount,c"vkCmdDrawIndirectCount";
-    CmdDrawIndexedIndirectCount,PFN_vkCmdDrawIndexedIndirectCount,c"vkCmdDrawIndexedIndirectCount";
-    CreateRenderPass2,PFN_vkCreateRenderPass2,c"vkCreateRenderPass2";
-    CmdBeginRenderPass2,PFN_vkCmdBeginRenderPass2,c"vkCmdBeginRenderPass2";
-    CmdNextSubpass2,PFN_vkCmdNextSubpass2,c"vkCmdNextSubpass2";
-    CmdEndRenderPass2,PFN_vkCmdEndRenderPass2,c"vkCmdEndRenderPass2";
+    ResetQueryPool(device: VkDevice, queryPool: VkQueryPool, firstQuery: u32, queryCount: u32) -> (),PFN_vkResetQueryPool,c"vkResetQueryPool";
+    GetSemaphoreCounterValue(device: VkDevice, semaphore: VkSemaphore, pValue: *mut u64) -> VkResult,PFN_vkGetSemaphoreCounterValue,c"vkGetSemaphoreCounterValue";
+    WaitSemaphores(device: VkDevice, pWaitInfo: *const VkSemaphoreWaitInfo, timeout: u64) -> VkResult,PFN_vkWaitSemaphores,c"vkWaitSemaphores";
+    SignalSemaphore(device: VkDevice, pSignalInfo: *const VkSemaphoreSignalInfo) -> VkResult,PFN_vkSignalSemaphore,c"vkSignalSemaphore";
+    GetBufferDeviceAddress(device: VkDevice, pInfo: *const VkBufferDeviceAddressInfo) -> VkDeviceAddress,PFN_vkGetBufferDeviceAddress,c"vkGetBufferDeviceAddress";
+    GetBufferOpaqueCaptureAddress(device: VkDevice, pInfo: *const VkBufferDeviceAddressInfo) -> u64,PFN_vkGetBufferOpaqueCaptureAddress,c"vkGetBufferOpaqueCaptureAddress";
+    GetDeviceMemoryOpaqueCaptureAddress(device: VkDevice, pInfo: *const VkDeviceMemoryOpaqueCaptureAddressInfo) -> u64,PFN_vkGetDeviceMemoryOpaqueCaptureAddress,c"vkGetDeviceMemoryOpaqueCaptureAddress";
+    CmdDrawIndirectCount(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, countBuffer: VkBuffer, countBufferOffset: VkDeviceSize, maxDrawCount: u32, stride: u32) -> (),PFN_vkCmdDrawIndirectCount,c"vkCmdDrawIndirectCount";
+    CmdDrawIndexedIndirectCount(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, countBuffer: VkBuffer, countBufferOffset: VkDeviceSize, maxDrawCount: u32, stride: u32) -> (),PFN_vkCmdDrawIndexedIndirectCount,c"vkCmdDrawIndexedIndirectCount";
+    CreateRenderPass2(device: VkDevice, pCreateInfo: *const VkRenderPassCreateInfo2, pAllocator: *const VkAllocationCallbacks, pRenderPass: *mut VkRenderPass) -> VkResult,PFN_vkCreateRenderPass2,c"vkCreateRenderPass2";
+    CmdBeginRenderPass2(commandBuffer: VkCommandBuffer, pRenderPassBegin: *const VkRenderPassBeginInfo, pSubpassBeginInfo: *const VkSubpassBeginInfo) -> (),PFN_vkCmdBeginRenderPass2,c"vkCmdBeginRenderPass2";
+    CmdNextSubpass2(commandBuffer: VkCommandBuffer, pSubpassBeginInfo: *const VkSubpassBeginInfo, pSubpassEndInfo: *const VkSubpassEndInfo) -> (),PFN_vkCmdNextSubpass2,c"vkCmdNextSubpass2";
+    CmdEndRenderPass2(commandBuffer: VkCommandBuffer, pSubpassEndInfo: *const VkSubpassEndInfo) -> (),PFN_vkCmdEndRenderPass2,c"vkCmdEndRenderPass2";
 }
 impl Vulkan_1_2_DeviceDispatch {
     #[inline(always)]
@@ -29267,7 +29268,7 @@ impl Vulkan_1_2_DeviceDispatch {
 // Vulkan 1_3
 dispatch_table! { Vulkan_1_3_InstanceDispatch;
     [inherit: Vulkan_1_1_InstanceDispatch]
-    GetPhysicalDeviceToolProperties,PFN_vkGetPhysicalDeviceToolProperties,c"vkGetPhysicalDeviceToolProperties";
+    GetPhysicalDeviceToolProperties(physicalDevice: VkPhysicalDevice, pToolCount: *mut u32, pToolProperties: *mut VkPhysicalDeviceToolProperties) -> VkResult,PFN_vkGetPhysicalDeviceToolProperties,c"vkGetPhysicalDeviceToolProperties";
 }
 impl Vulkan_1_3_InstanceDispatch {
     #[inline(always)]
@@ -29277,42 +29278,42 @@ impl Vulkan_1_3_InstanceDispatch {
 }
 dispatch_table! { Vulkan_1_3_DeviceDispatch;
     [inherit: Vulkan_1_2_DeviceDispatch]
-    CreatePrivateDataSlot,PFN_vkCreatePrivateDataSlot,c"vkCreatePrivateDataSlot";
-    DestroyPrivateDataSlot,PFN_vkDestroyPrivateDataSlot,c"vkDestroyPrivateDataSlot";
-    SetPrivateData,PFN_vkSetPrivateData,c"vkSetPrivateData";
-    GetPrivateData,PFN_vkGetPrivateData,c"vkGetPrivateData";
-    CmdPipelineBarrier2,PFN_vkCmdPipelineBarrier2,c"vkCmdPipelineBarrier2";
-    CmdWriteTimestamp2,PFN_vkCmdWriteTimestamp2,c"vkCmdWriteTimestamp2";
-    QueueSubmit2,PFN_vkQueueSubmit2,c"vkQueueSubmit2";
-    CmdCopyBuffer2,PFN_vkCmdCopyBuffer2,c"vkCmdCopyBuffer2";
-    CmdCopyImage2,PFN_vkCmdCopyImage2,c"vkCmdCopyImage2";
-    CmdCopyBufferToImage2,PFN_vkCmdCopyBufferToImage2,c"vkCmdCopyBufferToImage2";
-    CmdCopyImageToBuffer2,PFN_vkCmdCopyImageToBuffer2,c"vkCmdCopyImageToBuffer2";
-    GetDeviceBufferMemoryRequirements,PFN_vkGetDeviceBufferMemoryRequirements,c"vkGetDeviceBufferMemoryRequirements";
-    GetDeviceImageMemoryRequirements,PFN_vkGetDeviceImageMemoryRequirements,c"vkGetDeviceImageMemoryRequirements";
-    GetDeviceImageSparseMemoryRequirements,PFN_vkGetDeviceImageSparseMemoryRequirements,c"vkGetDeviceImageSparseMemoryRequirements";
-    CmdSetEvent2,PFN_vkCmdSetEvent2,c"vkCmdSetEvent2";
-    CmdResetEvent2,PFN_vkCmdResetEvent2,c"vkCmdResetEvent2";
-    CmdWaitEvents2,PFN_vkCmdWaitEvents2,c"vkCmdWaitEvents2";
-    CmdBlitImage2,PFN_vkCmdBlitImage2,c"vkCmdBlitImage2";
-    CmdResolveImage2,PFN_vkCmdResolveImage2,c"vkCmdResolveImage2";
-    CmdBeginRendering,PFN_vkCmdBeginRendering,c"vkCmdBeginRendering";
-    CmdEndRendering,PFN_vkCmdEndRendering,c"vkCmdEndRendering";
-    CmdSetCullMode,PFN_vkCmdSetCullMode,c"vkCmdSetCullMode";
-    CmdSetFrontFace,PFN_vkCmdSetFrontFace,c"vkCmdSetFrontFace";
-    CmdSetPrimitiveTopology,PFN_vkCmdSetPrimitiveTopology,c"vkCmdSetPrimitiveTopology";
-    CmdSetViewportWithCount,PFN_vkCmdSetViewportWithCount,c"vkCmdSetViewportWithCount";
-    CmdSetScissorWithCount,PFN_vkCmdSetScissorWithCount,c"vkCmdSetScissorWithCount";
-    CmdBindVertexBuffers2,PFN_vkCmdBindVertexBuffers2,c"vkCmdBindVertexBuffers2";
-    CmdSetDepthTestEnable,PFN_vkCmdSetDepthTestEnable,c"vkCmdSetDepthTestEnable";
-    CmdSetDepthWriteEnable,PFN_vkCmdSetDepthWriteEnable,c"vkCmdSetDepthWriteEnable";
-    CmdSetDepthCompareOp,PFN_vkCmdSetDepthCompareOp,c"vkCmdSetDepthCompareOp";
-    CmdSetDepthBoundsTestEnable,PFN_vkCmdSetDepthBoundsTestEnable,c"vkCmdSetDepthBoundsTestEnable";
-    CmdSetStencilTestEnable,PFN_vkCmdSetStencilTestEnable,c"vkCmdSetStencilTestEnable";
-    CmdSetStencilOp,PFN_vkCmdSetStencilOp,c"vkCmdSetStencilOp";
-    CmdSetRasterizerDiscardEnable,PFN_vkCmdSetRasterizerDiscardEnable,c"vkCmdSetRasterizerDiscardEnable";
-    CmdSetDepthBiasEnable,PFN_vkCmdSetDepthBiasEnable,c"vkCmdSetDepthBiasEnable";
-    CmdSetPrimitiveRestartEnable,PFN_vkCmdSetPrimitiveRestartEnable,c"vkCmdSetPrimitiveRestartEnable";
+    CreatePrivateDataSlot(device: VkDevice, pCreateInfo: *const VkPrivateDataSlotCreateInfo, pAllocator: *const VkAllocationCallbacks, pPrivateDataSlot: *mut VkPrivateDataSlot) -> VkResult,PFN_vkCreatePrivateDataSlot,c"vkCreatePrivateDataSlot";
+    DestroyPrivateDataSlot(device: VkDevice, privateDataSlot: VkPrivateDataSlot, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyPrivateDataSlot,c"vkDestroyPrivateDataSlot";
+    SetPrivateData(device: VkDevice, objectType: VkObjectType, objectHandle: u64, privateDataSlot: VkPrivateDataSlot, data: u64) -> VkResult,PFN_vkSetPrivateData,c"vkSetPrivateData";
+    GetPrivateData(device: VkDevice, objectType: VkObjectType, objectHandle: u64, privateDataSlot: VkPrivateDataSlot, pData: *mut u64) -> (),PFN_vkGetPrivateData,c"vkGetPrivateData";
+    CmdPipelineBarrier2(commandBuffer: VkCommandBuffer, pDependencyInfo: *const VkDependencyInfo) -> (),PFN_vkCmdPipelineBarrier2,c"vkCmdPipelineBarrier2";
+    CmdWriteTimestamp2(commandBuffer: VkCommandBuffer, stage: VkPipelineStageFlags2, queryPool: VkQueryPool, query: u32) -> (),PFN_vkCmdWriteTimestamp2,c"vkCmdWriteTimestamp2";
+    QueueSubmit2(queue: VkQueue, submitCount: u32, pSubmits: *const VkSubmitInfo2, fence: VkFence) -> VkResult,PFN_vkQueueSubmit2,c"vkQueueSubmit2";
+    CmdCopyBuffer2(commandBuffer: VkCommandBuffer, pCopyBufferInfo: *const VkCopyBufferInfo2) -> (),PFN_vkCmdCopyBuffer2,c"vkCmdCopyBuffer2";
+    CmdCopyImage2(commandBuffer: VkCommandBuffer, pCopyImageInfo: *const VkCopyImageInfo2) -> (),PFN_vkCmdCopyImage2,c"vkCmdCopyImage2";
+    CmdCopyBufferToImage2(commandBuffer: VkCommandBuffer, pCopyBufferToImageInfo: *const VkCopyBufferToImageInfo2) -> (),PFN_vkCmdCopyBufferToImage2,c"vkCmdCopyBufferToImage2";
+    CmdCopyImageToBuffer2(commandBuffer: VkCommandBuffer, pCopyImageToBufferInfo: *const VkCopyImageToBufferInfo2) -> (),PFN_vkCmdCopyImageToBuffer2,c"vkCmdCopyImageToBuffer2";
+    GetDeviceBufferMemoryRequirements(device: VkDevice, pInfo: *const VkDeviceBufferMemoryRequirements, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetDeviceBufferMemoryRequirements,c"vkGetDeviceBufferMemoryRequirements";
+    GetDeviceImageMemoryRequirements(device: VkDevice, pInfo: *const VkDeviceImageMemoryRequirements, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetDeviceImageMemoryRequirements,c"vkGetDeviceImageMemoryRequirements";
+    GetDeviceImageSparseMemoryRequirements(device: VkDevice, pInfo: *const VkDeviceImageMemoryRequirements, pSparseMemoryRequirementCount: *mut u32, pSparseMemoryRequirements: *mut VkSparseImageMemoryRequirements2) -> (),PFN_vkGetDeviceImageSparseMemoryRequirements,c"vkGetDeviceImageSparseMemoryRequirements";
+    CmdSetEvent2(commandBuffer: VkCommandBuffer, event: VkEvent, pDependencyInfo: *const VkDependencyInfo) -> (),PFN_vkCmdSetEvent2,c"vkCmdSetEvent2";
+    CmdResetEvent2(commandBuffer: VkCommandBuffer, event: VkEvent, stageMask: VkPipelineStageFlags2) -> (),PFN_vkCmdResetEvent2,c"vkCmdResetEvent2";
+    CmdWaitEvents2(commandBuffer: VkCommandBuffer, eventCount: u32, pEvents: *const VkEvent, pDependencyInfos: *const VkDependencyInfo) -> (),PFN_vkCmdWaitEvents2,c"vkCmdWaitEvents2";
+    CmdBlitImage2(commandBuffer: VkCommandBuffer, pBlitImageInfo: *const VkBlitImageInfo2) -> (),PFN_vkCmdBlitImage2,c"vkCmdBlitImage2";
+    CmdResolveImage2(commandBuffer: VkCommandBuffer, pResolveImageInfo: *const VkResolveImageInfo2) -> (),PFN_vkCmdResolveImage2,c"vkCmdResolveImage2";
+    CmdBeginRendering(commandBuffer: VkCommandBuffer, pRenderingInfo: *const VkRenderingInfo) -> (),PFN_vkCmdBeginRendering,c"vkCmdBeginRendering";
+    CmdEndRendering(commandBuffer: VkCommandBuffer) -> (),PFN_vkCmdEndRendering,c"vkCmdEndRendering";
+    CmdSetCullMode(commandBuffer: VkCommandBuffer, cullMode: VkCullModeFlags) -> (),PFN_vkCmdSetCullMode,c"vkCmdSetCullMode";
+    CmdSetFrontFace(commandBuffer: VkCommandBuffer, frontFace: VkFrontFace) -> (),PFN_vkCmdSetFrontFace,c"vkCmdSetFrontFace";
+    CmdSetPrimitiveTopology(commandBuffer: VkCommandBuffer, primitiveTopology: VkPrimitiveTopology) -> (),PFN_vkCmdSetPrimitiveTopology,c"vkCmdSetPrimitiveTopology";
+    CmdSetViewportWithCount(commandBuffer: VkCommandBuffer, viewportCount: u32, pViewports: *const VkViewport) -> (),PFN_vkCmdSetViewportWithCount,c"vkCmdSetViewportWithCount";
+    CmdSetScissorWithCount(commandBuffer: VkCommandBuffer, scissorCount: u32, pScissors: *const VkRect2D) -> (),PFN_vkCmdSetScissorWithCount,c"vkCmdSetScissorWithCount";
+    CmdBindVertexBuffers2(commandBuffer: VkCommandBuffer, firstBinding: u32, bindingCount: u32, pBuffers: *const VkBuffer, pOffsets: *const VkDeviceSize, pSizes: *const VkDeviceSize, pStrides: *const VkDeviceSize) -> (),PFN_vkCmdBindVertexBuffers2,c"vkCmdBindVertexBuffers2";
+    CmdSetDepthTestEnable(commandBuffer: VkCommandBuffer, depthTestEnable: VkBool32) -> (),PFN_vkCmdSetDepthTestEnable,c"vkCmdSetDepthTestEnable";
+    CmdSetDepthWriteEnable(commandBuffer: VkCommandBuffer, depthWriteEnable: VkBool32) -> (),PFN_vkCmdSetDepthWriteEnable,c"vkCmdSetDepthWriteEnable";
+    CmdSetDepthCompareOp(commandBuffer: VkCommandBuffer, depthCompareOp: VkCompareOp) -> (),PFN_vkCmdSetDepthCompareOp,c"vkCmdSetDepthCompareOp";
+    CmdSetDepthBoundsTestEnable(commandBuffer: VkCommandBuffer, depthBoundsTestEnable: VkBool32) -> (),PFN_vkCmdSetDepthBoundsTestEnable,c"vkCmdSetDepthBoundsTestEnable";
+    CmdSetStencilTestEnable(commandBuffer: VkCommandBuffer, stencilTestEnable: VkBool32) -> (),PFN_vkCmdSetStencilTestEnable,c"vkCmdSetStencilTestEnable";
+    CmdSetStencilOp(commandBuffer: VkCommandBuffer, faceMask: VkStencilFaceFlags, failOp: VkStencilOp, passOp: VkStencilOp, depthFailOp: VkStencilOp, compareOp: VkCompareOp) -> (),PFN_vkCmdSetStencilOp,c"vkCmdSetStencilOp";
+    CmdSetRasterizerDiscardEnable(commandBuffer: VkCommandBuffer, rasterizerDiscardEnable: VkBool32) -> (),PFN_vkCmdSetRasterizerDiscardEnable,c"vkCmdSetRasterizerDiscardEnable";
+    CmdSetDepthBiasEnable(commandBuffer: VkCommandBuffer, depthBiasEnable: VkBool32) -> (),PFN_vkCmdSetDepthBiasEnable,c"vkCmdSetDepthBiasEnable";
+    CmdSetPrimitiveRestartEnable(commandBuffer: VkCommandBuffer, primitiveRestartEnable: VkBool32) -> (),PFN_vkCmdSetPrimitiveRestartEnable,c"vkCmdSetPrimitiveRestartEnable";
 }
 impl Vulkan_1_3_DeviceDispatch {
     #[inline(always)]
@@ -29463,25 +29464,25 @@ impl Vulkan_1_3_DeviceDispatch {
 // Vulkan 1_4
 dispatch_table! { Vulkan_1_4_DeviceDispatch;
     [inherit: Vulkan_1_3_DeviceDispatch]
-    MapMemory2,PFN_vkMapMemory2,c"vkMapMemory2";
-    UnmapMemory2,PFN_vkUnmapMemory2,c"vkUnmapMemory2";
-    GetDeviceImageSubresourceLayout,PFN_vkGetDeviceImageSubresourceLayout,c"vkGetDeviceImageSubresourceLayout";
-    GetImageSubresourceLayout2,PFN_vkGetImageSubresourceLayout2,c"vkGetImageSubresourceLayout2";
-    CopyMemoryToImage,PFN_vkCopyMemoryToImage,c"vkCopyMemoryToImage";
-    CopyImageToMemory,PFN_vkCopyImageToMemory,c"vkCopyImageToMemory";
-    CopyImageToImage,PFN_vkCopyImageToImage,c"vkCopyImageToImage";
-    TransitionImageLayout,PFN_vkTransitionImageLayout,c"vkTransitionImageLayout";
-    CmdPushDescriptorSet,PFN_vkCmdPushDescriptorSet,c"vkCmdPushDescriptorSet";
-    CmdPushDescriptorSetWithTemplate,PFN_vkCmdPushDescriptorSetWithTemplate,c"vkCmdPushDescriptorSetWithTemplate";
-    CmdBindDescriptorSets2,PFN_vkCmdBindDescriptorSets2,c"vkCmdBindDescriptorSets2";
-    CmdPushConstants2,PFN_vkCmdPushConstants2,c"vkCmdPushConstants2";
-    CmdPushDescriptorSet2,PFN_vkCmdPushDescriptorSet2,c"vkCmdPushDescriptorSet2";
-    CmdPushDescriptorSetWithTemplate2,PFN_vkCmdPushDescriptorSetWithTemplate2,c"vkCmdPushDescriptorSetWithTemplate2";
-    CmdSetLineStipple,PFN_vkCmdSetLineStipple,c"vkCmdSetLineStipple";
-    CmdBindIndexBuffer2,PFN_vkCmdBindIndexBuffer2,c"vkCmdBindIndexBuffer2";
-    GetRenderingAreaGranularity,PFN_vkGetRenderingAreaGranularity,c"vkGetRenderingAreaGranularity";
-    CmdSetRenderingAttachmentLocations,PFN_vkCmdSetRenderingAttachmentLocations,c"vkCmdSetRenderingAttachmentLocations";
-    CmdSetRenderingInputAttachmentIndices,PFN_vkCmdSetRenderingInputAttachmentIndices,c"vkCmdSetRenderingInputAttachmentIndices";
+    MapMemory2(device: VkDevice, pMemoryMapInfo: *const VkMemoryMapInfo, ppData: *mut *mut c_void) -> VkResult,PFN_vkMapMemory2,c"vkMapMemory2";
+    UnmapMemory2(device: VkDevice, pMemoryUnmapInfo: *const VkMemoryUnmapInfo) -> VkResult,PFN_vkUnmapMemory2,c"vkUnmapMemory2";
+    GetDeviceImageSubresourceLayout(device: VkDevice, pInfo: *const VkDeviceImageSubresourceInfo, pLayout: *mut VkSubresourceLayout2) -> (),PFN_vkGetDeviceImageSubresourceLayout,c"vkGetDeviceImageSubresourceLayout";
+    GetImageSubresourceLayout2(device: VkDevice, image: VkImage, pSubresource: *const VkImageSubresource2, pLayout: *mut VkSubresourceLayout2) -> (),PFN_vkGetImageSubresourceLayout2,c"vkGetImageSubresourceLayout2";
+    CopyMemoryToImage(device: VkDevice, pCopyMemoryToImageInfo: *const VkCopyMemoryToImageInfo) -> VkResult,PFN_vkCopyMemoryToImage,c"vkCopyMemoryToImage";
+    CopyImageToMemory(device: VkDevice, pCopyImageToMemoryInfo: *const VkCopyImageToMemoryInfo) -> VkResult,PFN_vkCopyImageToMemory,c"vkCopyImageToMemory";
+    CopyImageToImage(device: VkDevice, pCopyImageToImageInfo: *const VkCopyImageToImageInfo) -> VkResult,PFN_vkCopyImageToImage,c"vkCopyImageToImage";
+    TransitionImageLayout(device: VkDevice, transitionCount: u32, pTransitions: *const VkHostImageLayoutTransitionInfo) -> VkResult,PFN_vkTransitionImageLayout,c"vkTransitionImageLayout";
+    CmdPushDescriptorSet(commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, layout: VkPipelineLayout, set: u32, descriptorWriteCount: u32, pDescriptorWrites: *const VkWriteDescriptorSet) -> (),PFN_vkCmdPushDescriptorSet,c"vkCmdPushDescriptorSet";
+    CmdPushDescriptorSetWithTemplate(commandBuffer: VkCommandBuffer, descriptorUpdateTemplate: VkDescriptorUpdateTemplate, layout: VkPipelineLayout, set: u32, pData: *const c_void) -> (),PFN_vkCmdPushDescriptorSetWithTemplate,c"vkCmdPushDescriptorSetWithTemplate";
+    CmdBindDescriptorSets2(commandBuffer: VkCommandBuffer, pBindDescriptorSetsInfo: *const VkBindDescriptorSetsInfo) -> (),PFN_vkCmdBindDescriptorSets2,c"vkCmdBindDescriptorSets2";
+    CmdPushConstants2(commandBuffer: VkCommandBuffer, pPushConstantsInfo: *const VkPushConstantsInfo) -> (),PFN_vkCmdPushConstants2,c"vkCmdPushConstants2";
+    CmdPushDescriptorSet2(commandBuffer: VkCommandBuffer, pPushDescriptorSetInfo: *const VkPushDescriptorSetInfo) -> (),PFN_vkCmdPushDescriptorSet2,c"vkCmdPushDescriptorSet2";
+    CmdPushDescriptorSetWithTemplate2(commandBuffer: VkCommandBuffer, pPushDescriptorSetWithTemplateInfo: *const VkPushDescriptorSetWithTemplateInfo) -> (),PFN_vkCmdPushDescriptorSetWithTemplate2,c"vkCmdPushDescriptorSetWithTemplate2";
+    CmdSetLineStipple(commandBuffer: VkCommandBuffer, lineStippleFactor: u32, lineStipplePattern: u16) -> (),PFN_vkCmdSetLineStipple,c"vkCmdSetLineStipple";
+    CmdBindIndexBuffer2(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, size: VkDeviceSize, indexType: VkIndexType) -> (),PFN_vkCmdBindIndexBuffer2,c"vkCmdBindIndexBuffer2";
+    GetRenderingAreaGranularity(device: VkDevice, pRenderingAreaInfo: *const VkRenderingAreaInfo, pGranularity: *mut VkExtent2D) -> (),PFN_vkGetRenderingAreaGranularity,c"vkGetRenderingAreaGranularity";
+    CmdSetRenderingAttachmentLocations(commandBuffer: VkCommandBuffer, pLocationInfo: *const VkRenderingAttachmentLocationInfo) -> (),PFN_vkCmdSetRenderingAttachmentLocations,c"vkCmdSetRenderingAttachmentLocations";
+    CmdSetRenderingInputAttachmentIndices(commandBuffer: VkCommandBuffer, pInputAttachmentIndexInfo: *const VkRenderingInputAttachmentIndexInfo) -> (),PFN_vkCmdSetRenderingInputAttachmentIndices,c"vkCmdSetRenderingInputAttachmentIndices";
 }
 impl Vulkan_1_4_DeviceDispatch {
     #[inline(always)]
@@ -29565,11 +29566,11 @@ impl Vulkan_1_4_DeviceDispatch {
 pub mod khr_surface {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        DestroySurfaceKHR,PFN_vkDestroySurfaceKHR,c"vkDestroySurfaceKHR";
-        GetPhysicalDeviceSurfaceSupportKHR,PFN_vkGetPhysicalDeviceSurfaceSupportKHR,c"vkGetPhysicalDeviceSurfaceSupportKHR";
-        GetPhysicalDeviceSurfaceCapabilitiesKHR,PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR,c"vkGetPhysicalDeviceSurfaceCapabilitiesKHR";
-        GetPhysicalDeviceSurfaceFormatsKHR,PFN_vkGetPhysicalDeviceSurfaceFormatsKHR,c"vkGetPhysicalDeviceSurfaceFormatsKHR";
-        GetPhysicalDeviceSurfacePresentModesKHR,PFN_vkGetPhysicalDeviceSurfacePresentModesKHR,c"vkGetPhysicalDeviceSurfacePresentModesKHR";
+        DestroySurfaceKHR(instance: VkInstance, surface: VkSurfaceKHR, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroySurfaceKHR,c"vkDestroySurfaceKHR";
+        GetPhysicalDeviceSurfaceSupportKHR(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, surface: VkSurfaceKHR, pSupported: *mut VkBool32) -> VkResult,PFN_vkGetPhysicalDeviceSurfaceSupportKHR,c"vkGetPhysicalDeviceSurfaceSupportKHR";
+        GetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice: VkPhysicalDevice, surface: VkSurfaceKHR, pSurfaceCapabilities: *mut VkSurfaceCapabilitiesKHR) -> VkResult,PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR,c"vkGetPhysicalDeviceSurfaceCapabilitiesKHR";
+        GetPhysicalDeviceSurfaceFormatsKHR(physicalDevice: VkPhysicalDevice, surface: VkSurfaceKHR, pSurfaceFormatCount: *mut u32, pSurfaceFormats: *mut VkSurfaceFormatKHR) -> VkResult,PFN_vkGetPhysicalDeviceSurfaceFormatsKHR,c"vkGetPhysicalDeviceSurfaceFormatsKHR";
+        GetPhysicalDeviceSurfacePresentModesKHR(physicalDevice: VkPhysicalDevice, surface: VkSurfaceKHR, pPresentModeCount: *mut u32, pPresentModes: *mut VkPresentModeKHR) -> VkResult,PFN_vkGetPhysicalDeviceSurfacePresentModesKHR,c"vkGetPhysicalDeviceSurfacePresentModesKHR";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -29598,11 +29599,11 @@ pub mod khr_surface {
 pub mod khr_swapchain {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CreateSwapchainKHR,PFN_vkCreateSwapchainKHR,c"vkCreateSwapchainKHR";
-        DestroySwapchainKHR,PFN_vkDestroySwapchainKHR,c"vkDestroySwapchainKHR";
-        GetSwapchainImagesKHR,PFN_vkGetSwapchainImagesKHR,c"vkGetSwapchainImagesKHR";
-        AcquireNextImageKHR,PFN_vkAcquireNextImageKHR,c"vkAcquireNextImageKHR";
-        QueuePresentKHR,PFN_vkQueuePresentKHR,c"vkQueuePresentKHR";
+        CreateSwapchainKHR(device: VkDevice, pCreateInfo: *const VkSwapchainCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSwapchain: *mut VkSwapchainKHR) -> VkResult,PFN_vkCreateSwapchainKHR,c"vkCreateSwapchainKHR";
+        DestroySwapchainKHR(device: VkDevice, swapchain: VkSwapchainKHR, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroySwapchainKHR,c"vkDestroySwapchainKHR";
+        GetSwapchainImagesKHR(device: VkDevice, swapchain: VkSwapchainKHR, pSwapchainImageCount: *mut u32, pSwapchainImages: *mut VkImage) -> VkResult,PFN_vkGetSwapchainImagesKHR,c"vkGetSwapchainImagesKHR";
+        AcquireNextImageKHR(device: VkDevice, swapchain: VkSwapchainKHR, timeout: u64, semaphore: VkSemaphore, fence: VkFence, pImageIndex: *mut u32) -> VkResult,PFN_vkAcquireNextImageKHR,c"vkAcquireNextImageKHR";
+        QueuePresentKHR(queue: VkQueue, pPresentInfo: *const VkPresentInfoKHR) -> VkResult,PFN_vkQueuePresentKHR,c"vkQueuePresentKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -29631,13 +29632,13 @@ pub mod khr_swapchain {
 pub mod khr_display {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceDisplayPropertiesKHR,PFN_vkGetPhysicalDeviceDisplayPropertiesKHR,c"vkGetPhysicalDeviceDisplayPropertiesKHR";
-        GetPhysicalDeviceDisplayPlanePropertiesKHR,PFN_vkGetPhysicalDeviceDisplayPlanePropertiesKHR,c"vkGetPhysicalDeviceDisplayPlanePropertiesKHR";
-        GetDisplayPlaneSupportedDisplaysKHR,PFN_vkGetDisplayPlaneSupportedDisplaysKHR,c"vkGetDisplayPlaneSupportedDisplaysKHR";
-        GetDisplayModePropertiesKHR,PFN_vkGetDisplayModePropertiesKHR,c"vkGetDisplayModePropertiesKHR";
-        CreateDisplayModeKHR,PFN_vkCreateDisplayModeKHR,c"vkCreateDisplayModeKHR";
-        GetDisplayPlaneCapabilitiesKHR,PFN_vkGetDisplayPlaneCapabilitiesKHR,c"vkGetDisplayPlaneCapabilitiesKHR";
-        CreateDisplayPlaneSurfaceKHR,PFN_vkCreateDisplayPlaneSurfaceKHR,c"vkCreateDisplayPlaneSurfaceKHR";
+        GetPhysicalDeviceDisplayPropertiesKHR(physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkDisplayPropertiesKHR) -> VkResult,PFN_vkGetPhysicalDeviceDisplayPropertiesKHR,c"vkGetPhysicalDeviceDisplayPropertiesKHR";
+        GetPhysicalDeviceDisplayPlanePropertiesKHR(physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkDisplayPlanePropertiesKHR) -> VkResult,PFN_vkGetPhysicalDeviceDisplayPlanePropertiesKHR,c"vkGetPhysicalDeviceDisplayPlanePropertiesKHR";
+        GetDisplayPlaneSupportedDisplaysKHR(physicalDevice: VkPhysicalDevice, planeIndex: u32, pDisplayCount: *mut u32, pDisplays: *mut VkDisplayKHR) -> VkResult,PFN_vkGetDisplayPlaneSupportedDisplaysKHR,c"vkGetDisplayPlaneSupportedDisplaysKHR";
+        GetDisplayModePropertiesKHR(physicalDevice: VkPhysicalDevice, display: VkDisplayKHR, pPropertyCount: *mut u32, pProperties: *mut VkDisplayModePropertiesKHR) -> VkResult,PFN_vkGetDisplayModePropertiesKHR,c"vkGetDisplayModePropertiesKHR";
+        CreateDisplayModeKHR(physicalDevice: VkPhysicalDevice, display: VkDisplayKHR, pCreateInfo: *const VkDisplayModeCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pMode: *mut VkDisplayModeKHR) -> VkResult,PFN_vkCreateDisplayModeKHR,c"vkCreateDisplayModeKHR";
+        GetDisplayPlaneCapabilitiesKHR(physicalDevice: VkPhysicalDevice, mode: VkDisplayModeKHR, planeIndex: u32, pCapabilities: *mut VkDisplayPlaneCapabilitiesKHR) -> VkResult,PFN_vkGetDisplayPlaneCapabilitiesKHR,c"vkGetDisplayPlaneCapabilitiesKHR";
+        CreateDisplayPlaneSurfaceKHR(instance: VkInstance, pCreateInfo: *const VkDisplaySurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateDisplayPlaneSurfaceKHR,c"vkCreateDisplayPlaneSurfaceKHR";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -29674,7 +29675,7 @@ pub mod khr_display {
 pub mod khr_display_swapchain {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CreateSharedSwapchainsKHR,PFN_vkCreateSharedSwapchainsKHR,c"vkCreateSharedSwapchainsKHR";
+        CreateSharedSwapchainsKHR(device: VkDevice, swapchainCount: u32, pCreateInfos: *const VkSwapchainCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSwapchains: *mut VkSwapchainKHR) -> VkResult,PFN_vkCreateSharedSwapchainsKHR,c"vkCreateSharedSwapchainsKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -29687,8 +29688,8 @@ pub mod khr_display_swapchain {
 pub mod khr_xlib_surface {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        CreateXlibSurfaceKHR,PFN_vkCreateXlibSurfaceKHR,c"vkCreateXlibSurfaceKHR";
-        GetPhysicalDeviceXlibPresentationSupportKHR,PFN_vkGetPhysicalDeviceXlibPresentationSupportKHR,c"vkGetPhysicalDeviceXlibPresentationSupportKHR";
+        CreateXlibSurfaceKHR(instance: VkInstance, pCreateInfo: *const VkXlibSurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateXlibSurfaceKHR,c"vkCreateXlibSurfaceKHR";
+        GetPhysicalDeviceXlibPresentationSupportKHR(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, dpy: *mut Display, visualID: VisualID) -> VkBool32,PFN_vkGetPhysicalDeviceXlibPresentationSupportKHR,c"vkGetPhysicalDeviceXlibPresentationSupportKHR";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -29705,8 +29706,8 @@ pub mod khr_xlib_surface {
 pub mod khr_xcb_surface {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        CreateXcbSurfaceKHR,PFN_vkCreateXcbSurfaceKHR,c"vkCreateXcbSurfaceKHR";
-        GetPhysicalDeviceXcbPresentationSupportKHR,PFN_vkGetPhysicalDeviceXcbPresentationSupportKHR,c"vkGetPhysicalDeviceXcbPresentationSupportKHR";
+        CreateXcbSurfaceKHR(instance: VkInstance, pCreateInfo: *const VkXcbSurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateXcbSurfaceKHR,c"vkCreateXcbSurfaceKHR";
+        GetPhysicalDeviceXcbPresentationSupportKHR(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, connection: *mut xcb_connection_t, visual_id: xcb_visualid_t) -> VkBool32,PFN_vkGetPhysicalDeviceXcbPresentationSupportKHR,c"vkGetPhysicalDeviceXcbPresentationSupportKHR";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -29723,8 +29724,8 @@ pub mod khr_xcb_surface {
 pub mod khr_wayland_surface {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        CreateWaylandSurfaceKHR,PFN_vkCreateWaylandSurfaceKHR,c"vkCreateWaylandSurfaceKHR";
-        GetPhysicalDeviceWaylandPresentationSupportKHR,PFN_vkGetPhysicalDeviceWaylandPresentationSupportKHR,c"vkGetPhysicalDeviceWaylandPresentationSupportKHR";
+        CreateWaylandSurfaceKHR(instance: VkInstance, pCreateInfo: *const VkWaylandSurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateWaylandSurfaceKHR,c"vkCreateWaylandSurfaceKHR";
+        GetPhysicalDeviceWaylandPresentationSupportKHR(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, display: *mut wl_display) -> VkBool32,PFN_vkGetPhysicalDeviceWaylandPresentationSupportKHR,c"vkGetPhysicalDeviceWaylandPresentationSupportKHR";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -29741,7 +29742,7 @@ pub mod khr_wayland_surface {
 pub mod khr_android_surface {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        CreateAndroidSurfaceKHR,PFN_vkCreateAndroidSurfaceKHR,c"vkCreateAndroidSurfaceKHR";
+        CreateAndroidSurfaceKHR(instance: VkInstance, pCreateInfo: *const VkAndroidSurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateAndroidSurfaceKHR,c"vkCreateAndroidSurfaceKHR";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -29754,8 +29755,8 @@ pub mod khr_android_surface {
 pub mod khr_win32_surface {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        CreateWin32SurfaceKHR,PFN_vkCreateWin32SurfaceKHR,c"vkCreateWin32SurfaceKHR";
-        GetPhysicalDeviceWin32PresentationSupportKHR,PFN_vkGetPhysicalDeviceWin32PresentationSupportKHR,c"vkGetPhysicalDeviceWin32PresentationSupportKHR";
+        CreateWin32SurfaceKHR(instance: VkInstance, pCreateInfo: *const VkWin32SurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateWin32SurfaceKHR,c"vkCreateWin32SurfaceKHR";
+        GetPhysicalDeviceWin32PresentationSupportKHR(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32) -> VkBool32,PFN_vkGetPhysicalDeviceWin32PresentationSupportKHR,c"vkGetPhysicalDeviceWin32PresentationSupportKHR";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -29772,9 +29773,9 @@ pub mod khr_win32_surface {
 pub mod ext_debug_report {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        CreateDebugReportCallbackEXT,PFN_vkCreateDebugReportCallbackEXT,c"vkCreateDebugReportCallbackEXT";
-        DestroyDebugReportCallbackEXT,PFN_vkDestroyDebugReportCallbackEXT,c"vkDestroyDebugReportCallbackEXT";
-        DebugReportMessageEXT,PFN_vkDebugReportMessageEXT,c"vkDebugReportMessageEXT";
+        CreateDebugReportCallbackEXT(instance: VkInstance, pCreateInfo: *const VkDebugReportCallbackCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pCallback: *mut VkDebugReportCallbackEXT) -> VkResult,PFN_vkCreateDebugReportCallbackEXT,c"vkCreateDebugReportCallbackEXT";
+        DestroyDebugReportCallbackEXT(instance: VkInstance, callback: VkDebugReportCallbackEXT, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyDebugReportCallbackEXT,c"vkDestroyDebugReportCallbackEXT";
+        DebugReportMessageEXT(instance: VkInstance, flags: VkDebugReportFlagsEXT, objectType: VkDebugReportObjectTypeEXT, object: u64, location: usize, messageCode: i32, pLayerPrefix: *const c_char, pMessage: *const c_char) -> (),PFN_vkDebugReportMessageEXT,c"vkDebugReportMessageEXT";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -29795,11 +29796,11 @@ pub mod ext_debug_report {
 pub mod ext_debug_marker {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        DebugMarkerSetObjectTagEXT,PFN_vkDebugMarkerSetObjectTagEXT,c"vkDebugMarkerSetObjectTagEXT";
-        DebugMarkerSetObjectNameEXT,PFN_vkDebugMarkerSetObjectNameEXT,c"vkDebugMarkerSetObjectNameEXT";
-        CmdDebugMarkerBeginEXT,PFN_vkCmdDebugMarkerBeginEXT,c"vkCmdDebugMarkerBeginEXT";
-        CmdDebugMarkerEndEXT,PFN_vkCmdDebugMarkerEndEXT,c"vkCmdDebugMarkerEndEXT";
-        CmdDebugMarkerInsertEXT,PFN_vkCmdDebugMarkerInsertEXT,c"vkCmdDebugMarkerInsertEXT";
+        DebugMarkerSetObjectTagEXT(device: VkDevice, pTagInfo: *const VkDebugMarkerObjectTagInfoEXT) -> VkResult,PFN_vkDebugMarkerSetObjectTagEXT,c"vkDebugMarkerSetObjectTagEXT";
+        DebugMarkerSetObjectNameEXT(device: VkDevice, pNameInfo: *const VkDebugMarkerObjectNameInfoEXT) -> VkResult,PFN_vkDebugMarkerSetObjectNameEXT,c"vkDebugMarkerSetObjectNameEXT";
+        CmdDebugMarkerBeginEXT(commandBuffer: VkCommandBuffer, pMarkerInfo: *const VkDebugMarkerMarkerInfoEXT) -> (),PFN_vkCmdDebugMarkerBeginEXT,c"vkCmdDebugMarkerBeginEXT";
+        CmdDebugMarkerEndEXT(commandBuffer: VkCommandBuffer) -> (),PFN_vkCmdDebugMarkerEndEXT,c"vkCmdDebugMarkerEndEXT";
+        CmdDebugMarkerInsertEXT(commandBuffer: VkCommandBuffer, pMarkerInfo: *const VkDebugMarkerMarkerInfoEXT) -> (),PFN_vkCmdDebugMarkerInsertEXT,c"vkCmdDebugMarkerInsertEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -29828,8 +29829,8 @@ pub mod ext_debug_marker {
 pub mod khr_video_queue {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceVideoCapabilitiesKHR,PFN_vkGetPhysicalDeviceVideoCapabilitiesKHR,c"vkGetPhysicalDeviceVideoCapabilitiesKHR";
-        GetPhysicalDeviceVideoFormatPropertiesKHR,PFN_vkGetPhysicalDeviceVideoFormatPropertiesKHR,c"vkGetPhysicalDeviceVideoFormatPropertiesKHR";
+        GetPhysicalDeviceVideoCapabilitiesKHR(physicalDevice: VkPhysicalDevice, pVideoProfile: *const VkVideoProfileInfoKHR, pCapabilities: *mut VkVideoCapabilitiesKHR) -> VkResult,PFN_vkGetPhysicalDeviceVideoCapabilitiesKHR,c"vkGetPhysicalDeviceVideoCapabilitiesKHR";
+        GetPhysicalDeviceVideoFormatPropertiesKHR(physicalDevice: VkPhysicalDevice, pVideoFormatInfo: *const VkPhysicalDeviceVideoFormatInfoKHR, pVideoFormatPropertyCount: *mut u32, pVideoFormatProperties: *mut VkVideoFormatPropertiesKHR) -> VkResult,PFN_vkGetPhysicalDeviceVideoFormatPropertiesKHR,c"vkGetPhysicalDeviceVideoFormatPropertiesKHR";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -29842,16 +29843,16 @@ pub mod khr_video_queue {
         }
     }
     dispatch_table! { DeviceDispatch;
-        CreateVideoSessionKHR,PFN_vkCreateVideoSessionKHR,c"vkCreateVideoSessionKHR";
-        DestroyVideoSessionKHR,PFN_vkDestroyVideoSessionKHR,c"vkDestroyVideoSessionKHR";
-        GetVideoSessionMemoryRequirementsKHR,PFN_vkGetVideoSessionMemoryRequirementsKHR,c"vkGetVideoSessionMemoryRequirementsKHR";
-        BindVideoSessionMemoryKHR,PFN_vkBindVideoSessionMemoryKHR,c"vkBindVideoSessionMemoryKHR";
-        CreateVideoSessionParametersKHR,PFN_vkCreateVideoSessionParametersKHR,c"vkCreateVideoSessionParametersKHR";
-        UpdateVideoSessionParametersKHR,PFN_vkUpdateVideoSessionParametersKHR,c"vkUpdateVideoSessionParametersKHR";
-        DestroyVideoSessionParametersKHR,PFN_vkDestroyVideoSessionParametersKHR,c"vkDestroyVideoSessionParametersKHR";
-        CmdBeginVideoCodingKHR,PFN_vkCmdBeginVideoCodingKHR,c"vkCmdBeginVideoCodingKHR";
-        CmdEndVideoCodingKHR,PFN_vkCmdEndVideoCodingKHR,c"vkCmdEndVideoCodingKHR";
-        CmdControlVideoCodingKHR,PFN_vkCmdControlVideoCodingKHR,c"vkCmdControlVideoCodingKHR";
+        CreateVideoSessionKHR(device: VkDevice, pCreateInfo: *const VkVideoSessionCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pVideoSession: *mut VkVideoSessionKHR) -> VkResult,PFN_vkCreateVideoSessionKHR,c"vkCreateVideoSessionKHR";
+        DestroyVideoSessionKHR(device: VkDevice, videoSession: VkVideoSessionKHR, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyVideoSessionKHR,c"vkDestroyVideoSessionKHR";
+        GetVideoSessionMemoryRequirementsKHR(device: VkDevice, videoSession: VkVideoSessionKHR, pMemoryRequirementsCount: *mut u32, pMemoryRequirements: *mut VkVideoSessionMemoryRequirementsKHR) -> VkResult,PFN_vkGetVideoSessionMemoryRequirementsKHR,c"vkGetVideoSessionMemoryRequirementsKHR";
+        BindVideoSessionMemoryKHR(device: VkDevice, videoSession: VkVideoSessionKHR, bindSessionMemoryInfoCount: u32, pBindSessionMemoryInfos: *const VkBindVideoSessionMemoryInfoKHR) -> VkResult,PFN_vkBindVideoSessionMemoryKHR,c"vkBindVideoSessionMemoryKHR";
+        CreateVideoSessionParametersKHR(device: VkDevice, pCreateInfo: *const VkVideoSessionParametersCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pVideoSessionParameters: *mut VkVideoSessionParametersKHR) -> VkResult,PFN_vkCreateVideoSessionParametersKHR,c"vkCreateVideoSessionParametersKHR";
+        UpdateVideoSessionParametersKHR(device: VkDevice, videoSessionParameters: VkVideoSessionParametersKHR, pUpdateInfo: *const VkVideoSessionParametersUpdateInfoKHR) -> VkResult,PFN_vkUpdateVideoSessionParametersKHR,c"vkUpdateVideoSessionParametersKHR";
+        DestroyVideoSessionParametersKHR(device: VkDevice, videoSessionParameters: VkVideoSessionParametersKHR, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyVideoSessionParametersKHR,c"vkDestroyVideoSessionParametersKHR";
+        CmdBeginVideoCodingKHR(commandBuffer: VkCommandBuffer, pBeginInfo: *const VkVideoBeginCodingInfoKHR) -> (),PFN_vkCmdBeginVideoCodingKHR,c"vkCmdBeginVideoCodingKHR";
+        CmdEndVideoCodingKHR(commandBuffer: VkCommandBuffer, pEndCodingInfo: *const VkVideoEndCodingInfoKHR) -> (),PFN_vkCmdEndVideoCodingKHR,c"vkCmdEndVideoCodingKHR";
+        CmdControlVideoCodingKHR(commandBuffer: VkCommandBuffer, pCodingControlInfo: *const VkVideoCodingControlInfoKHR) -> (),PFN_vkCmdControlVideoCodingKHR,c"vkCmdControlVideoCodingKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -29900,7 +29901,7 @@ pub mod khr_video_queue {
 pub mod khr_video_decode_queue {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdDecodeVideoKHR,PFN_vkCmdDecodeVideoKHR,c"vkCmdDecodeVideoKHR";
+        CmdDecodeVideoKHR(commandBuffer: VkCommandBuffer, pDecodeInfo: *const VkVideoDecodeInfoKHR) -> (),PFN_vkCmdDecodeVideoKHR,c"vkCmdDecodeVideoKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -29913,12 +29914,12 @@ pub mod khr_video_decode_queue {
 pub mod ext_transform_feedback {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdBindTransformFeedbackBuffersEXT,PFN_vkCmdBindTransformFeedbackBuffersEXT,c"vkCmdBindTransformFeedbackBuffersEXT";
-        CmdBeginTransformFeedbackEXT,PFN_vkCmdBeginTransformFeedbackEXT,c"vkCmdBeginTransformFeedbackEXT";
-        CmdEndTransformFeedbackEXT,PFN_vkCmdEndTransformFeedbackEXT,c"vkCmdEndTransformFeedbackEXT";
-        CmdBeginQueryIndexedEXT,PFN_vkCmdBeginQueryIndexedEXT,c"vkCmdBeginQueryIndexedEXT";
-        CmdEndQueryIndexedEXT,PFN_vkCmdEndQueryIndexedEXT,c"vkCmdEndQueryIndexedEXT";
-        CmdDrawIndirectByteCountEXT,PFN_vkCmdDrawIndirectByteCountEXT,c"vkCmdDrawIndirectByteCountEXT";
+        CmdBindTransformFeedbackBuffersEXT(commandBuffer: VkCommandBuffer, firstBinding: u32, bindingCount: u32, pBuffers: *const VkBuffer, pOffsets: *const VkDeviceSize, pSizes: *const VkDeviceSize) -> (),PFN_vkCmdBindTransformFeedbackBuffersEXT,c"vkCmdBindTransformFeedbackBuffersEXT";
+        CmdBeginTransformFeedbackEXT(commandBuffer: VkCommandBuffer, firstCounterBuffer: u32, counterBufferCount: u32, pCounterBuffers: *const VkBuffer, pCounterBufferOffsets: *const VkDeviceSize) -> (),PFN_vkCmdBeginTransformFeedbackEXT,c"vkCmdBeginTransformFeedbackEXT";
+        CmdEndTransformFeedbackEXT(commandBuffer: VkCommandBuffer, firstCounterBuffer: u32, counterBufferCount: u32, pCounterBuffers: *const VkBuffer, pCounterBufferOffsets: *const VkDeviceSize) -> (),PFN_vkCmdEndTransformFeedbackEXT,c"vkCmdEndTransformFeedbackEXT";
+        CmdBeginQueryIndexedEXT(commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, query: u32, flags: VkQueryControlFlags, index: u32) -> (),PFN_vkCmdBeginQueryIndexedEXT,c"vkCmdBeginQueryIndexedEXT";
+        CmdEndQueryIndexedEXT(commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, query: u32, index: u32) -> (),PFN_vkCmdEndQueryIndexedEXT,c"vkCmdEndQueryIndexedEXT";
+        CmdDrawIndirectByteCountEXT(commandBuffer: VkCommandBuffer, instanceCount: u32, firstInstance: u32, counterBuffer: VkBuffer, counterBufferOffset: VkDeviceSize, counterOffset: u32, vertexStride: u32) -> (),PFN_vkCmdDrawIndirectByteCountEXT,c"vkCmdDrawIndirectByteCountEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -29951,11 +29952,11 @@ pub mod ext_transform_feedback {
 pub mod nvx_binary_import {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CreateCuModuleNVX,PFN_vkCreateCuModuleNVX,c"vkCreateCuModuleNVX";
-        CreateCuFunctionNVX,PFN_vkCreateCuFunctionNVX,c"vkCreateCuFunctionNVX";
-        DestroyCuModuleNVX,PFN_vkDestroyCuModuleNVX,c"vkDestroyCuModuleNVX";
-        DestroyCuFunctionNVX,PFN_vkDestroyCuFunctionNVX,c"vkDestroyCuFunctionNVX";
-        CmdCuLaunchKernelNVX,PFN_vkCmdCuLaunchKernelNVX,c"vkCmdCuLaunchKernelNVX";
+        CreateCuModuleNVX(device: VkDevice, pCreateInfo: *const VkCuModuleCreateInfoNVX, pAllocator: *const VkAllocationCallbacks, pModule: *mut VkCuModuleNVX) -> VkResult,PFN_vkCreateCuModuleNVX,c"vkCreateCuModuleNVX";
+        CreateCuFunctionNVX(device: VkDevice, pCreateInfo: *const VkCuFunctionCreateInfoNVX, pAllocator: *const VkAllocationCallbacks, pFunction: *mut VkCuFunctionNVX) -> VkResult,PFN_vkCreateCuFunctionNVX,c"vkCreateCuFunctionNVX";
+        DestroyCuModuleNVX(device: VkDevice, module: VkCuModuleNVX, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyCuModuleNVX,c"vkDestroyCuModuleNVX";
+        DestroyCuFunctionNVX(device: VkDevice, function: VkCuFunctionNVX, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyCuFunctionNVX,c"vkDestroyCuFunctionNVX";
+        CmdCuLaunchKernelNVX(commandBuffer: VkCommandBuffer, pLaunchInfo: *const VkCuLaunchInfoNVX) -> (),PFN_vkCmdCuLaunchKernelNVX,c"vkCmdCuLaunchKernelNVX";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -29984,10 +29985,10 @@ pub mod nvx_binary_import {
 pub mod nvx_image_view_handle {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetImageViewHandleNVX,PFN_vkGetImageViewHandleNVX,c"vkGetImageViewHandleNVX";
-        GetImageViewHandle64NVX,PFN_vkGetImageViewHandle64NVX,c"vkGetImageViewHandle64NVX";
-        GetImageViewAddressNVX,PFN_vkGetImageViewAddressNVX,c"vkGetImageViewAddressNVX";
-        GetDeviceCombinedImageSamplerIndexNVX,PFN_vkGetDeviceCombinedImageSamplerIndexNVX,c"vkGetDeviceCombinedImageSamplerIndexNVX";
+        GetImageViewHandleNVX(device: VkDevice, pInfo: *const VkImageViewHandleInfoNVX) -> u32,PFN_vkGetImageViewHandleNVX,c"vkGetImageViewHandleNVX";
+        GetImageViewHandle64NVX(device: VkDevice, pInfo: *const VkImageViewHandleInfoNVX) -> u64,PFN_vkGetImageViewHandle64NVX,c"vkGetImageViewHandle64NVX";
+        GetImageViewAddressNVX(device: VkDevice, imageView: VkImageView, pProperties: *mut VkImageViewAddressPropertiesNVX) -> VkResult,PFN_vkGetImageViewAddressNVX,c"vkGetImageViewAddressNVX";
+        GetDeviceCombinedImageSamplerIndexNVX(device: VkDevice, imageViewIndex: u64, samplerIndex: u64) -> u64,PFN_vkGetDeviceCombinedImageSamplerIndexNVX,c"vkGetDeviceCombinedImageSamplerIndexNVX";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30012,8 +30013,8 @@ pub mod nvx_image_view_handle {
 pub mod amd_draw_indirect_count {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdDrawIndirectCountAMD,PFN_vkCmdDrawIndirectCountAMD,c"vkCmdDrawIndirectCountAMD";
-        CmdDrawIndexedIndirectCountAMD,PFN_vkCmdDrawIndexedIndirectCountAMD,c"vkCmdDrawIndexedIndirectCountAMD";
+        CmdDrawIndirectCountAMD(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, countBuffer: VkBuffer, countBufferOffset: VkDeviceSize, maxDrawCount: u32, stride: u32) -> (),PFN_vkCmdDrawIndirectCountAMD,c"vkCmdDrawIndirectCountAMD";
+        CmdDrawIndexedIndirectCountAMD(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, countBuffer: VkBuffer, countBufferOffset: VkDeviceSize, maxDrawCount: u32, stride: u32) -> (),PFN_vkCmdDrawIndexedIndirectCountAMD,c"vkCmdDrawIndexedIndirectCountAMD";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30030,7 +30031,7 @@ pub mod amd_draw_indirect_count {
 pub mod amd_shader_info {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetShaderInfoAMD,PFN_vkGetShaderInfoAMD,c"vkGetShaderInfoAMD";
+        GetShaderInfoAMD(device: VkDevice, pipeline: VkPipeline, shaderStage: VkShaderStageFlagBits, infoType: VkShaderInfoTypeAMD, pInfoSize: *mut usize, pInfo: *mut c_void) -> VkResult,PFN_vkGetShaderInfoAMD,c"vkGetShaderInfoAMD";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30043,8 +30044,8 @@ pub mod amd_shader_info {
 pub mod khr_dynamic_rendering {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdBeginRenderingKHR,PFN_vkCmdBeginRenderingKHR,c"vkCmdBeginRenderingKHR";
-        CmdEndRenderingKHR,PFN_vkCmdEndRenderingKHR,c"vkCmdEndRenderingKHR";
+        CmdBeginRenderingKHR(commandBuffer: VkCommandBuffer, pRenderingInfo: *const VkRenderingInfo) -> (),PFN_vkCmdBeginRenderingKHR,c"vkCmdBeginRenderingKHR";
+        CmdEndRenderingKHR(commandBuffer: VkCommandBuffer) -> (),PFN_vkCmdEndRenderingKHR,c"vkCmdEndRenderingKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30061,7 +30062,7 @@ pub mod khr_dynamic_rendering {
 pub mod ggp_stream_descriptor_surface {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        CreateStreamDescriptorSurfaceGGP,PFN_vkCreateStreamDescriptorSurfaceGGP,c"vkCreateStreamDescriptorSurfaceGGP";
+        CreateStreamDescriptorSurfaceGGP(instance: VkInstance, pCreateInfo: *const VkStreamDescriptorSurfaceCreateInfoGGP, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateStreamDescriptorSurfaceGGP,c"vkCreateStreamDescriptorSurfaceGGP";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -30074,7 +30075,7 @@ pub mod ggp_stream_descriptor_surface {
 pub mod nv_external_memory_capabilities {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceExternalImageFormatPropertiesNV,PFN_vkGetPhysicalDeviceExternalImageFormatPropertiesNV,c"vkGetPhysicalDeviceExternalImageFormatPropertiesNV";
+        GetPhysicalDeviceExternalImageFormatPropertiesNV(physicalDevice: VkPhysicalDevice, format: VkFormat, r#type: VkImageType, tiling: VkImageTiling, usage: VkImageUsageFlags, flags: VkImageCreateFlags, externalHandleType: VkExternalMemoryHandleTypeFlagsNV, pExternalImageFormatProperties: *mut VkExternalImageFormatPropertiesNV) -> VkResult,PFN_vkGetPhysicalDeviceExternalImageFormatPropertiesNV,c"vkGetPhysicalDeviceExternalImageFormatPropertiesNV";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -30087,7 +30088,7 @@ pub mod nv_external_memory_capabilities {
 pub mod nv_external_memory_win32 {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetMemoryWin32HandleNV,PFN_vkGetMemoryWin32HandleNV,c"vkGetMemoryWin32HandleNV";
+        GetMemoryWin32HandleNV(device: VkDevice, memory: VkDeviceMemory, handleType: VkExternalMemoryHandleTypeFlagsNV, pHandle: *mut HANDLE) -> VkResult,PFN_vkGetMemoryWin32HandleNV,c"vkGetMemoryWin32HandleNV";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30100,13 +30101,13 @@ pub mod nv_external_memory_win32 {
 pub mod khr_get_physical_device_properties2 {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceFeatures2KHR,PFN_vkGetPhysicalDeviceFeatures2KHR,c"vkGetPhysicalDeviceFeatures2KHR";
-        GetPhysicalDeviceProperties2KHR,PFN_vkGetPhysicalDeviceProperties2KHR,c"vkGetPhysicalDeviceProperties2KHR";
-        GetPhysicalDeviceFormatProperties2KHR,PFN_vkGetPhysicalDeviceFormatProperties2KHR,c"vkGetPhysicalDeviceFormatProperties2KHR";
-        GetPhysicalDeviceImageFormatProperties2KHR,PFN_vkGetPhysicalDeviceImageFormatProperties2KHR,c"vkGetPhysicalDeviceImageFormatProperties2KHR";
-        GetPhysicalDeviceQueueFamilyProperties2KHR,PFN_vkGetPhysicalDeviceQueueFamilyProperties2KHR,c"vkGetPhysicalDeviceQueueFamilyProperties2KHR";
-        GetPhysicalDeviceMemoryProperties2KHR,PFN_vkGetPhysicalDeviceMemoryProperties2KHR,c"vkGetPhysicalDeviceMemoryProperties2KHR";
-        GetPhysicalDeviceSparseImageFormatProperties2KHR,PFN_vkGetPhysicalDeviceSparseImageFormatProperties2KHR,c"vkGetPhysicalDeviceSparseImageFormatProperties2KHR";
+        GetPhysicalDeviceFeatures2KHR(physicalDevice: VkPhysicalDevice, pFeatures: *mut VkPhysicalDeviceFeatures2) -> (),PFN_vkGetPhysicalDeviceFeatures2KHR,c"vkGetPhysicalDeviceFeatures2KHR";
+        GetPhysicalDeviceProperties2KHR(physicalDevice: VkPhysicalDevice, pProperties: *mut VkPhysicalDeviceProperties2) -> (),PFN_vkGetPhysicalDeviceProperties2KHR,c"vkGetPhysicalDeviceProperties2KHR";
+        GetPhysicalDeviceFormatProperties2KHR(physicalDevice: VkPhysicalDevice, format: VkFormat, pFormatProperties: *mut VkFormatProperties2) -> (),PFN_vkGetPhysicalDeviceFormatProperties2KHR,c"vkGetPhysicalDeviceFormatProperties2KHR";
+        GetPhysicalDeviceImageFormatProperties2KHR(physicalDevice: VkPhysicalDevice, pImageFormatInfo: *const VkPhysicalDeviceImageFormatInfo2, pImageFormatProperties: *mut VkImageFormatProperties2) -> VkResult,PFN_vkGetPhysicalDeviceImageFormatProperties2KHR,c"vkGetPhysicalDeviceImageFormatProperties2KHR";
+        GetPhysicalDeviceQueueFamilyProperties2KHR(physicalDevice: VkPhysicalDevice, pQueueFamilyPropertyCount: *mut u32, pQueueFamilyProperties: *mut VkQueueFamilyProperties2) -> (),PFN_vkGetPhysicalDeviceQueueFamilyProperties2KHR,c"vkGetPhysicalDeviceQueueFamilyProperties2KHR";
+        GetPhysicalDeviceMemoryProperties2KHR(physicalDevice: VkPhysicalDevice, pMemoryProperties: *mut VkPhysicalDeviceMemoryProperties2) -> (),PFN_vkGetPhysicalDeviceMemoryProperties2KHR,c"vkGetPhysicalDeviceMemoryProperties2KHR";
+        GetPhysicalDeviceSparseImageFormatProperties2KHR(physicalDevice: VkPhysicalDevice, pFormatInfo: *const VkPhysicalDeviceSparseImageFormatInfo2, pPropertyCount: *mut u32, pProperties: *mut VkSparseImageFormatProperties2) -> (),PFN_vkGetPhysicalDeviceSparseImageFormatProperties2KHR,c"vkGetPhysicalDeviceSparseImageFormatProperties2KHR";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -30143,9 +30144,9 @@ pub mod khr_get_physical_device_properties2 {
 pub mod khr_device_group {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetDeviceGroupPeerMemoryFeaturesKHR,PFN_vkGetDeviceGroupPeerMemoryFeaturesKHR,c"vkGetDeviceGroupPeerMemoryFeaturesKHR";
-        CmdSetDeviceMaskKHR,PFN_vkCmdSetDeviceMaskKHR,c"vkCmdSetDeviceMaskKHR";
-        CmdDispatchBaseKHR,PFN_vkCmdDispatchBaseKHR,c"vkCmdDispatchBaseKHR";
+        GetDeviceGroupPeerMemoryFeaturesKHR(device: VkDevice, heapIndex: u32, localDeviceIndex: u32, remoteDeviceIndex: u32, pPeerMemoryFeatures: *mut VkPeerMemoryFeatureFlags) -> (),PFN_vkGetDeviceGroupPeerMemoryFeaturesKHR,c"vkGetDeviceGroupPeerMemoryFeaturesKHR";
+        CmdSetDeviceMaskKHR(commandBuffer: VkCommandBuffer, deviceMask: u32) -> (),PFN_vkCmdSetDeviceMaskKHR,c"vkCmdSetDeviceMaskKHR";
+        CmdDispatchBaseKHR(commandBuffer: VkCommandBuffer, baseGroupX: u32, baseGroupY: u32, baseGroupZ: u32, groupCountX: u32, groupCountY: u32, groupCountZ: u32) -> (),PFN_vkCmdDispatchBaseKHR,c"vkCmdDispatchBaseKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30166,7 +30167,7 @@ pub mod khr_device_group {
 pub mod nn_vi_surface {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        CreateViSurfaceNN,PFN_vkCreateViSurfaceNN,c"vkCreateViSurfaceNN";
+        CreateViSurfaceNN(instance: VkInstance, pCreateInfo: *const VkViSurfaceCreateInfoNN, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateViSurfaceNN,c"vkCreateViSurfaceNN";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -30179,7 +30180,7 @@ pub mod nn_vi_surface {
 pub mod khr_maintenance1 {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        TrimCommandPoolKHR,PFN_vkTrimCommandPoolKHR,c"vkTrimCommandPoolKHR";
+        TrimCommandPoolKHR(device: VkDevice, commandPool: VkCommandPool, flags: VkCommandPoolTrimFlags) -> (),PFN_vkTrimCommandPoolKHR,c"vkTrimCommandPoolKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30192,7 +30193,7 @@ pub mod khr_maintenance1 {
 pub mod khr_device_group_creation {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        EnumeratePhysicalDeviceGroupsKHR,PFN_vkEnumeratePhysicalDeviceGroupsKHR,c"vkEnumeratePhysicalDeviceGroupsKHR";
+        EnumeratePhysicalDeviceGroupsKHR(instance: VkInstance, pPhysicalDeviceGroupCount: *mut u32, pPhysicalDeviceGroupProperties: *mut VkPhysicalDeviceGroupProperties) -> VkResult,PFN_vkEnumeratePhysicalDeviceGroupsKHR,c"vkEnumeratePhysicalDeviceGroupsKHR";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -30205,7 +30206,7 @@ pub mod khr_device_group_creation {
 pub mod khr_external_memory_capabilities {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceExternalBufferPropertiesKHR,PFN_vkGetPhysicalDeviceExternalBufferPropertiesKHR,c"vkGetPhysicalDeviceExternalBufferPropertiesKHR";
+        GetPhysicalDeviceExternalBufferPropertiesKHR(physicalDevice: VkPhysicalDevice, pExternalBufferInfo: *const VkPhysicalDeviceExternalBufferInfo, pExternalBufferProperties: *mut VkExternalBufferProperties) -> (),PFN_vkGetPhysicalDeviceExternalBufferPropertiesKHR,c"vkGetPhysicalDeviceExternalBufferPropertiesKHR";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -30218,8 +30219,8 @@ pub mod khr_external_memory_capabilities {
 pub mod khr_external_memory_win32 {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetMemoryWin32HandleKHR,PFN_vkGetMemoryWin32HandleKHR,c"vkGetMemoryWin32HandleKHR";
-        GetMemoryWin32HandlePropertiesKHR,PFN_vkGetMemoryWin32HandlePropertiesKHR,c"vkGetMemoryWin32HandlePropertiesKHR";
+        GetMemoryWin32HandleKHR(device: VkDevice, pGetWin32HandleInfo: *const VkMemoryGetWin32HandleInfoKHR, pHandle: *mut HANDLE) -> VkResult,PFN_vkGetMemoryWin32HandleKHR,c"vkGetMemoryWin32HandleKHR";
+        GetMemoryWin32HandlePropertiesKHR(device: VkDevice, handleType: VkExternalMemoryHandleTypeFlagBits, handle: HANDLE, pMemoryWin32HandleProperties: *mut VkMemoryWin32HandlePropertiesKHR) -> VkResult,PFN_vkGetMemoryWin32HandlePropertiesKHR,c"vkGetMemoryWin32HandlePropertiesKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30236,8 +30237,8 @@ pub mod khr_external_memory_win32 {
 pub mod khr_external_memory_fd {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetMemoryFdKHR,PFN_vkGetMemoryFdKHR,c"vkGetMemoryFdKHR";
-        GetMemoryFdPropertiesKHR,PFN_vkGetMemoryFdPropertiesKHR,c"vkGetMemoryFdPropertiesKHR";
+        GetMemoryFdKHR(device: VkDevice, pGetFdInfo: *const VkMemoryGetFdInfoKHR, pFd: *mut c_int) -> VkResult,PFN_vkGetMemoryFdKHR,c"vkGetMemoryFdKHR";
+        GetMemoryFdPropertiesKHR(device: VkDevice, handleType: VkExternalMemoryHandleTypeFlagBits, fd: c_int, pMemoryFdProperties: *mut VkMemoryFdPropertiesKHR) -> VkResult,PFN_vkGetMemoryFdPropertiesKHR,c"vkGetMemoryFdPropertiesKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30254,7 +30255,7 @@ pub mod khr_external_memory_fd {
 pub mod khr_external_semaphore_capabilities {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceExternalSemaphorePropertiesKHR,PFN_vkGetPhysicalDeviceExternalSemaphorePropertiesKHR,c"vkGetPhysicalDeviceExternalSemaphorePropertiesKHR";
+        GetPhysicalDeviceExternalSemaphorePropertiesKHR(physicalDevice: VkPhysicalDevice, pExternalSemaphoreInfo: *const VkPhysicalDeviceExternalSemaphoreInfo, pExternalSemaphoreProperties: *mut VkExternalSemaphoreProperties) -> (),PFN_vkGetPhysicalDeviceExternalSemaphorePropertiesKHR,c"vkGetPhysicalDeviceExternalSemaphorePropertiesKHR";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -30267,8 +30268,8 @@ pub mod khr_external_semaphore_capabilities {
 pub mod khr_external_semaphore_win32 {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        ImportSemaphoreWin32HandleKHR,PFN_vkImportSemaphoreWin32HandleKHR,c"vkImportSemaphoreWin32HandleKHR";
-        GetSemaphoreWin32HandleKHR,PFN_vkGetSemaphoreWin32HandleKHR,c"vkGetSemaphoreWin32HandleKHR";
+        ImportSemaphoreWin32HandleKHR(device: VkDevice, pImportSemaphoreWin32HandleInfo: *const VkImportSemaphoreWin32HandleInfoKHR) -> VkResult,PFN_vkImportSemaphoreWin32HandleKHR,c"vkImportSemaphoreWin32HandleKHR";
+        GetSemaphoreWin32HandleKHR(device: VkDevice, pGetWin32HandleInfo: *const VkSemaphoreGetWin32HandleInfoKHR, pHandle: *mut HANDLE) -> VkResult,PFN_vkGetSemaphoreWin32HandleKHR,c"vkGetSemaphoreWin32HandleKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30285,8 +30286,8 @@ pub mod khr_external_semaphore_win32 {
 pub mod khr_external_semaphore_fd {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        ImportSemaphoreFdKHR,PFN_vkImportSemaphoreFdKHR,c"vkImportSemaphoreFdKHR";
-        GetSemaphoreFdKHR,PFN_vkGetSemaphoreFdKHR,c"vkGetSemaphoreFdKHR";
+        ImportSemaphoreFdKHR(device: VkDevice, pImportSemaphoreFdInfo: *const VkImportSemaphoreFdInfoKHR) -> VkResult,PFN_vkImportSemaphoreFdKHR,c"vkImportSemaphoreFdKHR";
+        GetSemaphoreFdKHR(device: VkDevice, pGetFdInfo: *const VkSemaphoreGetFdInfoKHR, pFd: *mut c_int) -> VkResult,PFN_vkGetSemaphoreFdKHR,c"vkGetSemaphoreFdKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30303,7 +30304,7 @@ pub mod khr_external_semaphore_fd {
 pub mod khr_push_descriptor {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdPushDescriptorSetKHR,PFN_vkCmdPushDescriptorSetKHR,c"vkCmdPushDescriptorSetKHR";
+        CmdPushDescriptorSetKHR(commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, layout: VkPipelineLayout, set: u32, descriptorWriteCount: u32, pDescriptorWrites: *const VkWriteDescriptorSet) -> (),PFN_vkCmdPushDescriptorSetKHR,c"vkCmdPushDescriptorSetKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30316,8 +30317,8 @@ pub mod khr_push_descriptor {
 pub mod ext_conditional_rendering {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdBeginConditionalRenderingEXT,PFN_vkCmdBeginConditionalRenderingEXT,c"vkCmdBeginConditionalRenderingEXT";
-        CmdEndConditionalRenderingEXT,PFN_vkCmdEndConditionalRenderingEXT,c"vkCmdEndConditionalRenderingEXT";
+        CmdBeginConditionalRenderingEXT(commandBuffer: VkCommandBuffer, pConditionalRenderingBegin: *const VkConditionalRenderingBeginInfoEXT) -> (),PFN_vkCmdBeginConditionalRenderingEXT,c"vkCmdBeginConditionalRenderingEXT";
+        CmdEndConditionalRenderingEXT(commandBuffer: VkCommandBuffer) -> (),PFN_vkCmdEndConditionalRenderingEXT,c"vkCmdEndConditionalRenderingEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30334,9 +30335,9 @@ pub mod ext_conditional_rendering {
 pub mod khr_descriptor_update_template {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CreateDescriptorUpdateTemplateKHR,PFN_vkCreateDescriptorUpdateTemplateKHR,c"vkCreateDescriptorUpdateTemplateKHR";
-        DestroyDescriptorUpdateTemplateKHR,PFN_vkDestroyDescriptorUpdateTemplateKHR,c"vkDestroyDescriptorUpdateTemplateKHR";
-        UpdateDescriptorSetWithTemplateKHR,PFN_vkUpdateDescriptorSetWithTemplateKHR,c"vkUpdateDescriptorSetWithTemplateKHR";
+        CreateDescriptorUpdateTemplateKHR(device: VkDevice, pCreateInfo: *const VkDescriptorUpdateTemplateCreateInfo, pAllocator: *const VkAllocationCallbacks, pDescriptorUpdateTemplate: *mut VkDescriptorUpdateTemplate) -> VkResult,PFN_vkCreateDescriptorUpdateTemplateKHR,c"vkCreateDescriptorUpdateTemplateKHR";
+        DestroyDescriptorUpdateTemplateKHR(device: VkDevice, descriptorUpdateTemplate: VkDescriptorUpdateTemplate, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyDescriptorUpdateTemplateKHR,c"vkDestroyDescriptorUpdateTemplateKHR";
+        UpdateDescriptorSetWithTemplateKHR(device: VkDevice, descriptorSet: VkDescriptorSet, descriptorUpdateTemplate: VkDescriptorUpdateTemplate, pData: *const c_void) -> (),PFN_vkUpdateDescriptorSetWithTemplateKHR,c"vkUpdateDescriptorSetWithTemplateKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30357,7 +30358,7 @@ pub mod khr_descriptor_update_template {
 pub mod nv_clip_space_w_scaling {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdSetViewportWScalingNV,PFN_vkCmdSetViewportWScalingNV,c"vkCmdSetViewportWScalingNV";
+        CmdSetViewportWScalingNV(commandBuffer: VkCommandBuffer, firstViewport: u32, viewportCount: u32, pViewportWScalings: *const VkViewportWScalingNV) -> (),PFN_vkCmdSetViewportWScalingNV,c"vkCmdSetViewportWScalingNV";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30370,7 +30371,7 @@ pub mod nv_clip_space_w_scaling {
 pub mod ext_direct_mode_display {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        ReleaseDisplayEXT,PFN_vkReleaseDisplayEXT,c"vkReleaseDisplayEXT";
+        ReleaseDisplayEXT(physicalDevice: VkPhysicalDevice, display: VkDisplayKHR) -> VkResult,PFN_vkReleaseDisplayEXT,c"vkReleaseDisplayEXT";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -30383,8 +30384,8 @@ pub mod ext_direct_mode_display {
 pub mod ext_acquire_xlib_display {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        AcquireXlibDisplayEXT,PFN_vkAcquireXlibDisplayEXT,c"vkAcquireXlibDisplayEXT";
-        GetRandROutputDisplayEXT,PFN_vkGetRandROutputDisplayEXT,c"vkGetRandROutputDisplayEXT";
+        AcquireXlibDisplayEXT(physicalDevice: VkPhysicalDevice, dpy: *mut Display, display: VkDisplayKHR) -> VkResult,PFN_vkAcquireXlibDisplayEXT,c"vkAcquireXlibDisplayEXT";
+        GetRandROutputDisplayEXT(physicalDevice: VkPhysicalDevice, dpy: *mut Display, rrOutput: RROutput, pDisplay: *mut VkDisplayKHR) -> VkResult,PFN_vkGetRandROutputDisplayEXT,c"vkGetRandROutputDisplayEXT";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -30401,7 +30402,7 @@ pub mod ext_acquire_xlib_display {
 pub mod ext_display_surface_counter {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceSurfaceCapabilities2EXT,PFN_vkGetPhysicalDeviceSurfaceCapabilities2EXT,c"vkGetPhysicalDeviceSurfaceCapabilities2EXT";
+        GetPhysicalDeviceSurfaceCapabilities2EXT(physicalDevice: VkPhysicalDevice, surface: VkSurfaceKHR, pSurfaceCapabilities: *mut VkSurfaceCapabilities2EXT) -> VkResult,PFN_vkGetPhysicalDeviceSurfaceCapabilities2EXT,c"vkGetPhysicalDeviceSurfaceCapabilities2EXT";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -30414,10 +30415,10 @@ pub mod ext_display_surface_counter {
 pub mod ext_display_control {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        DisplayPowerControlEXT,PFN_vkDisplayPowerControlEXT,c"vkDisplayPowerControlEXT";
-        RegisterDeviceEventEXT,PFN_vkRegisterDeviceEventEXT,c"vkRegisterDeviceEventEXT";
-        RegisterDisplayEventEXT,PFN_vkRegisterDisplayEventEXT,c"vkRegisterDisplayEventEXT";
-        GetSwapchainCounterEXT,PFN_vkGetSwapchainCounterEXT,c"vkGetSwapchainCounterEXT";
+        DisplayPowerControlEXT(device: VkDevice, display: VkDisplayKHR, pDisplayPowerInfo: *const VkDisplayPowerInfoEXT) -> VkResult,PFN_vkDisplayPowerControlEXT,c"vkDisplayPowerControlEXT";
+        RegisterDeviceEventEXT(device: VkDevice, pDeviceEventInfo: *const VkDeviceEventInfoEXT, pAllocator: *const VkAllocationCallbacks, pFence: *mut VkFence) -> VkResult,PFN_vkRegisterDeviceEventEXT,c"vkRegisterDeviceEventEXT";
+        RegisterDisplayEventEXT(device: VkDevice, display: VkDisplayKHR, pDisplayEventInfo: *const VkDisplayEventInfoEXT, pAllocator: *const VkAllocationCallbacks, pFence: *mut VkFence) -> VkResult,PFN_vkRegisterDisplayEventEXT,c"vkRegisterDisplayEventEXT";
+        GetSwapchainCounterEXT(device: VkDevice, swapchain: VkSwapchainKHR, counter: VkSurfaceCounterFlagBitsEXT, pCounterValue: *mut u64) -> VkResult,PFN_vkGetSwapchainCounterEXT,c"vkGetSwapchainCounterEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30442,8 +30443,8 @@ pub mod ext_display_control {
 pub mod google_display_timing {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetRefreshCycleDurationGOOGLE,PFN_vkGetRefreshCycleDurationGOOGLE,c"vkGetRefreshCycleDurationGOOGLE";
-        GetPastPresentationTimingGOOGLE,PFN_vkGetPastPresentationTimingGOOGLE,c"vkGetPastPresentationTimingGOOGLE";
+        GetRefreshCycleDurationGOOGLE(device: VkDevice, swapchain: VkSwapchainKHR, pDisplayTimingProperties: *mut VkRefreshCycleDurationGOOGLE) -> VkResult,PFN_vkGetRefreshCycleDurationGOOGLE,c"vkGetRefreshCycleDurationGOOGLE";
+        GetPastPresentationTimingGOOGLE(device: VkDevice, swapchain: VkSwapchainKHR, pPresentationTimingCount: *mut u32, pPresentationTimings: *mut VkPastPresentationTimingGOOGLE) -> VkResult,PFN_vkGetPastPresentationTimingGOOGLE,c"vkGetPastPresentationTimingGOOGLE";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30460,9 +30461,9 @@ pub mod google_display_timing {
 pub mod ext_discard_rectangles {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdSetDiscardRectangleEXT,PFN_vkCmdSetDiscardRectangleEXT,c"vkCmdSetDiscardRectangleEXT";
-        CmdSetDiscardRectangleEnableEXT,PFN_vkCmdSetDiscardRectangleEnableEXT,c"vkCmdSetDiscardRectangleEnableEXT";
-        CmdSetDiscardRectangleModeEXT,PFN_vkCmdSetDiscardRectangleModeEXT,c"vkCmdSetDiscardRectangleModeEXT";
+        CmdSetDiscardRectangleEXT(commandBuffer: VkCommandBuffer, firstDiscardRectangle: u32, discardRectangleCount: u32, pDiscardRectangles: *const VkRect2D) -> (),PFN_vkCmdSetDiscardRectangleEXT,c"vkCmdSetDiscardRectangleEXT";
+        CmdSetDiscardRectangleEnableEXT(commandBuffer: VkCommandBuffer, discardRectangleEnable: VkBool32) -> (),PFN_vkCmdSetDiscardRectangleEnableEXT,c"vkCmdSetDiscardRectangleEnableEXT";
+        CmdSetDiscardRectangleModeEXT(commandBuffer: VkCommandBuffer, discardRectangleMode: VkDiscardRectangleModeEXT) -> (),PFN_vkCmdSetDiscardRectangleModeEXT,c"vkCmdSetDiscardRectangleModeEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30483,7 +30484,7 @@ pub mod ext_discard_rectangles {
 pub mod ext_hdr_metadata {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        SetHdrMetadataEXT,PFN_vkSetHdrMetadataEXT,c"vkSetHdrMetadataEXT";
+        SetHdrMetadataEXT(device: VkDevice, swapchainCount: u32, pSwapchains: *const VkSwapchainKHR, pMetadata: *const VkHdrMetadataEXT) -> (),PFN_vkSetHdrMetadataEXT,c"vkSetHdrMetadataEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30496,10 +30497,10 @@ pub mod ext_hdr_metadata {
 pub mod khr_create_renderpass2 {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CreateRenderPass2KHR,PFN_vkCreateRenderPass2KHR,c"vkCreateRenderPass2KHR";
-        CmdBeginRenderPass2KHR,PFN_vkCmdBeginRenderPass2KHR,c"vkCmdBeginRenderPass2KHR";
-        CmdNextSubpass2KHR,PFN_vkCmdNextSubpass2KHR,c"vkCmdNextSubpass2KHR";
-        CmdEndRenderPass2KHR,PFN_vkCmdEndRenderPass2KHR,c"vkCmdEndRenderPass2KHR";
+        CreateRenderPass2KHR(device: VkDevice, pCreateInfo: *const VkRenderPassCreateInfo2, pAllocator: *const VkAllocationCallbacks, pRenderPass: *mut VkRenderPass) -> VkResult,PFN_vkCreateRenderPass2KHR,c"vkCreateRenderPass2KHR";
+        CmdBeginRenderPass2KHR(commandBuffer: VkCommandBuffer, pRenderPassBegin: *const VkRenderPassBeginInfo, pSubpassBeginInfo: *const VkSubpassBeginInfo) -> (),PFN_vkCmdBeginRenderPass2KHR,c"vkCmdBeginRenderPass2KHR";
+        CmdNextSubpass2KHR(commandBuffer: VkCommandBuffer, pSubpassBeginInfo: *const VkSubpassBeginInfo, pSubpassEndInfo: *const VkSubpassEndInfo) -> (),PFN_vkCmdNextSubpass2KHR,c"vkCmdNextSubpass2KHR";
+        CmdEndRenderPass2KHR(commandBuffer: VkCommandBuffer, pSubpassEndInfo: *const VkSubpassEndInfo) -> (),PFN_vkCmdEndRenderPass2KHR,c"vkCmdEndRenderPass2KHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30524,7 +30525,7 @@ pub mod khr_create_renderpass2 {
 pub mod khr_shared_presentable_image {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetSwapchainStatusKHR,PFN_vkGetSwapchainStatusKHR,c"vkGetSwapchainStatusKHR";
+        GetSwapchainStatusKHR(device: VkDevice, swapchain: VkSwapchainKHR) -> VkResult,PFN_vkGetSwapchainStatusKHR,c"vkGetSwapchainStatusKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30537,7 +30538,7 @@ pub mod khr_shared_presentable_image {
 pub mod khr_external_fence_capabilities {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceExternalFencePropertiesKHR,PFN_vkGetPhysicalDeviceExternalFencePropertiesKHR,c"vkGetPhysicalDeviceExternalFencePropertiesKHR";
+        GetPhysicalDeviceExternalFencePropertiesKHR(physicalDevice: VkPhysicalDevice, pExternalFenceInfo: *const VkPhysicalDeviceExternalFenceInfo, pExternalFenceProperties: *mut VkExternalFenceProperties) -> (),PFN_vkGetPhysicalDeviceExternalFencePropertiesKHR,c"vkGetPhysicalDeviceExternalFencePropertiesKHR";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -30550,8 +30551,8 @@ pub mod khr_external_fence_capabilities {
 pub mod khr_external_fence_win32 {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        ImportFenceWin32HandleKHR,PFN_vkImportFenceWin32HandleKHR,c"vkImportFenceWin32HandleKHR";
-        GetFenceWin32HandleKHR,PFN_vkGetFenceWin32HandleKHR,c"vkGetFenceWin32HandleKHR";
+        ImportFenceWin32HandleKHR(device: VkDevice, pImportFenceWin32HandleInfo: *const VkImportFenceWin32HandleInfoKHR) -> VkResult,PFN_vkImportFenceWin32HandleKHR,c"vkImportFenceWin32HandleKHR";
+        GetFenceWin32HandleKHR(device: VkDevice, pGetWin32HandleInfo: *const VkFenceGetWin32HandleInfoKHR, pHandle: *mut HANDLE) -> VkResult,PFN_vkGetFenceWin32HandleKHR,c"vkGetFenceWin32HandleKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30568,8 +30569,8 @@ pub mod khr_external_fence_win32 {
 pub mod khr_external_fence_fd {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        ImportFenceFdKHR,PFN_vkImportFenceFdKHR,c"vkImportFenceFdKHR";
-        GetFenceFdKHR,PFN_vkGetFenceFdKHR,c"vkGetFenceFdKHR";
+        ImportFenceFdKHR(device: VkDevice, pImportFenceFdInfo: *const VkImportFenceFdInfoKHR) -> VkResult,PFN_vkImportFenceFdKHR,c"vkImportFenceFdKHR";
+        GetFenceFdKHR(device: VkDevice, pGetFdInfo: *const VkFenceGetFdInfoKHR, pFd: *mut c_int) -> VkResult,PFN_vkGetFenceFdKHR,c"vkGetFenceFdKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30586,8 +30587,8 @@ pub mod khr_external_fence_fd {
 pub mod khr_performance_query {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        EnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR,PFN_vkEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR,c"vkEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR";
-        GetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR,PFN_vkGetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR,c"vkGetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR";
+        EnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, pCounterCount: *mut u32, pCounters: *mut VkPerformanceCounterKHR, pCounterDescriptions: *mut VkPerformanceCounterDescriptionKHR) -> VkResult,PFN_vkEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR,c"vkEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR";
+        GetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR(physicalDevice: VkPhysicalDevice, pPerformanceQueryCreateInfo: *const VkQueryPoolPerformanceCreateInfoKHR, pNumPasses: *mut u32) -> (),PFN_vkGetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR,c"vkGetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -30600,8 +30601,8 @@ pub mod khr_performance_query {
         }
     }
     dispatch_table! { DeviceDispatch;
-        AcquireProfilingLockKHR,PFN_vkAcquireProfilingLockKHR,c"vkAcquireProfilingLockKHR";
-        ReleaseProfilingLockKHR,PFN_vkReleaseProfilingLockKHR,c"vkReleaseProfilingLockKHR";
+        AcquireProfilingLockKHR(device: VkDevice, pInfo: *const VkAcquireProfilingLockInfoKHR) -> VkResult,PFN_vkAcquireProfilingLockKHR,c"vkAcquireProfilingLockKHR";
+        ReleaseProfilingLockKHR(device: VkDevice) -> (),PFN_vkReleaseProfilingLockKHR,c"vkReleaseProfilingLockKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30618,8 +30619,8 @@ pub mod khr_performance_query {
 pub mod khr_get_surface_capabilities2 {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceSurfaceCapabilities2KHR,PFN_vkGetPhysicalDeviceSurfaceCapabilities2KHR,c"vkGetPhysicalDeviceSurfaceCapabilities2KHR";
-        GetPhysicalDeviceSurfaceFormats2KHR,PFN_vkGetPhysicalDeviceSurfaceFormats2KHR,c"vkGetPhysicalDeviceSurfaceFormats2KHR";
+        GetPhysicalDeviceSurfaceCapabilities2KHR(physicalDevice: VkPhysicalDevice, pSurfaceInfo: *const VkPhysicalDeviceSurfaceInfo2KHR, pSurfaceCapabilities: *mut VkSurfaceCapabilities2KHR) -> VkResult,PFN_vkGetPhysicalDeviceSurfaceCapabilities2KHR,c"vkGetPhysicalDeviceSurfaceCapabilities2KHR";
+        GetPhysicalDeviceSurfaceFormats2KHR(physicalDevice: VkPhysicalDevice, pSurfaceInfo: *const VkPhysicalDeviceSurfaceInfo2KHR, pSurfaceFormatCount: *mut u32, pSurfaceFormats: *mut VkSurfaceFormat2KHR) -> VkResult,PFN_vkGetPhysicalDeviceSurfaceFormats2KHR,c"vkGetPhysicalDeviceSurfaceFormats2KHR";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -30636,10 +30637,10 @@ pub mod khr_get_surface_capabilities2 {
 pub mod khr_get_display_properties2 {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceDisplayProperties2KHR,PFN_vkGetPhysicalDeviceDisplayProperties2KHR,c"vkGetPhysicalDeviceDisplayProperties2KHR";
-        GetPhysicalDeviceDisplayPlaneProperties2KHR,PFN_vkGetPhysicalDeviceDisplayPlaneProperties2KHR,c"vkGetPhysicalDeviceDisplayPlaneProperties2KHR";
-        GetDisplayModeProperties2KHR,PFN_vkGetDisplayModeProperties2KHR,c"vkGetDisplayModeProperties2KHR";
-        GetDisplayPlaneCapabilities2KHR,PFN_vkGetDisplayPlaneCapabilities2KHR,c"vkGetDisplayPlaneCapabilities2KHR";
+        GetPhysicalDeviceDisplayProperties2KHR(physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkDisplayProperties2KHR) -> VkResult,PFN_vkGetPhysicalDeviceDisplayProperties2KHR,c"vkGetPhysicalDeviceDisplayProperties2KHR";
+        GetPhysicalDeviceDisplayPlaneProperties2KHR(physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkDisplayPlaneProperties2KHR) -> VkResult,PFN_vkGetPhysicalDeviceDisplayPlaneProperties2KHR,c"vkGetPhysicalDeviceDisplayPlaneProperties2KHR";
+        GetDisplayModeProperties2KHR(physicalDevice: VkPhysicalDevice, display: VkDisplayKHR, pPropertyCount: *mut u32, pProperties: *mut VkDisplayModeProperties2KHR) -> VkResult,PFN_vkGetDisplayModeProperties2KHR,c"vkGetDisplayModeProperties2KHR";
+        GetDisplayPlaneCapabilities2KHR(physicalDevice: VkPhysicalDevice, pDisplayPlaneInfo: *const VkDisplayPlaneInfo2KHR, pCapabilities: *mut VkDisplayPlaneCapabilities2KHR) -> VkResult,PFN_vkGetDisplayPlaneCapabilities2KHR,c"vkGetDisplayPlaneCapabilities2KHR";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -30664,7 +30665,7 @@ pub mod khr_get_display_properties2 {
 pub mod mvk_ios_surface {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        CreateIOSSurfaceMVK,PFN_vkCreateIOSSurfaceMVK,c"vkCreateIOSSurfaceMVK";
+        CreateIOSSurfaceMVK(instance: VkInstance, pCreateInfo: *const VkIOSSurfaceCreateInfoMVK, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateIOSSurfaceMVK,c"vkCreateIOSSurfaceMVK";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -30677,7 +30678,7 @@ pub mod mvk_ios_surface {
 pub mod mvk_macos_surface {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        CreateMacOSSurfaceMVK,PFN_vkCreateMacOSSurfaceMVK,c"vkCreateMacOSSurfaceMVK";
+        CreateMacOSSurfaceMVK(instance: VkInstance, pCreateInfo: *const VkMacOSSurfaceCreateInfoMVK, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateMacOSSurfaceMVK,c"vkCreateMacOSSurfaceMVK";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -30690,9 +30691,9 @@ pub mod mvk_macos_surface {
 pub mod ext_debug_utils {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        CreateDebugUtilsMessengerEXT,PFN_vkCreateDebugUtilsMessengerEXT,c"vkCreateDebugUtilsMessengerEXT";
-        DestroyDebugUtilsMessengerEXT,PFN_vkDestroyDebugUtilsMessengerEXT,c"vkDestroyDebugUtilsMessengerEXT";
-        SubmitDebugUtilsMessageEXT,PFN_vkSubmitDebugUtilsMessageEXT,c"vkSubmitDebugUtilsMessageEXT";
+        CreateDebugUtilsMessengerEXT(instance: VkInstance, pCreateInfo: *const VkDebugUtilsMessengerCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pMessenger: *mut VkDebugUtilsMessengerEXT) -> VkResult,PFN_vkCreateDebugUtilsMessengerEXT,c"vkCreateDebugUtilsMessengerEXT";
+        DestroyDebugUtilsMessengerEXT(instance: VkInstance, messenger: VkDebugUtilsMessengerEXT, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyDebugUtilsMessengerEXT,c"vkDestroyDebugUtilsMessengerEXT";
+        SubmitDebugUtilsMessageEXT(instance: VkInstance, messageSeverity: VkDebugUtilsMessageSeverityFlagBitsEXT, messageTypes: VkDebugUtilsMessageTypeFlagsEXT, pCallbackData: *const VkDebugUtilsMessengerCallbackDataEXT) -> (),PFN_vkSubmitDebugUtilsMessageEXT,c"vkSubmitDebugUtilsMessageEXT";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -30709,14 +30710,14 @@ pub mod ext_debug_utils {
         }
     }
     dispatch_table! { DeviceDispatch;
-        SetDebugUtilsObjectNameEXT,PFN_vkSetDebugUtilsObjectNameEXT,c"vkSetDebugUtilsObjectNameEXT";
-        SetDebugUtilsObjectTagEXT,PFN_vkSetDebugUtilsObjectTagEXT,c"vkSetDebugUtilsObjectTagEXT";
-        QueueBeginDebugUtilsLabelEXT,PFN_vkQueueBeginDebugUtilsLabelEXT,c"vkQueueBeginDebugUtilsLabelEXT";
-        QueueEndDebugUtilsLabelEXT,PFN_vkQueueEndDebugUtilsLabelEXT,c"vkQueueEndDebugUtilsLabelEXT";
-        QueueInsertDebugUtilsLabelEXT,PFN_vkQueueInsertDebugUtilsLabelEXT,c"vkQueueInsertDebugUtilsLabelEXT";
-        CmdBeginDebugUtilsLabelEXT,PFN_vkCmdBeginDebugUtilsLabelEXT,c"vkCmdBeginDebugUtilsLabelEXT";
-        CmdEndDebugUtilsLabelEXT,PFN_vkCmdEndDebugUtilsLabelEXT,c"vkCmdEndDebugUtilsLabelEXT";
-        CmdInsertDebugUtilsLabelEXT,PFN_vkCmdInsertDebugUtilsLabelEXT,c"vkCmdInsertDebugUtilsLabelEXT";
+        SetDebugUtilsObjectNameEXT(device: VkDevice, pNameInfo: *const VkDebugUtilsObjectNameInfoEXT) -> VkResult,PFN_vkSetDebugUtilsObjectNameEXT,c"vkSetDebugUtilsObjectNameEXT";
+        SetDebugUtilsObjectTagEXT(device: VkDevice, pTagInfo: *const VkDebugUtilsObjectTagInfoEXT) -> VkResult,PFN_vkSetDebugUtilsObjectTagEXT,c"vkSetDebugUtilsObjectTagEXT";
+        QueueBeginDebugUtilsLabelEXT(queue: VkQueue, pLabelInfo: *const VkDebugUtilsLabelEXT) -> (),PFN_vkQueueBeginDebugUtilsLabelEXT,c"vkQueueBeginDebugUtilsLabelEXT";
+        QueueEndDebugUtilsLabelEXT(queue: VkQueue) -> (),PFN_vkQueueEndDebugUtilsLabelEXT,c"vkQueueEndDebugUtilsLabelEXT";
+        QueueInsertDebugUtilsLabelEXT(queue: VkQueue, pLabelInfo: *const VkDebugUtilsLabelEXT) -> (),PFN_vkQueueInsertDebugUtilsLabelEXT,c"vkQueueInsertDebugUtilsLabelEXT";
+        CmdBeginDebugUtilsLabelEXT(commandBuffer: VkCommandBuffer, pLabelInfo: *const VkDebugUtilsLabelEXT) -> (),PFN_vkCmdBeginDebugUtilsLabelEXT,c"vkCmdBeginDebugUtilsLabelEXT";
+        CmdEndDebugUtilsLabelEXT(commandBuffer: VkCommandBuffer) -> (),PFN_vkCmdEndDebugUtilsLabelEXT,c"vkCmdEndDebugUtilsLabelEXT";
+        CmdInsertDebugUtilsLabelEXT(commandBuffer: VkCommandBuffer, pLabelInfo: *const VkDebugUtilsLabelEXT) -> (),PFN_vkCmdInsertDebugUtilsLabelEXT,c"vkCmdInsertDebugUtilsLabelEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30757,8 +30758,8 @@ pub mod ext_debug_utils {
 pub mod android_external_memory_android_hardware_buffer {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetAndroidHardwareBufferPropertiesANDROID,PFN_vkGetAndroidHardwareBufferPropertiesANDROID,c"vkGetAndroidHardwareBufferPropertiesANDROID";
-        GetMemoryAndroidHardwareBufferANDROID,PFN_vkGetMemoryAndroidHardwareBufferANDROID,c"vkGetMemoryAndroidHardwareBufferANDROID";
+        GetAndroidHardwareBufferPropertiesANDROID(device: VkDevice, buffer: *const AHardwareBuffer, pProperties: *mut VkAndroidHardwareBufferPropertiesANDROID) -> VkResult,PFN_vkGetAndroidHardwareBufferPropertiesANDROID,c"vkGetAndroidHardwareBufferPropertiesANDROID";
+        GetMemoryAndroidHardwareBufferANDROID(device: VkDevice, pInfo: *const VkMemoryGetAndroidHardwareBufferInfoANDROID, pBuffer: *mut *mut AHardwareBuffer) -> VkResult,PFN_vkGetMemoryAndroidHardwareBufferANDROID,c"vkGetMemoryAndroidHardwareBufferANDROID";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30775,18 +30776,18 @@ pub mod android_external_memory_android_hardware_buffer {
 pub mod amd_gpa_interface {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CreateGpaSessionAMD,PFN_vkCreateGpaSessionAMD,c"vkCreateGpaSessionAMD";
-        DestroyGpaSessionAMD,PFN_vkDestroyGpaSessionAMD,c"vkDestroyGpaSessionAMD";
-        SetGpaDeviceClockModeAMD,PFN_vkSetGpaDeviceClockModeAMD,c"vkSetGpaDeviceClockModeAMD";
-        GetGpaDeviceClockInfoAMD,PFN_vkGetGpaDeviceClockInfoAMD,c"vkGetGpaDeviceClockInfoAMD";
-        CmdBeginGpaSessionAMD,PFN_vkCmdBeginGpaSessionAMD,c"vkCmdBeginGpaSessionAMD";
-        CmdEndGpaSessionAMD,PFN_vkCmdEndGpaSessionAMD,c"vkCmdEndGpaSessionAMD";
-        CmdBeginGpaSampleAMD,PFN_vkCmdBeginGpaSampleAMD,c"vkCmdBeginGpaSampleAMD";
-        CmdEndGpaSampleAMD,PFN_vkCmdEndGpaSampleAMD,c"vkCmdEndGpaSampleAMD";
-        GetGpaSessionStatusAMD,PFN_vkGetGpaSessionStatusAMD,c"vkGetGpaSessionStatusAMD";
-        GetGpaSessionResultsAMD,PFN_vkGetGpaSessionResultsAMD,c"vkGetGpaSessionResultsAMD";
-        ResetGpaSessionAMD,PFN_vkResetGpaSessionAMD,c"vkResetGpaSessionAMD";
-        CmdCopyGpaSessionResultsAMD,PFN_vkCmdCopyGpaSessionResultsAMD,c"vkCmdCopyGpaSessionResultsAMD";
+        CreateGpaSessionAMD(device: VkDevice, pCreateInfo: *const VkGpaSessionCreateInfoAMD, pAllocator: *const VkAllocationCallbacks, pGpaSession: *mut VkGpaSessionAMD) -> VkResult,PFN_vkCreateGpaSessionAMD,c"vkCreateGpaSessionAMD";
+        DestroyGpaSessionAMD(device: VkDevice, gpaSession: VkGpaSessionAMD, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyGpaSessionAMD,c"vkDestroyGpaSessionAMD";
+        SetGpaDeviceClockModeAMD(device: VkDevice, pInfo: *mut VkGpaDeviceClockModeInfoAMD) -> VkResult,PFN_vkSetGpaDeviceClockModeAMD,c"vkSetGpaDeviceClockModeAMD";
+        GetGpaDeviceClockInfoAMD(device: VkDevice, pInfo: *mut VkGpaDeviceGetClockInfoAMD) -> VkResult,PFN_vkGetGpaDeviceClockInfoAMD,c"vkGetGpaDeviceClockInfoAMD";
+        CmdBeginGpaSessionAMD(commandBuffer: VkCommandBuffer, gpaSession: VkGpaSessionAMD) -> VkResult,PFN_vkCmdBeginGpaSessionAMD,c"vkCmdBeginGpaSessionAMD";
+        CmdEndGpaSessionAMD(commandBuffer: VkCommandBuffer, gpaSession: VkGpaSessionAMD) -> VkResult,PFN_vkCmdEndGpaSessionAMD,c"vkCmdEndGpaSessionAMD";
+        CmdBeginGpaSampleAMD(commandBuffer: VkCommandBuffer, gpaSession: VkGpaSessionAMD, pGpaSampleBeginInfo: *const VkGpaSampleBeginInfoAMD, pSampleID: *mut u32) -> VkResult,PFN_vkCmdBeginGpaSampleAMD,c"vkCmdBeginGpaSampleAMD";
+        CmdEndGpaSampleAMD(commandBuffer: VkCommandBuffer, gpaSession: VkGpaSessionAMD, sampleID: u32) -> (),PFN_vkCmdEndGpaSampleAMD,c"vkCmdEndGpaSampleAMD";
+        GetGpaSessionStatusAMD(device: VkDevice, gpaSession: VkGpaSessionAMD) -> VkResult,PFN_vkGetGpaSessionStatusAMD,c"vkGetGpaSessionStatusAMD";
+        GetGpaSessionResultsAMD(device: VkDevice, gpaSession: VkGpaSessionAMD, sampleID: u32, pSizeInBytes: *mut usize, pData: *mut c_void) -> VkResult,PFN_vkGetGpaSessionResultsAMD,c"vkGetGpaSessionResultsAMD";
+        ResetGpaSessionAMD(device: VkDevice, gpaSession: VkGpaSessionAMD) -> VkResult,PFN_vkResetGpaSessionAMD,c"vkResetGpaSessionAMD";
+        CmdCopyGpaSessionResultsAMD(commandBuffer: VkCommandBuffer, gpaSession: VkGpaSessionAMD) -> (),PFN_vkCmdCopyGpaSessionResultsAMD,c"vkCmdCopyGpaSessionResultsAMD";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30843,13 +30844,13 @@ pub mod amd_gpa_interface {
 pub mod amdx_shader_enqueue {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CreateExecutionGraphPipelinesAMDX,PFN_vkCreateExecutionGraphPipelinesAMDX,c"vkCreateExecutionGraphPipelinesAMDX";
-        GetExecutionGraphPipelineScratchSizeAMDX,PFN_vkGetExecutionGraphPipelineScratchSizeAMDX,c"vkGetExecutionGraphPipelineScratchSizeAMDX";
-        GetExecutionGraphPipelineNodeIndexAMDX,PFN_vkGetExecutionGraphPipelineNodeIndexAMDX,c"vkGetExecutionGraphPipelineNodeIndexAMDX";
-        CmdInitializeGraphScratchMemoryAMDX,PFN_vkCmdInitializeGraphScratchMemoryAMDX,c"vkCmdInitializeGraphScratchMemoryAMDX";
-        CmdDispatchGraphAMDX,PFN_vkCmdDispatchGraphAMDX,c"vkCmdDispatchGraphAMDX";
-        CmdDispatchGraphIndirectAMDX,PFN_vkCmdDispatchGraphIndirectAMDX,c"vkCmdDispatchGraphIndirectAMDX";
-        CmdDispatchGraphIndirectCountAMDX,PFN_vkCmdDispatchGraphIndirectCountAMDX,c"vkCmdDispatchGraphIndirectCountAMDX";
+        CreateExecutionGraphPipelinesAMDX(device: VkDevice, pipelineCache: VkPipelineCache, createInfoCount: u32, pCreateInfos: *const VkExecutionGraphPipelineCreateInfoAMDX, pAllocator: *const VkAllocationCallbacks, pPipelines: *mut VkPipeline) -> VkResult,PFN_vkCreateExecutionGraphPipelinesAMDX,c"vkCreateExecutionGraphPipelinesAMDX";
+        GetExecutionGraphPipelineScratchSizeAMDX(device: VkDevice, executionGraph: VkPipeline, pSizeInfo: *mut VkExecutionGraphPipelineScratchSizeAMDX) -> VkResult,PFN_vkGetExecutionGraphPipelineScratchSizeAMDX,c"vkGetExecutionGraphPipelineScratchSizeAMDX";
+        GetExecutionGraphPipelineNodeIndexAMDX(device: VkDevice, executionGraph: VkPipeline, pNodeInfo: *const VkPipelineShaderStageNodeCreateInfoAMDX, pNodeIndex: *mut u32) -> VkResult,PFN_vkGetExecutionGraphPipelineNodeIndexAMDX,c"vkGetExecutionGraphPipelineNodeIndexAMDX";
+        CmdInitializeGraphScratchMemoryAMDX(commandBuffer: VkCommandBuffer, executionGraph: VkPipeline, scratch: VkDeviceAddress, scratchSize: VkDeviceSize) -> (),PFN_vkCmdInitializeGraphScratchMemoryAMDX,c"vkCmdInitializeGraphScratchMemoryAMDX";
+        CmdDispatchGraphAMDX(commandBuffer: VkCommandBuffer, scratch: VkDeviceAddress, scratchSize: VkDeviceSize, pCountInfo: *const VkDispatchGraphCountInfoAMDX) -> (),PFN_vkCmdDispatchGraphAMDX,c"vkCmdDispatchGraphAMDX";
+        CmdDispatchGraphIndirectAMDX(commandBuffer: VkCommandBuffer, scratch: VkDeviceAddress, scratchSize: VkDeviceSize, pCountInfo: *const VkDispatchGraphCountInfoAMDX) -> (),PFN_vkCmdDispatchGraphIndirectAMDX,c"vkCmdDispatchGraphIndirectAMDX";
+        CmdDispatchGraphIndirectCountAMDX(commandBuffer: VkCommandBuffer, scratch: VkDeviceAddress, scratchSize: VkDeviceSize, countInfo: VkDeviceAddress) -> (),PFN_vkCmdDispatchGraphIndirectCountAMDX,c"vkCmdDispatchGraphIndirectCountAMDX";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30886,7 +30887,7 @@ pub mod amdx_shader_enqueue {
 pub mod ext_descriptor_heap {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceDescriptorSizeEXT,PFN_vkGetPhysicalDeviceDescriptorSizeEXT,c"vkGetPhysicalDeviceDescriptorSizeEXT";
+        GetPhysicalDeviceDescriptorSizeEXT(physicalDevice: VkPhysicalDevice, descriptorType: VkDescriptorType) -> VkDeviceSize,PFN_vkGetPhysicalDeviceDescriptorSizeEXT,c"vkGetPhysicalDeviceDescriptorSizeEXT";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -30895,12 +30896,12 @@ pub mod ext_descriptor_heap {
         }
     }
     dispatch_table! { DeviceDispatch;
-        WriteSamplerDescriptorsEXT,PFN_vkWriteSamplerDescriptorsEXT,c"vkWriteSamplerDescriptorsEXT";
-        WriteResourceDescriptorsEXT,PFN_vkWriteResourceDescriptorsEXT,c"vkWriteResourceDescriptorsEXT";
-        CmdBindSamplerHeapEXT,PFN_vkCmdBindSamplerHeapEXT,c"vkCmdBindSamplerHeapEXT";
-        CmdBindResourceHeapEXT,PFN_vkCmdBindResourceHeapEXT,c"vkCmdBindResourceHeapEXT";
-        CmdPushDataEXT,PFN_vkCmdPushDataEXT,c"vkCmdPushDataEXT";
-        GetImageOpaqueCaptureDataEXT,PFN_vkGetImageOpaqueCaptureDataEXT,c"vkGetImageOpaqueCaptureDataEXT";
+        WriteSamplerDescriptorsEXT(device: VkDevice, samplerCount: u32, pSamplers: *const VkSamplerCreateInfo, pDescriptors: *const VkHostAddressRangeEXT) -> VkResult,PFN_vkWriteSamplerDescriptorsEXT,c"vkWriteSamplerDescriptorsEXT";
+        WriteResourceDescriptorsEXT(device: VkDevice, resourceCount: u32, pResources: *const VkResourceDescriptorInfoEXT, pDescriptors: *const VkHostAddressRangeEXT) -> VkResult,PFN_vkWriteResourceDescriptorsEXT,c"vkWriteResourceDescriptorsEXT";
+        CmdBindSamplerHeapEXT(commandBuffer: VkCommandBuffer, pBindInfo: *const VkBindHeapInfoEXT) -> (),PFN_vkCmdBindSamplerHeapEXT,c"vkCmdBindSamplerHeapEXT";
+        CmdBindResourceHeapEXT(commandBuffer: VkCommandBuffer, pBindInfo: *const VkBindHeapInfoEXT) -> (),PFN_vkCmdBindResourceHeapEXT,c"vkCmdBindResourceHeapEXT";
+        CmdPushDataEXT(commandBuffer: VkCommandBuffer, pPushDataInfo: *const VkPushDataInfoEXT) -> (),PFN_vkCmdPushDataEXT,c"vkCmdPushDataEXT";
+        GetImageOpaqueCaptureDataEXT(device: VkDevice, imageCount: u32, pImages: *const VkImage, pDatas: *mut VkHostAddressRangeEXT) -> VkResult,PFN_vkGetImageOpaqueCaptureDataEXT,c"vkGetImageOpaqueCaptureDataEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30933,7 +30934,7 @@ pub mod ext_descriptor_heap {
 pub mod ext_sample_locations {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceMultisamplePropertiesEXT,PFN_vkGetPhysicalDeviceMultisamplePropertiesEXT,c"vkGetPhysicalDeviceMultisamplePropertiesEXT";
+        GetPhysicalDeviceMultisamplePropertiesEXT(physicalDevice: VkPhysicalDevice, samples: VkSampleCountFlagBits, pMultisampleProperties: *mut VkMultisamplePropertiesEXT) -> (),PFN_vkGetPhysicalDeviceMultisamplePropertiesEXT,c"vkGetPhysicalDeviceMultisamplePropertiesEXT";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -30942,7 +30943,7 @@ pub mod ext_sample_locations {
         }
     }
     dispatch_table! { DeviceDispatch;
-        CmdSetSampleLocationsEXT,PFN_vkCmdSetSampleLocationsEXT,c"vkCmdSetSampleLocationsEXT";
+        CmdSetSampleLocationsEXT(commandBuffer: VkCommandBuffer, pSampleLocationsInfo: *const VkSampleLocationsInfoEXT) -> (),PFN_vkCmdSetSampleLocationsEXT,c"vkCmdSetSampleLocationsEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30955,9 +30956,9 @@ pub mod ext_sample_locations {
 pub mod khr_get_memory_requirements2 {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetImageMemoryRequirements2KHR,PFN_vkGetImageMemoryRequirements2KHR,c"vkGetImageMemoryRequirements2KHR";
-        GetBufferMemoryRequirements2KHR,PFN_vkGetBufferMemoryRequirements2KHR,c"vkGetBufferMemoryRequirements2KHR";
-        GetImageSparseMemoryRequirements2KHR,PFN_vkGetImageSparseMemoryRequirements2KHR,c"vkGetImageSparseMemoryRequirements2KHR";
+        GetImageMemoryRequirements2KHR(device: VkDevice, pInfo: *const VkImageMemoryRequirementsInfo2, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetImageMemoryRequirements2KHR,c"vkGetImageMemoryRequirements2KHR";
+        GetBufferMemoryRequirements2KHR(device: VkDevice, pInfo: *const VkBufferMemoryRequirementsInfo2, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetBufferMemoryRequirements2KHR,c"vkGetBufferMemoryRequirements2KHR";
+        GetImageSparseMemoryRequirements2KHR(device: VkDevice, pInfo: *const VkImageSparseMemoryRequirementsInfo2, pSparseMemoryRequirementCount: *mut u32, pSparseMemoryRequirements: *mut VkSparseImageMemoryRequirements2) -> (),PFN_vkGetImageSparseMemoryRequirements2KHR,c"vkGetImageSparseMemoryRequirements2KHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -30978,22 +30979,22 @@ pub mod khr_get_memory_requirements2 {
 pub mod khr_acceleration_structure {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CreateAccelerationStructureKHR,PFN_vkCreateAccelerationStructureKHR,c"vkCreateAccelerationStructureKHR";
-        DestroyAccelerationStructureKHR,PFN_vkDestroyAccelerationStructureKHR,c"vkDestroyAccelerationStructureKHR";
-        CmdBuildAccelerationStructuresKHR,PFN_vkCmdBuildAccelerationStructuresKHR,c"vkCmdBuildAccelerationStructuresKHR";
-        CmdBuildAccelerationStructuresIndirectKHR,PFN_vkCmdBuildAccelerationStructuresIndirectKHR,c"vkCmdBuildAccelerationStructuresIndirectKHR";
-        BuildAccelerationStructuresKHR,PFN_vkBuildAccelerationStructuresKHR,c"vkBuildAccelerationStructuresKHR";
-        CopyAccelerationStructureKHR,PFN_vkCopyAccelerationStructureKHR,c"vkCopyAccelerationStructureKHR";
-        CopyAccelerationStructureToMemoryKHR,PFN_vkCopyAccelerationStructureToMemoryKHR,c"vkCopyAccelerationStructureToMemoryKHR";
-        CopyMemoryToAccelerationStructureKHR,PFN_vkCopyMemoryToAccelerationStructureKHR,c"vkCopyMemoryToAccelerationStructureKHR";
-        WriteAccelerationStructuresPropertiesKHR,PFN_vkWriteAccelerationStructuresPropertiesKHR,c"vkWriteAccelerationStructuresPropertiesKHR";
-        CmdCopyAccelerationStructureKHR,PFN_vkCmdCopyAccelerationStructureKHR,c"vkCmdCopyAccelerationStructureKHR";
-        CmdCopyAccelerationStructureToMemoryKHR,PFN_vkCmdCopyAccelerationStructureToMemoryKHR,c"vkCmdCopyAccelerationStructureToMemoryKHR";
-        CmdCopyMemoryToAccelerationStructureKHR,PFN_vkCmdCopyMemoryToAccelerationStructureKHR,c"vkCmdCopyMemoryToAccelerationStructureKHR";
-        GetAccelerationStructureDeviceAddressKHR,PFN_vkGetAccelerationStructureDeviceAddressKHR,c"vkGetAccelerationStructureDeviceAddressKHR";
-        CmdWriteAccelerationStructuresPropertiesKHR,PFN_vkCmdWriteAccelerationStructuresPropertiesKHR,c"vkCmdWriteAccelerationStructuresPropertiesKHR";
-        GetDeviceAccelerationStructureCompatibilityKHR,PFN_vkGetDeviceAccelerationStructureCompatibilityKHR,c"vkGetDeviceAccelerationStructureCompatibilityKHR";
-        GetAccelerationStructureBuildSizesKHR,PFN_vkGetAccelerationStructureBuildSizesKHR,c"vkGetAccelerationStructureBuildSizesKHR";
+        CreateAccelerationStructureKHR(device: VkDevice, pCreateInfo: *const VkAccelerationStructureCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pAccelerationStructure: *mut VkAccelerationStructureKHR) -> VkResult,PFN_vkCreateAccelerationStructureKHR,c"vkCreateAccelerationStructureKHR";
+        DestroyAccelerationStructureKHR(device: VkDevice, accelerationStructure: VkAccelerationStructureKHR, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyAccelerationStructureKHR,c"vkDestroyAccelerationStructureKHR";
+        CmdBuildAccelerationStructuresKHR(commandBuffer: VkCommandBuffer, infoCount: u32, pInfos: *const VkAccelerationStructureBuildGeometryInfoKHR, ppBuildRangeInfos: *const *const VkAccelerationStructureBuildRangeInfoKHR) -> (),PFN_vkCmdBuildAccelerationStructuresKHR,c"vkCmdBuildAccelerationStructuresKHR";
+        CmdBuildAccelerationStructuresIndirectKHR(commandBuffer: VkCommandBuffer, infoCount: u32, pInfos: *const VkAccelerationStructureBuildGeometryInfoKHR, pIndirectDeviceAddresses: *const VkDeviceAddress, pIndirectStrides: *const u32, ppMaxPrimitiveCounts: *const *const u32) -> (),PFN_vkCmdBuildAccelerationStructuresIndirectKHR,c"vkCmdBuildAccelerationStructuresIndirectKHR";
+        BuildAccelerationStructuresKHR(device: VkDevice, deferredOperation: VkDeferredOperationKHR, infoCount: u32, pInfos: *const VkAccelerationStructureBuildGeometryInfoKHR, ppBuildRangeInfos: *const *const VkAccelerationStructureBuildRangeInfoKHR) -> VkResult,PFN_vkBuildAccelerationStructuresKHR,c"vkBuildAccelerationStructuresKHR";
+        CopyAccelerationStructureKHR(device: VkDevice, deferredOperation: VkDeferredOperationKHR, pInfo: *const VkCopyAccelerationStructureInfoKHR) -> VkResult,PFN_vkCopyAccelerationStructureKHR,c"vkCopyAccelerationStructureKHR";
+        CopyAccelerationStructureToMemoryKHR(device: VkDevice, deferredOperation: VkDeferredOperationKHR, pInfo: *const VkCopyAccelerationStructureToMemoryInfoKHR) -> VkResult,PFN_vkCopyAccelerationStructureToMemoryKHR,c"vkCopyAccelerationStructureToMemoryKHR";
+        CopyMemoryToAccelerationStructureKHR(device: VkDevice, deferredOperation: VkDeferredOperationKHR, pInfo: *const VkCopyMemoryToAccelerationStructureInfoKHR) -> VkResult,PFN_vkCopyMemoryToAccelerationStructureKHR,c"vkCopyMemoryToAccelerationStructureKHR";
+        WriteAccelerationStructuresPropertiesKHR(device: VkDevice, accelerationStructureCount: u32, pAccelerationStructures: *const VkAccelerationStructureKHR, queryType: VkQueryType, dataSize: usize, pData: *mut c_void, stride: usize) -> VkResult,PFN_vkWriteAccelerationStructuresPropertiesKHR,c"vkWriteAccelerationStructuresPropertiesKHR";
+        CmdCopyAccelerationStructureKHR(commandBuffer: VkCommandBuffer, pInfo: *const VkCopyAccelerationStructureInfoKHR) -> (),PFN_vkCmdCopyAccelerationStructureKHR,c"vkCmdCopyAccelerationStructureKHR";
+        CmdCopyAccelerationStructureToMemoryKHR(commandBuffer: VkCommandBuffer, pInfo: *const VkCopyAccelerationStructureToMemoryInfoKHR) -> (),PFN_vkCmdCopyAccelerationStructureToMemoryKHR,c"vkCmdCopyAccelerationStructureToMemoryKHR";
+        CmdCopyMemoryToAccelerationStructureKHR(commandBuffer: VkCommandBuffer, pInfo: *const VkCopyMemoryToAccelerationStructureInfoKHR) -> (),PFN_vkCmdCopyMemoryToAccelerationStructureKHR,c"vkCmdCopyMemoryToAccelerationStructureKHR";
+        GetAccelerationStructureDeviceAddressKHR(device: VkDevice, pInfo: *const VkAccelerationStructureDeviceAddressInfoKHR) -> VkDeviceAddress,PFN_vkGetAccelerationStructureDeviceAddressKHR,c"vkGetAccelerationStructureDeviceAddressKHR";
+        CmdWriteAccelerationStructuresPropertiesKHR(commandBuffer: VkCommandBuffer, accelerationStructureCount: u32, pAccelerationStructures: *const VkAccelerationStructureKHR, queryType: VkQueryType, queryPool: VkQueryPool, firstQuery: u32) -> (),PFN_vkCmdWriteAccelerationStructuresPropertiesKHR,c"vkCmdWriteAccelerationStructuresPropertiesKHR";
+        GetDeviceAccelerationStructureCompatibilityKHR(device: VkDevice, pVersionInfo: *const VkAccelerationStructureVersionInfoKHR, pCompatibility: *mut VkAccelerationStructureCompatibilityKHR) -> (),PFN_vkGetDeviceAccelerationStructureCompatibilityKHR,c"vkGetDeviceAccelerationStructureCompatibilityKHR";
+        GetAccelerationStructureBuildSizesKHR(device: VkDevice, buildType: VkAccelerationStructureBuildTypeKHR, pBuildInfo: *const VkAccelerationStructureBuildGeometryInfoKHR, pMaxPrimitiveCounts: *const u32, pSizeInfo: *mut VkAccelerationStructureBuildSizesInfoKHR) -> (),PFN_vkGetAccelerationStructureBuildSizesKHR,c"vkGetAccelerationStructureBuildSizesKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31066,13 +31067,13 @@ pub mod khr_acceleration_structure {
 pub mod khr_ray_tracing_pipeline {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdTraceRaysKHR,PFN_vkCmdTraceRaysKHR,c"vkCmdTraceRaysKHR";
-        CreateRayTracingPipelinesKHR,PFN_vkCreateRayTracingPipelinesKHR,c"vkCreateRayTracingPipelinesKHR";
-        GetRayTracingShaderGroupHandlesKHR,PFN_vkGetRayTracingShaderGroupHandlesKHR,c"vkGetRayTracingShaderGroupHandlesKHR";
-        GetRayTracingCaptureReplayShaderGroupHandlesKHR,PFN_vkGetRayTracingCaptureReplayShaderGroupHandlesKHR,c"vkGetRayTracingCaptureReplayShaderGroupHandlesKHR";
-        CmdTraceRaysIndirectKHR,PFN_vkCmdTraceRaysIndirectKHR,c"vkCmdTraceRaysIndirectKHR";
-        GetRayTracingShaderGroupStackSizeKHR,PFN_vkGetRayTracingShaderGroupStackSizeKHR,c"vkGetRayTracingShaderGroupStackSizeKHR";
-        CmdSetRayTracingPipelineStackSizeKHR,PFN_vkCmdSetRayTracingPipelineStackSizeKHR,c"vkCmdSetRayTracingPipelineStackSizeKHR";
+        CmdTraceRaysKHR(commandBuffer: VkCommandBuffer, pRaygenShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, pMissShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, pHitShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, pCallableShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, width: u32, height: u32, depth: u32) -> (),PFN_vkCmdTraceRaysKHR,c"vkCmdTraceRaysKHR";
+        CreateRayTracingPipelinesKHR(device: VkDevice, deferredOperation: VkDeferredOperationKHR, pipelineCache: VkPipelineCache, createInfoCount: u32, pCreateInfos: *const VkRayTracingPipelineCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pPipelines: *mut VkPipeline) -> VkResult,PFN_vkCreateRayTracingPipelinesKHR,c"vkCreateRayTracingPipelinesKHR";
+        GetRayTracingShaderGroupHandlesKHR(device: VkDevice, pipeline: VkPipeline, firstGroup: u32, groupCount: u32, dataSize: usize, pData: *mut c_void) -> VkResult,PFN_vkGetRayTracingShaderGroupHandlesKHR,c"vkGetRayTracingShaderGroupHandlesKHR";
+        GetRayTracingCaptureReplayShaderGroupHandlesKHR(device: VkDevice, pipeline: VkPipeline, firstGroup: u32, groupCount: u32, dataSize: usize, pData: *mut c_void) -> VkResult,PFN_vkGetRayTracingCaptureReplayShaderGroupHandlesKHR,c"vkGetRayTracingCaptureReplayShaderGroupHandlesKHR";
+        CmdTraceRaysIndirectKHR(commandBuffer: VkCommandBuffer, pRaygenShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, pMissShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, pHitShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, pCallableShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, indirectDeviceAddress: VkDeviceAddress) -> (),PFN_vkCmdTraceRaysIndirectKHR,c"vkCmdTraceRaysIndirectKHR";
+        GetRayTracingShaderGroupStackSizeKHR(device: VkDevice, pipeline: VkPipeline, group: u32, groupShader: VkShaderGroupShaderKHR) -> VkDeviceSize,PFN_vkGetRayTracingShaderGroupStackSizeKHR,c"vkGetRayTracingShaderGroupStackSizeKHR";
+        CmdSetRayTracingPipelineStackSizeKHR(commandBuffer: VkCommandBuffer, pipelineStackSize: u32) -> (),PFN_vkCmdSetRayTracingPipelineStackSizeKHR,c"vkCmdSetRayTracingPipelineStackSizeKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31109,8 +31110,8 @@ pub mod khr_ray_tracing_pipeline {
 pub mod khr_sampler_ycbcr_conversion {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CreateSamplerYcbcrConversionKHR,PFN_vkCreateSamplerYcbcrConversionKHR,c"vkCreateSamplerYcbcrConversionKHR";
-        DestroySamplerYcbcrConversionKHR,PFN_vkDestroySamplerYcbcrConversionKHR,c"vkDestroySamplerYcbcrConversionKHR";
+        CreateSamplerYcbcrConversionKHR(device: VkDevice, pCreateInfo: *const VkSamplerYcbcrConversionCreateInfo, pAllocator: *const VkAllocationCallbacks, pYcbcrConversion: *mut VkSamplerYcbcrConversion) -> VkResult,PFN_vkCreateSamplerYcbcrConversionKHR,c"vkCreateSamplerYcbcrConversionKHR";
+        DestroySamplerYcbcrConversionKHR(device: VkDevice, ycbcrConversion: VkSamplerYcbcrConversion, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroySamplerYcbcrConversionKHR,c"vkDestroySamplerYcbcrConversionKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31127,8 +31128,8 @@ pub mod khr_sampler_ycbcr_conversion {
 pub mod khr_bind_memory2 {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        BindBufferMemory2KHR,PFN_vkBindBufferMemory2KHR,c"vkBindBufferMemory2KHR";
-        BindImageMemory2KHR,PFN_vkBindImageMemory2KHR,c"vkBindImageMemory2KHR";
+        BindBufferMemory2KHR(device: VkDevice, bindInfoCount: u32, pBindInfos: *const VkBindBufferMemoryInfo) -> VkResult,PFN_vkBindBufferMemory2KHR,c"vkBindBufferMemory2KHR";
+        BindImageMemory2KHR(device: VkDevice, bindInfoCount: u32, pBindInfos: *const VkBindImageMemoryInfo) -> VkResult,PFN_vkBindImageMemory2KHR,c"vkBindImageMemory2KHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31145,7 +31146,7 @@ pub mod khr_bind_memory2 {
 pub mod ext_image_drm_format_modifier {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetImageDrmFormatModifierPropertiesEXT,PFN_vkGetImageDrmFormatModifierPropertiesEXT,c"vkGetImageDrmFormatModifierPropertiesEXT";
+        GetImageDrmFormatModifierPropertiesEXT(device: VkDevice, image: VkImage, pProperties: *mut VkImageDrmFormatModifierPropertiesEXT) -> VkResult,PFN_vkGetImageDrmFormatModifierPropertiesEXT,c"vkGetImageDrmFormatModifierPropertiesEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31158,10 +31159,10 @@ pub mod ext_image_drm_format_modifier {
 pub mod ext_validation_cache {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CreateValidationCacheEXT,PFN_vkCreateValidationCacheEXT,c"vkCreateValidationCacheEXT";
-        DestroyValidationCacheEXT,PFN_vkDestroyValidationCacheEXT,c"vkDestroyValidationCacheEXT";
-        MergeValidationCachesEXT,PFN_vkMergeValidationCachesEXT,c"vkMergeValidationCachesEXT";
-        GetValidationCacheDataEXT,PFN_vkGetValidationCacheDataEXT,c"vkGetValidationCacheDataEXT";
+        CreateValidationCacheEXT(device: VkDevice, pCreateInfo: *const VkValidationCacheCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pValidationCache: *mut VkValidationCacheEXT) -> VkResult,PFN_vkCreateValidationCacheEXT,c"vkCreateValidationCacheEXT";
+        DestroyValidationCacheEXT(device: VkDevice, validationCache: VkValidationCacheEXT, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyValidationCacheEXT,c"vkDestroyValidationCacheEXT";
+        MergeValidationCachesEXT(device: VkDevice, dstCache: VkValidationCacheEXT, srcCacheCount: u32, pSrcCaches: *const VkValidationCacheEXT) -> VkResult,PFN_vkMergeValidationCachesEXT,c"vkMergeValidationCachesEXT";
+        GetValidationCacheDataEXT(device: VkDevice, validationCache: VkValidationCacheEXT, pDataSize: *mut usize, pData: *mut c_void) -> VkResult,PFN_vkGetValidationCacheDataEXT,c"vkGetValidationCacheDataEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31186,9 +31187,9 @@ pub mod ext_validation_cache {
 pub mod nv_shading_rate_image {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdBindShadingRateImageNV,PFN_vkCmdBindShadingRateImageNV,c"vkCmdBindShadingRateImageNV";
-        CmdSetViewportShadingRatePaletteNV,PFN_vkCmdSetViewportShadingRatePaletteNV,c"vkCmdSetViewportShadingRatePaletteNV";
-        CmdSetCoarseSampleOrderNV,PFN_vkCmdSetCoarseSampleOrderNV,c"vkCmdSetCoarseSampleOrderNV";
+        CmdBindShadingRateImageNV(commandBuffer: VkCommandBuffer, imageView: VkImageView, imageLayout: VkImageLayout) -> (),PFN_vkCmdBindShadingRateImageNV,c"vkCmdBindShadingRateImageNV";
+        CmdSetViewportShadingRatePaletteNV(commandBuffer: VkCommandBuffer, firstViewport: u32, viewportCount: u32, pShadingRatePalettes: *const VkShadingRatePaletteNV) -> (),PFN_vkCmdSetViewportShadingRatePaletteNV,c"vkCmdSetViewportShadingRatePaletteNV";
+        CmdSetCoarseSampleOrderNV(commandBuffer: VkCommandBuffer, sampleOrderType: VkCoarseSampleOrderTypeNV, customSampleOrderCount: u32, pCustomSampleOrders: *const VkCoarseSampleOrderCustomNV) -> (),PFN_vkCmdSetCoarseSampleOrderNV,c"vkCmdSetCoarseSampleOrderNV";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31209,18 +31210,18 @@ pub mod nv_shading_rate_image {
 pub mod nv_ray_tracing {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CreateAccelerationStructureNV,PFN_vkCreateAccelerationStructureNV,c"vkCreateAccelerationStructureNV";
-        DestroyAccelerationStructureNV,PFN_vkDestroyAccelerationStructureNV,c"vkDestroyAccelerationStructureNV";
-        GetAccelerationStructureMemoryRequirementsNV,PFN_vkGetAccelerationStructureMemoryRequirementsNV,c"vkGetAccelerationStructureMemoryRequirementsNV";
-        BindAccelerationStructureMemoryNV,PFN_vkBindAccelerationStructureMemoryNV,c"vkBindAccelerationStructureMemoryNV";
-        CmdBuildAccelerationStructureNV,PFN_vkCmdBuildAccelerationStructureNV,c"vkCmdBuildAccelerationStructureNV";
-        CmdCopyAccelerationStructureNV,PFN_vkCmdCopyAccelerationStructureNV,c"vkCmdCopyAccelerationStructureNV";
-        CmdTraceRaysNV,PFN_vkCmdTraceRaysNV,c"vkCmdTraceRaysNV";
-        CreateRayTracingPipelinesNV,PFN_vkCreateRayTracingPipelinesNV,c"vkCreateRayTracingPipelinesNV";
-        GetRayTracingShaderGroupHandlesNV,PFN_vkGetRayTracingShaderGroupHandlesNV,c"vkGetRayTracingShaderGroupHandlesNV";
-        GetAccelerationStructureHandleNV,PFN_vkGetAccelerationStructureHandleNV,c"vkGetAccelerationStructureHandleNV";
-        CmdWriteAccelerationStructuresPropertiesNV,PFN_vkCmdWriteAccelerationStructuresPropertiesNV,c"vkCmdWriteAccelerationStructuresPropertiesNV";
-        CompileDeferredNV,PFN_vkCompileDeferredNV,c"vkCompileDeferredNV";
+        CreateAccelerationStructureNV(device: VkDevice, pCreateInfo: *const VkAccelerationStructureCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pAccelerationStructure: *mut VkAccelerationStructureNV) -> VkResult,PFN_vkCreateAccelerationStructureNV,c"vkCreateAccelerationStructureNV";
+        DestroyAccelerationStructureNV(device: VkDevice, accelerationStructure: VkAccelerationStructureNV, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyAccelerationStructureNV,c"vkDestroyAccelerationStructureNV";
+        GetAccelerationStructureMemoryRequirementsNV(device: VkDevice, pInfo: *const VkAccelerationStructureMemoryRequirementsInfoNV, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetAccelerationStructureMemoryRequirementsNV,c"vkGetAccelerationStructureMemoryRequirementsNV";
+        BindAccelerationStructureMemoryNV(device: VkDevice, bindInfoCount: u32, pBindInfos: *const VkBindAccelerationStructureMemoryInfoNV) -> VkResult,PFN_vkBindAccelerationStructureMemoryNV,c"vkBindAccelerationStructureMemoryNV";
+        CmdBuildAccelerationStructureNV(commandBuffer: VkCommandBuffer, pInfo: *const VkAccelerationStructureInfoNV, instanceData: VkBuffer, instanceOffset: VkDeviceSize, update: VkBool32, dst: VkAccelerationStructureNV, src: VkAccelerationStructureNV, scratch: VkBuffer, scratchOffset: VkDeviceSize) -> (),PFN_vkCmdBuildAccelerationStructureNV,c"vkCmdBuildAccelerationStructureNV";
+        CmdCopyAccelerationStructureNV(commandBuffer: VkCommandBuffer, dst: VkAccelerationStructureNV, src: VkAccelerationStructureNV, mode: VkCopyAccelerationStructureModeKHR) -> (),PFN_vkCmdCopyAccelerationStructureNV,c"vkCmdCopyAccelerationStructureNV";
+        CmdTraceRaysNV(commandBuffer: VkCommandBuffer, raygenShaderBindingTableBuffer: VkBuffer, raygenShaderBindingOffset: VkDeviceSize, missShaderBindingTableBuffer: VkBuffer, missShaderBindingOffset: VkDeviceSize, missShaderBindingStride: VkDeviceSize, hitShaderBindingTableBuffer: VkBuffer, hitShaderBindingOffset: VkDeviceSize, hitShaderBindingStride: VkDeviceSize, callableShaderBindingTableBuffer: VkBuffer, callableShaderBindingOffset: VkDeviceSize, callableShaderBindingStride: VkDeviceSize, width: u32, height: u32, depth: u32) -> (),PFN_vkCmdTraceRaysNV,c"vkCmdTraceRaysNV";
+        CreateRayTracingPipelinesNV(device: VkDevice, pipelineCache: VkPipelineCache, createInfoCount: u32, pCreateInfos: *const VkRayTracingPipelineCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pPipelines: *mut VkPipeline) -> VkResult,PFN_vkCreateRayTracingPipelinesNV,c"vkCreateRayTracingPipelinesNV";
+        GetRayTracingShaderGroupHandlesNV(device: VkDevice, pipeline: VkPipeline, firstGroup: u32, groupCount: u32, dataSize: usize, pData: *mut c_void) -> VkResult,PFN_vkGetRayTracingShaderGroupHandlesNV,c"vkGetRayTracingShaderGroupHandlesNV";
+        GetAccelerationStructureHandleNV(device: VkDevice, accelerationStructure: VkAccelerationStructureNV, dataSize: usize, pData: *mut c_void) -> VkResult,PFN_vkGetAccelerationStructureHandleNV,c"vkGetAccelerationStructureHandleNV";
+        CmdWriteAccelerationStructuresPropertiesNV(commandBuffer: VkCommandBuffer, accelerationStructureCount: u32, pAccelerationStructures: *const VkAccelerationStructureNV, queryType: VkQueryType, queryPool: VkQueryPool, firstQuery: u32) -> (),PFN_vkCmdWriteAccelerationStructuresPropertiesNV,c"vkCmdWriteAccelerationStructuresPropertiesNV";
+        CompileDeferredNV(device: VkDevice, pipeline: VkPipeline, shader: u32) -> VkResult,PFN_vkCompileDeferredNV,c"vkCompileDeferredNV";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31277,7 +31278,7 @@ pub mod nv_ray_tracing {
 pub mod khr_maintenance3 {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetDescriptorSetLayoutSupportKHR,PFN_vkGetDescriptorSetLayoutSupportKHR,c"vkGetDescriptorSetLayoutSupportKHR";
+        GetDescriptorSetLayoutSupportKHR(device: VkDevice, pCreateInfo: *const VkDescriptorSetLayoutCreateInfo, pSupport: *mut VkDescriptorSetLayoutSupport) -> (),PFN_vkGetDescriptorSetLayoutSupportKHR,c"vkGetDescriptorSetLayoutSupportKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31290,8 +31291,8 @@ pub mod khr_maintenance3 {
 pub mod khr_draw_indirect_count {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdDrawIndirectCountKHR,PFN_vkCmdDrawIndirectCountKHR,c"vkCmdDrawIndirectCountKHR";
-        CmdDrawIndexedIndirectCountKHR,PFN_vkCmdDrawIndexedIndirectCountKHR,c"vkCmdDrawIndexedIndirectCountKHR";
+        CmdDrawIndirectCountKHR(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, countBuffer: VkBuffer, countBufferOffset: VkDeviceSize, maxDrawCount: u32, stride: u32) -> (),PFN_vkCmdDrawIndirectCountKHR,c"vkCmdDrawIndirectCountKHR";
+        CmdDrawIndexedIndirectCountKHR(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, countBuffer: VkBuffer, countBufferOffset: VkDeviceSize, maxDrawCount: u32, stride: u32) -> (),PFN_vkCmdDrawIndexedIndirectCountKHR,c"vkCmdDrawIndexedIndirectCountKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31308,7 +31309,7 @@ pub mod khr_draw_indirect_count {
 pub mod ext_external_memory_host {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetMemoryHostPointerPropertiesEXT,PFN_vkGetMemoryHostPointerPropertiesEXT,c"vkGetMemoryHostPointerPropertiesEXT";
+        GetMemoryHostPointerPropertiesEXT(device: VkDevice, handleType: VkExternalMemoryHandleTypeFlagBits, pHostPointer: *const c_void, pMemoryHostPointerProperties: *mut VkMemoryHostPointerPropertiesEXT) -> VkResult,PFN_vkGetMemoryHostPointerPropertiesEXT,c"vkGetMemoryHostPointerPropertiesEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31321,7 +31322,7 @@ pub mod ext_external_memory_host {
 pub mod amd_buffer_marker {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdWriteBufferMarkerAMD,PFN_vkCmdWriteBufferMarkerAMD,c"vkCmdWriteBufferMarkerAMD";
+        CmdWriteBufferMarkerAMD(commandBuffer: VkCommandBuffer, pipelineStage: VkPipelineStageFlagBits, dstBuffer: VkBuffer, dstOffset: VkDeviceSize, marker: u32) -> (),PFN_vkCmdWriteBufferMarkerAMD,c"vkCmdWriteBufferMarkerAMD";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31334,7 +31335,7 @@ pub mod amd_buffer_marker {
 pub mod ext_calibrated_timestamps {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceCalibrateableTimeDomainsEXT,PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT,c"vkGetPhysicalDeviceCalibrateableTimeDomainsEXT";
+        GetPhysicalDeviceCalibrateableTimeDomainsEXT(physicalDevice: VkPhysicalDevice, pTimeDomainCount: *mut u32, pTimeDomains: *mut VkTimeDomainKHR) -> VkResult,PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT,c"vkGetPhysicalDeviceCalibrateableTimeDomainsEXT";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -31343,7 +31344,7 @@ pub mod ext_calibrated_timestamps {
         }
     }
     dispatch_table! { DeviceDispatch;
-        GetCalibratedTimestampsEXT,PFN_vkGetCalibratedTimestampsEXT,c"vkGetCalibratedTimestampsEXT";
+        GetCalibratedTimestampsEXT(device: VkDevice, timestampCount: u32, pTimestampInfos: *const VkCalibratedTimestampInfoKHR, pTimestamps: *mut u64, pMaxDeviation: *mut u64) -> VkResult,PFN_vkGetCalibratedTimestampsEXT,c"vkGetCalibratedTimestampsEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31356,8 +31357,8 @@ pub mod ext_calibrated_timestamps {
 pub mod nv_mesh_shader {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdDrawMeshTasksNV,PFN_vkCmdDrawMeshTasksNV,c"vkCmdDrawMeshTasksNV";
-        CmdDrawMeshTasksIndirectNV,PFN_vkCmdDrawMeshTasksIndirectNV,c"vkCmdDrawMeshTasksIndirectNV";
+        CmdDrawMeshTasksNV(commandBuffer: VkCommandBuffer, taskCount: u32, firstTask: u32) -> (),PFN_vkCmdDrawMeshTasksNV,c"vkCmdDrawMeshTasksNV";
+        CmdDrawMeshTasksIndirectNV(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, drawCount: u32, stride: u32) -> (),PFN_vkCmdDrawMeshTasksIndirectNV,c"vkCmdDrawMeshTasksIndirectNV";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31374,8 +31375,8 @@ pub mod nv_mesh_shader {
 pub mod nv_scissor_exclusive {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdSetExclusiveScissorEnableNV,PFN_vkCmdSetExclusiveScissorEnableNV,c"vkCmdSetExclusiveScissorEnableNV";
-        CmdSetExclusiveScissorNV,PFN_vkCmdSetExclusiveScissorNV,c"vkCmdSetExclusiveScissorNV";
+        CmdSetExclusiveScissorEnableNV(commandBuffer: VkCommandBuffer, firstExclusiveScissor: u32, exclusiveScissorCount: u32, pExclusiveScissorEnables: *const VkBool32) -> (),PFN_vkCmdSetExclusiveScissorEnableNV,c"vkCmdSetExclusiveScissorEnableNV";
+        CmdSetExclusiveScissorNV(commandBuffer: VkCommandBuffer, firstExclusiveScissor: u32, exclusiveScissorCount: u32, pExclusiveScissors: *const VkRect2D) -> (),PFN_vkCmdSetExclusiveScissorNV,c"vkCmdSetExclusiveScissorNV";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31392,8 +31393,8 @@ pub mod nv_scissor_exclusive {
 pub mod nv_device_diagnostic_checkpoints {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdSetCheckpointNV,PFN_vkCmdSetCheckpointNV,c"vkCmdSetCheckpointNV";
-        GetQueueCheckpointDataNV,PFN_vkGetQueueCheckpointDataNV,c"vkGetQueueCheckpointDataNV";
+        CmdSetCheckpointNV(commandBuffer: VkCommandBuffer, pCheckpointMarker: *const c_void) -> (),PFN_vkCmdSetCheckpointNV,c"vkCmdSetCheckpointNV";
+        GetQueueCheckpointDataNV(queue: VkQueue, pCheckpointDataCount: *mut u32, pCheckpointData: *mut VkCheckpointDataNV) -> (),PFN_vkGetQueueCheckpointDataNV,c"vkGetQueueCheckpointDataNV";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31410,9 +31411,9 @@ pub mod nv_device_diagnostic_checkpoints {
 pub mod khr_timeline_semaphore {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetSemaphoreCounterValueKHR,PFN_vkGetSemaphoreCounterValueKHR,c"vkGetSemaphoreCounterValueKHR";
-        WaitSemaphoresKHR,PFN_vkWaitSemaphoresKHR,c"vkWaitSemaphoresKHR";
-        SignalSemaphoreKHR,PFN_vkSignalSemaphoreKHR,c"vkSignalSemaphoreKHR";
+        GetSemaphoreCounterValueKHR(device: VkDevice, semaphore: VkSemaphore, pValue: *mut u64) -> VkResult,PFN_vkGetSemaphoreCounterValueKHR,c"vkGetSemaphoreCounterValueKHR";
+        WaitSemaphoresKHR(device: VkDevice, pWaitInfo: *const VkSemaphoreWaitInfo, timeout: u64) -> VkResult,PFN_vkWaitSemaphoresKHR,c"vkWaitSemaphoresKHR";
+        SignalSemaphoreKHR(device: VkDevice, pSignalInfo: *const VkSemaphoreSignalInfo) -> VkResult,PFN_vkSignalSemaphoreKHR,c"vkSignalSemaphoreKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31433,10 +31434,10 @@ pub mod khr_timeline_semaphore {
 pub mod ext_present_timing {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        SetSwapchainPresentTimingQueueSizeEXT,PFN_vkSetSwapchainPresentTimingQueueSizeEXT,c"vkSetSwapchainPresentTimingQueueSizeEXT";
-        GetSwapchainTimingPropertiesEXT,PFN_vkGetSwapchainTimingPropertiesEXT,c"vkGetSwapchainTimingPropertiesEXT";
-        GetSwapchainTimeDomainPropertiesEXT,PFN_vkGetSwapchainTimeDomainPropertiesEXT,c"vkGetSwapchainTimeDomainPropertiesEXT";
-        GetPastPresentationTimingEXT,PFN_vkGetPastPresentationTimingEXT,c"vkGetPastPresentationTimingEXT";
+        SetSwapchainPresentTimingQueueSizeEXT(device: VkDevice, swapchain: VkSwapchainKHR, size: u32) -> VkResult,PFN_vkSetSwapchainPresentTimingQueueSizeEXT,c"vkSetSwapchainPresentTimingQueueSizeEXT";
+        GetSwapchainTimingPropertiesEXT(device: VkDevice, swapchain: VkSwapchainKHR, pSwapchainTimingProperties: *mut VkSwapchainTimingPropertiesEXT, pSwapchainTimingPropertiesCounter: *mut u64) -> VkResult,PFN_vkGetSwapchainTimingPropertiesEXT,c"vkGetSwapchainTimingPropertiesEXT";
+        GetSwapchainTimeDomainPropertiesEXT(device: VkDevice, swapchain: VkSwapchainKHR, pSwapchainTimeDomainProperties: *mut VkSwapchainTimeDomainPropertiesEXT, pTimeDomainsCounter: *mut u64) -> VkResult,PFN_vkGetSwapchainTimeDomainPropertiesEXT,c"vkGetSwapchainTimeDomainPropertiesEXT";
+        GetPastPresentationTimingEXT(device: VkDevice, pPastPresentationTimingInfo: *const VkPastPresentationTimingInfoEXT, pPastPresentationTimingProperties: *mut VkPastPresentationTimingPropertiesEXT) -> VkResult,PFN_vkGetPastPresentationTimingEXT,c"vkGetPastPresentationTimingEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31461,15 +31462,15 @@ pub mod ext_present_timing {
 pub mod intel_performance_query {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        InitializePerformanceApiINTEL,PFN_vkInitializePerformanceApiINTEL,c"vkInitializePerformanceApiINTEL";
-        UninitializePerformanceApiINTEL,PFN_vkUninitializePerformanceApiINTEL,c"vkUninitializePerformanceApiINTEL";
-        CmdSetPerformanceMarkerINTEL,PFN_vkCmdSetPerformanceMarkerINTEL,c"vkCmdSetPerformanceMarkerINTEL";
-        CmdSetPerformanceStreamMarkerINTEL,PFN_vkCmdSetPerformanceStreamMarkerINTEL,c"vkCmdSetPerformanceStreamMarkerINTEL";
-        CmdSetPerformanceOverrideINTEL,PFN_vkCmdSetPerformanceOverrideINTEL,c"vkCmdSetPerformanceOverrideINTEL";
-        AcquirePerformanceConfigurationINTEL,PFN_vkAcquirePerformanceConfigurationINTEL,c"vkAcquirePerformanceConfigurationINTEL";
-        ReleasePerformanceConfigurationINTEL,PFN_vkReleasePerformanceConfigurationINTEL,c"vkReleasePerformanceConfigurationINTEL";
-        QueueSetPerformanceConfigurationINTEL,PFN_vkQueueSetPerformanceConfigurationINTEL,c"vkQueueSetPerformanceConfigurationINTEL";
-        GetPerformanceParameterINTEL,PFN_vkGetPerformanceParameterINTEL,c"vkGetPerformanceParameterINTEL";
+        InitializePerformanceApiINTEL(device: VkDevice, pInitializeInfo: *const VkInitializePerformanceApiInfoINTEL) -> VkResult,PFN_vkInitializePerformanceApiINTEL,c"vkInitializePerformanceApiINTEL";
+        UninitializePerformanceApiINTEL(device: VkDevice) -> (),PFN_vkUninitializePerformanceApiINTEL,c"vkUninitializePerformanceApiINTEL";
+        CmdSetPerformanceMarkerINTEL(commandBuffer: VkCommandBuffer, pMarkerInfo: *const VkPerformanceMarkerInfoINTEL) -> VkResult,PFN_vkCmdSetPerformanceMarkerINTEL,c"vkCmdSetPerformanceMarkerINTEL";
+        CmdSetPerformanceStreamMarkerINTEL(commandBuffer: VkCommandBuffer, pMarkerInfo: *const VkPerformanceStreamMarkerInfoINTEL) -> VkResult,PFN_vkCmdSetPerformanceStreamMarkerINTEL,c"vkCmdSetPerformanceStreamMarkerINTEL";
+        CmdSetPerformanceOverrideINTEL(commandBuffer: VkCommandBuffer, pOverrideInfo: *const VkPerformanceOverrideInfoINTEL) -> VkResult,PFN_vkCmdSetPerformanceOverrideINTEL,c"vkCmdSetPerformanceOverrideINTEL";
+        AcquirePerformanceConfigurationINTEL(device: VkDevice, pAcquireInfo: *const VkPerformanceConfigurationAcquireInfoINTEL, pConfiguration: *mut VkPerformanceConfigurationINTEL) -> VkResult,PFN_vkAcquirePerformanceConfigurationINTEL,c"vkAcquirePerformanceConfigurationINTEL";
+        ReleasePerformanceConfigurationINTEL(device: VkDevice, configuration: VkPerformanceConfigurationINTEL) -> VkResult,PFN_vkReleasePerformanceConfigurationINTEL,c"vkReleasePerformanceConfigurationINTEL";
+        QueueSetPerformanceConfigurationINTEL(queue: VkQueue, configuration: VkPerformanceConfigurationINTEL) -> VkResult,PFN_vkQueueSetPerformanceConfigurationINTEL,c"vkQueueSetPerformanceConfigurationINTEL";
+        GetPerformanceParameterINTEL(device: VkDevice, parameter: VkPerformanceParameterTypeINTEL, pValue: *mut VkPerformanceValueINTEL) -> VkResult,PFN_vkGetPerformanceParameterINTEL,c"vkGetPerformanceParameterINTEL";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31514,7 +31515,7 @@ pub mod intel_performance_query {
 pub mod amd_display_native_hdr {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        SetLocalDimmingAMD,PFN_vkSetLocalDimmingAMD,c"vkSetLocalDimmingAMD";
+        SetLocalDimmingAMD(device: VkDevice, swapChain: VkSwapchainKHR, localDimmingEnable: VkBool32) -> (),PFN_vkSetLocalDimmingAMD,c"vkSetLocalDimmingAMD";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31527,7 +31528,7 @@ pub mod amd_display_native_hdr {
 pub mod fuchsia_imagepipe_surface {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        CreateImagePipeSurfaceFUCHSIA,PFN_vkCreateImagePipeSurfaceFUCHSIA,c"vkCreateImagePipeSurfaceFUCHSIA";
+        CreateImagePipeSurfaceFUCHSIA(instance: VkInstance, pCreateInfo: *const VkImagePipeSurfaceCreateInfoFUCHSIA, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateImagePipeSurfaceFUCHSIA,c"vkCreateImagePipeSurfaceFUCHSIA";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -31540,7 +31541,7 @@ pub mod fuchsia_imagepipe_surface {
 pub mod ext_metal_surface {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        CreateMetalSurfaceEXT,PFN_vkCreateMetalSurfaceEXT,c"vkCreateMetalSurfaceEXT";
+        CreateMetalSurfaceEXT(instance: VkInstance, pCreateInfo: *const VkMetalSurfaceCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateMetalSurfaceEXT,c"vkCreateMetalSurfaceEXT";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -31553,7 +31554,7 @@ pub mod ext_metal_surface {
 pub mod khr_fragment_shading_rate {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceFragmentShadingRatesKHR,PFN_vkGetPhysicalDeviceFragmentShadingRatesKHR,c"vkGetPhysicalDeviceFragmentShadingRatesKHR";
+        GetPhysicalDeviceFragmentShadingRatesKHR(physicalDevice: VkPhysicalDevice, pFragmentShadingRateCount: *mut u32, pFragmentShadingRates: *mut VkPhysicalDeviceFragmentShadingRateKHR) -> VkResult,PFN_vkGetPhysicalDeviceFragmentShadingRatesKHR,c"vkGetPhysicalDeviceFragmentShadingRatesKHR";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -31562,11 +31563,11 @@ pub mod khr_fragment_shading_rate {
         }
     }
     dispatch_table! { DeviceDispatch;
-        CmdSetFragmentShadingRateKHR,PFN_vkCmdSetFragmentShadingRateKHR,c"vkCmdSetFragmentShadingRateKHR";
+        CmdSetFragmentShadingRateKHR(commandBuffer: VkCommandBuffer, pFragmentSize: *const VkExtent2D, combinerOps: *mut VkFragmentShadingRateCombinerOpKHR) -> (),PFN_vkCmdSetFragmentShadingRateKHR,c"vkCmdSetFragmentShadingRateKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn CmdSetFragmentShadingRateKHR(&self, commandBuffer: VkCommandBuffer, pFragmentSize: *const VkExtent2D, combinerOps: [VkFragmentShadingRateCombinerOpKHR; 2 as usize]) -> () {
+        pub unsafe fn CmdSetFragmentShadingRateKHR(&self, commandBuffer: VkCommandBuffer, pFragmentSize: *const VkExtent2D, combinerOps: *mut VkFragmentShadingRateCombinerOpKHR) -> () {
             unsafe { (self.CmdSetFragmentShadingRateKHR)(commandBuffer, pFragmentSize, combinerOps) }
         }
     }
@@ -31575,8 +31576,8 @@ pub mod khr_fragment_shading_rate {
 pub mod khr_dynamic_rendering_local_read {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdSetRenderingAttachmentLocationsKHR,PFN_vkCmdSetRenderingAttachmentLocationsKHR,c"vkCmdSetRenderingAttachmentLocationsKHR";
-        CmdSetRenderingInputAttachmentIndicesKHR,PFN_vkCmdSetRenderingInputAttachmentIndicesKHR,c"vkCmdSetRenderingInputAttachmentIndicesKHR";
+        CmdSetRenderingAttachmentLocationsKHR(commandBuffer: VkCommandBuffer, pLocationInfo: *const VkRenderingAttachmentLocationInfo) -> (),PFN_vkCmdSetRenderingAttachmentLocationsKHR,c"vkCmdSetRenderingAttachmentLocationsKHR";
+        CmdSetRenderingInputAttachmentIndicesKHR(commandBuffer: VkCommandBuffer, pInputAttachmentIndexInfo: *const VkRenderingInputAttachmentIndexInfo) -> (),PFN_vkCmdSetRenderingInputAttachmentIndicesKHR,c"vkCmdSetRenderingInputAttachmentIndicesKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31593,7 +31594,7 @@ pub mod khr_dynamic_rendering_local_read {
 pub mod ext_buffer_device_address {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetBufferDeviceAddressEXT,PFN_vkGetBufferDeviceAddressEXT,c"vkGetBufferDeviceAddressEXT";
+        GetBufferDeviceAddressEXT(device: VkDevice, pInfo: *const VkBufferDeviceAddressInfo) -> VkDeviceAddress,PFN_vkGetBufferDeviceAddressEXT,c"vkGetBufferDeviceAddressEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31606,7 +31607,7 @@ pub mod ext_buffer_device_address {
 pub mod ext_tooling_info {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceToolPropertiesEXT,PFN_vkGetPhysicalDeviceToolPropertiesEXT,c"vkGetPhysicalDeviceToolPropertiesEXT";
+        GetPhysicalDeviceToolPropertiesEXT(physicalDevice: VkPhysicalDevice, pToolCount: *mut u32, pToolProperties: *mut VkPhysicalDeviceToolProperties) -> VkResult,PFN_vkGetPhysicalDeviceToolPropertiesEXT,c"vkGetPhysicalDeviceToolPropertiesEXT";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -31619,7 +31620,7 @@ pub mod ext_tooling_info {
 pub mod khr_present_wait {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        WaitForPresentKHR,PFN_vkWaitForPresentKHR,c"vkWaitForPresentKHR";
+        WaitForPresentKHR(device: VkDevice, swapchain: VkSwapchainKHR, presentId: u64, timeout: u64) -> VkResult,PFN_vkWaitForPresentKHR,c"vkWaitForPresentKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31632,7 +31633,7 @@ pub mod khr_present_wait {
 pub mod nv_cooperative_matrix {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceCooperativeMatrixPropertiesNV,PFN_vkGetPhysicalDeviceCooperativeMatrixPropertiesNV,c"vkGetPhysicalDeviceCooperativeMatrixPropertiesNV";
+        GetPhysicalDeviceCooperativeMatrixPropertiesNV(physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkCooperativeMatrixPropertiesNV) -> VkResult,PFN_vkGetPhysicalDeviceCooperativeMatrixPropertiesNV,c"vkGetPhysicalDeviceCooperativeMatrixPropertiesNV";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -31645,7 +31646,7 @@ pub mod nv_cooperative_matrix {
 pub mod nv_coverage_reduction_mode {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV,PFN_vkGetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV,c"vkGetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV";
+        GetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV(physicalDevice: VkPhysicalDevice, pCombinationCount: *mut u32, pCombinations: *mut VkFramebufferMixedSamplesCombinationNV) -> VkResult,PFN_vkGetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV,c"vkGetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -31658,7 +31659,7 @@ pub mod nv_coverage_reduction_mode {
 pub mod ext_full_screen_exclusive {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceSurfacePresentModes2EXT,PFN_vkGetPhysicalDeviceSurfacePresentModes2EXT,c"vkGetPhysicalDeviceSurfacePresentModes2EXT";
+        GetPhysicalDeviceSurfacePresentModes2EXT(physicalDevice: VkPhysicalDevice, pSurfaceInfo: *const VkPhysicalDeviceSurfaceInfo2KHR, pPresentModeCount: *mut u32, pPresentModes: *mut VkPresentModeKHR) -> VkResult,PFN_vkGetPhysicalDeviceSurfacePresentModes2EXT,c"vkGetPhysicalDeviceSurfacePresentModes2EXT";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -31667,8 +31668,8 @@ pub mod ext_full_screen_exclusive {
         }
     }
     dispatch_table! { DeviceDispatch;
-        AcquireFullScreenExclusiveModeEXT,PFN_vkAcquireFullScreenExclusiveModeEXT,c"vkAcquireFullScreenExclusiveModeEXT";
-        ReleaseFullScreenExclusiveModeEXT,PFN_vkReleaseFullScreenExclusiveModeEXT,c"vkReleaseFullScreenExclusiveModeEXT";
+        AcquireFullScreenExclusiveModeEXT(device: VkDevice, swapchain: VkSwapchainKHR) -> VkResult,PFN_vkAcquireFullScreenExclusiveModeEXT,c"vkAcquireFullScreenExclusiveModeEXT";
+        ReleaseFullScreenExclusiveModeEXT(device: VkDevice, swapchain: VkSwapchainKHR) -> VkResult,PFN_vkReleaseFullScreenExclusiveModeEXT,c"vkReleaseFullScreenExclusiveModeEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31685,7 +31686,7 @@ pub mod ext_full_screen_exclusive {
 pub mod ext_headless_surface {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        CreateHeadlessSurfaceEXT,PFN_vkCreateHeadlessSurfaceEXT,c"vkCreateHeadlessSurfaceEXT";
+        CreateHeadlessSurfaceEXT(instance: VkInstance, pCreateInfo: *const VkHeadlessSurfaceCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateHeadlessSurfaceEXT,c"vkCreateHeadlessSurfaceEXT";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -31698,9 +31699,9 @@ pub mod ext_headless_surface {
 pub mod khr_buffer_device_address {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetBufferDeviceAddressKHR,PFN_vkGetBufferDeviceAddressKHR,c"vkGetBufferDeviceAddressKHR";
-        GetBufferOpaqueCaptureAddressKHR,PFN_vkGetBufferOpaqueCaptureAddressKHR,c"vkGetBufferOpaqueCaptureAddressKHR";
-        GetDeviceMemoryOpaqueCaptureAddressKHR,PFN_vkGetDeviceMemoryOpaqueCaptureAddressKHR,c"vkGetDeviceMemoryOpaqueCaptureAddressKHR";
+        GetBufferDeviceAddressKHR(device: VkDevice, pInfo: *const VkBufferDeviceAddressInfo) -> VkDeviceAddress,PFN_vkGetBufferDeviceAddressKHR,c"vkGetBufferDeviceAddressKHR";
+        GetBufferOpaqueCaptureAddressKHR(device: VkDevice, pInfo: *const VkBufferDeviceAddressInfo) -> u64,PFN_vkGetBufferOpaqueCaptureAddressKHR,c"vkGetBufferOpaqueCaptureAddressKHR";
+        GetDeviceMemoryOpaqueCaptureAddressKHR(device: VkDevice, pInfo: *const VkDeviceMemoryOpaqueCaptureAddressInfo) -> u64,PFN_vkGetDeviceMemoryOpaqueCaptureAddressKHR,c"vkGetDeviceMemoryOpaqueCaptureAddressKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31721,7 +31722,7 @@ pub mod khr_buffer_device_address {
 pub mod ext_line_rasterization {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdSetLineStippleEXT,PFN_vkCmdSetLineStippleEXT,c"vkCmdSetLineStippleEXT";
+        CmdSetLineStippleEXT(commandBuffer: VkCommandBuffer, lineStippleFactor: u32, lineStipplePattern: u16) -> (),PFN_vkCmdSetLineStippleEXT,c"vkCmdSetLineStippleEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31734,7 +31735,7 @@ pub mod ext_line_rasterization {
 pub mod ext_host_query_reset {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        ResetQueryPoolEXT,PFN_vkResetQueryPoolEXT,c"vkResetQueryPoolEXT";
+        ResetQueryPoolEXT(device: VkDevice, queryPool: VkQueryPool, firstQuery: u32, queryCount: u32) -> (),PFN_vkResetQueryPoolEXT,c"vkResetQueryPoolEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31747,18 +31748,18 @@ pub mod ext_host_query_reset {
 pub mod ext_extended_dynamic_state {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdSetCullModeEXT,PFN_vkCmdSetCullModeEXT,c"vkCmdSetCullModeEXT";
-        CmdSetFrontFaceEXT,PFN_vkCmdSetFrontFaceEXT,c"vkCmdSetFrontFaceEXT";
-        CmdSetPrimitiveTopologyEXT,PFN_vkCmdSetPrimitiveTopologyEXT,c"vkCmdSetPrimitiveTopologyEXT";
-        CmdSetViewportWithCountEXT,PFN_vkCmdSetViewportWithCountEXT,c"vkCmdSetViewportWithCountEXT";
-        CmdSetScissorWithCountEXT,PFN_vkCmdSetScissorWithCountEXT,c"vkCmdSetScissorWithCountEXT";
-        CmdBindVertexBuffers2EXT,PFN_vkCmdBindVertexBuffers2EXT,c"vkCmdBindVertexBuffers2EXT";
-        CmdSetDepthTestEnableEXT,PFN_vkCmdSetDepthTestEnableEXT,c"vkCmdSetDepthTestEnableEXT";
-        CmdSetDepthWriteEnableEXT,PFN_vkCmdSetDepthWriteEnableEXT,c"vkCmdSetDepthWriteEnableEXT";
-        CmdSetDepthCompareOpEXT,PFN_vkCmdSetDepthCompareOpEXT,c"vkCmdSetDepthCompareOpEXT";
-        CmdSetDepthBoundsTestEnableEXT,PFN_vkCmdSetDepthBoundsTestEnableEXT,c"vkCmdSetDepthBoundsTestEnableEXT";
-        CmdSetStencilTestEnableEXT,PFN_vkCmdSetStencilTestEnableEXT,c"vkCmdSetStencilTestEnableEXT";
-        CmdSetStencilOpEXT,PFN_vkCmdSetStencilOpEXT,c"vkCmdSetStencilOpEXT";
+        CmdSetCullModeEXT(commandBuffer: VkCommandBuffer, cullMode: VkCullModeFlags) -> (),PFN_vkCmdSetCullModeEXT,c"vkCmdSetCullModeEXT";
+        CmdSetFrontFaceEXT(commandBuffer: VkCommandBuffer, frontFace: VkFrontFace) -> (),PFN_vkCmdSetFrontFaceEXT,c"vkCmdSetFrontFaceEXT";
+        CmdSetPrimitiveTopologyEXT(commandBuffer: VkCommandBuffer, primitiveTopology: VkPrimitiveTopology) -> (),PFN_vkCmdSetPrimitiveTopologyEXT,c"vkCmdSetPrimitiveTopologyEXT";
+        CmdSetViewportWithCountEXT(commandBuffer: VkCommandBuffer, viewportCount: u32, pViewports: *const VkViewport) -> (),PFN_vkCmdSetViewportWithCountEXT,c"vkCmdSetViewportWithCountEXT";
+        CmdSetScissorWithCountEXT(commandBuffer: VkCommandBuffer, scissorCount: u32, pScissors: *const VkRect2D) -> (),PFN_vkCmdSetScissorWithCountEXT,c"vkCmdSetScissorWithCountEXT";
+        CmdBindVertexBuffers2EXT(commandBuffer: VkCommandBuffer, firstBinding: u32, bindingCount: u32, pBuffers: *const VkBuffer, pOffsets: *const VkDeviceSize, pSizes: *const VkDeviceSize, pStrides: *const VkDeviceSize) -> (),PFN_vkCmdBindVertexBuffers2EXT,c"vkCmdBindVertexBuffers2EXT";
+        CmdSetDepthTestEnableEXT(commandBuffer: VkCommandBuffer, depthTestEnable: VkBool32) -> (),PFN_vkCmdSetDepthTestEnableEXT,c"vkCmdSetDepthTestEnableEXT";
+        CmdSetDepthWriteEnableEXT(commandBuffer: VkCommandBuffer, depthWriteEnable: VkBool32) -> (),PFN_vkCmdSetDepthWriteEnableEXT,c"vkCmdSetDepthWriteEnableEXT";
+        CmdSetDepthCompareOpEXT(commandBuffer: VkCommandBuffer, depthCompareOp: VkCompareOp) -> (),PFN_vkCmdSetDepthCompareOpEXT,c"vkCmdSetDepthCompareOpEXT";
+        CmdSetDepthBoundsTestEnableEXT(commandBuffer: VkCommandBuffer, depthBoundsTestEnable: VkBool32) -> (),PFN_vkCmdSetDepthBoundsTestEnableEXT,c"vkCmdSetDepthBoundsTestEnableEXT";
+        CmdSetStencilTestEnableEXT(commandBuffer: VkCommandBuffer, stencilTestEnable: VkBool32) -> (),PFN_vkCmdSetStencilTestEnableEXT,c"vkCmdSetStencilTestEnableEXT";
+        CmdSetStencilOpEXT(commandBuffer: VkCommandBuffer, faceMask: VkStencilFaceFlags, failOp: VkStencilOp, passOp: VkStencilOp, depthFailOp: VkStencilOp, compareOp: VkCompareOp) -> (),PFN_vkCmdSetStencilOpEXT,c"vkCmdSetStencilOpEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31815,11 +31816,11 @@ pub mod ext_extended_dynamic_state {
 pub mod khr_deferred_host_operations {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CreateDeferredOperationKHR,PFN_vkCreateDeferredOperationKHR,c"vkCreateDeferredOperationKHR";
-        DestroyDeferredOperationKHR,PFN_vkDestroyDeferredOperationKHR,c"vkDestroyDeferredOperationKHR";
-        GetDeferredOperationMaxConcurrencyKHR,PFN_vkGetDeferredOperationMaxConcurrencyKHR,c"vkGetDeferredOperationMaxConcurrencyKHR";
-        GetDeferredOperationResultKHR,PFN_vkGetDeferredOperationResultKHR,c"vkGetDeferredOperationResultKHR";
-        DeferredOperationJoinKHR,PFN_vkDeferredOperationJoinKHR,c"vkDeferredOperationJoinKHR";
+        CreateDeferredOperationKHR(device: VkDevice, pAllocator: *const VkAllocationCallbacks, pDeferredOperation: *mut VkDeferredOperationKHR) -> VkResult,PFN_vkCreateDeferredOperationKHR,c"vkCreateDeferredOperationKHR";
+        DestroyDeferredOperationKHR(device: VkDevice, operation: VkDeferredOperationKHR, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyDeferredOperationKHR,c"vkDestroyDeferredOperationKHR";
+        GetDeferredOperationMaxConcurrencyKHR(device: VkDevice, operation: VkDeferredOperationKHR) -> u32,PFN_vkGetDeferredOperationMaxConcurrencyKHR,c"vkGetDeferredOperationMaxConcurrencyKHR";
+        GetDeferredOperationResultKHR(device: VkDevice, operation: VkDeferredOperationKHR) -> VkResult,PFN_vkGetDeferredOperationResultKHR,c"vkGetDeferredOperationResultKHR";
+        DeferredOperationJoinKHR(device: VkDevice, operation: VkDeferredOperationKHR) -> VkResult,PFN_vkDeferredOperationJoinKHR,c"vkDeferredOperationJoinKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31848,9 +31849,9 @@ pub mod khr_deferred_host_operations {
 pub mod khr_pipeline_executable_properties {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetPipelineExecutablePropertiesKHR,PFN_vkGetPipelineExecutablePropertiesKHR,c"vkGetPipelineExecutablePropertiesKHR";
-        GetPipelineExecutableStatisticsKHR,PFN_vkGetPipelineExecutableStatisticsKHR,c"vkGetPipelineExecutableStatisticsKHR";
-        GetPipelineExecutableInternalRepresentationsKHR,PFN_vkGetPipelineExecutableInternalRepresentationsKHR,c"vkGetPipelineExecutableInternalRepresentationsKHR";
+        GetPipelineExecutablePropertiesKHR(device: VkDevice, pPipelineInfo: *const VkPipelineInfoKHR, pExecutableCount: *mut u32, pProperties: *mut VkPipelineExecutablePropertiesKHR) -> VkResult,PFN_vkGetPipelineExecutablePropertiesKHR,c"vkGetPipelineExecutablePropertiesKHR";
+        GetPipelineExecutableStatisticsKHR(device: VkDevice, pExecutableInfo: *const VkPipelineExecutableInfoKHR, pStatisticCount: *mut u32, pStatistics: *mut VkPipelineExecutableStatisticKHR) -> VkResult,PFN_vkGetPipelineExecutableStatisticsKHR,c"vkGetPipelineExecutableStatisticsKHR";
+        GetPipelineExecutableInternalRepresentationsKHR(device: VkDevice, pExecutableInfo: *const VkPipelineExecutableInfoKHR, pInternalRepresentationCount: *mut u32, pInternalRepresentations: *mut VkPipelineExecutableInternalRepresentationKHR) -> VkResult,PFN_vkGetPipelineExecutableInternalRepresentationsKHR,c"vkGetPipelineExecutableInternalRepresentationsKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31871,11 +31872,11 @@ pub mod khr_pipeline_executable_properties {
 pub mod ext_host_image_copy {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CopyMemoryToImageEXT,PFN_vkCopyMemoryToImageEXT,c"vkCopyMemoryToImageEXT";
-        CopyImageToMemoryEXT,PFN_vkCopyImageToMemoryEXT,c"vkCopyImageToMemoryEXT";
-        CopyImageToImageEXT,PFN_vkCopyImageToImageEXT,c"vkCopyImageToImageEXT";
-        TransitionImageLayoutEXT,PFN_vkTransitionImageLayoutEXT,c"vkTransitionImageLayoutEXT";
-        GetImageSubresourceLayout2EXT,PFN_vkGetImageSubresourceLayout2EXT,c"vkGetImageSubresourceLayout2EXT";
+        CopyMemoryToImageEXT(device: VkDevice, pCopyMemoryToImageInfo: *const VkCopyMemoryToImageInfo) -> VkResult,PFN_vkCopyMemoryToImageEXT,c"vkCopyMemoryToImageEXT";
+        CopyImageToMemoryEXT(device: VkDevice, pCopyImageToMemoryInfo: *const VkCopyImageToMemoryInfo) -> VkResult,PFN_vkCopyImageToMemoryEXT,c"vkCopyImageToMemoryEXT";
+        CopyImageToImageEXT(device: VkDevice, pCopyImageToImageInfo: *const VkCopyImageToImageInfo) -> VkResult,PFN_vkCopyImageToImageEXT,c"vkCopyImageToImageEXT";
+        TransitionImageLayoutEXT(device: VkDevice, transitionCount: u32, pTransitions: *const VkHostImageLayoutTransitionInfo) -> VkResult,PFN_vkTransitionImageLayoutEXT,c"vkTransitionImageLayoutEXT";
+        GetImageSubresourceLayout2EXT(device: VkDevice, image: VkImage, pSubresource: *const VkImageSubresource2, pLayout: *mut VkSubresourceLayout2) -> (),PFN_vkGetImageSubresourceLayout2EXT,c"vkGetImageSubresourceLayout2EXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31904,8 +31905,8 @@ pub mod ext_host_image_copy {
 pub mod khr_map_memory2 {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        MapMemory2KHR,PFN_vkMapMemory2KHR,c"vkMapMemory2KHR";
-        UnmapMemory2KHR,PFN_vkUnmapMemory2KHR,c"vkUnmapMemory2KHR";
+        MapMemory2KHR(device: VkDevice, pMemoryMapInfo: *const VkMemoryMapInfo, ppData: *mut *mut c_void) -> VkResult,PFN_vkMapMemory2KHR,c"vkMapMemory2KHR";
+        UnmapMemory2KHR(device: VkDevice, pMemoryUnmapInfo: *const VkMemoryUnmapInfo) -> VkResult,PFN_vkUnmapMemory2KHR,c"vkUnmapMemory2KHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31922,7 +31923,7 @@ pub mod khr_map_memory2 {
 pub mod ext_swapchain_maintenance1 {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        ReleaseSwapchainImagesEXT,PFN_vkReleaseSwapchainImagesEXT,c"vkReleaseSwapchainImagesEXT";
+        ReleaseSwapchainImagesEXT(device: VkDevice, pReleaseInfo: *const VkReleaseSwapchainImagesInfoKHR) -> VkResult,PFN_vkReleaseSwapchainImagesEXT,c"vkReleaseSwapchainImagesEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31935,12 +31936,12 @@ pub mod ext_swapchain_maintenance1 {
 pub mod nv_device_generated_commands {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetGeneratedCommandsMemoryRequirementsNV,PFN_vkGetGeneratedCommandsMemoryRequirementsNV,c"vkGetGeneratedCommandsMemoryRequirementsNV";
-        CmdPreprocessGeneratedCommandsNV,PFN_vkCmdPreprocessGeneratedCommandsNV,c"vkCmdPreprocessGeneratedCommandsNV";
-        CmdExecuteGeneratedCommandsNV,PFN_vkCmdExecuteGeneratedCommandsNV,c"vkCmdExecuteGeneratedCommandsNV";
-        CmdBindPipelineShaderGroupNV,PFN_vkCmdBindPipelineShaderGroupNV,c"vkCmdBindPipelineShaderGroupNV";
-        CreateIndirectCommandsLayoutNV,PFN_vkCreateIndirectCommandsLayoutNV,c"vkCreateIndirectCommandsLayoutNV";
-        DestroyIndirectCommandsLayoutNV,PFN_vkDestroyIndirectCommandsLayoutNV,c"vkDestroyIndirectCommandsLayoutNV";
+        GetGeneratedCommandsMemoryRequirementsNV(device: VkDevice, pInfo: *const VkGeneratedCommandsMemoryRequirementsInfoNV, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetGeneratedCommandsMemoryRequirementsNV,c"vkGetGeneratedCommandsMemoryRequirementsNV";
+        CmdPreprocessGeneratedCommandsNV(commandBuffer: VkCommandBuffer, pGeneratedCommandsInfo: *const VkGeneratedCommandsInfoNV) -> (),PFN_vkCmdPreprocessGeneratedCommandsNV,c"vkCmdPreprocessGeneratedCommandsNV";
+        CmdExecuteGeneratedCommandsNV(commandBuffer: VkCommandBuffer, isPreprocessed: VkBool32, pGeneratedCommandsInfo: *const VkGeneratedCommandsInfoNV) -> (),PFN_vkCmdExecuteGeneratedCommandsNV,c"vkCmdExecuteGeneratedCommandsNV";
+        CmdBindPipelineShaderGroupNV(commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, pipeline: VkPipeline, groupIndex: u32) -> (),PFN_vkCmdBindPipelineShaderGroupNV,c"vkCmdBindPipelineShaderGroupNV";
+        CreateIndirectCommandsLayoutNV(device: VkDevice, pCreateInfo: *const VkIndirectCommandsLayoutCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pIndirectCommandsLayout: *mut VkIndirectCommandsLayoutNV) -> VkResult,PFN_vkCreateIndirectCommandsLayoutNV,c"vkCreateIndirectCommandsLayoutNV";
+        DestroyIndirectCommandsLayoutNV(device: VkDevice, indirectCommandsLayout: VkIndirectCommandsLayoutNV, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyIndirectCommandsLayoutNV,c"vkDestroyIndirectCommandsLayoutNV";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31973,7 +31974,7 @@ pub mod nv_device_generated_commands {
 pub mod ext_depth_bias_control {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdSetDepthBias2EXT,PFN_vkCmdSetDepthBias2EXT,c"vkCmdSetDepthBias2EXT";
+        CmdSetDepthBias2EXT(commandBuffer: VkCommandBuffer, pDepthBiasInfo: *const VkDepthBiasInfoEXT) -> (),PFN_vkCmdSetDepthBias2EXT,c"vkCmdSetDepthBias2EXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -31986,8 +31987,8 @@ pub mod ext_depth_bias_control {
 pub mod ext_acquire_drm_display {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        AcquireDrmDisplayEXT,PFN_vkAcquireDrmDisplayEXT,c"vkAcquireDrmDisplayEXT";
-        GetDrmDisplayEXT,PFN_vkGetDrmDisplayEXT,c"vkGetDrmDisplayEXT";
+        AcquireDrmDisplayEXT(physicalDevice: VkPhysicalDevice, drmFd: i32, display: VkDisplayKHR) -> VkResult,PFN_vkAcquireDrmDisplayEXT,c"vkAcquireDrmDisplayEXT";
+        GetDrmDisplayEXT(physicalDevice: VkPhysicalDevice, drmFd: i32, connectorId: u32, display: *mut VkDisplayKHR) -> VkResult,PFN_vkGetDrmDisplayEXT,c"vkGetDrmDisplayEXT";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -32004,10 +32005,10 @@ pub mod ext_acquire_drm_display {
 pub mod ext_private_data {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CreatePrivateDataSlotEXT,PFN_vkCreatePrivateDataSlotEXT,c"vkCreatePrivateDataSlotEXT";
-        DestroyPrivateDataSlotEXT,PFN_vkDestroyPrivateDataSlotEXT,c"vkDestroyPrivateDataSlotEXT";
-        SetPrivateDataEXT,PFN_vkSetPrivateDataEXT,c"vkSetPrivateDataEXT";
-        GetPrivateDataEXT,PFN_vkGetPrivateDataEXT,c"vkGetPrivateDataEXT";
+        CreatePrivateDataSlotEXT(device: VkDevice, pCreateInfo: *const VkPrivateDataSlotCreateInfo, pAllocator: *const VkAllocationCallbacks, pPrivateDataSlot: *mut VkPrivateDataSlot) -> VkResult,PFN_vkCreatePrivateDataSlotEXT,c"vkCreatePrivateDataSlotEXT";
+        DestroyPrivateDataSlotEXT(device: VkDevice, privateDataSlot: VkPrivateDataSlot, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyPrivateDataSlotEXT,c"vkDestroyPrivateDataSlotEXT";
+        SetPrivateDataEXT(device: VkDevice, objectType: VkObjectType, objectHandle: u64, privateDataSlot: VkPrivateDataSlot, data: u64) -> VkResult,PFN_vkSetPrivateDataEXT,c"vkSetPrivateDataEXT";
+        GetPrivateDataEXT(device: VkDevice, objectType: VkObjectType, objectHandle: u64, privateDataSlot: VkPrivateDataSlot, pData: *mut u64) -> (),PFN_vkGetPrivateDataEXT,c"vkGetPrivateDataEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32032,7 +32033,7 @@ pub mod ext_private_data {
 pub mod khr_video_encode_queue {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR,PFN_vkGetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR,c"vkGetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR";
+        GetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR(physicalDevice: VkPhysicalDevice, pQualityLevelInfo: *const VkPhysicalDeviceVideoEncodeQualityLevelInfoKHR, pQualityLevelProperties: *mut VkVideoEncodeQualityLevelPropertiesKHR) -> VkResult,PFN_vkGetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR,c"vkGetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -32041,8 +32042,8 @@ pub mod khr_video_encode_queue {
         }
     }
     dispatch_table! { DeviceDispatch;
-        GetEncodedVideoSessionParametersKHR,PFN_vkGetEncodedVideoSessionParametersKHR,c"vkGetEncodedVideoSessionParametersKHR";
-        CmdEncodeVideoKHR,PFN_vkCmdEncodeVideoKHR,c"vkCmdEncodeVideoKHR";
+        GetEncodedVideoSessionParametersKHR(device: VkDevice, pVideoSessionParametersInfo: *const VkVideoEncodeSessionParametersGetInfoKHR, pFeedbackInfo: *mut VkVideoEncodeSessionParametersFeedbackInfoKHR, pDataSize: *mut usize, pData: *mut c_void) -> VkResult,PFN_vkGetEncodedVideoSessionParametersKHR,c"vkGetEncodedVideoSessionParametersKHR";
+        CmdEncodeVideoKHR(commandBuffer: VkCommandBuffer, pEncodeInfo: *const VkVideoEncodeInfoKHR) -> (),PFN_vkCmdEncodeVideoKHR,c"vkCmdEncodeVideoKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32059,7 +32060,7 @@ pub mod khr_video_encode_queue {
 pub mod qcom_queue_perf_hint {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        QueueSetPerfHintQCOM,PFN_vkQueueSetPerfHintQCOM,c"vkQueueSetPerfHintQCOM";
+        QueueSetPerfHintQCOM(queue: VkQueue, pPerfHintInfo: *const VkPerfHintInfoQCOM) -> VkResult,PFN_vkQueueSetPerfHintQCOM,c"vkQueueSetPerfHintQCOM";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32072,12 +32073,12 @@ pub mod qcom_queue_perf_hint {
 pub mod nv_cuda_kernel_launch {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CreateCudaModuleNV,PFN_vkCreateCudaModuleNV,c"vkCreateCudaModuleNV";
-        GetCudaModuleCacheNV,PFN_vkGetCudaModuleCacheNV,c"vkGetCudaModuleCacheNV";
-        CreateCudaFunctionNV,PFN_vkCreateCudaFunctionNV,c"vkCreateCudaFunctionNV";
-        DestroyCudaModuleNV,PFN_vkDestroyCudaModuleNV,c"vkDestroyCudaModuleNV";
-        DestroyCudaFunctionNV,PFN_vkDestroyCudaFunctionNV,c"vkDestroyCudaFunctionNV";
-        CmdCudaLaunchKernelNV,PFN_vkCmdCudaLaunchKernelNV,c"vkCmdCudaLaunchKernelNV";
+        CreateCudaModuleNV(device: VkDevice, pCreateInfo: *const VkCudaModuleCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pModule: *mut VkCudaModuleNV) -> VkResult,PFN_vkCreateCudaModuleNV,c"vkCreateCudaModuleNV";
+        GetCudaModuleCacheNV(device: VkDevice, module: VkCudaModuleNV, pCacheSize: *mut usize, pCacheData: *mut c_void) -> VkResult,PFN_vkGetCudaModuleCacheNV,c"vkGetCudaModuleCacheNV";
+        CreateCudaFunctionNV(device: VkDevice, pCreateInfo: *const VkCudaFunctionCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pFunction: *mut VkCudaFunctionNV) -> VkResult,PFN_vkCreateCudaFunctionNV,c"vkCreateCudaFunctionNV";
+        DestroyCudaModuleNV(device: VkDevice, module: VkCudaModuleNV, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyCudaModuleNV,c"vkDestroyCudaModuleNV";
+        DestroyCudaFunctionNV(device: VkDevice, function: VkCudaFunctionNV, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyCudaFunctionNV,c"vkDestroyCudaFunctionNV";
+        CmdCudaLaunchKernelNV(commandBuffer: VkCommandBuffer, pLaunchInfo: *const VkCudaLaunchInfoNV) -> (),PFN_vkCmdCudaLaunchKernelNV,c"vkCmdCudaLaunchKernelNV";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32110,9 +32111,9 @@ pub mod nv_cuda_kernel_launch {
 pub mod qcom_tile_shading {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdDispatchTileQCOM,PFN_vkCmdDispatchTileQCOM,c"vkCmdDispatchTileQCOM";
-        CmdBeginPerTileExecutionQCOM,PFN_vkCmdBeginPerTileExecutionQCOM,c"vkCmdBeginPerTileExecutionQCOM";
-        CmdEndPerTileExecutionQCOM,PFN_vkCmdEndPerTileExecutionQCOM,c"vkCmdEndPerTileExecutionQCOM";
+        CmdDispatchTileQCOM(commandBuffer: VkCommandBuffer, pDispatchTileInfo: *const VkDispatchTileInfoQCOM) -> (),PFN_vkCmdDispatchTileQCOM,c"vkCmdDispatchTileQCOM";
+        CmdBeginPerTileExecutionQCOM(commandBuffer: VkCommandBuffer, pPerTileBeginInfo: *const VkPerTileBeginInfoQCOM) -> (),PFN_vkCmdBeginPerTileExecutionQCOM,c"vkCmdBeginPerTileExecutionQCOM";
+        CmdEndPerTileExecutionQCOM(commandBuffer: VkCommandBuffer, pPerTileEndInfo: *const VkPerTileEndInfoQCOM) -> (),PFN_vkCmdEndPerTileExecutionQCOM,c"vkCmdEndPerTileExecutionQCOM";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32133,13 +32134,13 @@ pub mod qcom_tile_shading {
 pub mod nv_low_latency {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        SetLatencySleepModeLegacyNV,PFN_vkSetLatencySleepModeLegacyNV,c"vkSetLatencySleepModeLegacyNV";
-        LatencySleepLegacyNV,PFN_vkLatencySleepLegacyNV,c"vkLatencySleepLegacyNV";
-        SetLatencyMarkerLegacyNV,PFN_vkSetLatencyMarkerLegacyNV,c"vkSetLatencyMarkerLegacyNV";
-        GetLatencyTimingsLegacyNV,PFN_vkGetLatencyTimingsLegacyNV,c"vkGetLatencyTimingsLegacyNV";
-        QueueNotifyOutOfBandLegacyNV,PFN_vkQueueNotifyOutOfBandLegacyNV,c"vkQueueNotifyOutOfBandLegacyNV";
-        GetSleepStatusLegacyNV,PFN_vkGetSleepStatusLegacyNV,c"vkGetSleepStatusLegacyNV";
-        ShutdownLatencyDeviceLegacyNV,PFN_vkShutdownLatencyDeviceLegacyNV,c"vkShutdownLatencyDeviceLegacyNV";
+        SetLatencySleepModeLegacyNV(device: VkDevice, lowLatencyMode: VkBool32, lowLatencyBoost: VkBool32, minimumIntervalUs: u32) -> (),PFN_vkSetLatencySleepModeLegacyNV,c"vkSetLatencySleepModeLegacyNV";
+        LatencySleepLegacyNV(device: VkDevice, signalSemaphore: VkSemaphore, value: u64) -> (),PFN_vkLatencySleepLegacyNV,c"vkLatencySleepLegacyNV";
+        SetLatencyMarkerLegacyNV(device: VkDevice, frameID: u64, marker: u32) -> (),PFN_vkSetLatencyMarkerLegacyNV,c"vkSetLatencyMarkerLegacyNV";
+        GetLatencyTimingsLegacyNV(device: VkDevice, pTimings: *mut c_void) -> (),PFN_vkGetLatencyTimingsLegacyNV,c"vkGetLatencyTimingsLegacyNV";
+        QueueNotifyOutOfBandLegacyNV(queue: VkQueue, queueType: u32) -> (),PFN_vkQueueNotifyOutOfBandLegacyNV,c"vkQueueNotifyOutOfBandLegacyNV";
+        GetSleepStatusLegacyNV(device: VkDevice, pLowLatencyMode: *mut VkBool32) -> (),PFN_vkGetSleepStatusLegacyNV,c"vkGetSleepStatusLegacyNV";
+        ShutdownLatencyDeviceLegacyNV(device: VkDevice) -> (),PFN_vkShutdownLatencyDeviceLegacyNV,c"vkShutdownLatencyDeviceLegacyNV";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32176,7 +32177,7 @@ pub mod nv_low_latency {
 pub mod ext_metal_objects {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        ExportMetalObjectsEXT,PFN_vkExportMetalObjectsEXT,c"vkExportMetalObjectsEXT";
+        ExportMetalObjectsEXT(device: VkDevice, pMetalObjectsInfo: *mut VkExportMetalObjectsInfoEXT) -> (),PFN_vkExportMetalObjectsEXT,c"vkExportMetalObjectsEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32189,12 +32190,12 @@ pub mod ext_metal_objects {
 pub mod khr_synchronization2 {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdSetEvent2KHR,PFN_vkCmdSetEvent2KHR,c"vkCmdSetEvent2KHR";
-        CmdResetEvent2KHR,PFN_vkCmdResetEvent2KHR,c"vkCmdResetEvent2KHR";
-        CmdWaitEvents2KHR,PFN_vkCmdWaitEvents2KHR,c"vkCmdWaitEvents2KHR";
-        CmdPipelineBarrier2KHR,PFN_vkCmdPipelineBarrier2KHR,c"vkCmdPipelineBarrier2KHR";
-        CmdWriteTimestamp2KHR,PFN_vkCmdWriteTimestamp2KHR,c"vkCmdWriteTimestamp2KHR";
-        QueueSubmit2KHR,PFN_vkQueueSubmit2KHR,c"vkQueueSubmit2KHR";
+        CmdSetEvent2KHR(commandBuffer: VkCommandBuffer, event: VkEvent, pDependencyInfo: *const VkDependencyInfo) -> (),PFN_vkCmdSetEvent2KHR,c"vkCmdSetEvent2KHR";
+        CmdResetEvent2KHR(commandBuffer: VkCommandBuffer, event: VkEvent, stageMask: VkPipelineStageFlags2) -> (),PFN_vkCmdResetEvent2KHR,c"vkCmdResetEvent2KHR";
+        CmdWaitEvents2KHR(commandBuffer: VkCommandBuffer, eventCount: u32, pEvents: *const VkEvent, pDependencyInfos: *const VkDependencyInfo) -> (),PFN_vkCmdWaitEvents2KHR,c"vkCmdWaitEvents2KHR";
+        CmdPipelineBarrier2KHR(commandBuffer: VkCommandBuffer, pDependencyInfo: *const VkDependencyInfo) -> (),PFN_vkCmdPipelineBarrier2KHR,c"vkCmdPipelineBarrier2KHR";
+        CmdWriteTimestamp2KHR(commandBuffer: VkCommandBuffer, stage: VkPipelineStageFlags2, queryPool: VkQueryPool, query: u32) -> (),PFN_vkCmdWriteTimestamp2KHR,c"vkCmdWriteTimestamp2KHR";
+        QueueSubmit2KHR(queue: VkQueue, submitCount: u32, pSubmits: *const VkSubmitInfo2, fence: VkFence) -> VkResult,PFN_vkQueueSubmit2KHR,c"vkQueueSubmit2KHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32227,16 +32228,16 @@ pub mod khr_synchronization2 {
 pub mod ext_descriptor_buffer {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetDescriptorSetLayoutSizeEXT,PFN_vkGetDescriptorSetLayoutSizeEXT,c"vkGetDescriptorSetLayoutSizeEXT";
-        GetDescriptorSetLayoutBindingOffsetEXT,PFN_vkGetDescriptorSetLayoutBindingOffsetEXT,c"vkGetDescriptorSetLayoutBindingOffsetEXT";
-        GetDescriptorEXT,PFN_vkGetDescriptorEXT,c"vkGetDescriptorEXT";
-        CmdBindDescriptorBuffersEXT,PFN_vkCmdBindDescriptorBuffersEXT,c"vkCmdBindDescriptorBuffersEXT";
-        CmdSetDescriptorBufferOffsetsEXT,PFN_vkCmdSetDescriptorBufferOffsetsEXT,c"vkCmdSetDescriptorBufferOffsetsEXT";
-        CmdBindDescriptorBufferEmbeddedSamplersEXT,PFN_vkCmdBindDescriptorBufferEmbeddedSamplersEXT,c"vkCmdBindDescriptorBufferEmbeddedSamplersEXT";
-        GetBufferOpaqueCaptureDescriptorDataEXT,PFN_vkGetBufferOpaqueCaptureDescriptorDataEXT,c"vkGetBufferOpaqueCaptureDescriptorDataEXT";
-        GetImageOpaqueCaptureDescriptorDataEXT,PFN_vkGetImageOpaqueCaptureDescriptorDataEXT,c"vkGetImageOpaqueCaptureDescriptorDataEXT";
-        GetImageViewOpaqueCaptureDescriptorDataEXT,PFN_vkGetImageViewOpaqueCaptureDescriptorDataEXT,c"vkGetImageViewOpaqueCaptureDescriptorDataEXT";
-        GetSamplerOpaqueCaptureDescriptorDataEXT,PFN_vkGetSamplerOpaqueCaptureDescriptorDataEXT,c"vkGetSamplerOpaqueCaptureDescriptorDataEXT";
+        GetDescriptorSetLayoutSizeEXT(device: VkDevice, layout: VkDescriptorSetLayout, pLayoutSizeInBytes: *mut VkDeviceSize) -> (),PFN_vkGetDescriptorSetLayoutSizeEXT,c"vkGetDescriptorSetLayoutSizeEXT";
+        GetDescriptorSetLayoutBindingOffsetEXT(device: VkDevice, layout: VkDescriptorSetLayout, binding: u32, pOffset: *mut VkDeviceSize) -> (),PFN_vkGetDescriptorSetLayoutBindingOffsetEXT,c"vkGetDescriptorSetLayoutBindingOffsetEXT";
+        GetDescriptorEXT(device: VkDevice, pDescriptorInfo: *const VkDescriptorGetInfoEXT, dataSize: usize, pDescriptor: *mut c_void) -> (),PFN_vkGetDescriptorEXT,c"vkGetDescriptorEXT";
+        CmdBindDescriptorBuffersEXT(commandBuffer: VkCommandBuffer, bufferCount: u32, pBindingInfos: *const VkDescriptorBufferBindingInfoEXT) -> (),PFN_vkCmdBindDescriptorBuffersEXT,c"vkCmdBindDescriptorBuffersEXT";
+        CmdSetDescriptorBufferOffsetsEXT(commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, layout: VkPipelineLayout, firstSet: u32, setCount: u32, pBufferIndices: *const u32, pOffsets: *const VkDeviceSize) -> (),PFN_vkCmdSetDescriptorBufferOffsetsEXT,c"vkCmdSetDescriptorBufferOffsetsEXT";
+        CmdBindDescriptorBufferEmbeddedSamplersEXT(commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, layout: VkPipelineLayout, set: u32) -> (),PFN_vkCmdBindDescriptorBufferEmbeddedSamplersEXT,c"vkCmdBindDescriptorBufferEmbeddedSamplersEXT";
+        GetBufferOpaqueCaptureDescriptorDataEXT(device: VkDevice, pInfo: *const VkBufferCaptureDescriptorDataInfoEXT, pData: *mut c_void) -> VkResult,PFN_vkGetBufferOpaqueCaptureDescriptorDataEXT,c"vkGetBufferOpaqueCaptureDescriptorDataEXT";
+        GetImageOpaqueCaptureDescriptorDataEXT(device: VkDevice, pInfo: *const VkImageCaptureDescriptorDataInfoEXT, pData: *mut c_void) -> VkResult,PFN_vkGetImageOpaqueCaptureDescriptorDataEXT,c"vkGetImageOpaqueCaptureDescriptorDataEXT";
+        GetImageViewOpaqueCaptureDescriptorDataEXT(device: VkDevice, pInfo: *const VkImageViewCaptureDescriptorDataInfoEXT, pData: *mut c_void) -> VkResult,PFN_vkGetImageViewOpaqueCaptureDescriptorDataEXT,c"vkGetImageViewOpaqueCaptureDescriptorDataEXT";
+        GetSamplerOpaqueCaptureDescriptorDataEXT(device: VkDevice, pInfo: *const VkSamplerCaptureDescriptorDataInfoEXT, pData: *mut c_void) -> VkResult,PFN_vkGetSamplerOpaqueCaptureDescriptorDataEXT,c"vkGetSamplerOpaqueCaptureDescriptorDataEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32285,17 +32286,17 @@ pub mod ext_descriptor_buffer {
 pub mod khr_device_address_commands {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdBindIndexBuffer3KHR,PFN_vkCmdBindIndexBuffer3KHR,c"vkCmdBindIndexBuffer3KHR";
-        CmdBindVertexBuffers3KHR,PFN_vkCmdBindVertexBuffers3KHR,c"vkCmdBindVertexBuffers3KHR";
-        CmdDrawIndirect2KHR,PFN_vkCmdDrawIndirect2KHR,c"vkCmdDrawIndirect2KHR";
-        CmdDrawIndexedIndirect2KHR,PFN_vkCmdDrawIndexedIndirect2KHR,c"vkCmdDrawIndexedIndirect2KHR";
-        CmdDispatchIndirect2KHR,PFN_vkCmdDispatchIndirect2KHR,c"vkCmdDispatchIndirect2KHR";
-        CmdCopyMemoryKHR,PFN_vkCmdCopyMemoryKHR,c"vkCmdCopyMemoryKHR";
-        CmdCopyMemoryToImageKHR,PFN_vkCmdCopyMemoryToImageKHR,c"vkCmdCopyMemoryToImageKHR";
-        CmdCopyImageToMemoryKHR,PFN_vkCmdCopyImageToMemoryKHR,c"vkCmdCopyImageToMemoryKHR";
-        CmdUpdateMemoryKHR,PFN_vkCmdUpdateMemoryKHR,c"vkCmdUpdateMemoryKHR";
-        CmdFillMemoryKHR,PFN_vkCmdFillMemoryKHR,c"vkCmdFillMemoryKHR";
-        CmdCopyQueryPoolResultsToMemoryKHR,PFN_vkCmdCopyQueryPoolResultsToMemoryKHR,c"vkCmdCopyQueryPoolResultsToMemoryKHR";
+        CmdBindIndexBuffer3KHR(commandBuffer: VkCommandBuffer, pInfo: *const VkBindIndexBuffer3InfoKHR) -> (),PFN_vkCmdBindIndexBuffer3KHR,c"vkCmdBindIndexBuffer3KHR";
+        CmdBindVertexBuffers3KHR(commandBuffer: VkCommandBuffer, firstBinding: u32, bindingCount: u32, pBindingInfos: *const VkBindVertexBuffer3InfoKHR) -> (),PFN_vkCmdBindVertexBuffers3KHR,c"vkCmdBindVertexBuffers3KHR";
+        CmdDrawIndirect2KHR(commandBuffer: VkCommandBuffer, pInfo: *const VkDrawIndirect2InfoKHR) -> (),PFN_vkCmdDrawIndirect2KHR,c"vkCmdDrawIndirect2KHR";
+        CmdDrawIndexedIndirect2KHR(commandBuffer: VkCommandBuffer, pInfo: *const VkDrawIndirect2InfoKHR) -> (),PFN_vkCmdDrawIndexedIndirect2KHR,c"vkCmdDrawIndexedIndirect2KHR";
+        CmdDispatchIndirect2KHR(commandBuffer: VkCommandBuffer, pInfo: *const VkDispatchIndirect2InfoKHR) -> (),PFN_vkCmdDispatchIndirect2KHR,c"vkCmdDispatchIndirect2KHR";
+        CmdCopyMemoryKHR(commandBuffer: VkCommandBuffer, pCopyMemoryInfo: *const VkCopyDeviceMemoryInfoKHR) -> (),PFN_vkCmdCopyMemoryKHR,c"vkCmdCopyMemoryKHR";
+        CmdCopyMemoryToImageKHR(commandBuffer: VkCommandBuffer, pCopyMemoryInfo: *const VkCopyDeviceMemoryImageInfoKHR) -> (),PFN_vkCmdCopyMemoryToImageKHR,c"vkCmdCopyMemoryToImageKHR";
+        CmdCopyImageToMemoryKHR(commandBuffer: VkCommandBuffer, pCopyMemoryInfo: *const VkCopyDeviceMemoryImageInfoKHR) -> (),PFN_vkCmdCopyImageToMemoryKHR,c"vkCmdCopyImageToMemoryKHR";
+        CmdUpdateMemoryKHR(commandBuffer: VkCommandBuffer, pDstRange: *const VkDeviceAddressRangeKHR, dstFlags: VkAddressCommandFlagsKHR, dataSize: VkDeviceSize, pData: *const c_void) -> (),PFN_vkCmdUpdateMemoryKHR,c"vkCmdUpdateMemoryKHR";
+        CmdFillMemoryKHR(commandBuffer: VkCommandBuffer, pDstRange: *const VkDeviceAddressRangeKHR, dstFlags: VkAddressCommandFlagsKHR, data: u32) -> (),PFN_vkCmdFillMemoryKHR,c"vkCmdFillMemoryKHR";
+        CmdCopyQueryPoolResultsToMemoryKHR(commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, firstQuery: u32, queryCount: u32, pDstRange: *const VkStridedDeviceAddressRangeKHR, dstFlags: VkAddressCommandFlagsKHR, queryResultFlags: VkQueryResultFlags) -> (),PFN_vkCmdCopyQueryPoolResultsToMemoryKHR,c"vkCmdCopyQueryPoolResultsToMemoryKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32348,11 +32349,11 @@ pub mod khr_device_address_commands {
 pub mod nv_fragment_shading_rate_enums {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdSetFragmentShadingRateEnumNV,PFN_vkCmdSetFragmentShadingRateEnumNV,c"vkCmdSetFragmentShadingRateEnumNV";
+        CmdSetFragmentShadingRateEnumNV(commandBuffer: VkCommandBuffer, shadingRate: VkFragmentShadingRateNV, combinerOps: *mut VkFragmentShadingRateCombinerOpKHR) -> (),PFN_vkCmdSetFragmentShadingRateEnumNV,c"vkCmdSetFragmentShadingRateEnumNV";
     }
     impl DeviceDispatch {
         #[inline(always)]
-        pub unsafe fn CmdSetFragmentShadingRateEnumNV(&self, commandBuffer: VkCommandBuffer, shadingRate: VkFragmentShadingRateNV, combinerOps: [VkFragmentShadingRateCombinerOpKHR; 2 as usize]) -> () {
+        pub unsafe fn CmdSetFragmentShadingRateEnumNV(&self, commandBuffer: VkCommandBuffer, shadingRate: VkFragmentShadingRateNV, combinerOps: *mut VkFragmentShadingRateCombinerOpKHR) -> () {
             unsafe { (self.CmdSetFragmentShadingRateEnumNV)(commandBuffer, shadingRate, combinerOps) }
         }
     }
@@ -32361,8 +32362,8 @@ pub mod nv_fragment_shading_rate_enums {
 pub mod ext_mesh_shader {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdDrawMeshTasksEXT,PFN_vkCmdDrawMeshTasksEXT,c"vkCmdDrawMeshTasksEXT";
-        CmdDrawMeshTasksIndirectEXT,PFN_vkCmdDrawMeshTasksIndirectEXT,c"vkCmdDrawMeshTasksIndirectEXT";
+        CmdDrawMeshTasksEXT(commandBuffer: VkCommandBuffer, groupCountX: u32, groupCountY: u32, groupCountZ: u32) -> (),PFN_vkCmdDrawMeshTasksEXT,c"vkCmdDrawMeshTasksEXT";
+        CmdDrawMeshTasksIndirectEXT(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, drawCount: u32, stride: u32) -> (),PFN_vkCmdDrawMeshTasksIndirectEXT,c"vkCmdDrawMeshTasksIndirectEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32379,12 +32380,12 @@ pub mod ext_mesh_shader {
 pub mod khr_copy_commands2 {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdCopyBuffer2KHR,PFN_vkCmdCopyBuffer2KHR,c"vkCmdCopyBuffer2KHR";
-        CmdCopyImage2KHR,PFN_vkCmdCopyImage2KHR,c"vkCmdCopyImage2KHR";
-        CmdCopyBufferToImage2KHR,PFN_vkCmdCopyBufferToImage2KHR,c"vkCmdCopyBufferToImage2KHR";
-        CmdCopyImageToBuffer2KHR,PFN_vkCmdCopyImageToBuffer2KHR,c"vkCmdCopyImageToBuffer2KHR";
-        CmdBlitImage2KHR,PFN_vkCmdBlitImage2KHR,c"vkCmdBlitImage2KHR";
-        CmdResolveImage2KHR,PFN_vkCmdResolveImage2KHR,c"vkCmdResolveImage2KHR";
+        CmdCopyBuffer2KHR(commandBuffer: VkCommandBuffer, pCopyBufferInfo: *const VkCopyBufferInfo2) -> (),PFN_vkCmdCopyBuffer2KHR,c"vkCmdCopyBuffer2KHR";
+        CmdCopyImage2KHR(commandBuffer: VkCommandBuffer, pCopyImageInfo: *const VkCopyImageInfo2) -> (),PFN_vkCmdCopyImage2KHR,c"vkCmdCopyImage2KHR";
+        CmdCopyBufferToImage2KHR(commandBuffer: VkCommandBuffer, pCopyBufferToImageInfo: *const VkCopyBufferToImageInfo2) -> (),PFN_vkCmdCopyBufferToImage2KHR,c"vkCmdCopyBufferToImage2KHR";
+        CmdCopyImageToBuffer2KHR(commandBuffer: VkCommandBuffer, pCopyImageToBufferInfo: *const VkCopyImageToBufferInfo2) -> (),PFN_vkCmdCopyImageToBuffer2KHR,c"vkCmdCopyImageToBuffer2KHR";
+        CmdBlitImage2KHR(commandBuffer: VkCommandBuffer, pBlitImageInfo: *const VkBlitImageInfo2) -> (),PFN_vkCmdBlitImage2KHR,c"vkCmdBlitImage2KHR";
+        CmdResolveImage2KHR(commandBuffer: VkCommandBuffer, pResolveImageInfo: *const VkResolveImageInfo2) -> (),PFN_vkCmdResolveImage2KHR,c"vkCmdResolveImage2KHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32417,7 +32418,7 @@ pub mod khr_copy_commands2 {
 pub mod ext_image_compression_control {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetImageSubresourceLayout2EXT,PFN_vkGetImageSubresourceLayout2EXT,c"vkGetImageSubresourceLayout2EXT";
+        GetImageSubresourceLayout2EXT(device: VkDevice, image: VkImage, pSubresource: *const VkImageSubresource2, pLayout: *mut VkSubresourceLayout2) -> (),PFN_vkGetImageSubresourceLayout2EXT,c"vkGetImageSubresourceLayout2EXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32430,7 +32431,7 @@ pub mod ext_image_compression_control {
 pub mod ext_device_fault {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetDeviceFaultInfoEXT,PFN_vkGetDeviceFaultInfoEXT,c"vkGetDeviceFaultInfoEXT";
+        GetDeviceFaultInfoEXT(device: VkDevice, pFaultCounts: *mut VkDeviceFaultCountsEXT, pFaultInfo: *mut VkDeviceFaultInfoEXT) -> VkResult,PFN_vkGetDeviceFaultInfoEXT,c"vkGetDeviceFaultInfoEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32443,8 +32444,8 @@ pub mod ext_device_fault {
 pub mod nv_acquire_winrt_display {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        AcquireWinrtDisplayNV,PFN_vkAcquireWinrtDisplayNV,c"vkAcquireWinrtDisplayNV";
-        GetWinrtDisplayNV,PFN_vkGetWinrtDisplayNV,c"vkGetWinrtDisplayNV";
+        AcquireWinrtDisplayNV(physicalDevice: VkPhysicalDevice, display: VkDisplayKHR) -> VkResult,PFN_vkAcquireWinrtDisplayNV,c"vkAcquireWinrtDisplayNV";
+        GetWinrtDisplayNV(physicalDevice: VkPhysicalDevice, deviceRelativeId: u32, pDisplay: *mut VkDisplayKHR) -> VkResult,PFN_vkGetWinrtDisplayNV,c"vkGetWinrtDisplayNV";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -32461,8 +32462,8 @@ pub mod nv_acquire_winrt_display {
 pub mod ext_directfb_surface {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        CreateDirectFBSurfaceEXT,PFN_vkCreateDirectFBSurfaceEXT,c"vkCreateDirectFBSurfaceEXT";
-        GetPhysicalDeviceDirectFBPresentationSupportEXT,PFN_vkGetPhysicalDeviceDirectFBPresentationSupportEXT,c"vkGetPhysicalDeviceDirectFBPresentationSupportEXT";
+        CreateDirectFBSurfaceEXT(instance: VkInstance, pCreateInfo: *const VkDirectFBSurfaceCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateDirectFBSurfaceEXT,c"vkCreateDirectFBSurfaceEXT";
+        GetPhysicalDeviceDirectFBPresentationSupportEXT(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, dfb: *mut IDirectFB) -> VkBool32,PFN_vkGetPhysicalDeviceDirectFBPresentationSupportEXT,c"vkGetPhysicalDeviceDirectFBPresentationSupportEXT";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -32479,7 +32480,7 @@ pub mod ext_directfb_surface {
 pub mod ext_vertex_input_dynamic_state {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdSetVertexInputEXT,PFN_vkCmdSetVertexInputEXT,c"vkCmdSetVertexInputEXT";
+        CmdSetVertexInputEXT(commandBuffer: VkCommandBuffer, vertexBindingDescriptionCount: u32, pVertexBindingDescriptions: *const VkVertexInputBindingDescription2EXT, vertexAttributeDescriptionCount: u32, pVertexAttributeDescriptions: *const VkVertexInputAttributeDescription2EXT) -> (),PFN_vkCmdSetVertexInputEXT,c"vkCmdSetVertexInputEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32492,8 +32493,8 @@ pub mod ext_vertex_input_dynamic_state {
 pub mod fuchsia_external_memory {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetMemoryZirconHandleFUCHSIA,PFN_vkGetMemoryZirconHandleFUCHSIA,c"vkGetMemoryZirconHandleFUCHSIA";
-        GetMemoryZirconHandlePropertiesFUCHSIA,PFN_vkGetMemoryZirconHandlePropertiesFUCHSIA,c"vkGetMemoryZirconHandlePropertiesFUCHSIA";
+        GetMemoryZirconHandleFUCHSIA(device: VkDevice, pGetZirconHandleInfo: *const VkMemoryGetZirconHandleInfoFUCHSIA, pZirconHandle: *mut zx_handle_t) -> VkResult,PFN_vkGetMemoryZirconHandleFUCHSIA,c"vkGetMemoryZirconHandleFUCHSIA";
+        GetMemoryZirconHandlePropertiesFUCHSIA(device: VkDevice, handleType: VkExternalMemoryHandleTypeFlagBits, zirconHandle: zx_handle_t, pMemoryZirconHandleProperties: *mut VkMemoryZirconHandlePropertiesFUCHSIA) -> VkResult,PFN_vkGetMemoryZirconHandlePropertiesFUCHSIA,c"vkGetMemoryZirconHandlePropertiesFUCHSIA";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32510,8 +32511,8 @@ pub mod fuchsia_external_memory {
 pub mod fuchsia_external_semaphore {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        ImportSemaphoreZirconHandleFUCHSIA,PFN_vkImportSemaphoreZirconHandleFUCHSIA,c"vkImportSemaphoreZirconHandleFUCHSIA";
-        GetSemaphoreZirconHandleFUCHSIA,PFN_vkGetSemaphoreZirconHandleFUCHSIA,c"vkGetSemaphoreZirconHandleFUCHSIA";
+        ImportSemaphoreZirconHandleFUCHSIA(device: VkDevice, pImportSemaphoreZirconHandleInfo: *const VkImportSemaphoreZirconHandleInfoFUCHSIA) -> VkResult,PFN_vkImportSemaphoreZirconHandleFUCHSIA,c"vkImportSemaphoreZirconHandleFUCHSIA";
+        GetSemaphoreZirconHandleFUCHSIA(device: VkDevice, pGetZirconHandleInfo: *const VkSemaphoreGetZirconHandleInfoFUCHSIA, pZirconHandle: *mut zx_handle_t) -> VkResult,PFN_vkGetSemaphoreZirconHandleFUCHSIA,c"vkGetSemaphoreZirconHandleFUCHSIA";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32528,11 +32529,11 @@ pub mod fuchsia_external_semaphore {
 pub mod fuchsia_buffer_collection {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CreateBufferCollectionFUCHSIA,PFN_vkCreateBufferCollectionFUCHSIA,c"vkCreateBufferCollectionFUCHSIA";
-        SetBufferCollectionImageConstraintsFUCHSIA,PFN_vkSetBufferCollectionImageConstraintsFUCHSIA,c"vkSetBufferCollectionImageConstraintsFUCHSIA";
-        SetBufferCollectionBufferConstraintsFUCHSIA,PFN_vkSetBufferCollectionBufferConstraintsFUCHSIA,c"vkSetBufferCollectionBufferConstraintsFUCHSIA";
-        DestroyBufferCollectionFUCHSIA,PFN_vkDestroyBufferCollectionFUCHSIA,c"vkDestroyBufferCollectionFUCHSIA";
-        GetBufferCollectionPropertiesFUCHSIA,PFN_vkGetBufferCollectionPropertiesFUCHSIA,c"vkGetBufferCollectionPropertiesFUCHSIA";
+        CreateBufferCollectionFUCHSIA(device: VkDevice, pCreateInfo: *const VkBufferCollectionCreateInfoFUCHSIA, pAllocator: *const VkAllocationCallbacks, pCollection: *mut VkBufferCollectionFUCHSIA) -> VkResult,PFN_vkCreateBufferCollectionFUCHSIA,c"vkCreateBufferCollectionFUCHSIA";
+        SetBufferCollectionImageConstraintsFUCHSIA(device: VkDevice, collection: VkBufferCollectionFUCHSIA, pImageConstraintsInfo: *const VkImageConstraintsInfoFUCHSIA) -> VkResult,PFN_vkSetBufferCollectionImageConstraintsFUCHSIA,c"vkSetBufferCollectionImageConstraintsFUCHSIA";
+        SetBufferCollectionBufferConstraintsFUCHSIA(device: VkDevice, collection: VkBufferCollectionFUCHSIA, pBufferConstraintsInfo: *const VkBufferConstraintsInfoFUCHSIA) -> VkResult,PFN_vkSetBufferCollectionBufferConstraintsFUCHSIA,c"vkSetBufferCollectionBufferConstraintsFUCHSIA";
+        DestroyBufferCollectionFUCHSIA(device: VkDevice, collection: VkBufferCollectionFUCHSIA, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyBufferCollectionFUCHSIA,c"vkDestroyBufferCollectionFUCHSIA";
+        GetBufferCollectionPropertiesFUCHSIA(device: VkDevice, collection: VkBufferCollectionFUCHSIA, pProperties: *mut VkBufferCollectionPropertiesFUCHSIA) -> VkResult,PFN_vkGetBufferCollectionPropertiesFUCHSIA,c"vkGetBufferCollectionPropertiesFUCHSIA";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32561,8 +32562,8 @@ pub mod fuchsia_buffer_collection {
 pub mod huawei_subpass_shading {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI,PFN_vkGetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI,c"vkGetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI";
-        CmdSubpassShadingHUAWEI,PFN_vkCmdSubpassShadingHUAWEI,c"vkCmdSubpassShadingHUAWEI";
+        GetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI(device: VkDevice, renderpass: VkRenderPass, pMaxWorkgroupSize: *mut VkExtent2D) -> VkResult,PFN_vkGetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI,c"vkGetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI";
+        CmdSubpassShadingHUAWEI(commandBuffer: VkCommandBuffer) -> (),PFN_vkCmdSubpassShadingHUAWEI,c"vkCmdSubpassShadingHUAWEI";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32579,7 +32580,7 @@ pub mod huawei_subpass_shading {
 pub mod huawei_invocation_mask {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdBindInvocationMaskHUAWEI,PFN_vkCmdBindInvocationMaskHUAWEI,c"vkCmdBindInvocationMaskHUAWEI";
+        CmdBindInvocationMaskHUAWEI(commandBuffer: VkCommandBuffer, imageView: VkImageView, imageLayout: VkImageLayout) -> (),PFN_vkCmdBindInvocationMaskHUAWEI,c"vkCmdBindInvocationMaskHUAWEI";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32592,7 +32593,7 @@ pub mod huawei_invocation_mask {
 pub mod nv_external_memory_rdma {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetMemoryRemoteAddressNV,PFN_vkGetMemoryRemoteAddressNV,c"vkGetMemoryRemoteAddressNV";
+        GetMemoryRemoteAddressNV(device: VkDevice, pMemoryGetRemoteAddressInfo: *const VkMemoryGetRemoteAddressInfoNV, pAddress: *mut VkRemoteAddressNV) -> VkResult,PFN_vkGetMemoryRemoteAddressNV,c"vkGetMemoryRemoteAddressNV";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32605,7 +32606,7 @@ pub mod nv_external_memory_rdma {
 pub mod ext_pipeline_properties {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetPipelinePropertiesEXT,PFN_vkGetPipelinePropertiesEXT,c"vkGetPipelinePropertiesEXT";
+        GetPipelinePropertiesEXT(device: VkDevice, pPipelineInfo: *const VkPipelineInfoKHR, pPipelineProperties: *mut VkBaseOutStructure) -> VkResult,PFN_vkGetPipelinePropertiesEXT,c"vkGetPipelinePropertiesEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32618,11 +32619,11 @@ pub mod ext_pipeline_properties {
 pub mod ext_extended_dynamic_state2 {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdSetPatchControlPointsEXT,PFN_vkCmdSetPatchControlPointsEXT,c"vkCmdSetPatchControlPointsEXT";
-        CmdSetRasterizerDiscardEnableEXT,PFN_vkCmdSetRasterizerDiscardEnableEXT,c"vkCmdSetRasterizerDiscardEnableEXT";
-        CmdSetDepthBiasEnableEXT,PFN_vkCmdSetDepthBiasEnableEXT,c"vkCmdSetDepthBiasEnableEXT";
-        CmdSetLogicOpEXT,PFN_vkCmdSetLogicOpEXT,c"vkCmdSetLogicOpEXT";
-        CmdSetPrimitiveRestartEnableEXT,PFN_vkCmdSetPrimitiveRestartEnableEXT,c"vkCmdSetPrimitiveRestartEnableEXT";
+        CmdSetPatchControlPointsEXT(commandBuffer: VkCommandBuffer, patchControlPoints: u32) -> (),PFN_vkCmdSetPatchControlPointsEXT,c"vkCmdSetPatchControlPointsEXT";
+        CmdSetRasterizerDiscardEnableEXT(commandBuffer: VkCommandBuffer, rasterizerDiscardEnable: VkBool32) -> (),PFN_vkCmdSetRasterizerDiscardEnableEXT,c"vkCmdSetRasterizerDiscardEnableEXT";
+        CmdSetDepthBiasEnableEXT(commandBuffer: VkCommandBuffer, depthBiasEnable: VkBool32) -> (),PFN_vkCmdSetDepthBiasEnableEXT,c"vkCmdSetDepthBiasEnableEXT";
+        CmdSetLogicOpEXT(commandBuffer: VkCommandBuffer, logicOp: VkLogicOp) -> (),PFN_vkCmdSetLogicOpEXT,c"vkCmdSetLogicOpEXT";
+        CmdSetPrimitiveRestartEnableEXT(commandBuffer: VkCommandBuffer, primitiveRestartEnable: VkBool32) -> (),PFN_vkCmdSetPrimitiveRestartEnableEXT,c"vkCmdSetPrimitiveRestartEnableEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32651,8 +32652,8 @@ pub mod ext_extended_dynamic_state2 {
 pub mod qnx_screen_surface {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        CreateScreenSurfaceQNX,PFN_vkCreateScreenSurfaceQNX,c"vkCreateScreenSurfaceQNX";
-        GetPhysicalDeviceScreenPresentationSupportQNX,PFN_vkGetPhysicalDeviceScreenPresentationSupportQNX,c"vkGetPhysicalDeviceScreenPresentationSupportQNX";
+        CreateScreenSurfaceQNX(instance: VkInstance, pCreateInfo: *const VkScreenSurfaceCreateInfoQNX, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateScreenSurfaceQNX,c"vkCreateScreenSurfaceQNX";
+        GetPhysicalDeviceScreenPresentationSupportQNX(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, window: *mut _screen_window) -> VkBool32,PFN_vkGetPhysicalDeviceScreenPresentationSupportQNX,c"vkGetPhysicalDeviceScreenPresentationSupportQNX";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -32669,7 +32670,7 @@ pub mod qnx_screen_surface {
 pub mod ext_color_write_enable {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdSetColorWriteEnableEXT,PFN_vkCmdSetColorWriteEnableEXT,c"vkCmdSetColorWriteEnableEXT";
+        CmdSetColorWriteEnableEXT(commandBuffer: VkCommandBuffer, attachmentCount: u32, pColorWriteEnables: *const VkBool32) -> (),PFN_vkCmdSetColorWriteEnableEXT,c"vkCmdSetColorWriteEnableEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32682,8 +32683,8 @@ pub mod ext_color_write_enable {
 pub mod ext_multi_draw {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdDrawMultiEXT,PFN_vkCmdDrawMultiEXT,c"vkCmdDrawMultiEXT";
-        CmdDrawMultiIndexedEXT,PFN_vkCmdDrawMultiIndexedEXT,c"vkCmdDrawMultiIndexedEXT";
+        CmdDrawMultiEXT(commandBuffer: VkCommandBuffer, drawCount: u32, pVertexInfo: *const VkMultiDrawInfoEXT, instanceCount: u32, firstInstance: u32, stride: u32) -> (),PFN_vkCmdDrawMultiEXT,c"vkCmdDrawMultiEXT";
+        CmdDrawMultiIndexedEXT(commandBuffer: VkCommandBuffer, drawCount: u32, pIndexInfo: *const VkMultiDrawIndexedInfoEXT, instanceCount: u32, firstInstance: u32, stride: u32, pVertexOffset: *const i32) -> (),PFN_vkCmdDrawMultiIndexedEXT,c"vkCmdDrawMultiIndexedEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32700,20 +32701,20 @@ pub mod ext_multi_draw {
 pub mod ext_opacity_micromap {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CreateMicromapEXT,PFN_vkCreateMicromapEXT,c"vkCreateMicromapEXT";
-        DestroyMicromapEXT,PFN_vkDestroyMicromapEXT,c"vkDestroyMicromapEXT";
-        CmdBuildMicromapsEXT,PFN_vkCmdBuildMicromapsEXT,c"vkCmdBuildMicromapsEXT";
-        BuildMicromapsEXT,PFN_vkBuildMicromapsEXT,c"vkBuildMicromapsEXT";
-        CopyMicromapEXT,PFN_vkCopyMicromapEXT,c"vkCopyMicromapEXT";
-        CopyMicromapToMemoryEXT,PFN_vkCopyMicromapToMemoryEXT,c"vkCopyMicromapToMemoryEXT";
-        CopyMemoryToMicromapEXT,PFN_vkCopyMemoryToMicromapEXT,c"vkCopyMemoryToMicromapEXT";
-        WriteMicromapsPropertiesEXT,PFN_vkWriteMicromapsPropertiesEXT,c"vkWriteMicromapsPropertiesEXT";
-        CmdCopyMicromapEXT,PFN_vkCmdCopyMicromapEXT,c"vkCmdCopyMicromapEXT";
-        CmdCopyMicromapToMemoryEXT,PFN_vkCmdCopyMicromapToMemoryEXT,c"vkCmdCopyMicromapToMemoryEXT";
-        CmdCopyMemoryToMicromapEXT,PFN_vkCmdCopyMemoryToMicromapEXT,c"vkCmdCopyMemoryToMicromapEXT";
-        CmdWriteMicromapsPropertiesEXT,PFN_vkCmdWriteMicromapsPropertiesEXT,c"vkCmdWriteMicromapsPropertiesEXT";
-        GetDeviceMicromapCompatibilityEXT,PFN_vkGetDeviceMicromapCompatibilityEXT,c"vkGetDeviceMicromapCompatibilityEXT";
-        GetMicromapBuildSizesEXT,PFN_vkGetMicromapBuildSizesEXT,c"vkGetMicromapBuildSizesEXT";
+        CreateMicromapEXT(device: VkDevice, pCreateInfo: *const VkMicromapCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pMicromap: *mut VkMicromapEXT) -> VkResult,PFN_vkCreateMicromapEXT,c"vkCreateMicromapEXT";
+        DestroyMicromapEXT(device: VkDevice, micromap: VkMicromapEXT, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyMicromapEXT,c"vkDestroyMicromapEXT";
+        CmdBuildMicromapsEXT(commandBuffer: VkCommandBuffer, infoCount: u32, pInfos: *const VkMicromapBuildInfoEXT) -> (),PFN_vkCmdBuildMicromapsEXT,c"vkCmdBuildMicromapsEXT";
+        BuildMicromapsEXT(device: VkDevice, deferredOperation: VkDeferredOperationKHR, infoCount: u32, pInfos: *const VkMicromapBuildInfoEXT) -> VkResult,PFN_vkBuildMicromapsEXT,c"vkBuildMicromapsEXT";
+        CopyMicromapEXT(device: VkDevice, deferredOperation: VkDeferredOperationKHR, pInfo: *const VkCopyMicromapInfoEXT) -> VkResult,PFN_vkCopyMicromapEXT,c"vkCopyMicromapEXT";
+        CopyMicromapToMemoryEXT(device: VkDevice, deferredOperation: VkDeferredOperationKHR, pInfo: *const VkCopyMicromapToMemoryInfoEXT) -> VkResult,PFN_vkCopyMicromapToMemoryEXT,c"vkCopyMicromapToMemoryEXT";
+        CopyMemoryToMicromapEXT(device: VkDevice, deferredOperation: VkDeferredOperationKHR, pInfo: *const VkCopyMemoryToMicromapInfoEXT) -> VkResult,PFN_vkCopyMemoryToMicromapEXT,c"vkCopyMemoryToMicromapEXT";
+        WriteMicromapsPropertiesEXT(device: VkDevice, micromapCount: u32, pMicromaps: *const VkMicromapEXT, queryType: VkQueryType, dataSize: usize, pData: *mut c_void, stride: usize) -> VkResult,PFN_vkWriteMicromapsPropertiesEXT,c"vkWriteMicromapsPropertiesEXT";
+        CmdCopyMicromapEXT(commandBuffer: VkCommandBuffer, pInfo: *const VkCopyMicromapInfoEXT) -> (),PFN_vkCmdCopyMicromapEXT,c"vkCmdCopyMicromapEXT";
+        CmdCopyMicromapToMemoryEXT(commandBuffer: VkCommandBuffer, pInfo: *const VkCopyMicromapToMemoryInfoEXT) -> (),PFN_vkCmdCopyMicromapToMemoryEXT,c"vkCmdCopyMicromapToMemoryEXT";
+        CmdCopyMemoryToMicromapEXT(commandBuffer: VkCommandBuffer, pInfo: *const VkCopyMemoryToMicromapInfoEXT) -> (),PFN_vkCmdCopyMemoryToMicromapEXT,c"vkCmdCopyMemoryToMicromapEXT";
+        CmdWriteMicromapsPropertiesEXT(commandBuffer: VkCommandBuffer, micromapCount: u32, pMicromaps: *const VkMicromapEXT, queryType: VkQueryType, queryPool: VkQueryPool, firstQuery: u32) -> (),PFN_vkCmdWriteMicromapsPropertiesEXT,c"vkCmdWriteMicromapsPropertiesEXT";
+        GetDeviceMicromapCompatibilityEXT(device: VkDevice, pVersionInfo: *const VkMicromapVersionInfoEXT, pCompatibility: *mut VkAccelerationStructureCompatibilityKHR) -> (),PFN_vkGetDeviceMicromapCompatibilityEXT,c"vkGetDeviceMicromapCompatibilityEXT";
+        GetMicromapBuildSizesEXT(device: VkDevice, buildType: VkAccelerationStructureBuildTypeKHR, pBuildInfo: *const VkMicromapBuildInfoEXT, pSizeInfo: *mut VkMicromapBuildSizesInfoEXT) -> (),PFN_vkGetMicromapBuildSizesEXT,c"vkGetMicromapBuildSizesEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32778,8 +32779,8 @@ pub mod ext_opacity_micromap {
 pub mod huawei_cluster_culling_shader {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdDrawClusterHUAWEI,PFN_vkCmdDrawClusterHUAWEI,c"vkCmdDrawClusterHUAWEI";
-        CmdDrawClusterIndirectHUAWEI,PFN_vkCmdDrawClusterIndirectHUAWEI,c"vkCmdDrawClusterIndirectHUAWEI";
+        CmdDrawClusterHUAWEI(commandBuffer: VkCommandBuffer, groupCountX: u32, groupCountY: u32, groupCountZ: u32) -> (),PFN_vkCmdDrawClusterHUAWEI,c"vkCmdDrawClusterHUAWEI";
+        CmdDrawClusterIndirectHUAWEI(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize) -> (),PFN_vkCmdDrawClusterIndirectHUAWEI,c"vkCmdDrawClusterIndirectHUAWEI";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32796,7 +32797,7 @@ pub mod huawei_cluster_culling_shader {
 pub mod ext_pageable_device_local_memory {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        SetDeviceMemoryPriorityEXT,PFN_vkSetDeviceMemoryPriorityEXT,c"vkSetDeviceMemoryPriorityEXT";
+        SetDeviceMemoryPriorityEXT(device: VkDevice, memory: VkDeviceMemory, priority: f32) -> (),PFN_vkSetDeviceMemoryPriorityEXT,c"vkSetDeviceMemoryPriorityEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32809,9 +32810,9 @@ pub mod ext_pageable_device_local_memory {
 pub mod khr_maintenance4 {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetDeviceBufferMemoryRequirementsKHR,PFN_vkGetDeviceBufferMemoryRequirementsKHR,c"vkGetDeviceBufferMemoryRequirementsKHR";
-        GetDeviceImageMemoryRequirementsKHR,PFN_vkGetDeviceImageMemoryRequirementsKHR,c"vkGetDeviceImageMemoryRequirementsKHR";
-        GetDeviceImageSparseMemoryRequirementsKHR,PFN_vkGetDeviceImageSparseMemoryRequirementsKHR,c"vkGetDeviceImageSparseMemoryRequirementsKHR";
+        GetDeviceBufferMemoryRequirementsKHR(device: VkDevice, pInfo: *const VkDeviceBufferMemoryRequirements, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetDeviceBufferMemoryRequirementsKHR,c"vkGetDeviceBufferMemoryRequirementsKHR";
+        GetDeviceImageMemoryRequirementsKHR(device: VkDevice, pInfo: *const VkDeviceImageMemoryRequirements, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetDeviceImageMemoryRequirementsKHR,c"vkGetDeviceImageMemoryRequirementsKHR";
+        GetDeviceImageSparseMemoryRequirementsKHR(device: VkDevice, pInfo: *const VkDeviceImageMemoryRequirements, pSparseMemoryRequirementCount: *mut u32, pSparseMemoryRequirements: *mut VkSparseImageMemoryRequirements2) -> (),PFN_vkGetDeviceImageSparseMemoryRequirementsKHR,c"vkGetDeviceImageSparseMemoryRequirementsKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32832,7 +32833,7 @@ pub mod khr_maintenance4 {
 pub mod arm_scheduling_controls {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdSetDispatchParametersARM,PFN_vkCmdSetDispatchParametersARM,c"vkCmdSetDispatchParametersARM";
+        CmdSetDispatchParametersARM(commandBuffer: VkCommandBuffer, pDispatchParameters: *const VkDispatchParametersARM) -> (),PFN_vkCmdSetDispatchParametersARM,c"vkCmdSetDispatchParametersARM";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32845,8 +32846,8 @@ pub mod arm_scheduling_controls {
 pub mod valve_descriptor_set_host_mapping {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetDescriptorSetLayoutHostMappingInfoVALVE,PFN_vkGetDescriptorSetLayoutHostMappingInfoVALVE,c"vkGetDescriptorSetLayoutHostMappingInfoVALVE";
-        GetDescriptorSetHostMappingVALVE,PFN_vkGetDescriptorSetHostMappingVALVE,c"vkGetDescriptorSetHostMappingVALVE";
+        GetDescriptorSetLayoutHostMappingInfoVALVE(device: VkDevice, pBindingReference: *const VkDescriptorSetBindingReferenceVALVE, pHostMapping: *mut VkDescriptorSetLayoutHostMappingInfoVALVE) -> (),PFN_vkGetDescriptorSetLayoutHostMappingInfoVALVE,c"vkGetDescriptorSetLayoutHostMappingInfoVALVE";
+        GetDescriptorSetHostMappingVALVE(device: VkDevice, descriptorSet: VkDescriptorSet, ppData: *mut *mut c_void) -> (),PFN_vkGetDescriptorSetHostMappingVALVE,c"vkGetDescriptorSetHostMappingVALVE";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32863,8 +32864,8 @@ pub mod valve_descriptor_set_host_mapping {
 pub mod nv_copy_memory_indirect {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdCopyMemoryIndirectNV,PFN_vkCmdCopyMemoryIndirectNV,c"vkCmdCopyMemoryIndirectNV";
-        CmdCopyMemoryToImageIndirectNV,PFN_vkCmdCopyMemoryToImageIndirectNV,c"vkCmdCopyMemoryToImageIndirectNV";
+        CmdCopyMemoryIndirectNV(commandBuffer: VkCommandBuffer, copyBufferAddress: VkDeviceAddress, copyCount: u32, stride: u32) -> (),PFN_vkCmdCopyMemoryIndirectNV,c"vkCmdCopyMemoryIndirectNV";
+        CmdCopyMemoryToImageIndirectNV(commandBuffer: VkCommandBuffer, copyBufferAddress: VkDeviceAddress, copyCount: u32, stride: u32, dstImage: VkImage, dstImageLayout: VkImageLayout, pImageSubresources: *const VkImageSubresourceLayers) -> (),PFN_vkCmdCopyMemoryToImageIndirectNV,c"vkCmdCopyMemoryToImageIndirectNV";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32881,8 +32882,8 @@ pub mod nv_copy_memory_indirect {
 pub mod nv_memory_decompression {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdDecompressMemoryNV,PFN_vkCmdDecompressMemoryNV,c"vkCmdDecompressMemoryNV";
-        CmdDecompressMemoryIndirectCountNV,PFN_vkCmdDecompressMemoryIndirectCountNV,c"vkCmdDecompressMemoryIndirectCountNV";
+        CmdDecompressMemoryNV(commandBuffer: VkCommandBuffer, decompressRegionCount: u32, pDecompressMemoryRegions: *const VkDecompressMemoryRegionNV) -> (),PFN_vkCmdDecompressMemoryNV,c"vkCmdDecompressMemoryNV";
+        CmdDecompressMemoryIndirectCountNV(commandBuffer: VkCommandBuffer, indirectCommandsAddress: VkDeviceAddress, indirectCommandsCountAddress: VkDeviceAddress, stride: u32) -> (),PFN_vkCmdDecompressMemoryIndirectCountNV,c"vkCmdDecompressMemoryIndirectCountNV";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32899,9 +32900,9 @@ pub mod nv_memory_decompression {
 pub mod nv_device_generated_commands_compute {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetPipelineIndirectMemoryRequirementsNV,PFN_vkGetPipelineIndirectMemoryRequirementsNV,c"vkGetPipelineIndirectMemoryRequirementsNV";
-        CmdUpdatePipelineIndirectBufferNV,PFN_vkCmdUpdatePipelineIndirectBufferNV,c"vkCmdUpdatePipelineIndirectBufferNV";
-        GetPipelineIndirectDeviceAddressNV,PFN_vkGetPipelineIndirectDeviceAddressNV,c"vkGetPipelineIndirectDeviceAddressNV";
+        GetPipelineIndirectMemoryRequirementsNV(device: VkDevice, pCreateInfo: *const VkComputePipelineCreateInfo, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetPipelineIndirectMemoryRequirementsNV,c"vkGetPipelineIndirectMemoryRequirementsNV";
+        CmdUpdatePipelineIndirectBufferNV(commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, pipeline: VkPipeline) -> (),PFN_vkCmdUpdatePipelineIndirectBufferNV,c"vkCmdUpdatePipelineIndirectBufferNV";
+        GetPipelineIndirectDeviceAddressNV(device: VkDevice, pInfo: *const VkPipelineIndirectDeviceAddressInfoNV) -> VkDeviceAddress,PFN_vkGetPipelineIndirectDeviceAddressNV,c"vkGetPipelineIndirectDeviceAddressNV";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32922,8 +32923,8 @@ pub mod nv_device_generated_commands_compute {
 pub mod ohos_external_memory {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetNativeBufferPropertiesOHOS,PFN_vkGetNativeBufferPropertiesOHOS,c"vkGetNativeBufferPropertiesOHOS";
-        GetMemoryNativeBufferOHOS,PFN_vkGetMemoryNativeBufferOHOS,c"vkGetMemoryNativeBufferOHOS";
+        GetNativeBufferPropertiesOHOS(device: VkDevice, buffer: *const OH_NativeBuffer, pProperties: *mut VkNativeBufferPropertiesOHOS) -> VkResult,PFN_vkGetNativeBufferPropertiesOHOS,c"vkGetNativeBufferPropertiesOHOS";
+        GetMemoryNativeBufferOHOS(device: VkDevice, pInfo: *const VkMemoryGetNativeBufferInfoOHOS, pBuffer: *mut *mut OH_NativeBuffer) -> VkResult,PFN_vkGetMemoryNativeBufferOHOS,c"vkGetMemoryNativeBufferOHOS";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32940,16 +32941,16 @@ pub mod ohos_external_memory {
 pub mod ext_extended_dynamic_state3 {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdSetDepthClampEnableEXT,PFN_vkCmdSetDepthClampEnableEXT,c"vkCmdSetDepthClampEnableEXT";
-        CmdSetPolygonModeEXT,PFN_vkCmdSetPolygonModeEXT,c"vkCmdSetPolygonModeEXT";
-        CmdSetRasterizationSamplesEXT,PFN_vkCmdSetRasterizationSamplesEXT,c"vkCmdSetRasterizationSamplesEXT";
-        CmdSetSampleMaskEXT,PFN_vkCmdSetSampleMaskEXT,c"vkCmdSetSampleMaskEXT";
-        CmdSetAlphaToCoverageEnableEXT,PFN_vkCmdSetAlphaToCoverageEnableEXT,c"vkCmdSetAlphaToCoverageEnableEXT";
-        CmdSetAlphaToOneEnableEXT,PFN_vkCmdSetAlphaToOneEnableEXT,c"vkCmdSetAlphaToOneEnableEXT";
-        CmdSetLogicOpEnableEXT,PFN_vkCmdSetLogicOpEnableEXT,c"vkCmdSetLogicOpEnableEXT";
-        CmdSetColorBlendEnableEXT,PFN_vkCmdSetColorBlendEnableEXT,c"vkCmdSetColorBlendEnableEXT";
-        CmdSetColorBlendEquationEXT,PFN_vkCmdSetColorBlendEquationEXT,c"vkCmdSetColorBlendEquationEXT";
-        CmdSetColorWriteMaskEXT,PFN_vkCmdSetColorWriteMaskEXT,c"vkCmdSetColorWriteMaskEXT";
+        CmdSetDepthClampEnableEXT(commandBuffer: VkCommandBuffer, depthClampEnable: VkBool32) -> (),PFN_vkCmdSetDepthClampEnableEXT,c"vkCmdSetDepthClampEnableEXT";
+        CmdSetPolygonModeEXT(commandBuffer: VkCommandBuffer, polygonMode: VkPolygonMode) -> (),PFN_vkCmdSetPolygonModeEXT,c"vkCmdSetPolygonModeEXT";
+        CmdSetRasterizationSamplesEXT(commandBuffer: VkCommandBuffer, rasterizationSamples: VkSampleCountFlagBits) -> (),PFN_vkCmdSetRasterizationSamplesEXT,c"vkCmdSetRasterizationSamplesEXT";
+        CmdSetSampleMaskEXT(commandBuffer: VkCommandBuffer, samples: VkSampleCountFlagBits, pSampleMask: *const VkSampleMask) -> (),PFN_vkCmdSetSampleMaskEXT,c"vkCmdSetSampleMaskEXT";
+        CmdSetAlphaToCoverageEnableEXT(commandBuffer: VkCommandBuffer, alphaToCoverageEnable: VkBool32) -> (),PFN_vkCmdSetAlphaToCoverageEnableEXT,c"vkCmdSetAlphaToCoverageEnableEXT";
+        CmdSetAlphaToOneEnableEXT(commandBuffer: VkCommandBuffer, alphaToOneEnable: VkBool32) -> (),PFN_vkCmdSetAlphaToOneEnableEXT,c"vkCmdSetAlphaToOneEnableEXT";
+        CmdSetLogicOpEnableEXT(commandBuffer: VkCommandBuffer, logicOpEnable: VkBool32) -> (),PFN_vkCmdSetLogicOpEnableEXT,c"vkCmdSetLogicOpEnableEXT";
+        CmdSetColorBlendEnableEXT(commandBuffer: VkCommandBuffer, firstAttachment: u32, attachmentCount: u32, pColorBlendEnables: *const VkBool32) -> (),PFN_vkCmdSetColorBlendEnableEXT,c"vkCmdSetColorBlendEnableEXT";
+        CmdSetColorBlendEquationEXT(commandBuffer: VkCommandBuffer, firstAttachment: u32, attachmentCount: u32, pColorBlendEquations: *const VkColorBlendEquationEXT) -> (),PFN_vkCmdSetColorBlendEquationEXT,c"vkCmdSetColorBlendEquationEXT";
+        CmdSetColorWriteMaskEXT(commandBuffer: VkCommandBuffer, firstAttachment: u32, attachmentCount: u32, pColorWriteMasks: *const VkColorComponentFlags) -> (),PFN_vkCmdSetColorWriteMaskEXT,c"vkCmdSetColorWriteMaskEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -32998,7 +32999,7 @@ pub mod ext_extended_dynamic_state3 {
 pub mod arm_tensors {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceExternalTensorPropertiesARM,PFN_vkGetPhysicalDeviceExternalTensorPropertiesARM,c"vkGetPhysicalDeviceExternalTensorPropertiesARM";
+        GetPhysicalDeviceExternalTensorPropertiesARM(physicalDevice: VkPhysicalDevice, pExternalTensorInfo: *const VkPhysicalDeviceExternalTensorInfoARM, pExternalTensorProperties: *mut VkExternalTensorPropertiesARM) -> (),PFN_vkGetPhysicalDeviceExternalTensorPropertiesARM,c"vkGetPhysicalDeviceExternalTensorPropertiesARM";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -33007,14 +33008,14 @@ pub mod arm_tensors {
         }
     }
     dispatch_table! { DeviceDispatch;
-        CreateTensorARM,PFN_vkCreateTensorARM,c"vkCreateTensorARM";
-        DestroyTensorARM,PFN_vkDestroyTensorARM,c"vkDestroyTensorARM";
-        CreateTensorViewARM,PFN_vkCreateTensorViewARM,c"vkCreateTensorViewARM";
-        DestroyTensorViewARM,PFN_vkDestroyTensorViewARM,c"vkDestroyTensorViewARM";
-        GetTensorMemoryRequirementsARM,PFN_vkGetTensorMemoryRequirementsARM,c"vkGetTensorMemoryRequirementsARM";
-        BindTensorMemoryARM,PFN_vkBindTensorMemoryARM,c"vkBindTensorMemoryARM";
-        GetDeviceTensorMemoryRequirementsARM,PFN_vkGetDeviceTensorMemoryRequirementsARM,c"vkGetDeviceTensorMemoryRequirementsARM";
-        CmdCopyTensorARM,PFN_vkCmdCopyTensorARM,c"vkCmdCopyTensorARM";
+        CreateTensorARM(device: VkDevice, pCreateInfo: *const VkTensorCreateInfoARM, pAllocator: *const VkAllocationCallbacks, pTensor: *mut VkTensorARM) -> VkResult,PFN_vkCreateTensorARM,c"vkCreateTensorARM";
+        DestroyTensorARM(device: VkDevice, tensor: VkTensorARM, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyTensorARM,c"vkDestroyTensorARM";
+        CreateTensorViewARM(device: VkDevice, pCreateInfo: *const VkTensorViewCreateInfoARM, pAllocator: *const VkAllocationCallbacks, pView: *mut VkTensorViewARM) -> VkResult,PFN_vkCreateTensorViewARM,c"vkCreateTensorViewARM";
+        DestroyTensorViewARM(device: VkDevice, tensorView: VkTensorViewARM, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyTensorViewARM,c"vkDestroyTensorViewARM";
+        GetTensorMemoryRequirementsARM(device: VkDevice, pInfo: *const VkTensorMemoryRequirementsInfoARM, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetTensorMemoryRequirementsARM,c"vkGetTensorMemoryRequirementsARM";
+        BindTensorMemoryARM(device: VkDevice, bindInfoCount: u32, pBindInfos: *const VkBindTensorMemoryInfoARM) -> VkResult,PFN_vkBindTensorMemoryARM,c"vkBindTensorMemoryARM";
+        GetDeviceTensorMemoryRequirementsARM(device: VkDevice, pInfo: *const VkDeviceTensorMemoryRequirementsARM, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetDeviceTensorMemoryRequirementsARM,c"vkGetDeviceTensorMemoryRequirementsARM";
+        CmdCopyTensorARM(commandBuffer: VkCommandBuffer, pCopyTensorInfo: *const VkCopyTensorInfoARM) -> (),PFN_vkCmdCopyTensorARM,c"vkCmdCopyTensorARM";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33055,8 +33056,8 @@ pub mod arm_tensors {
 pub mod ext_shader_module_identifier {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetShaderModuleIdentifierEXT,PFN_vkGetShaderModuleIdentifierEXT,c"vkGetShaderModuleIdentifierEXT";
-        GetShaderModuleCreateInfoIdentifierEXT,PFN_vkGetShaderModuleCreateInfoIdentifierEXT,c"vkGetShaderModuleCreateInfoIdentifierEXT";
+        GetShaderModuleIdentifierEXT(device: VkDevice, shaderModule: VkShaderModule, pIdentifier: *mut VkShaderModuleIdentifierEXT) -> (),PFN_vkGetShaderModuleIdentifierEXT,c"vkGetShaderModuleIdentifierEXT";
+        GetShaderModuleCreateInfoIdentifierEXT(device: VkDevice, pCreateInfo: *const VkShaderModuleCreateInfo, pIdentifier: *mut VkShaderModuleIdentifierEXT) -> (),PFN_vkGetShaderModuleCreateInfoIdentifierEXT,c"vkGetShaderModuleCreateInfoIdentifierEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33073,7 +33074,7 @@ pub mod ext_shader_module_identifier {
 pub mod nv_optical_flow {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceOpticalFlowImageFormatsNV,PFN_vkGetPhysicalDeviceOpticalFlowImageFormatsNV,c"vkGetPhysicalDeviceOpticalFlowImageFormatsNV";
+        GetPhysicalDeviceOpticalFlowImageFormatsNV(physicalDevice: VkPhysicalDevice, pOpticalFlowImageFormatInfo: *const VkOpticalFlowImageFormatInfoNV, pFormatCount: *mut u32, pImageFormatProperties: *mut VkOpticalFlowImageFormatPropertiesNV) -> VkResult,PFN_vkGetPhysicalDeviceOpticalFlowImageFormatsNV,c"vkGetPhysicalDeviceOpticalFlowImageFormatsNV";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -33082,10 +33083,10 @@ pub mod nv_optical_flow {
         }
     }
     dispatch_table! { DeviceDispatch;
-        CreateOpticalFlowSessionNV,PFN_vkCreateOpticalFlowSessionNV,c"vkCreateOpticalFlowSessionNV";
-        DestroyOpticalFlowSessionNV,PFN_vkDestroyOpticalFlowSessionNV,c"vkDestroyOpticalFlowSessionNV";
-        BindOpticalFlowSessionImageNV,PFN_vkBindOpticalFlowSessionImageNV,c"vkBindOpticalFlowSessionImageNV";
-        CmdOpticalFlowExecuteNV,PFN_vkCmdOpticalFlowExecuteNV,c"vkCmdOpticalFlowExecuteNV";
+        CreateOpticalFlowSessionNV(device: VkDevice, pCreateInfo: *const VkOpticalFlowSessionCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pSession: *mut VkOpticalFlowSessionNV) -> VkResult,PFN_vkCreateOpticalFlowSessionNV,c"vkCreateOpticalFlowSessionNV";
+        DestroyOpticalFlowSessionNV(device: VkDevice, session: VkOpticalFlowSessionNV, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyOpticalFlowSessionNV,c"vkDestroyOpticalFlowSessionNV";
+        BindOpticalFlowSessionImageNV(device: VkDevice, session: VkOpticalFlowSessionNV, bindingPoint: VkOpticalFlowSessionBindingPointNV, view: VkImageView, layout: VkImageLayout) -> VkResult,PFN_vkBindOpticalFlowSessionImageNV,c"vkBindOpticalFlowSessionImageNV";
+        CmdOpticalFlowExecuteNV(commandBuffer: VkCommandBuffer, session: VkOpticalFlowSessionNV, pExecuteInfo: *const VkOpticalFlowExecuteInfoNV) -> (),PFN_vkCmdOpticalFlowExecuteNV,c"vkCmdOpticalFlowExecuteNV";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33110,10 +33111,10 @@ pub mod nv_optical_flow {
 pub mod khr_maintenance5 {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdBindIndexBuffer2KHR,PFN_vkCmdBindIndexBuffer2KHR,c"vkCmdBindIndexBuffer2KHR";
-        GetRenderingAreaGranularityKHR,PFN_vkGetRenderingAreaGranularityKHR,c"vkGetRenderingAreaGranularityKHR";
-        GetDeviceImageSubresourceLayoutKHR,PFN_vkGetDeviceImageSubresourceLayoutKHR,c"vkGetDeviceImageSubresourceLayoutKHR";
-        GetImageSubresourceLayout2KHR,PFN_vkGetImageSubresourceLayout2KHR,c"vkGetImageSubresourceLayout2KHR";
+        CmdBindIndexBuffer2KHR(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, size: VkDeviceSize, indexType: VkIndexType) -> (),PFN_vkCmdBindIndexBuffer2KHR,c"vkCmdBindIndexBuffer2KHR";
+        GetRenderingAreaGranularityKHR(device: VkDevice, pRenderingAreaInfo: *const VkRenderingAreaInfo, pGranularity: *mut VkExtent2D) -> (),PFN_vkGetRenderingAreaGranularityKHR,c"vkGetRenderingAreaGranularityKHR";
+        GetDeviceImageSubresourceLayoutKHR(device: VkDevice, pInfo: *const VkDeviceImageSubresourceInfo, pLayout: *mut VkSubresourceLayout2) -> (),PFN_vkGetDeviceImageSubresourceLayoutKHR,c"vkGetDeviceImageSubresourceLayoutKHR";
+        GetImageSubresourceLayout2KHR(device: VkDevice, image: VkImage, pSubresource: *const VkImageSubresource2, pLayout: *mut VkSubresourceLayout2) -> (),PFN_vkGetImageSubresourceLayout2KHR,c"vkGetImageSubresourceLayout2KHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33138,7 +33139,7 @@ pub mod khr_maintenance5 {
 pub mod amd_anti_lag {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        AntiLagUpdateAMD,PFN_vkAntiLagUpdateAMD,c"vkAntiLagUpdateAMD";
+        AntiLagUpdateAMD(device: VkDevice, pData: *const VkAntiLagDataAMD) -> (),PFN_vkAntiLagUpdateAMD,c"vkAntiLagUpdateAMD";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33151,7 +33152,7 @@ pub mod amd_anti_lag {
 pub mod khr_present_wait2 {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        WaitForPresent2KHR,PFN_vkWaitForPresent2KHR,c"vkWaitForPresent2KHR";
+        WaitForPresent2KHR(device: VkDevice, swapchain: VkSwapchainKHR, pPresentWait2Info: *const VkPresentWait2InfoKHR) -> VkResult,PFN_vkWaitForPresent2KHR,c"vkWaitForPresent2KHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33164,39 +33165,39 @@ pub mod khr_present_wait2 {
 pub mod ext_shader_object {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CreateShadersEXT,PFN_vkCreateShadersEXT,c"vkCreateShadersEXT";
-        DestroyShaderEXT,PFN_vkDestroyShaderEXT,c"vkDestroyShaderEXT";
-        GetShaderBinaryDataEXT,PFN_vkGetShaderBinaryDataEXT,c"vkGetShaderBinaryDataEXT";
-        CmdBindShadersEXT,PFN_vkCmdBindShadersEXT,c"vkCmdBindShadersEXT";
-        CmdSetCullModeEXT,PFN_vkCmdSetCullModeEXT,c"vkCmdSetCullModeEXT";
-        CmdSetFrontFaceEXT,PFN_vkCmdSetFrontFaceEXT,c"vkCmdSetFrontFaceEXT";
-        CmdSetPrimitiveTopologyEXT,PFN_vkCmdSetPrimitiveTopologyEXT,c"vkCmdSetPrimitiveTopologyEXT";
-        CmdSetViewportWithCountEXT,PFN_vkCmdSetViewportWithCountEXT,c"vkCmdSetViewportWithCountEXT";
-        CmdSetScissorWithCountEXT,PFN_vkCmdSetScissorWithCountEXT,c"vkCmdSetScissorWithCountEXT";
-        CmdBindVertexBuffers2EXT,PFN_vkCmdBindVertexBuffers2EXT,c"vkCmdBindVertexBuffers2EXT";
-        CmdSetDepthTestEnableEXT,PFN_vkCmdSetDepthTestEnableEXT,c"vkCmdSetDepthTestEnableEXT";
-        CmdSetDepthWriteEnableEXT,PFN_vkCmdSetDepthWriteEnableEXT,c"vkCmdSetDepthWriteEnableEXT";
-        CmdSetDepthCompareOpEXT,PFN_vkCmdSetDepthCompareOpEXT,c"vkCmdSetDepthCompareOpEXT";
-        CmdSetDepthBoundsTestEnableEXT,PFN_vkCmdSetDepthBoundsTestEnableEXT,c"vkCmdSetDepthBoundsTestEnableEXT";
-        CmdSetStencilTestEnableEXT,PFN_vkCmdSetStencilTestEnableEXT,c"vkCmdSetStencilTestEnableEXT";
-        CmdSetStencilOpEXT,PFN_vkCmdSetStencilOpEXT,c"vkCmdSetStencilOpEXT";
-        CmdSetVertexInputEXT,PFN_vkCmdSetVertexInputEXT,c"vkCmdSetVertexInputEXT";
-        CmdSetPatchControlPointsEXT,PFN_vkCmdSetPatchControlPointsEXT,c"vkCmdSetPatchControlPointsEXT";
-        CmdSetRasterizerDiscardEnableEXT,PFN_vkCmdSetRasterizerDiscardEnableEXT,c"vkCmdSetRasterizerDiscardEnableEXT";
-        CmdSetDepthBiasEnableEXT,PFN_vkCmdSetDepthBiasEnableEXT,c"vkCmdSetDepthBiasEnableEXT";
-        CmdSetLogicOpEXT,PFN_vkCmdSetLogicOpEXT,c"vkCmdSetLogicOpEXT";
-        CmdSetPrimitiveRestartEnableEXT,PFN_vkCmdSetPrimitiveRestartEnableEXT,c"vkCmdSetPrimitiveRestartEnableEXT";
-        CmdSetTessellationDomainOriginEXT,PFN_vkCmdSetTessellationDomainOriginEXT,c"vkCmdSetTessellationDomainOriginEXT";
-        CmdSetDepthClampEnableEXT,PFN_vkCmdSetDepthClampEnableEXT,c"vkCmdSetDepthClampEnableEXT";
-        CmdSetPolygonModeEXT,PFN_vkCmdSetPolygonModeEXT,c"vkCmdSetPolygonModeEXT";
-        CmdSetRasterizationSamplesEXT,PFN_vkCmdSetRasterizationSamplesEXT,c"vkCmdSetRasterizationSamplesEXT";
-        CmdSetSampleMaskEXT,PFN_vkCmdSetSampleMaskEXT,c"vkCmdSetSampleMaskEXT";
-        CmdSetAlphaToCoverageEnableEXT,PFN_vkCmdSetAlphaToCoverageEnableEXT,c"vkCmdSetAlphaToCoverageEnableEXT";
-        CmdSetAlphaToOneEnableEXT,PFN_vkCmdSetAlphaToOneEnableEXT,c"vkCmdSetAlphaToOneEnableEXT";
-        CmdSetLogicOpEnableEXT,PFN_vkCmdSetLogicOpEnableEXT,c"vkCmdSetLogicOpEnableEXT";
-        CmdSetColorBlendEnableEXT,PFN_vkCmdSetColorBlendEnableEXT,c"vkCmdSetColorBlendEnableEXT";
-        CmdSetColorBlendEquationEXT,PFN_vkCmdSetColorBlendEquationEXT,c"vkCmdSetColorBlendEquationEXT";
-        CmdSetColorWriteMaskEXT,PFN_vkCmdSetColorWriteMaskEXT,c"vkCmdSetColorWriteMaskEXT";
+        CreateShadersEXT(device: VkDevice, createInfoCount: u32, pCreateInfos: *const VkShaderCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pShaders: *mut VkShaderEXT) -> VkResult,PFN_vkCreateShadersEXT,c"vkCreateShadersEXT";
+        DestroyShaderEXT(device: VkDevice, shader: VkShaderEXT, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyShaderEXT,c"vkDestroyShaderEXT";
+        GetShaderBinaryDataEXT(device: VkDevice, shader: VkShaderEXT, pDataSize: *mut usize, pData: *mut c_void) -> VkResult,PFN_vkGetShaderBinaryDataEXT,c"vkGetShaderBinaryDataEXT";
+        CmdBindShadersEXT(commandBuffer: VkCommandBuffer, stageCount: u32, pStages: *const VkShaderStageFlagBits, pShaders: *const VkShaderEXT) -> (),PFN_vkCmdBindShadersEXT,c"vkCmdBindShadersEXT";
+        CmdSetCullModeEXT(commandBuffer: VkCommandBuffer, cullMode: VkCullModeFlags) -> (),PFN_vkCmdSetCullModeEXT,c"vkCmdSetCullModeEXT";
+        CmdSetFrontFaceEXT(commandBuffer: VkCommandBuffer, frontFace: VkFrontFace) -> (),PFN_vkCmdSetFrontFaceEXT,c"vkCmdSetFrontFaceEXT";
+        CmdSetPrimitiveTopologyEXT(commandBuffer: VkCommandBuffer, primitiveTopology: VkPrimitiveTopology) -> (),PFN_vkCmdSetPrimitiveTopologyEXT,c"vkCmdSetPrimitiveTopologyEXT";
+        CmdSetViewportWithCountEXT(commandBuffer: VkCommandBuffer, viewportCount: u32, pViewports: *const VkViewport) -> (),PFN_vkCmdSetViewportWithCountEXT,c"vkCmdSetViewportWithCountEXT";
+        CmdSetScissorWithCountEXT(commandBuffer: VkCommandBuffer, scissorCount: u32, pScissors: *const VkRect2D) -> (),PFN_vkCmdSetScissorWithCountEXT,c"vkCmdSetScissorWithCountEXT";
+        CmdBindVertexBuffers2EXT(commandBuffer: VkCommandBuffer, firstBinding: u32, bindingCount: u32, pBuffers: *const VkBuffer, pOffsets: *const VkDeviceSize, pSizes: *const VkDeviceSize, pStrides: *const VkDeviceSize) -> (),PFN_vkCmdBindVertexBuffers2EXT,c"vkCmdBindVertexBuffers2EXT";
+        CmdSetDepthTestEnableEXT(commandBuffer: VkCommandBuffer, depthTestEnable: VkBool32) -> (),PFN_vkCmdSetDepthTestEnableEXT,c"vkCmdSetDepthTestEnableEXT";
+        CmdSetDepthWriteEnableEXT(commandBuffer: VkCommandBuffer, depthWriteEnable: VkBool32) -> (),PFN_vkCmdSetDepthWriteEnableEXT,c"vkCmdSetDepthWriteEnableEXT";
+        CmdSetDepthCompareOpEXT(commandBuffer: VkCommandBuffer, depthCompareOp: VkCompareOp) -> (),PFN_vkCmdSetDepthCompareOpEXT,c"vkCmdSetDepthCompareOpEXT";
+        CmdSetDepthBoundsTestEnableEXT(commandBuffer: VkCommandBuffer, depthBoundsTestEnable: VkBool32) -> (),PFN_vkCmdSetDepthBoundsTestEnableEXT,c"vkCmdSetDepthBoundsTestEnableEXT";
+        CmdSetStencilTestEnableEXT(commandBuffer: VkCommandBuffer, stencilTestEnable: VkBool32) -> (),PFN_vkCmdSetStencilTestEnableEXT,c"vkCmdSetStencilTestEnableEXT";
+        CmdSetStencilOpEXT(commandBuffer: VkCommandBuffer, faceMask: VkStencilFaceFlags, failOp: VkStencilOp, passOp: VkStencilOp, depthFailOp: VkStencilOp, compareOp: VkCompareOp) -> (),PFN_vkCmdSetStencilOpEXT,c"vkCmdSetStencilOpEXT";
+        CmdSetVertexInputEXT(commandBuffer: VkCommandBuffer, vertexBindingDescriptionCount: u32, pVertexBindingDescriptions: *const VkVertexInputBindingDescription2EXT, vertexAttributeDescriptionCount: u32, pVertexAttributeDescriptions: *const VkVertexInputAttributeDescription2EXT) -> (),PFN_vkCmdSetVertexInputEXT,c"vkCmdSetVertexInputEXT";
+        CmdSetPatchControlPointsEXT(commandBuffer: VkCommandBuffer, patchControlPoints: u32) -> (),PFN_vkCmdSetPatchControlPointsEXT,c"vkCmdSetPatchControlPointsEXT";
+        CmdSetRasterizerDiscardEnableEXT(commandBuffer: VkCommandBuffer, rasterizerDiscardEnable: VkBool32) -> (),PFN_vkCmdSetRasterizerDiscardEnableEXT,c"vkCmdSetRasterizerDiscardEnableEXT";
+        CmdSetDepthBiasEnableEXT(commandBuffer: VkCommandBuffer, depthBiasEnable: VkBool32) -> (),PFN_vkCmdSetDepthBiasEnableEXT,c"vkCmdSetDepthBiasEnableEXT";
+        CmdSetLogicOpEXT(commandBuffer: VkCommandBuffer, logicOp: VkLogicOp) -> (),PFN_vkCmdSetLogicOpEXT,c"vkCmdSetLogicOpEXT";
+        CmdSetPrimitiveRestartEnableEXT(commandBuffer: VkCommandBuffer, primitiveRestartEnable: VkBool32) -> (),PFN_vkCmdSetPrimitiveRestartEnableEXT,c"vkCmdSetPrimitiveRestartEnableEXT";
+        CmdSetTessellationDomainOriginEXT(commandBuffer: VkCommandBuffer, domainOrigin: VkTessellationDomainOrigin) -> (),PFN_vkCmdSetTessellationDomainOriginEXT,c"vkCmdSetTessellationDomainOriginEXT";
+        CmdSetDepthClampEnableEXT(commandBuffer: VkCommandBuffer, depthClampEnable: VkBool32) -> (),PFN_vkCmdSetDepthClampEnableEXT,c"vkCmdSetDepthClampEnableEXT";
+        CmdSetPolygonModeEXT(commandBuffer: VkCommandBuffer, polygonMode: VkPolygonMode) -> (),PFN_vkCmdSetPolygonModeEXT,c"vkCmdSetPolygonModeEXT";
+        CmdSetRasterizationSamplesEXT(commandBuffer: VkCommandBuffer, rasterizationSamples: VkSampleCountFlagBits) -> (),PFN_vkCmdSetRasterizationSamplesEXT,c"vkCmdSetRasterizationSamplesEXT";
+        CmdSetSampleMaskEXT(commandBuffer: VkCommandBuffer, samples: VkSampleCountFlagBits, pSampleMask: *const VkSampleMask) -> (),PFN_vkCmdSetSampleMaskEXT,c"vkCmdSetSampleMaskEXT";
+        CmdSetAlphaToCoverageEnableEXT(commandBuffer: VkCommandBuffer, alphaToCoverageEnable: VkBool32) -> (),PFN_vkCmdSetAlphaToCoverageEnableEXT,c"vkCmdSetAlphaToCoverageEnableEXT";
+        CmdSetAlphaToOneEnableEXT(commandBuffer: VkCommandBuffer, alphaToOneEnable: VkBool32) -> (),PFN_vkCmdSetAlphaToOneEnableEXT,c"vkCmdSetAlphaToOneEnableEXT";
+        CmdSetLogicOpEnableEXT(commandBuffer: VkCommandBuffer, logicOpEnable: VkBool32) -> (),PFN_vkCmdSetLogicOpEnableEXT,c"vkCmdSetLogicOpEnableEXT";
+        CmdSetColorBlendEnableEXT(commandBuffer: VkCommandBuffer, firstAttachment: u32, attachmentCount: u32, pColorBlendEnables: *const VkBool32) -> (),PFN_vkCmdSetColorBlendEnableEXT,c"vkCmdSetColorBlendEnableEXT";
+        CmdSetColorBlendEquationEXT(commandBuffer: VkCommandBuffer, firstAttachment: u32, attachmentCount: u32, pColorBlendEquations: *const VkColorBlendEquationEXT) -> (),PFN_vkCmdSetColorBlendEquationEXT,c"vkCmdSetColorBlendEquationEXT";
+        CmdSetColorWriteMaskEXT(commandBuffer: VkCommandBuffer, firstAttachment: u32, attachmentCount: u32, pColorWriteMasks: *const VkColorComponentFlags) -> (),PFN_vkCmdSetColorWriteMaskEXT,c"vkCmdSetColorWriteMaskEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33337,11 +33338,11 @@ pub mod ext_shader_object {
 pub mod khr_pipeline_binary {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CreatePipelineBinariesKHR,PFN_vkCreatePipelineBinariesKHR,c"vkCreatePipelineBinariesKHR";
-        DestroyPipelineBinaryKHR,PFN_vkDestroyPipelineBinaryKHR,c"vkDestroyPipelineBinaryKHR";
-        GetPipelineKeyKHR,PFN_vkGetPipelineKeyKHR,c"vkGetPipelineKeyKHR";
-        GetPipelineBinaryDataKHR,PFN_vkGetPipelineBinaryDataKHR,c"vkGetPipelineBinaryDataKHR";
-        ReleaseCapturedPipelineDataKHR,PFN_vkReleaseCapturedPipelineDataKHR,c"vkReleaseCapturedPipelineDataKHR";
+        CreatePipelineBinariesKHR(device: VkDevice, pCreateInfo: *const VkPipelineBinaryCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pBinaries: *mut VkPipelineBinaryHandlesInfoKHR) -> VkResult,PFN_vkCreatePipelineBinariesKHR,c"vkCreatePipelineBinariesKHR";
+        DestroyPipelineBinaryKHR(device: VkDevice, pipelineBinary: VkPipelineBinaryKHR, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyPipelineBinaryKHR,c"vkDestroyPipelineBinaryKHR";
+        GetPipelineKeyKHR(device: VkDevice, pPipelineCreateInfo: *const VkPipelineCreateInfoKHR, pPipelineKey: *mut VkPipelineBinaryKeyKHR) -> VkResult,PFN_vkGetPipelineKeyKHR,c"vkGetPipelineKeyKHR";
+        GetPipelineBinaryDataKHR(device: VkDevice, pInfo: *const VkPipelineBinaryDataInfoKHR, pPipelineBinaryKey: *mut VkPipelineBinaryKeyKHR, pPipelineBinaryDataSize: *mut usize, pPipelineBinaryData: *mut c_void) -> VkResult,PFN_vkGetPipelineBinaryDataKHR,c"vkGetPipelineBinaryDataKHR";
+        ReleaseCapturedPipelineDataKHR(device: VkDevice, pInfo: *const VkReleaseCapturedPipelineDataInfoKHR, pAllocator: *const VkAllocationCallbacks) -> VkResult,PFN_vkReleaseCapturedPipelineDataKHR,c"vkReleaseCapturedPipelineDataKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33370,8 +33371,8 @@ pub mod khr_pipeline_binary {
 pub mod qcom_tile_properties {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetFramebufferTilePropertiesQCOM,PFN_vkGetFramebufferTilePropertiesQCOM,c"vkGetFramebufferTilePropertiesQCOM";
-        GetDynamicRenderingTilePropertiesQCOM,PFN_vkGetDynamicRenderingTilePropertiesQCOM,c"vkGetDynamicRenderingTilePropertiesQCOM";
+        GetFramebufferTilePropertiesQCOM(device: VkDevice, framebuffer: VkFramebuffer, pPropertiesCount: *mut u32, pProperties: *mut VkTilePropertiesQCOM) -> VkResult,PFN_vkGetFramebufferTilePropertiesQCOM,c"vkGetFramebufferTilePropertiesQCOM";
+        GetDynamicRenderingTilePropertiesQCOM(device: VkDevice, pRenderingInfo: *const VkRenderingInfo, pProperties: *mut VkTilePropertiesQCOM) -> VkResult,PFN_vkGetDynamicRenderingTilePropertiesQCOM,c"vkGetDynamicRenderingTilePropertiesQCOM";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33388,7 +33389,7 @@ pub mod qcom_tile_properties {
 pub mod khr_swapchain_maintenance1 {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        ReleaseSwapchainImagesKHR,PFN_vkReleaseSwapchainImagesKHR,c"vkReleaseSwapchainImagesKHR";
+        ReleaseSwapchainImagesKHR(device: VkDevice, pReleaseInfo: *const VkReleaseSwapchainImagesInfoKHR) -> VkResult,PFN_vkReleaseSwapchainImagesKHR,c"vkReleaseSwapchainImagesKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33401,7 +33402,7 @@ pub mod khr_swapchain_maintenance1 {
 pub mod nv_cooperative_vector {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceCooperativeVectorPropertiesNV,PFN_vkGetPhysicalDeviceCooperativeVectorPropertiesNV,c"vkGetPhysicalDeviceCooperativeVectorPropertiesNV";
+        GetPhysicalDeviceCooperativeVectorPropertiesNV(physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkCooperativeVectorPropertiesNV) -> VkResult,PFN_vkGetPhysicalDeviceCooperativeVectorPropertiesNV,c"vkGetPhysicalDeviceCooperativeVectorPropertiesNV";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -33410,8 +33411,8 @@ pub mod nv_cooperative_vector {
         }
     }
     dispatch_table! { DeviceDispatch;
-        ConvertCooperativeVectorMatrixNV,PFN_vkConvertCooperativeVectorMatrixNV,c"vkConvertCooperativeVectorMatrixNV";
-        CmdConvertCooperativeVectorMatrixNV,PFN_vkCmdConvertCooperativeVectorMatrixNV,c"vkCmdConvertCooperativeVectorMatrixNV";
+        ConvertCooperativeVectorMatrixNV(device: VkDevice, pInfo: *const VkConvertCooperativeVectorMatrixInfoNV) -> VkResult,PFN_vkConvertCooperativeVectorMatrixNV,c"vkConvertCooperativeVectorMatrixNV";
+        CmdConvertCooperativeVectorMatrixNV(commandBuffer: VkCommandBuffer, infoCount: u32, pInfos: *const VkConvertCooperativeVectorMatrixInfoNV) -> (),PFN_vkCmdConvertCooperativeVectorMatrixNV,c"vkCmdConvertCooperativeVectorMatrixNV";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33428,11 +33429,11 @@ pub mod nv_cooperative_vector {
 pub mod nv_low_latency2 {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        SetLatencySleepModeNV,PFN_vkSetLatencySleepModeNV,c"vkSetLatencySleepModeNV";
-        LatencySleepNV,PFN_vkLatencySleepNV,c"vkLatencySleepNV";
-        SetLatencyMarkerNV,PFN_vkSetLatencyMarkerNV,c"vkSetLatencyMarkerNV";
-        GetLatencyTimingsNV,PFN_vkGetLatencyTimingsNV,c"vkGetLatencyTimingsNV";
-        QueueNotifyOutOfBandNV,PFN_vkQueueNotifyOutOfBandNV,c"vkQueueNotifyOutOfBandNV";
+        SetLatencySleepModeNV(device: VkDevice, swapchain: VkSwapchainKHR, pSleepModeInfo: *const VkLatencySleepModeInfoNV) -> VkResult,PFN_vkSetLatencySleepModeNV,c"vkSetLatencySleepModeNV";
+        LatencySleepNV(device: VkDevice, swapchain: VkSwapchainKHR, pSleepInfo: *const VkLatencySleepInfoNV) -> VkResult,PFN_vkLatencySleepNV,c"vkLatencySleepNV";
+        SetLatencyMarkerNV(device: VkDevice, swapchain: VkSwapchainKHR, pLatencyMarkerInfo: *const VkSetLatencyMarkerInfoNV) -> (),PFN_vkSetLatencyMarkerNV,c"vkSetLatencyMarkerNV";
+        GetLatencyTimingsNV(device: VkDevice, swapchain: VkSwapchainKHR, pLatencyMarkerInfo: *mut VkGetLatencyMarkerInfoNV) -> (),PFN_vkGetLatencyTimingsNV,c"vkGetLatencyTimingsNV";
+        QueueNotifyOutOfBandNV(queue: VkQueue, pQueueTypeInfo: *const VkOutOfBandQueueTypeInfoNV) -> (),PFN_vkQueueNotifyOutOfBandNV,c"vkQueueNotifyOutOfBandNV";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33461,7 +33462,7 @@ pub mod nv_low_latency2 {
 pub mod khr_cooperative_matrix {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceCooperativeMatrixPropertiesKHR,PFN_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR,c"vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR";
+        GetPhysicalDeviceCooperativeMatrixPropertiesKHR(physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkCooperativeMatrixPropertiesKHR) -> VkResult,PFN_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR,c"vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -33474,8 +33475,8 @@ pub mod khr_cooperative_matrix {
 pub mod arm_data_graph {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceQueueFamilyDataGraphPropertiesARM,PFN_vkGetPhysicalDeviceQueueFamilyDataGraphPropertiesARM,c"vkGetPhysicalDeviceQueueFamilyDataGraphPropertiesARM";
-        GetPhysicalDeviceQueueFamilyDataGraphProcessingEnginePropertiesARM,PFN_vkGetPhysicalDeviceQueueFamilyDataGraphProcessingEnginePropertiesARM,c"vkGetPhysicalDeviceQueueFamilyDataGraphProcessingEnginePropertiesARM";
+        GetPhysicalDeviceQueueFamilyDataGraphPropertiesARM(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, pQueueFamilyDataGraphPropertyCount: *mut u32, pQueueFamilyDataGraphProperties: *mut VkQueueFamilyDataGraphPropertiesARM) -> VkResult,PFN_vkGetPhysicalDeviceQueueFamilyDataGraphPropertiesARM,c"vkGetPhysicalDeviceQueueFamilyDataGraphPropertiesARM";
+        GetPhysicalDeviceQueueFamilyDataGraphProcessingEnginePropertiesARM(physicalDevice: VkPhysicalDevice, pQueueFamilyDataGraphProcessingEngineInfo: *const VkPhysicalDeviceQueueFamilyDataGraphProcessingEngineInfoARM, pQueueFamilyDataGraphProcessingEngineProperties: *mut VkQueueFamilyDataGraphProcessingEnginePropertiesARM) -> (),PFN_vkGetPhysicalDeviceQueueFamilyDataGraphProcessingEnginePropertiesARM,c"vkGetPhysicalDeviceQueueFamilyDataGraphProcessingEnginePropertiesARM";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -33488,15 +33489,15 @@ pub mod arm_data_graph {
         }
     }
     dispatch_table! { DeviceDispatch;
-        CreateDataGraphPipelinesARM,PFN_vkCreateDataGraphPipelinesARM,c"vkCreateDataGraphPipelinesARM";
-        CreateDataGraphPipelineSessionARM,PFN_vkCreateDataGraphPipelineSessionARM,c"vkCreateDataGraphPipelineSessionARM";
-        GetDataGraphPipelineSessionBindPointRequirementsARM,PFN_vkGetDataGraphPipelineSessionBindPointRequirementsARM,c"vkGetDataGraphPipelineSessionBindPointRequirementsARM";
-        GetDataGraphPipelineSessionMemoryRequirementsARM,PFN_vkGetDataGraphPipelineSessionMemoryRequirementsARM,c"vkGetDataGraphPipelineSessionMemoryRequirementsARM";
-        BindDataGraphPipelineSessionMemoryARM,PFN_vkBindDataGraphPipelineSessionMemoryARM,c"vkBindDataGraphPipelineSessionMemoryARM";
-        DestroyDataGraphPipelineSessionARM,PFN_vkDestroyDataGraphPipelineSessionARM,c"vkDestroyDataGraphPipelineSessionARM";
-        CmdDispatchDataGraphARM,PFN_vkCmdDispatchDataGraphARM,c"vkCmdDispatchDataGraphARM";
-        GetDataGraphPipelineAvailablePropertiesARM,PFN_vkGetDataGraphPipelineAvailablePropertiesARM,c"vkGetDataGraphPipelineAvailablePropertiesARM";
-        GetDataGraphPipelinePropertiesARM,PFN_vkGetDataGraphPipelinePropertiesARM,c"vkGetDataGraphPipelinePropertiesARM";
+        CreateDataGraphPipelinesARM(device: VkDevice, deferredOperation: VkDeferredOperationKHR, pipelineCache: VkPipelineCache, createInfoCount: u32, pCreateInfos: *const VkDataGraphPipelineCreateInfoARM, pAllocator: *const VkAllocationCallbacks, pPipelines: *mut VkPipeline) -> VkResult,PFN_vkCreateDataGraphPipelinesARM,c"vkCreateDataGraphPipelinesARM";
+        CreateDataGraphPipelineSessionARM(device: VkDevice, pCreateInfo: *const VkDataGraphPipelineSessionCreateInfoARM, pAllocator: *const VkAllocationCallbacks, pSession: *mut VkDataGraphPipelineSessionARM) -> VkResult,PFN_vkCreateDataGraphPipelineSessionARM,c"vkCreateDataGraphPipelineSessionARM";
+        GetDataGraphPipelineSessionBindPointRequirementsARM(device: VkDevice, pInfo: *const VkDataGraphPipelineSessionBindPointRequirementsInfoARM, pBindPointRequirementCount: *mut u32, pBindPointRequirements: *mut VkDataGraphPipelineSessionBindPointRequirementARM) -> VkResult,PFN_vkGetDataGraphPipelineSessionBindPointRequirementsARM,c"vkGetDataGraphPipelineSessionBindPointRequirementsARM";
+        GetDataGraphPipelineSessionMemoryRequirementsARM(device: VkDevice, pInfo: *const VkDataGraphPipelineSessionMemoryRequirementsInfoARM, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetDataGraphPipelineSessionMemoryRequirementsARM,c"vkGetDataGraphPipelineSessionMemoryRequirementsARM";
+        BindDataGraphPipelineSessionMemoryARM(device: VkDevice, bindInfoCount: u32, pBindInfos: *const VkBindDataGraphPipelineSessionMemoryInfoARM) -> VkResult,PFN_vkBindDataGraphPipelineSessionMemoryARM,c"vkBindDataGraphPipelineSessionMemoryARM";
+        DestroyDataGraphPipelineSessionARM(device: VkDevice, session: VkDataGraphPipelineSessionARM, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyDataGraphPipelineSessionARM,c"vkDestroyDataGraphPipelineSessionARM";
+        CmdDispatchDataGraphARM(commandBuffer: VkCommandBuffer, session: VkDataGraphPipelineSessionARM, pInfo: *const VkDataGraphPipelineDispatchInfoARM) -> (),PFN_vkCmdDispatchDataGraphARM,c"vkCmdDispatchDataGraphARM";
+        GetDataGraphPipelineAvailablePropertiesARM(device: VkDevice, pPipelineInfo: *const VkDataGraphPipelineInfoARM, pPropertiesCount: *mut u32, pProperties: *mut VkDataGraphPipelinePropertyARM) -> VkResult,PFN_vkGetDataGraphPipelineAvailablePropertiesARM,c"vkGetDataGraphPipelineAvailablePropertiesARM";
+        GetDataGraphPipelinePropertiesARM(device: VkDevice, pPipelineInfo: *const VkDataGraphPipelineInfoARM, propertiesCount: u32, pProperties: *mut VkDataGraphPipelinePropertyQueryResultARM) -> VkResult,PFN_vkGetDataGraphPipelinePropertiesARM,c"vkGetDataGraphPipelinePropertiesARM";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33541,7 +33542,7 @@ pub mod arm_data_graph {
 pub mod arm_data_graph_instruction_set_tosa {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM,PFN_vkGetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM,c"vkGetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM";
+        GetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, pQueueFamilyDataGraphProperties: *const VkQueueFamilyDataGraphPropertiesARM, pProperties: *mut VkBaseOutStructure) -> VkResult,PFN_vkGetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM,c"vkGetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -33554,7 +33555,7 @@ pub mod arm_data_graph_instruction_set_tosa {
 pub mod ext_attachment_feedback_loop_dynamic_state {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdSetAttachmentFeedbackLoopEnableEXT,PFN_vkCmdSetAttachmentFeedbackLoopEnableEXT,c"vkCmdSetAttachmentFeedbackLoopEnableEXT";
+        CmdSetAttachmentFeedbackLoopEnableEXT(commandBuffer: VkCommandBuffer, aspectMask: VkImageAspectFlags) -> (),PFN_vkCmdSetAttachmentFeedbackLoopEnableEXT,c"vkCmdSetAttachmentFeedbackLoopEnableEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33567,7 +33568,7 @@ pub mod ext_attachment_feedback_loop_dynamic_state {
 pub mod qnx_external_memory_screen_buffer {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetScreenBufferPropertiesQNX,PFN_vkGetScreenBufferPropertiesQNX,c"vkGetScreenBufferPropertiesQNX";
+        GetScreenBufferPropertiesQNX(device: VkDevice, buffer: *const _screen_buffer, pProperties: *mut VkScreenBufferPropertiesQNX) -> VkResult,PFN_vkGetScreenBufferPropertiesQNX,c"vkGetScreenBufferPropertiesQNX";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33580,7 +33581,7 @@ pub mod qnx_external_memory_screen_buffer {
 pub mod khr_line_rasterization {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdSetLineStippleKHR,PFN_vkCmdSetLineStippleKHR,c"vkCmdSetLineStippleKHR";
+        CmdSetLineStippleKHR(commandBuffer: VkCommandBuffer, lineStippleFactor: u32, lineStipplePattern: u16) -> (),PFN_vkCmdSetLineStippleKHR,c"vkCmdSetLineStippleKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33593,7 +33594,7 @@ pub mod khr_line_rasterization {
 pub mod khr_calibrated_timestamps {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceCalibrateableTimeDomainsKHR,PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR,c"vkGetPhysicalDeviceCalibrateableTimeDomainsKHR";
+        GetPhysicalDeviceCalibrateableTimeDomainsKHR(physicalDevice: VkPhysicalDevice, pTimeDomainCount: *mut u32, pTimeDomains: *mut VkTimeDomainKHR) -> VkResult,PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR,c"vkGetPhysicalDeviceCalibrateableTimeDomainsKHR";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -33602,7 +33603,7 @@ pub mod khr_calibrated_timestamps {
         }
     }
     dispatch_table! { DeviceDispatch;
-        GetCalibratedTimestampsKHR,PFN_vkGetCalibratedTimestampsKHR,c"vkGetCalibratedTimestampsKHR";
+        GetCalibratedTimestampsKHR(device: VkDevice, timestampCount: u32, pTimestampInfos: *const VkCalibratedTimestampInfoKHR, pTimestamps: *mut u64, pMaxDeviation: *mut u64) -> VkResult,PFN_vkGetCalibratedTimestampsKHR,c"vkGetCalibratedTimestampsKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33615,8 +33616,8 @@ pub mod khr_calibrated_timestamps {
 pub mod khr_maintenance6 {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdBindDescriptorSets2KHR,PFN_vkCmdBindDescriptorSets2KHR,c"vkCmdBindDescriptorSets2KHR";
-        CmdPushConstants2KHR,PFN_vkCmdPushConstants2KHR,c"vkCmdPushConstants2KHR";
+        CmdBindDescriptorSets2KHR(commandBuffer: VkCommandBuffer, pBindDescriptorSetsInfo: *const VkBindDescriptorSetsInfo) -> (),PFN_vkCmdBindDescriptorSets2KHR,c"vkCmdBindDescriptorSets2KHR";
+        CmdPushConstants2KHR(commandBuffer: VkCommandBuffer, pPushConstantsInfo: *const VkPushConstantsInfo) -> (),PFN_vkCmdPushConstants2KHR,c"vkCmdPushConstants2KHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33633,7 +33634,7 @@ pub mod khr_maintenance6 {
 pub mod qcom_tile_memory_heap {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdBindTileMemoryQCOM,PFN_vkCmdBindTileMemoryQCOM,c"vkCmdBindTileMemoryQCOM";
+        CmdBindTileMemoryQCOM(commandBuffer: VkCommandBuffer, pTileMemoryBindInfo: *const VkTileMemoryBindInfoQCOM) -> (),PFN_vkCmdBindTileMemoryQCOM,c"vkCmdBindTileMemoryQCOM";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33646,8 +33647,8 @@ pub mod qcom_tile_memory_heap {
 pub mod khr_copy_memory_indirect {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdCopyMemoryIndirectKHR,PFN_vkCmdCopyMemoryIndirectKHR,c"vkCmdCopyMemoryIndirectKHR";
-        CmdCopyMemoryToImageIndirectKHR,PFN_vkCmdCopyMemoryToImageIndirectKHR,c"vkCmdCopyMemoryToImageIndirectKHR";
+        CmdCopyMemoryIndirectKHR(commandBuffer: VkCommandBuffer, pCopyMemoryIndirectInfo: *const VkCopyMemoryIndirectInfoKHR) -> (),PFN_vkCmdCopyMemoryIndirectKHR,c"vkCmdCopyMemoryIndirectKHR";
+        CmdCopyMemoryToImageIndirectKHR(commandBuffer: VkCommandBuffer, pCopyMemoryToImageIndirectInfo: *const VkCopyMemoryToImageIndirectInfoKHR) -> (),PFN_vkCmdCopyMemoryToImageIndirectKHR,c"vkCmdCopyMemoryToImageIndirectKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33664,8 +33665,8 @@ pub mod khr_copy_memory_indirect {
 pub mod ext_memory_decompression {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdDecompressMemoryEXT,PFN_vkCmdDecompressMemoryEXT,c"vkCmdDecompressMemoryEXT";
-        CmdDecompressMemoryIndirectCountEXT,PFN_vkCmdDecompressMemoryIndirectCountEXT,c"vkCmdDecompressMemoryIndirectCountEXT";
+        CmdDecompressMemoryEXT(commandBuffer: VkCommandBuffer, pDecompressMemoryInfoEXT: *const VkDecompressMemoryInfoEXT) -> (),PFN_vkCmdDecompressMemoryEXT,c"vkCmdDecompressMemoryEXT";
+        CmdDecompressMemoryIndirectCountEXT(commandBuffer: VkCommandBuffer, decompressionMethod: VkMemoryDecompressionMethodFlagsEXT, indirectCommandsAddress: VkDeviceAddress, indirectCommandsCountAddress: VkDeviceAddress, maxDecompressionCount: u32, stride: u32) -> (),PFN_vkCmdDecompressMemoryIndirectCountEXT,c"vkCmdDecompressMemoryIndirectCountEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33682,7 +33683,7 @@ pub mod ext_memory_decompression {
 pub mod nv_external_compute_queue {
     use super::*;
     dispatch_table! { EntryDispatch;
-        GetExternalComputeQueueDataNV,PFN_vkGetExternalComputeQueueDataNV,c"vkGetExternalComputeQueueDataNV";
+        GetExternalComputeQueueDataNV(externalQueue: VkExternalComputeQueueNV, params: *mut VkExternalComputeQueueDataParamsNV, pData: *mut c_void) -> (),PFN_vkGetExternalComputeQueueDataNV,c"vkGetExternalComputeQueueDataNV";
     }
     impl EntryDispatch {
         #[inline(always)]
@@ -33691,8 +33692,8 @@ pub mod nv_external_compute_queue {
         }
     }
     dispatch_table! { DeviceDispatch;
-        CreateExternalComputeQueueNV,PFN_vkCreateExternalComputeQueueNV,c"vkCreateExternalComputeQueueNV";
-        DestroyExternalComputeQueueNV,PFN_vkDestroyExternalComputeQueueNV,c"vkDestroyExternalComputeQueueNV";
+        CreateExternalComputeQueueNV(device: VkDevice, pCreateInfo: *const VkExternalComputeQueueCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pExternalQueue: *mut VkExternalComputeQueueNV) -> VkResult,PFN_vkCreateExternalComputeQueueNV,c"vkCreateExternalComputeQueueNV";
+        DestroyExternalComputeQueueNV(device: VkDevice, externalQueue: VkExternalComputeQueueNV, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyExternalComputeQueueNV,c"vkDestroyExternalComputeQueueNV";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33709,8 +33710,8 @@ pub mod nv_external_compute_queue {
 pub mod nv_cluster_acceleration_structure {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetClusterAccelerationStructureBuildSizesNV,PFN_vkGetClusterAccelerationStructureBuildSizesNV,c"vkGetClusterAccelerationStructureBuildSizesNV";
-        CmdBuildClusterAccelerationStructureIndirectNV,PFN_vkCmdBuildClusterAccelerationStructureIndirectNV,c"vkCmdBuildClusterAccelerationStructureIndirectNV";
+        GetClusterAccelerationStructureBuildSizesNV(device: VkDevice, pInfo: *const VkClusterAccelerationStructureInputInfoNV, pSizeInfo: *mut VkAccelerationStructureBuildSizesInfoKHR) -> (),PFN_vkGetClusterAccelerationStructureBuildSizesNV,c"vkGetClusterAccelerationStructureBuildSizesNV";
+        CmdBuildClusterAccelerationStructureIndirectNV(commandBuffer: VkCommandBuffer, pCommandInfos: *const VkClusterAccelerationStructureCommandsInfoNV) -> (),PFN_vkCmdBuildClusterAccelerationStructureIndirectNV,c"vkCmdBuildClusterAccelerationStructureIndirectNV";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33727,8 +33728,8 @@ pub mod nv_cluster_acceleration_structure {
 pub mod nv_partitioned_acceleration_structure {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetPartitionedAccelerationStructuresBuildSizesNV,PFN_vkGetPartitionedAccelerationStructuresBuildSizesNV,c"vkGetPartitionedAccelerationStructuresBuildSizesNV";
-        CmdBuildPartitionedAccelerationStructuresNV,PFN_vkCmdBuildPartitionedAccelerationStructuresNV,c"vkCmdBuildPartitionedAccelerationStructuresNV";
+        GetPartitionedAccelerationStructuresBuildSizesNV(device: VkDevice, pInfo: *const VkPartitionedAccelerationStructureInstancesInputNV, pSizeInfo: *mut VkAccelerationStructureBuildSizesInfoKHR) -> (),PFN_vkGetPartitionedAccelerationStructuresBuildSizesNV,c"vkGetPartitionedAccelerationStructuresBuildSizesNV";
+        CmdBuildPartitionedAccelerationStructuresNV(commandBuffer: VkCommandBuffer, pBuildInfo: *const VkBuildPartitionedAccelerationStructureInfoNV) -> (),PFN_vkCmdBuildPartitionedAccelerationStructuresNV,c"vkCmdBuildPartitionedAccelerationStructuresNV";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33745,15 +33746,15 @@ pub mod nv_partitioned_acceleration_structure {
 pub mod ext_device_generated_commands {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetGeneratedCommandsMemoryRequirementsEXT,PFN_vkGetGeneratedCommandsMemoryRequirementsEXT,c"vkGetGeneratedCommandsMemoryRequirementsEXT";
-        CmdPreprocessGeneratedCommandsEXT,PFN_vkCmdPreprocessGeneratedCommandsEXT,c"vkCmdPreprocessGeneratedCommandsEXT";
-        CmdExecuteGeneratedCommandsEXT,PFN_vkCmdExecuteGeneratedCommandsEXT,c"vkCmdExecuteGeneratedCommandsEXT";
-        CreateIndirectCommandsLayoutEXT,PFN_vkCreateIndirectCommandsLayoutEXT,c"vkCreateIndirectCommandsLayoutEXT";
-        DestroyIndirectCommandsLayoutEXT,PFN_vkDestroyIndirectCommandsLayoutEXT,c"vkDestroyIndirectCommandsLayoutEXT";
-        CreateIndirectExecutionSetEXT,PFN_vkCreateIndirectExecutionSetEXT,c"vkCreateIndirectExecutionSetEXT";
-        DestroyIndirectExecutionSetEXT,PFN_vkDestroyIndirectExecutionSetEXT,c"vkDestroyIndirectExecutionSetEXT";
-        UpdateIndirectExecutionSetPipelineEXT,PFN_vkUpdateIndirectExecutionSetPipelineEXT,c"vkUpdateIndirectExecutionSetPipelineEXT";
-        UpdateIndirectExecutionSetShaderEXT,PFN_vkUpdateIndirectExecutionSetShaderEXT,c"vkUpdateIndirectExecutionSetShaderEXT";
+        GetGeneratedCommandsMemoryRequirementsEXT(device: VkDevice, pInfo: *const VkGeneratedCommandsMemoryRequirementsInfoEXT, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetGeneratedCommandsMemoryRequirementsEXT,c"vkGetGeneratedCommandsMemoryRequirementsEXT";
+        CmdPreprocessGeneratedCommandsEXT(commandBuffer: VkCommandBuffer, pGeneratedCommandsInfo: *const VkGeneratedCommandsInfoEXT, stateCommandBuffer: VkCommandBuffer) -> (),PFN_vkCmdPreprocessGeneratedCommandsEXT,c"vkCmdPreprocessGeneratedCommandsEXT";
+        CmdExecuteGeneratedCommandsEXT(commandBuffer: VkCommandBuffer, isPreprocessed: VkBool32, pGeneratedCommandsInfo: *const VkGeneratedCommandsInfoEXT) -> (),PFN_vkCmdExecuteGeneratedCommandsEXT,c"vkCmdExecuteGeneratedCommandsEXT";
+        CreateIndirectCommandsLayoutEXT(device: VkDevice, pCreateInfo: *const VkIndirectCommandsLayoutCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pIndirectCommandsLayout: *mut VkIndirectCommandsLayoutEXT) -> VkResult,PFN_vkCreateIndirectCommandsLayoutEXT,c"vkCreateIndirectCommandsLayoutEXT";
+        DestroyIndirectCommandsLayoutEXT(device: VkDevice, indirectCommandsLayout: VkIndirectCommandsLayoutEXT, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyIndirectCommandsLayoutEXT,c"vkDestroyIndirectCommandsLayoutEXT";
+        CreateIndirectExecutionSetEXT(device: VkDevice, pCreateInfo: *const VkIndirectExecutionSetCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pIndirectExecutionSet: *mut VkIndirectExecutionSetEXT) -> VkResult,PFN_vkCreateIndirectExecutionSetEXT,c"vkCreateIndirectExecutionSetEXT";
+        DestroyIndirectExecutionSetEXT(device: VkDevice, indirectExecutionSet: VkIndirectExecutionSetEXT, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyIndirectExecutionSetEXT,c"vkDestroyIndirectExecutionSetEXT";
+        UpdateIndirectExecutionSetPipelineEXT(device: VkDevice, indirectExecutionSet: VkIndirectExecutionSetEXT, executionSetWriteCount: u32, pExecutionSetWrites: *const VkWriteIndirectExecutionSetPipelineEXT) -> (),PFN_vkUpdateIndirectExecutionSetPipelineEXT,c"vkUpdateIndirectExecutionSetPipelineEXT";
+        UpdateIndirectExecutionSetShaderEXT(device: VkDevice, indirectExecutionSet: VkIndirectExecutionSetEXT, executionSetWriteCount: u32, pExecutionSetWrites: *const VkWriteIndirectExecutionSetShaderEXT) -> (),PFN_vkUpdateIndirectExecutionSetShaderEXT,c"vkUpdateIndirectExecutionSetShaderEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33798,8 +33799,8 @@ pub mod ext_device_generated_commands {
 pub mod khr_device_fault {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetDeviceFaultReportsKHR,PFN_vkGetDeviceFaultReportsKHR,c"vkGetDeviceFaultReportsKHR";
-        GetDeviceFaultDebugInfoKHR,PFN_vkGetDeviceFaultDebugInfoKHR,c"vkGetDeviceFaultDebugInfoKHR";
+        GetDeviceFaultReportsKHR(device: VkDevice, timeout: u64, pFaultCounts: *mut u32, pFaultInfo: *mut VkDeviceFaultInfoKHR) -> VkResult,PFN_vkGetDeviceFaultReportsKHR,c"vkGetDeviceFaultReportsKHR";
+        GetDeviceFaultDebugInfoKHR(device: VkDevice, pDebugInfo: *mut VkDeviceFaultDebugInfoKHR) -> VkResult,PFN_vkGetDeviceFaultDebugInfoKHR,c"vkGetDeviceFaultDebugInfoKHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33816,7 +33817,7 @@ pub mod khr_device_fault {
 pub mod ext_depth_clamp_control {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdSetDepthClampRangeEXT,PFN_vkCmdSetDepthClampRangeEXT,c"vkCmdSetDepthClampRangeEXT";
+        CmdSetDepthClampRangeEXT(commandBuffer: VkCommandBuffer, depthClampMode: VkDepthClampModeEXT, pDepthClampRange: *const VkDepthClampRangeEXT) -> (),PFN_vkCmdSetDepthClampRangeEXT,c"vkCmdSetDepthClampRangeEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33829,7 +33830,7 @@ pub mod ext_depth_clamp_control {
 pub mod ohos_surface {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        CreateSurfaceOHOS,PFN_vkCreateSurfaceOHOS,c"vkCreateSurfaceOHOS";
+        CreateSurfaceOHOS(instance: VkInstance, pCreateInfo: *const VkSurfaceCreateInfoOHOS, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateSurfaceOHOS,c"vkCreateSurfaceOHOS";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -33842,7 +33843,7 @@ pub mod ohos_surface {
 pub mod nv_cooperative_matrix2 {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV,PFN_vkGetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV,c"vkGetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV";
+        GetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV(physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkCooperativeMatrixFlexibleDimensionsPropertiesNV) -> VkResult,PFN_vkGetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV,c"vkGetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -33855,8 +33856,8 @@ pub mod nv_cooperative_matrix2 {
 pub mod ext_external_memory_metal {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        GetMemoryMetalHandleEXT,PFN_vkGetMemoryMetalHandleEXT,c"vkGetMemoryMetalHandleEXT";
-        GetMemoryMetalHandlePropertiesEXT,PFN_vkGetMemoryMetalHandlePropertiesEXT,c"vkGetMemoryMetalHandlePropertiesEXT";
+        GetMemoryMetalHandleEXT(device: VkDevice, pGetMetalHandleInfo: *const VkMemoryGetMetalHandleInfoEXT, pHandle: *mut *mut c_void) -> VkResult,PFN_vkGetMemoryMetalHandleEXT,c"vkGetMemoryMetalHandleEXT";
+        GetMemoryMetalHandlePropertiesEXT(device: VkDevice, handleType: VkExternalMemoryHandleTypeFlagBits, pHandle: *const c_void, pMemoryMetalHandleProperties: *mut VkMemoryMetalHandlePropertiesEXT) -> VkResult,PFN_vkGetMemoryMetalHandlePropertiesEXT,c"vkGetMemoryMetalHandlePropertiesEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33873,7 +33874,7 @@ pub mod ext_external_memory_metal {
 pub mod arm_performance_counters_by_region {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        EnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM,PFN_vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM,c"vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM";
+        EnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, pCounterCount: *mut u32, pCounters: *mut VkPerformanceCounterARM, pCounterDescriptions: *mut VkPerformanceCounterDescriptionARM) -> VkResult,PFN_vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM,c"vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -33886,7 +33887,7 @@ pub mod arm_performance_counters_by_region {
 pub mod arm_shader_instrumentation {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        EnumeratePhysicalDeviceShaderInstrumentationMetricsARM,PFN_vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM,c"vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM";
+        EnumeratePhysicalDeviceShaderInstrumentationMetricsARM(physicalDevice: VkPhysicalDevice, pDescriptionCount: *mut u32, pDescriptions: *mut VkShaderInstrumentationMetricDescriptionARM) -> VkResult,PFN_vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM,c"vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -33895,12 +33896,12 @@ pub mod arm_shader_instrumentation {
         }
     }
     dispatch_table! { DeviceDispatch;
-        CreateShaderInstrumentationARM,PFN_vkCreateShaderInstrumentationARM,c"vkCreateShaderInstrumentationARM";
-        DestroyShaderInstrumentationARM,PFN_vkDestroyShaderInstrumentationARM,c"vkDestroyShaderInstrumentationARM";
-        CmdBeginShaderInstrumentationARM,PFN_vkCmdBeginShaderInstrumentationARM,c"vkCmdBeginShaderInstrumentationARM";
-        CmdEndShaderInstrumentationARM,PFN_vkCmdEndShaderInstrumentationARM,c"vkCmdEndShaderInstrumentationARM";
-        GetShaderInstrumentationValuesARM,PFN_vkGetShaderInstrumentationValuesARM,c"vkGetShaderInstrumentationValuesARM";
-        ClearShaderInstrumentationMetricsARM,PFN_vkClearShaderInstrumentationMetricsARM,c"vkClearShaderInstrumentationMetricsARM";
+        CreateShaderInstrumentationARM(device: VkDevice, pCreateInfo: *const VkShaderInstrumentationCreateInfoARM, pAllocator: *const VkAllocationCallbacks, pInstrumentation: *mut VkShaderInstrumentationARM) -> VkResult,PFN_vkCreateShaderInstrumentationARM,c"vkCreateShaderInstrumentationARM";
+        DestroyShaderInstrumentationARM(device: VkDevice, instrumentation: VkShaderInstrumentationARM, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyShaderInstrumentationARM,c"vkDestroyShaderInstrumentationARM";
+        CmdBeginShaderInstrumentationARM(commandBuffer: VkCommandBuffer, instrumentation: VkShaderInstrumentationARM) -> (),PFN_vkCmdBeginShaderInstrumentationARM,c"vkCmdBeginShaderInstrumentationARM";
+        CmdEndShaderInstrumentationARM(commandBuffer: VkCommandBuffer) -> (),PFN_vkCmdEndShaderInstrumentationARM,c"vkCmdEndShaderInstrumentationARM";
+        GetShaderInstrumentationValuesARM(device: VkDevice, instrumentation: VkShaderInstrumentationARM, pMetricBlockCount: *mut u32, pMetricValues: *mut c_void, flags: VkShaderInstrumentationValuesFlagsARM) -> VkResult,PFN_vkGetShaderInstrumentationValuesARM,c"vkGetShaderInstrumentationValuesARM";
+        ClearShaderInstrumentationMetricsARM(device: VkDevice, instrumentation: VkShaderInstrumentationARM) -> (),PFN_vkClearShaderInstrumentationMetricsARM,c"vkClearShaderInstrumentationMetricsARM";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33933,7 +33934,7 @@ pub mod arm_shader_instrumentation {
 pub mod ext_fragment_density_map_offset {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdEndRendering2EXT,PFN_vkCmdEndRendering2EXT,c"vkCmdEndRendering2EXT";
+        CmdEndRendering2EXT(commandBuffer: VkCommandBuffer, pRenderingEndInfo: *const VkRenderingEndInfoKHR) -> (),PFN_vkCmdEndRendering2EXT,c"vkCmdEndRendering2EXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33946,7 +33947,7 @@ pub mod ext_fragment_density_map_offset {
 pub mod khr_maintenance10 {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdEndRendering2KHR,PFN_vkCmdEndRendering2KHR,c"vkCmdEndRendering2KHR";
+        CmdEndRendering2KHR(commandBuffer: VkCommandBuffer, pRenderingEndInfo: *const VkRenderingEndInfoKHR) -> (),PFN_vkCmdEndRendering2KHR,c"vkCmdEndRendering2KHR";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33959,8 +33960,8 @@ pub mod khr_maintenance10 {
 pub mod arm_data_graph_optical_flow {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM,PFN_vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM,c"vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM";
-        GetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM,PFN_vkGetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM,c"vkGetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM";
+        GetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, pQueueFamilyDataGraphProperties: *const VkQueueFamilyDataGraphPropertiesARM, pOpticalFlowImageFormatInfo: *const VkDataGraphOpticalFlowImageFormatInfoARM, pFormatCount: *mut u32, pImageFormatProperties: *mut VkDataGraphOpticalFlowImageFormatPropertiesARM) -> VkResult,PFN_vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM,c"vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM";
+        GetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, pQueueFamilyDataGraphProperties: *const VkQueueFamilyDataGraphPropertiesARM, pProperties: *mut VkBaseOutStructure) -> VkResult,PFN_vkGetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM,c"vkGetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -33977,7 +33978,7 @@ pub mod arm_data_graph_optical_flow {
 pub mod nv_compute_occupancy_priority {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdSetComputeOccupancyPriorityNV,PFN_vkCmdSetComputeOccupancyPriorityNV,c"vkCmdSetComputeOccupancyPriorityNV";
+        CmdSetComputeOccupancyPriorityNV(commandBuffer: VkCommandBuffer, pParameters: *const VkComputeOccupancyPriorityParametersNV) -> (),PFN_vkCmdSetComputeOccupancyPriorityNV,c"vkCmdSetComputeOccupancyPriorityNV";
     }
     impl DeviceDispatch {
         #[inline(always)]
@@ -33990,7 +33991,7 @@ pub mod nv_compute_occupancy_priority {
 pub mod ext_cooperative_matrix_maintenance1 {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        GetPhysicalDeviceCooperativeMatrixProperties2EXT,PFN_vkGetPhysicalDeviceCooperativeMatrixProperties2EXT,c"vkGetPhysicalDeviceCooperativeMatrixProperties2EXT";
+        GetPhysicalDeviceCooperativeMatrixProperties2EXT(physicalDevice: VkPhysicalDevice, pCooperativeMatrixInfo: *const VkPhysicalDeviceCooperativeMatrixInfo2EXT, pPropertyCount: *mut u32, pProperties: *mut VkCooperativeMatrixProperties2EXT) -> VkResult,PFN_vkGetPhysicalDeviceCooperativeMatrixProperties2EXT,c"vkGetPhysicalDeviceCooperativeMatrixProperties2EXT";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -34003,8 +34004,8 @@ pub mod ext_cooperative_matrix_maintenance1 {
 pub mod sec_ubm_surface {
     use super::*;
     dispatch_table! { InstanceDispatch;
-        CreateUbmSurfaceSEC,PFN_vkCreateUbmSurfaceSEC,c"vkCreateUbmSurfaceSEC";
-        GetPhysicalDeviceUbmPresentationSupportSEC,PFN_vkGetPhysicalDeviceUbmPresentationSupportSEC,c"vkGetPhysicalDeviceUbmPresentationSupportSEC";
+        CreateUbmSurfaceSEC(instance: VkInstance, pCreateInfo: *const VkUbmSurfaceCreateInfoSEC, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateUbmSurfaceSEC,c"vkCreateUbmSurfaceSEC";
+        GetPhysicalDeviceUbmPresentationSupportSEC(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, device: *mut ubm_device) -> VkBool32,PFN_vkGetPhysicalDeviceUbmPresentationSupportSEC,c"vkGetPhysicalDeviceUbmPresentationSupportSEC";
     }
     impl InstanceDispatch {
         #[inline(always)]
@@ -34021,12 +34022,4234 @@ pub mod sec_ubm_surface {
 pub mod ext_primitive_restart_index {
     use super::*;
     dispatch_table! { DeviceDispatch;
-        CmdSetPrimitiveRestartIndexEXT,PFN_vkCmdSetPrimitiveRestartIndexEXT,c"vkCmdSetPrimitiveRestartIndexEXT";
+        CmdSetPrimitiveRestartIndexEXT(commandBuffer: VkCommandBuffer, primitiveRestartIndex: u32) -> (),PFN_vkCmdSetPrimitiveRestartIndexEXT,c"vkCmdSetPrimitiveRestartIndexEXT";
     }
     impl DeviceDispatch {
         #[inline(always)]
         pub unsafe fn CmdSetPrimitiveRestartIndexEXT(&self, commandBuffer: VkCommandBuffer, primitiveRestartIndex: u32) -> () {
             unsafe { (self.CmdSetPrimitiveRestartIndexEXT)(commandBuffer, primitiveRestartIndex) }
         }
+    }
+}
+dispatch_table! { EntryDispatchCombined;
+    CreateInstance(pCreateInfo: *const VkInstanceCreateInfo, pAllocator: *const VkAllocationCallbacks, pInstance: *mut VkInstance) -> VkResult,PFN_vkCreateInstance,c"vkCreateInstance";
+    EnumerateInstanceExtensionProperties(pLayerName: *const c_char, pPropertyCount: *mut u32, pProperties: *mut VkExtensionProperties) -> VkResult,PFN_vkEnumerateInstanceExtensionProperties,c"vkEnumerateInstanceExtensionProperties";
+    EnumerateInstanceLayerProperties(pPropertyCount: *mut u32, pProperties: *mut VkLayerProperties) -> VkResult,PFN_vkEnumerateInstanceLayerProperties,c"vkEnumerateInstanceLayerProperties";
+    EnumerateInstanceVersion(pApiVersion: *mut u32) -> VkResult,PFN_vkEnumerateInstanceVersion,c"vkEnumerateInstanceVersion";
+    GetExternalComputeQueueDataNV(externalQueue: VkExternalComputeQueueNV, params: *mut VkExternalComputeQueueDataParamsNV, pData: *mut c_void) -> (),PFN_vkGetExternalComputeQueueDataNV,c"vkGetExternalComputeQueueDataNV";
+    GetInstanceProcAddr(instance: VkInstance, pName: *const c_char) -> PFN_vkVoidFunction,PFN_vkGetInstanceProcAddr,c"vkGetInstanceProcAddr";
+}
+impl EntryDispatchCombined {
+    #[inline(always)]
+    pub unsafe fn CreateInstance(&self, pCreateInfo: *const VkInstanceCreateInfo, pAllocator: *const VkAllocationCallbacks, pInstance: *mut VkInstance) -> VkResult {
+        unsafe { (self.CreateInstance)(pCreateInfo, pAllocator, pInstance) }
+    }
+    #[inline(always)]
+    pub unsafe fn EnumerateInstanceExtensionProperties(&self, pLayerName: *const c_char, pPropertyCount: *mut u32, pProperties: *mut VkExtensionProperties) -> VkResult {
+        unsafe { (self.EnumerateInstanceExtensionProperties)(pLayerName, pPropertyCount, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn EnumerateInstanceLayerProperties(&self, pPropertyCount: *mut u32, pProperties: *mut VkLayerProperties) -> VkResult {
+        unsafe { (self.EnumerateInstanceLayerProperties)(pPropertyCount, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn EnumerateInstanceVersion(&self, pApiVersion: *mut u32) -> VkResult {
+        unsafe { (self.EnumerateInstanceVersion)(pApiVersion) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetExternalComputeQueueDataNV(&self, externalQueue: VkExternalComputeQueueNV, params: *mut VkExternalComputeQueueDataParamsNV, pData: *mut c_void) -> () {
+        unsafe { (self.GetExternalComputeQueueDataNV)(externalQueue, params, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetInstanceProcAddr(&self, instance: VkInstance, pName: *const c_char) -> PFN_vkVoidFunction {
+        unsafe { (self.GetInstanceProcAddr)(instance, pName) }
+    }
+}
+dispatch_table! { InstanceDispatchCombined;
+    AcquireDrmDisplayEXT(physicalDevice: VkPhysicalDevice, drmFd: i32, display: VkDisplayKHR) -> VkResult,PFN_vkAcquireDrmDisplayEXT,c"vkAcquireDrmDisplayEXT";
+    AcquireWinrtDisplayNV(physicalDevice: VkPhysicalDevice, display: VkDisplayKHR) -> VkResult,PFN_vkAcquireWinrtDisplayNV,c"vkAcquireWinrtDisplayNV";
+    AcquireXlibDisplayEXT(physicalDevice: VkPhysicalDevice, dpy: *mut Display, display: VkDisplayKHR) -> VkResult,PFN_vkAcquireXlibDisplayEXT,c"vkAcquireXlibDisplayEXT";
+    CreateAndroidSurfaceKHR(instance: VkInstance, pCreateInfo: *const VkAndroidSurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateAndroidSurfaceKHR,c"vkCreateAndroidSurfaceKHR";
+    CreateDebugReportCallbackEXT(instance: VkInstance, pCreateInfo: *const VkDebugReportCallbackCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pCallback: *mut VkDebugReportCallbackEXT) -> VkResult,PFN_vkCreateDebugReportCallbackEXT,c"vkCreateDebugReportCallbackEXT";
+    CreateDebugUtilsMessengerEXT(instance: VkInstance, pCreateInfo: *const VkDebugUtilsMessengerCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pMessenger: *mut VkDebugUtilsMessengerEXT) -> VkResult,PFN_vkCreateDebugUtilsMessengerEXT,c"vkCreateDebugUtilsMessengerEXT";
+    CreateDevice(physicalDevice: VkPhysicalDevice, pCreateInfo: *const VkDeviceCreateInfo, pAllocator: *const VkAllocationCallbacks, pDevice: *mut VkDevice) -> VkResult,PFN_vkCreateDevice,c"vkCreateDevice";
+    CreateDirectFBSurfaceEXT(instance: VkInstance, pCreateInfo: *const VkDirectFBSurfaceCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateDirectFBSurfaceEXT,c"vkCreateDirectFBSurfaceEXT";
+    CreateDisplayModeKHR(physicalDevice: VkPhysicalDevice, display: VkDisplayKHR, pCreateInfo: *const VkDisplayModeCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pMode: *mut VkDisplayModeKHR) -> VkResult,PFN_vkCreateDisplayModeKHR,c"vkCreateDisplayModeKHR";
+    CreateDisplayPlaneSurfaceKHR(instance: VkInstance, pCreateInfo: *const VkDisplaySurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateDisplayPlaneSurfaceKHR,c"vkCreateDisplayPlaneSurfaceKHR";
+    CreateHeadlessSurfaceEXT(instance: VkInstance, pCreateInfo: *const VkHeadlessSurfaceCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateHeadlessSurfaceEXT,c"vkCreateHeadlessSurfaceEXT";
+    CreateIOSSurfaceMVK(instance: VkInstance, pCreateInfo: *const VkIOSSurfaceCreateInfoMVK, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateIOSSurfaceMVK,c"vkCreateIOSSurfaceMVK";
+    CreateImagePipeSurfaceFUCHSIA(instance: VkInstance, pCreateInfo: *const VkImagePipeSurfaceCreateInfoFUCHSIA, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateImagePipeSurfaceFUCHSIA,c"vkCreateImagePipeSurfaceFUCHSIA";
+    CreateMacOSSurfaceMVK(instance: VkInstance, pCreateInfo: *const VkMacOSSurfaceCreateInfoMVK, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateMacOSSurfaceMVK,c"vkCreateMacOSSurfaceMVK";
+    CreateMetalSurfaceEXT(instance: VkInstance, pCreateInfo: *const VkMetalSurfaceCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateMetalSurfaceEXT,c"vkCreateMetalSurfaceEXT";
+    CreateScreenSurfaceQNX(instance: VkInstance, pCreateInfo: *const VkScreenSurfaceCreateInfoQNX, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateScreenSurfaceQNX,c"vkCreateScreenSurfaceQNX";
+    CreateStreamDescriptorSurfaceGGP(instance: VkInstance, pCreateInfo: *const VkStreamDescriptorSurfaceCreateInfoGGP, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateStreamDescriptorSurfaceGGP,c"vkCreateStreamDescriptorSurfaceGGP";
+    CreateSurfaceOHOS(instance: VkInstance, pCreateInfo: *const VkSurfaceCreateInfoOHOS, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateSurfaceOHOS,c"vkCreateSurfaceOHOS";
+    CreateUbmSurfaceSEC(instance: VkInstance, pCreateInfo: *const VkUbmSurfaceCreateInfoSEC, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateUbmSurfaceSEC,c"vkCreateUbmSurfaceSEC";
+    CreateViSurfaceNN(instance: VkInstance, pCreateInfo: *const VkViSurfaceCreateInfoNN, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateViSurfaceNN,c"vkCreateViSurfaceNN";
+    CreateWaylandSurfaceKHR(instance: VkInstance, pCreateInfo: *const VkWaylandSurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateWaylandSurfaceKHR,c"vkCreateWaylandSurfaceKHR";
+    CreateWin32SurfaceKHR(instance: VkInstance, pCreateInfo: *const VkWin32SurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateWin32SurfaceKHR,c"vkCreateWin32SurfaceKHR";
+    CreateXcbSurfaceKHR(instance: VkInstance, pCreateInfo: *const VkXcbSurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateXcbSurfaceKHR,c"vkCreateXcbSurfaceKHR";
+    CreateXlibSurfaceKHR(instance: VkInstance, pCreateInfo: *const VkXlibSurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult,PFN_vkCreateXlibSurfaceKHR,c"vkCreateXlibSurfaceKHR";
+    DebugReportMessageEXT(instance: VkInstance, flags: VkDebugReportFlagsEXT, objectType: VkDebugReportObjectTypeEXT, object: u64, location: usize, messageCode: i32, pLayerPrefix: *const c_char, pMessage: *const c_char) -> (),PFN_vkDebugReportMessageEXT,c"vkDebugReportMessageEXT";
+    DestroyDebugReportCallbackEXT(instance: VkInstance, callback: VkDebugReportCallbackEXT, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyDebugReportCallbackEXT,c"vkDestroyDebugReportCallbackEXT";
+    DestroyDebugUtilsMessengerEXT(instance: VkInstance, messenger: VkDebugUtilsMessengerEXT, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyDebugUtilsMessengerEXT,c"vkDestroyDebugUtilsMessengerEXT";
+    DestroyInstance(instance: VkInstance, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyInstance,c"vkDestroyInstance";
+    DestroySurfaceKHR(instance: VkInstance, surface: VkSurfaceKHR, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroySurfaceKHR,c"vkDestroySurfaceKHR";
+    EnumerateDeviceExtensionProperties(physicalDevice: VkPhysicalDevice, pLayerName: *const c_char, pPropertyCount: *mut u32, pProperties: *mut VkExtensionProperties) -> VkResult,PFN_vkEnumerateDeviceExtensionProperties,c"vkEnumerateDeviceExtensionProperties";
+    EnumerateDeviceLayerProperties(physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkLayerProperties) -> VkResult,PFN_vkEnumerateDeviceLayerProperties,c"vkEnumerateDeviceLayerProperties";
+    EnumeratePhysicalDeviceGroups(instance: VkInstance, pPhysicalDeviceGroupCount: *mut u32, pPhysicalDeviceGroupProperties: *mut VkPhysicalDeviceGroupProperties) -> VkResult,PFN_vkEnumeratePhysicalDeviceGroups,c"vkEnumeratePhysicalDeviceGroups";
+    EnumeratePhysicalDeviceGroupsKHR(instance: VkInstance, pPhysicalDeviceGroupCount: *mut u32, pPhysicalDeviceGroupProperties: *mut VkPhysicalDeviceGroupProperties) -> VkResult,PFN_vkEnumeratePhysicalDeviceGroupsKHR,c"vkEnumeratePhysicalDeviceGroupsKHR";
+    EnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, pCounterCount: *mut u32, pCounters: *mut VkPerformanceCounterARM, pCounterDescriptions: *mut VkPerformanceCounterDescriptionARM) -> VkResult,PFN_vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM,c"vkEnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM";
+    EnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, pCounterCount: *mut u32, pCounters: *mut VkPerformanceCounterKHR, pCounterDescriptions: *mut VkPerformanceCounterDescriptionKHR) -> VkResult,PFN_vkEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR,c"vkEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR";
+    EnumeratePhysicalDeviceShaderInstrumentationMetricsARM(physicalDevice: VkPhysicalDevice, pDescriptionCount: *mut u32, pDescriptions: *mut VkShaderInstrumentationMetricDescriptionARM) -> VkResult,PFN_vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM,c"vkEnumeratePhysicalDeviceShaderInstrumentationMetricsARM";
+    EnumeratePhysicalDevices(instance: VkInstance, pPhysicalDeviceCount: *mut u32, pPhysicalDevices: *mut VkPhysicalDevice) -> VkResult,PFN_vkEnumeratePhysicalDevices,c"vkEnumeratePhysicalDevices";
+    GetDeviceProcAddr(device: VkDevice, pName: *const c_char) -> PFN_vkVoidFunction,PFN_vkGetDeviceProcAddr,c"vkGetDeviceProcAddr";
+    GetDisplayModeProperties2KHR(physicalDevice: VkPhysicalDevice, display: VkDisplayKHR, pPropertyCount: *mut u32, pProperties: *mut VkDisplayModeProperties2KHR) -> VkResult,PFN_vkGetDisplayModeProperties2KHR,c"vkGetDisplayModeProperties2KHR";
+    GetDisplayModePropertiesKHR(physicalDevice: VkPhysicalDevice, display: VkDisplayKHR, pPropertyCount: *mut u32, pProperties: *mut VkDisplayModePropertiesKHR) -> VkResult,PFN_vkGetDisplayModePropertiesKHR,c"vkGetDisplayModePropertiesKHR";
+    GetDisplayPlaneCapabilities2KHR(physicalDevice: VkPhysicalDevice, pDisplayPlaneInfo: *const VkDisplayPlaneInfo2KHR, pCapabilities: *mut VkDisplayPlaneCapabilities2KHR) -> VkResult,PFN_vkGetDisplayPlaneCapabilities2KHR,c"vkGetDisplayPlaneCapabilities2KHR";
+    GetDisplayPlaneCapabilitiesKHR(physicalDevice: VkPhysicalDevice, mode: VkDisplayModeKHR, planeIndex: u32, pCapabilities: *mut VkDisplayPlaneCapabilitiesKHR) -> VkResult,PFN_vkGetDisplayPlaneCapabilitiesKHR,c"vkGetDisplayPlaneCapabilitiesKHR";
+    GetDisplayPlaneSupportedDisplaysKHR(physicalDevice: VkPhysicalDevice, planeIndex: u32, pDisplayCount: *mut u32, pDisplays: *mut VkDisplayKHR) -> VkResult,PFN_vkGetDisplayPlaneSupportedDisplaysKHR,c"vkGetDisplayPlaneSupportedDisplaysKHR";
+    GetDrmDisplayEXT(physicalDevice: VkPhysicalDevice, drmFd: i32, connectorId: u32, display: *mut VkDisplayKHR) -> VkResult,PFN_vkGetDrmDisplayEXT,c"vkGetDrmDisplayEXT";
+    GetPhysicalDeviceCalibrateableTimeDomainsEXT(physicalDevice: VkPhysicalDevice, pTimeDomainCount: *mut u32, pTimeDomains: *mut VkTimeDomainKHR) -> VkResult,PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT,c"vkGetPhysicalDeviceCalibrateableTimeDomainsEXT";
+    GetPhysicalDeviceCalibrateableTimeDomainsKHR(physicalDevice: VkPhysicalDevice, pTimeDomainCount: *mut u32, pTimeDomains: *mut VkTimeDomainKHR) -> VkResult,PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR,c"vkGetPhysicalDeviceCalibrateableTimeDomainsKHR";
+    GetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV(physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkCooperativeMatrixFlexibleDimensionsPropertiesNV) -> VkResult,PFN_vkGetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV,c"vkGetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV";
+    GetPhysicalDeviceCooperativeMatrixProperties2EXT(physicalDevice: VkPhysicalDevice, pCooperativeMatrixInfo: *const VkPhysicalDeviceCooperativeMatrixInfo2EXT, pPropertyCount: *mut u32, pProperties: *mut VkCooperativeMatrixProperties2EXT) -> VkResult,PFN_vkGetPhysicalDeviceCooperativeMatrixProperties2EXT,c"vkGetPhysicalDeviceCooperativeMatrixProperties2EXT";
+    GetPhysicalDeviceCooperativeMatrixPropertiesKHR(physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkCooperativeMatrixPropertiesKHR) -> VkResult,PFN_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR,c"vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR";
+    GetPhysicalDeviceCooperativeMatrixPropertiesNV(physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkCooperativeMatrixPropertiesNV) -> VkResult,PFN_vkGetPhysicalDeviceCooperativeMatrixPropertiesNV,c"vkGetPhysicalDeviceCooperativeMatrixPropertiesNV";
+    GetPhysicalDeviceCooperativeVectorPropertiesNV(physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkCooperativeVectorPropertiesNV) -> VkResult,PFN_vkGetPhysicalDeviceCooperativeVectorPropertiesNV,c"vkGetPhysicalDeviceCooperativeVectorPropertiesNV";
+    GetPhysicalDeviceDescriptorSizeEXT(physicalDevice: VkPhysicalDevice, descriptorType: VkDescriptorType) -> VkDeviceSize,PFN_vkGetPhysicalDeviceDescriptorSizeEXT,c"vkGetPhysicalDeviceDescriptorSizeEXT";
+    GetPhysicalDeviceDirectFBPresentationSupportEXT(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, dfb: *mut IDirectFB) -> VkBool32,PFN_vkGetPhysicalDeviceDirectFBPresentationSupportEXT,c"vkGetPhysicalDeviceDirectFBPresentationSupportEXT";
+    GetPhysicalDeviceDisplayPlaneProperties2KHR(physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkDisplayPlaneProperties2KHR) -> VkResult,PFN_vkGetPhysicalDeviceDisplayPlaneProperties2KHR,c"vkGetPhysicalDeviceDisplayPlaneProperties2KHR";
+    GetPhysicalDeviceDisplayPlanePropertiesKHR(physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkDisplayPlanePropertiesKHR) -> VkResult,PFN_vkGetPhysicalDeviceDisplayPlanePropertiesKHR,c"vkGetPhysicalDeviceDisplayPlanePropertiesKHR";
+    GetPhysicalDeviceDisplayProperties2KHR(physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkDisplayProperties2KHR) -> VkResult,PFN_vkGetPhysicalDeviceDisplayProperties2KHR,c"vkGetPhysicalDeviceDisplayProperties2KHR";
+    GetPhysicalDeviceDisplayPropertiesKHR(physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkDisplayPropertiesKHR) -> VkResult,PFN_vkGetPhysicalDeviceDisplayPropertiesKHR,c"vkGetPhysicalDeviceDisplayPropertiesKHR";
+    GetPhysicalDeviceExternalBufferProperties(physicalDevice: VkPhysicalDevice, pExternalBufferInfo: *const VkPhysicalDeviceExternalBufferInfo, pExternalBufferProperties: *mut VkExternalBufferProperties) -> (),PFN_vkGetPhysicalDeviceExternalBufferProperties,c"vkGetPhysicalDeviceExternalBufferProperties";
+    GetPhysicalDeviceExternalBufferPropertiesKHR(physicalDevice: VkPhysicalDevice, pExternalBufferInfo: *const VkPhysicalDeviceExternalBufferInfo, pExternalBufferProperties: *mut VkExternalBufferProperties) -> (),PFN_vkGetPhysicalDeviceExternalBufferPropertiesKHR,c"vkGetPhysicalDeviceExternalBufferPropertiesKHR";
+    GetPhysicalDeviceExternalFenceProperties(physicalDevice: VkPhysicalDevice, pExternalFenceInfo: *const VkPhysicalDeviceExternalFenceInfo, pExternalFenceProperties: *mut VkExternalFenceProperties) -> (),PFN_vkGetPhysicalDeviceExternalFenceProperties,c"vkGetPhysicalDeviceExternalFenceProperties";
+    GetPhysicalDeviceExternalFencePropertiesKHR(physicalDevice: VkPhysicalDevice, pExternalFenceInfo: *const VkPhysicalDeviceExternalFenceInfo, pExternalFenceProperties: *mut VkExternalFenceProperties) -> (),PFN_vkGetPhysicalDeviceExternalFencePropertiesKHR,c"vkGetPhysicalDeviceExternalFencePropertiesKHR";
+    GetPhysicalDeviceExternalImageFormatPropertiesNV(physicalDevice: VkPhysicalDevice, format: VkFormat, r#type: VkImageType, tiling: VkImageTiling, usage: VkImageUsageFlags, flags: VkImageCreateFlags, externalHandleType: VkExternalMemoryHandleTypeFlagsNV, pExternalImageFormatProperties: *mut VkExternalImageFormatPropertiesNV) -> VkResult,PFN_vkGetPhysicalDeviceExternalImageFormatPropertiesNV,c"vkGetPhysicalDeviceExternalImageFormatPropertiesNV";
+    GetPhysicalDeviceExternalSemaphoreProperties(physicalDevice: VkPhysicalDevice, pExternalSemaphoreInfo: *const VkPhysicalDeviceExternalSemaphoreInfo, pExternalSemaphoreProperties: *mut VkExternalSemaphoreProperties) -> (),PFN_vkGetPhysicalDeviceExternalSemaphoreProperties,c"vkGetPhysicalDeviceExternalSemaphoreProperties";
+    GetPhysicalDeviceExternalSemaphorePropertiesKHR(physicalDevice: VkPhysicalDevice, pExternalSemaphoreInfo: *const VkPhysicalDeviceExternalSemaphoreInfo, pExternalSemaphoreProperties: *mut VkExternalSemaphoreProperties) -> (),PFN_vkGetPhysicalDeviceExternalSemaphorePropertiesKHR,c"vkGetPhysicalDeviceExternalSemaphorePropertiesKHR";
+    GetPhysicalDeviceExternalTensorPropertiesARM(physicalDevice: VkPhysicalDevice, pExternalTensorInfo: *const VkPhysicalDeviceExternalTensorInfoARM, pExternalTensorProperties: *mut VkExternalTensorPropertiesARM) -> (),PFN_vkGetPhysicalDeviceExternalTensorPropertiesARM,c"vkGetPhysicalDeviceExternalTensorPropertiesARM";
+    GetPhysicalDeviceFeatures(physicalDevice: VkPhysicalDevice, pFeatures: *mut VkPhysicalDeviceFeatures) -> (),PFN_vkGetPhysicalDeviceFeatures,c"vkGetPhysicalDeviceFeatures";
+    GetPhysicalDeviceFeatures2(physicalDevice: VkPhysicalDevice, pFeatures: *mut VkPhysicalDeviceFeatures2) -> (),PFN_vkGetPhysicalDeviceFeatures2,c"vkGetPhysicalDeviceFeatures2";
+    GetPhysicalDeviceFeatures2KHR(physicalDevice: VkPhysicalDevice, pFeatures: *mut VkPhysicalDeviceFeatures2) -> (),PFN_vkGetPhysicalDeviceFeatures2KHR,c"vkGetPhysicalDeviceFeatures2KHR";
+    GetPhysicalDeviceFormatProperties(physicalDevice: VkPhysicalDevice, format: VkFormat, pFormatProperties: *mut VkFormatProperties) -> (),PFN_vkGetPhysicalDeviceFormatProperties,c"vkGetPhysicalDeviceFormatProperties";
+    GetPhysicalDeviceFormatProperties2(physicalDevice: VkPhysicalDevice, format: VkFormat, pFormatProperties: *mut VkFormatProperties2) -> (),PFN_vkGetPhysicalDeviceFormatProperties2,c"vkGetPhysicalDeviceFormatProperties2";
+    GetPhysicalDeviceFormatProperties2KHR(physicalDevice: VkPhysicalDevice, format: VkFormat, pFormatProperties: *mut VkFormatProperties2) -> (),PFN_vkGetPhysicalDeviceFormatProperties2KHR,c"vkGetPhysicalDeviceFormatProperties2KHR";
+    GetPhysicalDeviceFragmentShadingRatesKHR(physicalDevice: VkPhysicalDevice, pFragmentShadingRateCount: *mut u32, pFragmentShadingRates: *mut VkPhysicalDeviceFragmentShadingRateKHR) -> VkResult,PFN_vkGetPhysicalDeviceFragmentShadingRatesKHR,c"vkGetPhysicalDeviceFragmentShadingRatesKHR";
+    GetPhysicalDeviceImageFormatProperties(physicalDevice: VkPhysicalDevice, format: VkFormat, r#type: VkImageType, tiling: VkImageTiling, usage: VkImageUsageFlags, flags: VkImageCreateFlags, pImageFormatProperties: *mut VkImageFormatProperties) -> VkResult,PFN_vkGetPhysicalDeviceImageFormatProperties,c"vkGetPhysicalDeviceImageFormatProperties";
+    GetPhysicalDeviceImageFormatProperties2(physicalDevice: VkPhysicalDevice, pImageFormatInfo: *const VkPhysicalDeviceImageFormatInfo2, pImageFormatProperties: *mut VkImageFormatProperties2) -> VkResult,PFN_vkGetPhysicalDeviceImageFormatProperties2,c"vkGetPhysicalDeviceImageFormatProperties2";
+    GetPhysicalDeviceImageFormatProperties2KHR(physicalDevice: VkPhysicalDevice, pImageFormatInfo: *const VkPhysicalDeviceImageFormatInfo2, pImageFormatProperties: *mut VkImageFormatProperties2) -> VkResult,PFN_vkGetPhysicalDeviceImageFormatProperties2KHR,c"vkGetPhysicalDeviceImageFormatProperties2KHR";
+    GetPhysicalDeviceMemoryProperties(physicalDevice: VkPhysicalDevice, pMemoryProperties: *mut VkPhysicalDeviceMemoryProperties) -> (),PFN_vkGetPhysicalDeviceMemoryProperties,c"vkGetPhysicalDeviceMemoryProperties";
+    GetPhysicalDeviceMemoryProperties2(physicalDevice: VkPhysicalDevice, pMemoryProperties: *mut VkPhysicalDeviceMemoryProperties2) -> (),PFN_vkGetPhysicalDeviceMemoryProperties2,c"vkGetPhysicalDeviceMemoryProperties2";
+    GetPhysicalDeviceMemoryProperties2KHR(physicalDevice: VkPhysicalDevice, pMemoryProperties: *mut VkPhysicalDeviceMemoryProperties2) -> (),PFN_vkGetPhysicalDeviceMemoryProperties2KHR,c"vkGetPhysicalDeviceMemoryProperties2KHR";
+    GetPhysicalDeviceMultisamplePropertiesEXT(physicalDevice: VkPhysicalDevice, samples: VkSampleCountFlagBits, pMultisampleProperties: *mut VkMultisamplePropertiesEXT) -> (),PFN_vkGetPhysicalDeviceMultisamplePropertiesEXT,c"vkGetPhysicalDeviceMultisamplePropertiesEXT";
+    GetPhysicalDeviceOpticalFlowImageFormatsNV(physicalDevice: VkPhysicalDevice, pOpticalFlowImageFormatInfo: *const VkOpticalFlowImageFormatInfoNV, pFormatCount: *mut u32, pImageFormatProperties: *mut VkOpticalFlowImageFormatPropertiesNV) -> VkResult,PFN_vkGetPhysicalDeviceOpticalFlowImageFormatsNV,c"vkGetPhysicalDeviceOpticalFlowImageFormatsNV";
+    GetPhysicalDevicePresentRectanglesKHR(physicalDevice: VkPhysicalDevice, surface: VkSurfaceKHR, pRectCount: *mut u32, pRects: *mut VkRect2D) -> VkResult,PFN_vkGetPhysicalDevicePresentRectanglesKHR,c"vkGetPhysicalDevicePresentRectanglesKHR";
+    GetPhysicalDeviceProperties(physicalDevice: VkPhysicalDevice, pProperties: *mut VkPhysicalDeviceProperties) -> (),PFN_vkGetPhysicalDeviceProperties,c"vkGetPhysicalDeviceProperties";
+    GetPhysicalDeviceProperties2(physicalDevice: VkPhysicalDevice, pProperties: *mut VkPhysicalDeviceProperties2) -> (),PFN_vkGetPhysicalDeviceProperties2,c"vkGetPhysicalDeviceProperties2";
+    GetPhysicalDeviceProperties2KHR(physicalDevice: VkPhysicalDevice, pProperties: *mut VkPhysicalDeviceProperties2) -> (),PFN_vkGetPhysicalDeviceProperties2KHR,c"vkGetPhysicalDeviceProperties2KHR";
+    GetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, pQueueFamilyDataGraphProperties: *const VkQueueFamilyDataGraphPropertiesARM, pProperties: *mut VkBaseOutStructure) -> VkResult,PFN_vkGetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM,c"vkGetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM";
+    GetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, pQueueFamilyDataGraphProperties: *const VkQueueFamilyDataGraphPropertiesARM, pOpticalFlowImageFormatInfo: *const VkDataGraphOpticalFlowImageFormatInfoARM, pFormatCount: *mut u32, pImageFormatProperties: *mut VkDataGraphOpticalFlowImageFormatPropertiesARM) -> VkResult,PFN_vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM,c"vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM";
+    GetPhysicalDeviceQueueFamilyDataGraphProcessingEnginePropertiesARM(physicalDevice: VkPhysicalDevice, pQueueFamilyDataGraphProcessingEngineInfo: *const VkPhysicalDeviceQueueFamilyDataGraphProcessingEngineInfoARM, pQueueFamilyDataGraphProcessingEngineProperties: *mut VkQueueFamilyDataGraphProcessingEnginePropertiesARM) -> (),PFN_vkGetPhysicalDeviceQueueFamilyDataGraphProcessingEnginePropertiesARM,c"vkGetPhysicalDeviceQueueFamilyDataGraphProcessingEnginePropertiesARM";
+    GetPhysicalDeviceQueueFamilyDataGraphPropertiesARM(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, pQueueFamilyDataGraphPropertyCount: *mut u32, pQueueFamilyDataGraphProperties: *mut VkQueueFamilyDataGraphPropertiesARM) -> VkResult,PFN_vkGetPhysicalDeviceQueueFamilyDataGraphPropertiesARM,c"vkGetPhysicalDeviceQueueFamilyDataGraphPropertiesARM";
+    GetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR(physicalDevice: VkPhysicalDevice, pPerformanceQueryCreateInfo: *const VkQueryPoolPerformanceCreateInfoKHR, pNumPasses: *mut u32) -> (),PFN_vkGetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR,c"vkGetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR";
+    GetPhysicalDeviceQueueFamilyProperties(physicalDevice: VkPhysicalDevice, pQueueFamilyPropertyCount: *mut u32, pQueueFamilyProperties: *mut VkQueueFamilyProperties) -> (),PFN_vkGetPhysicalDeviceQueueFamilyProperties,c"vkGetPhysicalDeviceQueueFamilyProperties";
+    GetPhysicalDeviceQueueFamilyProperties2(physicalDevice: VkPhysicalDevice, pQueueFamilyPropertyCount: *mut u32, pQueueFamilyProperties: *mut VkQueueFamilyProperties2) -> (),PFN_vkGetPhysicalDeviceQueueFamilyProperties2,c"vkGetPhysicalDeviceQueueFamilyProperties2";
+    GetPhysicalDeviceQueueFamilyProperties2KHR(physicalDevice: VkPhysicalDevice, pQueueFamilyPropertyCount: *mut u32, pQueueFamilyProperties: *mut VkQueueFamilyProperties2) -> (),PFN_vkGetPhysicalDeviceQueueFamilyProperties2KHR,c"vkGetPhysicalDeviceQueueFamilyProperties2KHR";
+    GetPhysicalDeviceScreenPresentationSupportQNX(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, window: *mut _screen_window) -> VkBool32,PFN_vkGetPhysicalDeviceScreenPresentationSupportQNX,c"vkGetPhysicalDeviceScreenPresentationSupportQNX";
+    GetPhysicalDeviceSparseImageFormatProperties(physicalDevice: VkPhysicalDevice, format: VkFormat, r#type: VkImageType, samples: VkSampleCountFlagBits, usage: VkImageUsageFlags, tiling: VkImageTiling, pPropertyCount: *mut u32, pProperties: *mut VkSparseImageFormatProperties) -> (),PFN_vkGetPhysicalDeviceSparseImageFormatProperties,c"vkGetPhysicalDeviceSparseImageFormatProperties";
+    GetPhysicalDeviceSparseImageFormatProperties2(physicalDevice: VkPhysicalDevice, pFormatInfo: *const VkPhysicalDeviceSparseImageFormatInfo2, pPropertyCount: *mut u32, pProperties: *mut VkSparseImageFormatProperties2) -> (),PFN_vkGetPhysicalDeviceSparseImageFormatProperties2,c"vkGetPhysicalDeviceSparseImageFormatProperties2";
+    GetPhysicalDeviceSparseImageFormatProperties2KHR(physicalDevice: VkPhysicalDevice, pFormatInfo: *const VkPhysicalDeviceSparseImageFormatInfo2, pPropertyCount: *mut u32, pProperties: *mut VkSparseImageFormatProperties2) -> (),PFN_vkGetPhysicalDeviceSparseImageFormatProperties2KHR,c"vkGetPhysicalDeviceSparseImageFormatProperties2KHR";
+    GetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV(physicalDevice: VkPhysicalDevice, pCombinationCount: *mut u32, pCombinations: *mut VkFramebufferMixedSamplesCombinationNV) -> VkResult,PFN_vkGetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV,c"vkGetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV";
+    GetPhysicalDeviceSurfaceCapabilities2EXT(physicalDevice: VkPhysicalDevice, surface: VkSurfaceKHR, pSurfaceCapabilities: *mut VkSurfaceCapabilities2EXT) -> VkResult,PFN_vkGetPhysicalDeviceSurfaceCapabilities2EXT,c"vkGetPhysicalDeviceSurfaceCapabilities2EXT";
+    GetPhysicalDeviceSurfaceCapabilities2KHR(physicalDevice: VkPhysicalDevice, pSurfaceInfo: *const VkPhysicalDeviceSurfaceInfo2KHR, pSurfaceCapabilities: *mut VkSurfaceCapabilities2KHR) -> VkResult,PFN_vkGetPhysicalDeviceSurfaceCapabilities2KHR,c"vkGetPhysicalDeviceSurfaceCapabilities2KHR";
+    GetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice: VkPhysicalDevice, surface: VkSurfaceKHR, pSurfaceCapabilities: *mut VkSurfaceCapabilitiesKHR) -> VkResult,PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR,c"vkGetPhysicalDeviceSurfaceCapabilitiesKHR";
+    GetPhysicalDeviceSurfaceFormats2KHR(physicalDevice: VkPhysicalDevice, pSurfaceInfo: *const VkPhysicalDeviceSurfaceInfo2KHR, pSurfaceFormatCount: *mut u32, pSurfaceFormats: *mut VkSurfaceFormat2KHR) -> VkResult,PFN_vkGetPhysicalDeviceSurfaceFormats2KHR,c"vkGetPhysicalDeviceSurfaceFormats2KHR";
+    GetPhysicalDeviceSurfaceFormatsKHR(physicalDevice: VkPhysicalDevice, surface: VkSurfaceKHR, pSurfaceFormatCount: *mut u32, pSurfaceFormats: *mut VkSurfaceFormatKHR) -> VkResult,PFN_vkGetPhysicalDeviceSurfaceFormatsKHR,c"vkGetPhysicalDeviceSurfaceFormatsKHR";
+    GetPhysicalDeviceSurfacePresentModes2EXT(physicalDevice: VkPhysicalDevice, pSurfaceInfo: *const VkPhysicalDeviceSurfaceInfo2KHR, pPresentModeCount: *mut u32, pPresentModes: *mut VkPresentModeKHR) -> VkResult,PFN_vkGetPhysicalDeviceSurfacePresentModes2EXT,c"vkGetPhysicalDeviceSurfacePresentModes2EXT";
+    GetPhysicalDeviceSurfacePresentModesKHR(physicalDevice: VkPhysicalDevice, surface: VkSurfaceKHR, pPresentModeCount: *mut u32, pPresentModes: *mut VkPresentModeKHR) -> VkResult,PFN_vkGetPhysicalDeviceSurfacePresentModesKHR,c"vkGetPhysicalDeviceSurfacePresentModesKHR";
+    GetPhysicalDeviceSurfaceSupportKHR(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, surface: VkSurfaceKHR, pSupported: *mut VkBool32) -> VkResult,PFN_vkGetPhysicalDeviceSurfaceSupportKHR,c"vkGetPhysicalDeviceSurfaceSupportKHR";
+    GetPhysicalDeviceToolProperties(physicalDevice: VkPhysicalDevice, pToolCount: *mut u32, pToolProperties: *mut VkPhysicalDeviceToolProperties) -> VkResult,PFN_vkGetPhysicalDeviceToolProperties,c"vkGetPhysicalDeviceToolProperties";
+    GetPhysicalDeviceToolPropertiesEXT(physicalDevice: VkPhysicalDevice, pToolCount: *mut u32, pToolProperties: *mut VkPhysicalDeviceToolProperties) -> VkResult,PFN_vkGetPhysicalDeviceToolPropertiesEXT,c"vkGetPhysicalDeviceToolPropertiesEXT";
+    GetPhysicalDeviceUbmPresentationSupportSEC(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, device: *mut ubm_device) -> VkBool32,PFN_vkGetPhysicalDeviceUbmPresentationSupportSEC,c"vkGetPhysicalDeviceUbmPresentationSupportSEC";
+    GetPhysicalDeviceVideoCapabilitiesKHR(physicalDevice: VkPhysicalDevice, pVideoProfile: *const VkVideoProfileInfoKHR, pCapabilities: *mut VkVideoCapabilitiesKHR) -> VkResult,PFN_vkGetPhysicalDeviceVideoCapabilitiesKHR,c"vkGetPhysicalDeviceVideoCapabilitiesKHR";
+    GetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR(physicalDevice: VkPhysicalDevice, pQualityLevelInfo: *const VkPhysicalDeviceVideoEncodeQualityLevelInfoKHR, pQualityLevelProperties: *mut VkVideoEncodeQualityLevelPropertiesKHR) -> VkResult,PFN_vkGetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR,c"vkGetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR";
+    GetPhysicalDeviceVideoFormatPropertiesKHR(physicalDevice: VkPhysicalDevice, pVideoFormatInfo: *const VkPhysicalDeviceVideoFormatInfoKHR, pVideoFormatPropertyCount: *mut u32, pVideoFormatProperties: *mut VkVideoFormatPropertiesKHR) -> VkResult,PFN_vkGetPhysicalDeviceVideoFormatPropertiesKHR,c"vkGetPhysicalDeviceVideoFormatPropertiesKHR";
+    GetPhysicalDeviceWaylandPresentationSupportKHR(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, display: *mut wl_display) -> VkBool32,PFN_vkGetPhysicalDeviceWaylandPresentationSupportKHR,c"vkGetPhysicalDeviceWaylandPresentationSupportKHR";
+    GetPhysicalDeviceWin32PresentationSupportKHR(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32) -> VkBool32,PFN_vkGetPhysicalDeviceWin32PresentationSupportKHR,c"vkGetPhysicalDeviceWin32PresentationSupportKHR";
+    GetPhysicalDeviceXcbPresentationSupportKHR(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, connection: *mut xcb_connection_t, visual_id: xcb_visualid_t) -> VkBool32,PFN_vkGetPhysicalDeviceXcbPresentationSupportKHR,c"vkGetPhysicalDeviceXcbPresentationSupportKHR";
+    GetPhysicalDeviceXlibPresentationSupportKHR(physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, dpy: *mut Display, visualID: VisualID) -> VkBool32,PFN_vkGetPhysicalDeviceXlibPresentationSupportKHR,c"vkGetPhysicalDeviceXlibPresentationSupportKHR";
+    GetRandROutputDisplayEXT(physicalDevice: VkPhysicalDevice, dpy: *mut Display, rrOutput: RROutput, pDisplay: *mut VkDisplayKHR) -> VkResult,PFN_vkGetRandROutputDisplayEXT,c"vkGetRandROutputDisplayEXT";
+    GetWinrtDisplayNV(physicalDevice: VkPhysicalDevice, deviceRelativeId: u32, pDisplay: *mut VkDisplayKHR) -> VkResult,PFN_vkGetWinrtDisplayNV,c"vkGetWinrtDisplayNV";
+    ReleaseDisplayEXT(physicalDevice: VkPhysicalDevice, display: VkDisplayKHR) -> VkResult,PFN_vkReleaseDisplayEXT,c"vkReleaseDisplayEXT";
+    SubmitDebugUtilsMessageEXT(instance: VkInstance, messageSeverity: VkDebugUtilsMessageSeverityFlagBitsEXT, messageTypes: VkDebugUtilsMessageTypeFlagsEXT, pCallbackData: *const VkDebugUtilsMessengerCallbackDataEXT) -> (),PFN_vkSubmitDebugUtilsMessageEXT,c"vkSubmitDebugUtilsMessageEXT";
+}
+impl InstanceDispatchCombined {
+    #[inline(always)]
+    pub unsafe fn AcquireDrmDisplayEXT(&self, physicalDevice: VkPhysicalDevice, drmFd: i32, display: VkDisplayKHR) -> VkResult {
+        unsafe { (self.AcquireDrmDisplayEXT)(physicalDevice, drmFd, display) }
+    }
+    #[inline(always)]
+    pub unsafe fn AcquireWinrtDisplayNV(&self, physicalDevice: VkPhysicalDevice, display: VkDisplayKHR) -> VkResult {
+        unsafe { (self.AcquireWinrtDisplayNV)(physicalDevice, display) }
+    }
+    #[inline(always)]
+    pub unsafe fn AcquireXlibDisplayEXT(&self, physicalDevice: VkPhysicalDevice, dpy: *mut Display, display: VkDisplayKHR) -> VkResult {
+        unsafe { (self.AcquireXlibDisplayEXT)(physicalDevice, dpy, display) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateAndroidSurfaceKHR(&self, instance: VkInstance, pCreateInfo: *const VkAndroidSurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
+        unsafe { (self.CreateAndroidSurfaceKHR)(instance, pCreateInfo, pAllocator, pSurface) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateDebugReportCallbackEXT(&self, instance: VkInstance, pCreateInfo: *const VkDebugReportCallbackCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pCallback: *mut VkDebugReportCallbackEXT) -> VkResult {
+        unsafe { (self.CreateDebugReportCallbackEXT)(instance, pCreateInfo, pAllocator, pCallback) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateDebugUtilsMessengerEXT(&self, instance: VkInstance, pCreateInfo: *const VkDebugUtilsMessengerCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pMessenger: *mut VkDebugUtilsMessengerEXT) -> VkResult {
+        unsafe { (self.CreateDebugUtilsMessengerEXT)(instance, pCreateInfo, pAllocator, pMessenger) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateDevice(&self, physicalDevice: VkPhysicalDevice, pCreateInfo: *const VkDeviceCreateInfo, pAllocator: *const VkAllocationCallbacks, pDevice: *mut VkDevice) -> VkResult {
+        unsafe { (self.CreateDevice)(physicalDevice, pCreateInfo, pAllocator, pDevice) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateDirectFBSurfaceEXT(&self, instance: VkInstance, pCreateInfo: *const VkDirectFBSurfaceCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
+        unsafe { (self.CreateDirectFBSurfaceEXT)(instance, pCreateInfo, pAllocator, pSurface) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateDisplayModeKHR(&self, physicalDevice: VkPhysicalDevice, display: VkDisplayKHR, pCreateInfo: *const VkDisplayModeCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pMode: *mut VkDisplayModeKHR) -> VkResult {
+        unsafe { (self.CreateDisplayModeKHR)(physicalDevice, display, pCreateInfo, pAllocator, pMode) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateDisplayPlaneSurfaceKHR(&self, instance: VkInstance, pCreateInfo: *const VkDisplaySurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
+        unsafe { (self.CreateDisplayPlaneSurfaceKHR)(instance, pCreateInfo, pAllocator, pSurface) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateHeadlessSurfaceEXT(&self, instance: VkInstance, pCreateInfo: *const VkHeadlessSurfaceCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
+        unsafe { (self.CreateHeadlessSurfaceEXT)(instance, pCreateInfo, pAllocator, pSurface) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateIOSSurfaceMVK(&self, instance: VkInstance, pCreateInfo: *const VkIOSSurfaceCreateInfoMVK, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
+        unsafe { (self.CreateIOSSurfaceMVK)(instance, pCreateInfo, pAllocator, pSurface) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateImagePipeSurfaceFUCHSIA(&self, instance: VkInstance, pCreateInfo: *const VkImagePipeSurfaceCreateInfoFUCHSIA, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
+        unsafe { (self.CreateImagePipeSurfaceFUCHSIA)(instance, pCreateInfo, pAllocator, pSurface) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateMacOSSurfaceMVK(&self, instance: VkInstance, pCreateInfo: *const VkMacOSSurfaceCreateInfoMVK, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
+        unsafe { (self.CreateMacOSSurfaceMVK)(instance, pCreateInfo, pAllocator, pSurface) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateMetalSurfaceEXT(&self, instance: VkInstance, pCreateInfo: *const VkMetalSurfaceCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
+        unsafe { (self.CreateMetalSurfaceEXT)(instance, pCreateInfo, pAllocator, pSurface) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateScreenSurfaceQNX(&self, instance: VkInstance, pCreateInfo: *const VkScreenSurfaceCreateInfoQNX, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
+        unsafe { (self.CreateScreenSurfaceQNX)(instance, pCreateInfo, pAllocator, pSurface) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateStreamDescriptorSurfaceGGP(&self, instance: VkInstance, pCreateInfo: *const VkStreamDescriptorSurfaceCreateInfoGGP, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
+        unsafe { (self.CreateStreamDescriptorSurfaceGGP)(instance, pCreateInfo, pAllocator, pSurface) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateSurfaceOHOS(&self, instance: VkInstance, pCreateInfo: *const VkSurfaceCreateInfoOHOS, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
+        unsafe { (self.CreateSurfaceOHOS)(instance, pCreateInfo, pAllocator, pSurface) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateUbmSurfaceSEC(&self, instance: VkInstance, pCreateInfo: *const VkUbmSurfaceCreateInfoSEC, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
+        unsafe { (self.CreateUbmSurfaceSEC)(instance, pCreateInfo, pAllocator, pSurface) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateViSurfaceNN(&self, instance: VkInstance, pCreateInfo: *const VkViSurfaceCreateInfoNN, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
+        unsafe { (self.CreateViSurfaceNN)(instance, pCreateInfo, pAllocator, pSurface) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateWaylandSurfaceKHR(&self, instance: VkInstance, pCreateInfo: *const VkWaylandSurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
+        unsafe { (self.CreateWaylandSurfaceKHR)(instance, pCreateInfo, pAllocator, pSurface) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateWin32SurfaceKHR(&self, instance: VkInstance, pCreateInfo: *const VkWin32SurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
+        unsafe { (self.CreateWin32SurfaceKHR)(instance, pCreateInfo, pAllocator, pSurface) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateXcbSurfaceKHR(&self, instance: VkInstance, pCreateInfo: *const VkXcbSurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
+        unsafe { (self.CreateXcbSurfaceKHR)(instance, pCreateInfo, pAllocator, pSurface) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateXlibSurfaceKHR(&self, instance: VkInstance, pCreateInfo: *const VkXlibSurfaceCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSurface: *mut VkSurfaceKHR) -> VkResult {
+        unsafe { (self.CreateXlibSurfaceKHR)(instance, pCreateInfo, pAllocator, pSurface) }
+    }
+    #[inline(always)]
+    pub unsafe fn DebugReportMessageEXT(&self, instance: VkInstance, flags: VkDebugReportFlagsEXT, objectType: VkDebugReportObjectTypeEXT, object: u64, location: usize, messageCode: i32, pLayerPrefix: *const c_char, pMessage: *const c_char) -> () {
+        unsafe { (self.DebugReportMessageEXT)(instance, flags, objectType, object, location, messageCode, pLayerPrefix, pMessage) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyDebugReportCallbackEXT(&self, instance: VkInstance, callback: VkDebugReportCallbackEXT, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyDebugReportCallbackEXT)(instance, callback, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyDebugUtilsMessengerEXT(&self, instance: VkInstance, messenger: VkDebugUtilsMessengerEXT, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyDebugUtilsMessengerEXT)(instance, messenger, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyInstance(&self, instance: VkInstance, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyInstance)(instance, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroySurfaceKHR(&self, instance: VkInstance, surface: VkSurfaceKHR, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroySurfaceKHR)(instance, surface, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn EnumerateDeviceExtensionProperties(&self, physicalDevice: VkPhysicalDevice, pLayerName: *const c_char, pPropertyCount: *mut u32, pProperties: *mut VkExtensionProperties) -> VkResult {
+        unsafe { (self.EnumerateDeviceExtensionProperties)(physicalDevice, pLayerName, pPropertyCount, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn EnumerateDeviceLayerProperties(&self, physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkLayerProperties) -> VkResult {
+        unsafe { (self.EnumerateDeviceLayerProperties)(physicalDevice, pPropertyCount, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn EnumeratePhysicalDeviceGroups(&self, instance: VkInstance, pPhysicalDeviceGroupCount: *mut u32, pPhysicalDeviceGroupProperties: *mut VkPhysicalDeviceGroupProperties) -> VkResult {
+        unsafe { (self.EnumeratePhysicalDeviceGroups)(instance, pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn EnumeratePhysicalDeviceGroupsKHR(&self, instance: VkInstance, pPhysicalDeviceGroupCount: *mut u32, pPhysicalDeviceGroupProperties: *mut VkPhysicalDeviceGroupProperties) -> VkResult {
+        unsafe { (self.EnumeratePhysicalDeviceGroupsKHR)(instance, pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn EnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM(&self, physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, pCounterCount: *mut u32, pCounters: *mut VkPerformanceCounterARM, pCounterDescriptions: *mut VkPerformanceCounterDescriptionARM) -> VkResult {
+        unsafe { (self.EnumeratePhysicalDeviceQueueFamilyPerformanceCountersByRegionARM)(physicalDevice, queueFamilyIndex, pCounterCount, pCounters, pCounterDescriptions) }
+    }
+    #[inline(always)]
+    pub unsafe fn EnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR(&self, physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, pCounterCount: *mut u32, pCounters: *mut VkPerformanceCounterKHR, pCounterDescriptions: *mut VkPerformanceCounterDescriptionKHR) -> VkResult {
+        unsafe { (self.EnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR)(physicalDevice, queueFamilyIndex, pCounterCount, pCounters, pCounterDescriptions) }
+    }
+    #[inline(always)]
+    pub unsafe fn EnumeratePhysicalDeviceShaderInstrumentationMetricsARM(&self, physicalDevice: VkPhysicalDevice, pDescriptionCount: *mut u32, pDescriptions: *mut VkShaderInstrumentationMetricDescriptionARM) -> VkResult {
+        unsafe { (self.EnumeratePhysicalDeviceShaderInstrumentationMetricsARM)(physicalDevice, pDescriptionCount, pDescriptions) }
+    }
+    #[inline(always)]
+    pub unsafe fn EnumeratePhysicalDevices(&self, instance: VkInstance, pPhysicalDeviceCount: *mut u32, pPhysicalDevices: *mut VkPhysicalDevice) -> VkResult {
+        unsafe { (self.EnumeratePhysicalDevices)(instance, pPhysicalDeviceCount, pPhysicalDevices) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceProcAddr(&self, device: VkDevice, pName: *const c_char) -> PFN_vkVoidFunction {
+        unsafe { (self.GetDeviceProcAddr)(device, pName) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDisplayModeProperties2KHR(&self, physicalDevice: VkPhysicalDevice, display: VkDisplayKHR, pPropertyCount: *mut u32, pProperties: *mut VkDisplayModeProperties2KHR) -> VkResult {
+        unsafe { (self.GetDisplayModeProperties2KHR)(physicalDevice, display, pPropertyCount, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDisplayModePropertiesKHR(&self, physicalDevice: VkPhysicalDevice, display: VkDisplayKHR, pPropertyCount: *mut u32, pProperties: *mut VkDisplayModePropertiesKHR) -> VkResult {
+        unsafe { (self.GetDisplayModePropertiesKHR)(physicalDevice, display, pPropertyCount, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDisplayPlaneCapabilities2KHR(&self, physicalDevice: VkPhysicalDevice, pDisplayPlaneInfo: *const VkDisplayPlaneInfo2KHR, pCapabilities: *mut VkDisplayPlaneCapabilities2KHR) -> VkResult {
+        unsafe { (self.GetDisplayPlaneCapabilities2KHR)(physicalDevice, pDisplayPlaneInfo, pCapabilities) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDisplayPlaneCapabilitiesKHR(&self, physicalDevice: VkPhysicalDevice, mode: VkDisplayModeKHR, planeIndex: u32, pCapabilities: *mut VkDisplayPlaneCapabilitiesKHR) -> VkResult {
+        unsafe { (self.GetDisplayPlaneCapabilitiesKHR)(physicalDevice, mode, planeIndex, pCapabilities) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDisplayPlaneSupportedDisplaysKHR(&self, physicalDevice: VkPhysicalDevice, planeIndex: u32, pDisplayCount: *mut u32, pDisplays: *mut VkDisplayKHR) -> VkResult {
+        unsafe { (self.GetDisplayPlaneSupportedDisplaysKHR)(physicalDevice, planeIndex, pDisplayCount, pDisplays) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDrmDisplayEXT(&self, physicalDevice: VkPhysicalDevice, drmFd: i32, connectorId: u32, display: *mut VkDisplayKHR) -> VkResult {
+        unsafe { (self.GetDrmDisplayEXT)(physicalDevice, drmFd, connectorId, display) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceCalibrateableTimeDomainsEXT(&self, physicalDevice: VkPhysicalDevice, pTimeDomainCount: *mut u32, pTimeDomains: *mut VkTimeDomainKHR) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceCalibrateableTimeDomainsEXT)(physicalDevice, pTimeDomainCount, pTimeDomains) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceCalibrateableTimeDomainsKHR(&self, physicalDevice: VkPhysicalDevice, pTimeDomainCount: *mut u32, pTimeDomains: *mut VkTimeDomainKHR) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceCalibrateableTimeDomainsKHR)(physicalDevice, pTimeDomainCount, pTimeDomains) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV(&self, physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkCooperativeMatrixFlexibleDimensionsPropertiesNV) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV)(physicalDevice, pPropertyCount, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceCooperativeMatrixProperties2EXT(&self, physicalDevice: VkPhysicalDevice, pCooperativeMatrixInfo: *const VkPhysicalDeviceCooperativeMatrixInfo2EXT, pPropertyCount: *mut u32, pProperties: *mut VkCooperativeMatrixProperties2EXT) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceCooperativeMatrixProperties2EXT)(physicalDevice, pCooperativeMatrixInfo, pPropertyCount, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceCooperativeMatrixPropertiesKHR(&self, physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkCooperativeMatrixPropertiesKHR) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceCooperativeMatrixPropertiesKHR)(physicalDevice, pPropertyCount, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceCooperativeMatrixPropertiesNV(&self, physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkCooperativeMatrixPropertiesNV) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceCooperativeMatrixPropertiesNV)(physicalDevice, pPropertyCount, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceCooperativeVectorPropertiesNV(&self, physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkCooperativeVectorPropertiesNV) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceCooperativeVectorPropertiesNV)(physicalDevice, pPropertyCount, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceDescriptorSizeEXT(&self, physicalDevice: VkPhysicalDevice, descriptorType: VkDescriptorType) -> VkDeviceSize {
+        unsafe { (self.GetPhysicalDeviceDescriptorSizeEXT)(physicalDevice, descriptorType) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceDirectFBPresentationSupportEXT(&self, physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, dfb: *mut IDirectFB) -> VkBool32 {
+        unsafe { (self.GetPhysicalDeviceDirectFBPresentationSupportEXT)(physicalDevice, queueFamilyIndex, dfb) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceDisplayPlaneProperties2KHR(&self, physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkDisplayPlaneProperties2KHR) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceDisplayPlaneProperties2KHR)(physicalDevice, pPropertyCount, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceDisplayPlanePropertiesKHR(&self, physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkDisplayPlanePropertiesKHR) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceDisplayPlanePropertiesKHR)(physicalDevice, pPropertyCount, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceDisplayProperties2KHR(&self, physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkDisplayProperties2KHR) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceDisplayProperties2KHR)(physicalDevice, pPropertyCount, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceDisplayPropertiesKHR(&self, physicalDevice: VkPhysicalDevice, pPropertyCount: *mut u32, pProperties: *mut VkDisplayPropertiesKHR) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceDisplayPropertiesKHR)(physicalDevice, pPropertyCount, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceExternalBufferProperties(&self, physicalDevice: VkPhysicalDevice, pExternalBufferInfo: *const VkPhysicalDeviceExternalBufferInfo, pExternalBufferProperties: *mut VkExternalBufferProperties) -> () {
+        unsafe { (self.GetPhysicalDeviceExternalBufferProperties)(physicalDevice, pExternalBufferInfo, pExternalBufferProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceExternalBufferPropertiesKHR(&self, physicalDevice: VkPhysicalDevice, pExternalBufferInfo: *const VkPhysicalDeviceExternalBufferInfo, pExternalBufferProperties: *mut VkExternalBufferProperties) -> () {
+        unsafe { (self.GetPhysicalDeviceExternalBufferPropertiesKHR)(physicalDevice, pExternalBufferInfo, pExternalBufferProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceExternalFenceProperties(&self, physicalDevice: VkPhysicalDevice, pExternalFenceInfo: *const VkPhysicalDeviceExternalFenceInfo, pExternalFenceProperties: *mut VkExternalFenceProperties) -> () {
+        unsafe { (self.GetPhysicalDeviceExternalFenceProperties)(physicalDevice, pExternalFenceInfo, pExternalFenceProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceExternalFencePropertiesKHR(&self, physicalDevice: VkPhysicalDevice, pExternalFenceInfo: *const VkPhysicalDeviceExternalFenceInfo, pExternalFenceProperties: *mut VkExternalFenceProperties) -> () {
+        unsafe { (self.GetPhysicalDeviceExternalFencePropertiesKHR)(physicalDevice, pExternalFenceInfo, pExternalFenceProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceExternalImageFormatPropertiesNV(&self, physicalDevice: VkPhysicalDevice, format: VkFormat, r#type: VkImageType, tiling: VkImageTiling, usage: VkImageUsageFlags, flags: VkImageCreateFlags, externalHandleType: VkExternalMemoryHandleTypeFlagsNV, pExternalImageFormatProperties: *mut VkExternalImageFormatPropertiesNV) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceExternalImageFormatPropertiesNV)(physicalDevice, format, r#type, tiling, usage, flags, externalHandleType, pExternalImageFormatProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceExternalSemaphoreProperties(&self, physicalDevice: VkPhysicalDevice, pExternalSemaphoreInfo: *const VkPhysicalDeviceExternalSemaphoreInfo, pExternalSemaphoreProperties: *mut VkExternalSemaphoreProperties) -> () {
+        unsafe { (self.GetPhysicalDeviceExternalSemaphoreProperties)(physicalDevice, pExternalSemaphoreInfo, pExternalSemaphoreProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceExternalSemaphorePropertiesKHR(&self, physicalDevice: VkPhysicalDevice, pExternalSemaphoreInfo: *const VkPhysicalDeviceExternalSemaphoreInfo, pExternalSemaphoreProperties: *mut VkExternalSemaphoreProperties) -> () {
+        unsafe { (self.GetPhysicalDeviceExternalSemaphorePropertiesKHR)(physicalDevice, pExternalSemaphoreInfo, pExternalSemaphoreProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceExternalTensorPropertiesARM(&self, physicalDevice: VkPhysicalDevice, pExternalTensorInfo: *const VkPhysicalDeviceExternalTensorInfoARM, pExternalTensorProperties: *mut VkExternalTensorPropertiesARM) -> () {
+        unsafe { (self.GetPhysicalDeviceExternalTensorPropertiesARM)(physicalDevice, pExternalTensorInfo, pExternalTensorProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceFeatures(&self, physicalDevice: VkPhysicalDevice, pFeatures: *mut VkPhysicalDeviceFeatures) -> () {
+        unsafe { (self.GetPhysicalDeviceFeatures)(physicalDevice, pFeatures) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceFeatures2(&self, physicalDevice: VkPhysicalDevice, pFeatures: *mut VkPhysicalDeviceFeatures2) -> () {
+        unsafe { (self.GetPhysicalDeviceFeatures2)(physicalDevice, pFeatures) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceFeatures2KHR(&self, physicalDevice: VkPhysicalDevice, pFeatures: *mut VkPhysicalDeviceFeatures2) -> () {
+        unsafe { (self.GetPhysicalDeviceFeatures2KHR)(physicalDevice, pFeatures) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceFormatProperties(&self, physicalDevice: VkPhysicalDevice, format: VkFormat, pFormatProperties: *mut VkFormatProperties) -> () {
+        unsafe { (self.GetPhysicalDeviceFormatProperties)(physicalDevice, format, pFormatProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceFormatProperties2(&self, physicalDevice: VkPhysicalDevice, format: VkFormat, pFormatProperties: *mut VkFormatProperties2) -> () {
+        unsafe { (self.GetPhysicalDeviceFormatProperties2)(physicalDevice, format, pFormatProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceFormatProperties2KHR(&self, physicalDevice: VkPhysicalDevice, format: VkFormat, pFormatProperties: *mut VkFormatProperties2) -> () {
+        unsafe { (self.GetPhysicalDeviceFormatProperties2KHR)(physicalDevice, format, pFormatProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceFragmentShadingRatesKHR(&self, physicalDevice: VkPhysicalDevice, pFragmentShadingRateCount: *mut u32, pFragmentShadingRates: *mut VkPhysicalDeviceFragmentShadingRateKHR) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceFragmentShadingRatesKHR)(physicalDevice, pFragmentShadingRateCount, pFragmentShadingRates) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceImageFormatProperties(&self, physicalDevice: VkPhysicalDevice, format: VkFormat, r#type: VkImageType, tiling: VkImageTiling, usage: VkImageUsageFlags, flags: VkImageCreateFlags, pImageFormatProperties: *mut VkImageFormatProperties) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceImageFormatProperties)(physicalDevice, format, r#type, tiling, usage, flags, pImageFormatProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceImageFormatProperties2(&self, physicalDevice: VkPhysicalDevice, pImageFormatInfo: *const VkPhysicalDeviceImageFormatInfo2, pImageFormatProperties: *mut VkImageFormatProperties2) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceImageFormatProperties2)(physicalDevice, pImageFormatInfo, pImageFormatProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceImageFormatProperties2KHR(&self, physicalDevice: VkPhysicalDevice, pImageFormatInfo: *const VkPhysicalDeviceImageFormatInfo2, pImageFormatProperties: *mut VkImageFormatProperties2) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceImageFormatProperties2KHR)(physicalDevice, pImageFormatInfo, pImageFormatProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceMemoryProperties(&self, physicalDevice: VkPhysicalDevice, pMemoryProperties: *mut VkPhysicalDeviceMemoryProperties) -> () {
+        unsafe { (self.GetPhysicalDeviceMemoryProperties)(physicalDevice, pMemoryProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceMemoryProperties2(&self, physicalDevice: VkPhysicalDevice, pMemoryProperties: *mut VkPhysicalDeviceMemoryProperties2) -> () {
+        unsafe { (self.GetPhysicalDeviceMemoryProperties2)(physicalDevice, pMemoryProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceMemoryProperties2KHR(&self, physicalDevice: VkPhysicalDevice, pMemoryProperties: *mut VkPhysicalDeviceMemoryProperties2) -> () {
+        unsafe { (self.GetPhysicalDeviceMemoryProperties2KHR)(physicalDevice, pMemoryProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceMultisamplePropertiesEXT(&self, physicalDevice: VkPhysicalDevice, samples: VkSampleCountFlagBits, pMultisampleProperties: *mut VkMultisamplePropertiesEXT) -> () {
+        unsafe { (self.GetPhysicalDeviceMultisamplePropertiesEXT)(physicalDevice, samples, pMultisampleProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceOpticalFlowImageFormatsNV(&self, physicalDevice: VkPhysicalDevice, pOpticalFlowImageFormatInfo: *const VkOpticalFlowImageFormatInfoNV, pFormatCount: *mut u32, pImageFormatProperties: *mut VkOpticalFlowImageFormatPropertiesNV) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceOpticalFlowImageFormatsNV)(physicalDevice, pOpticalFlowImageFormatInfo, pFormatCount, pImageFormatProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDevicePresentRectanglesKHR(&self, physicalDevice: VkPhysicalDevice, surface: VkSurfaceKHR, pRectCount: *mut u32, pRects: *mut VkRect2D) -> VkResult {
+        unsafe { (self.GetPhysicalDevicePresentRectanglesKHR)(physicalDevice, surface, pRectCount, pRects) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceProperties(&self, physicalDevice: VkPhysicalDevice, pProperties: *mut VkPhysicalDeviceProperties) -> () {
+        unsafe { (self.GetPhysicalDeviceProperties)(physicalDevice, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceProperties2(&self, physicalDevice: VkPhysicalDevice, pProperties: *mut VkPhysicalDeviceProperties2) -> () {
+        unsafe { (self.GetPhysicalDeviceProperties2)(physicalDevice, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceProperties2KHR(&self, physicalDevice: VkPhysicalDevice, pProperties: *mut VkPhysicalDeviceProperties2) -> () {
+        unsafe { (self.GetPhysicalDeviceProperties2KHR)(physicalDevice, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM(&self, physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, pQueueFamilyDataGraphProperties: *const VkQueueFamilyDataGraphPropertiesARM, pProperties: *mut VkBaseOutStructure) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceQueueFamilyDataGraphEngineOperationPropertiesARM)(physicalDevice, queueFamilyIndex, pQueueFamilyDataGraphProperties, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM(&self, physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, pQueueFamilyDataGraphProperties: *const VkQueueFamilyDataGraphPropertiesARM, pOpticalFlowImageFormatInfo: *const VkDataGraphOpticalFlowImageFormatInfoARM, pFormatCount: *mut u32, pImageFormatProperties: *mut VkDataGraphOpticalFlowImageFormatPropertiesARM) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM)(physicalDevice, queueFamilyIndex, pQueueFamilyDataGraphProperties, pOpticalFlowImageFormatInfo, pFormatCount, pImageFormatProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceQueueFamilyDataGraphProcessingEnginePropertiesARM(&self, physicalDevice: VkPhysicalDevice, pQueueFamilyDataGraphProcessingEngineInfo: *const VkPhysicalDeviceQueueFamilyDataGraphProcessingEngineInfoARM, pQueueFamilyDataGraphProcessingEngineProperties: *mut VkQueueFamilyDataGraphProcessingEnginePropertiesARM) -> () {
+        unsafe { (self.GetPhysicalDeviceQueueFamilyDataGraphProcessingEnginePropertiesARM)(physicalDevice, pQueueFamilyDataGraphProcessingEngineInfo, pQueueFamilyDataGraphProcessingEngineProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceQueueFamilyDataGraphPropertiesARM(&self, physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, pQueueFamilyDataGraphPropertyCount: *mut u32, pQueueFamilyDataGraphProperties: *mut VkQueueFamilyDataGraphPropertiesARM) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceQueueFamilyDataGraphPropertiesARM)(physicalDevice, queueFamilyIndex, pQueueFamilyDataGraphPropertyCount, pQueueFamilyDataGraphProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR(&self, physicalDevice: VkPhysicalDevice, pPerformanceQueryCreateInfo: *const VkQueryPoolPerformanceCreateInfoKHR, pNumPasses: *mut u32) -> () {
+        unsafe { (self.GetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR)(physicalDevice, pPerformanceQueryCreateInfo, pNumPasses) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceQueueFamilyProperties(&self, physicalDevice: VkPhysicalDevice, pQueueFamilyPropertyCount: *mut u32, pQueueFamilyProperties: *mut VkQueueFamilyProperties) -> () {
+        unsafe { (self.GetPhysicalDeviceQueueFamilyProperties)(physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceQueueFamilyProperties2(&self, physicalDevice: VkPhysicalDevice, pQueueFamilyPropertyCount: *mut u32, pQueueFamilyProperties: *mut VkQueueFamilyProperties2) -> () {
+        unsafe { (self.GetPhysicalDeviceQueueFamilyProperties2)(physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceQueueFamilyProperties2KHR(&self, physicalDevice: VkPhysicalDevice, pQueueFamilyPropertyCount: *mut u32, pQueueFamilyProperties: *mut VkQueueFamilyProperties2) -> () {
+        unsafe { (self.GetPhysicalDeviceQueueFamilyProperties2KHR)(physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceScreenPresentationSupportQNX(&self, physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, window: *mut _screen_window) -> VkBool32 {
+        unsafe { (self.GetPhysicalDeviceScreenPresentationSupportQNX)(physicalDevice, queueFamilyIndex, window) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceSparseImageFormatProperties(&self, physicalDevice: VkPhysicalDevice, format: VkFormat, r#type: VkImageType, samples: VkSampleCountFlagBits, usage: VkImageUsageFlags, tiling: VkImageTiling, pPropertyCount: *mut u32, pProperties: *mut VkSparseImageFormatProperties) -> () {
+        unsafe { (self.GetPhysicalDeviceSparseImageFormatProperties)(physicalDevice, format, r#type, samples, usage, tiling, pPropertyCount, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceSparseImageFormatProperties2(&self, physicalDevice: VkPhysicalDevice, pFormatInfo: *const VkPhysicalDeviceSparseImageFormatInfo2, pPropertyCount: *mut u32, pProperties: *mut VkSparseImageFormatProperties2) -> () {
+        unsafe { (self.GetPhysicalDeviceSparseImageFormatProperties2)(physicalDevice, pFormatInfo, pPropertyCount, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceSparseImageFormatProperties2KHR(&self, physicalDevice: VkPhysicalDevice, pFormatInfo: *const VkPhysicalDeviceSparseImageFormatInfo2, pPropertyCount: *mut u32, pProperties: *mut VkSparseImageFormatProperties2) -> () {
+        unsafe { (self.GetPhysicalDeviceSparseImageFormatProperties2KHR)(physicalDevice, pFormatInfo, pPropertyCount, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV(&self, physicalDevice: VkPhysicalDevice, pCombinationCount: *mut u32, pCombinations: *mut VkFramebufferMixedSamplesCombinationNV) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV)(physicalDevice, pCombinationCount, pCombinations) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceSurfaceCapabilities2EXT(&self, physicalDevice: VkPhysicalDevice, surface: VkSurfaceKHR, pSurfaceCapabilities: *mut VkSurfaceCapabilities2EXT) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceSurfaceCapabilities2EXT)(physicalDevice, surface, pSurfaceCapabilities) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceSurfaceCapabilities2KHR(&self, physicalDevice: VkPhysicalDevice, pSurfaceInfo: *const VkPhysicalDeviceSurfaceInfo2KHR, pSurfaceCapabilities: *mut VkSurfaceCapabilities2KHR) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceSurfaceCapabilities2KHR)(physicalDevice, pSurfaceInfo, pSurfaceCapabilities) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceSurfaceCapabilitiesKHR(&self, physicalDevice: VkPhysicalDevice, surface: VkSurfaceKHR, pSurfaceCapabilities: *mut VkSurfaceCapabilitiesKHR) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceSurfaceCapabilitiesKHR)(physicalDevice, surface, pSurfaceCapabilities) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceSurfaceFormats2KHR(&self, physicalDevice: VkPhysicalDevice, pSurfaceInfo: *const VkPhysicalDeviceSurfaceInfo2KHR, pSurfaceFormatCount: *mut u32, pSurfaceFormats: *mut VkSurfaceFormat2KHR) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceSurfaceFormats2KHR)(physicalDevice, pSurfaceInfo, pSurfaceFormatCount, pSurfaceFormats) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceSurfaceFormatsKHR(&self, physicalDevice: VkPhysicalDevice, surface: VkSurfaceKHR, pSurfaceFormatCount: *mut u32, pSurfaceFormats: *mut VkSurfaceFormatKHR) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceSurfaceFormatsKHR)(physicalDevice, surface, pSurfaceFormatCount, pSurfaceFormats) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceSurfacePresentModes2EXT(&self, physicalDevice: VkPhysicalDevice, pSurfaceInfo: *const VkPhysicalDeviceSurfaceInfo2KHR, pPresentModeCount: *mut u32, pPresentModes: *mut VkPresentModeKHR) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceSurfacePresentModes2EXT)(physicalDevice, pSurfaceInfo, pPresentModeCount, pPresentModes) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceSurfacePresentModesKHR(&self, physicalDevice: VkPhysicalDevice, surface: VkSurfaceKHR, pPresentModeCount: *mut u32, pPresentModes: *mut VkPresentModeKHR) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceSurfacePresentModesKHR)(physicalDevice, surface, pPresentModeCount, pPresentModes) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceSurfaceSupportKHR(&self, physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, surface: VkSurfaceKHR, pSupported: *mut VkBool32) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceSurfaceSupportKHR)(physicalDevice, queueFamilyIndex, surface, pSupported) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceToolProperties(&self, physicalDevice: VkPhysicalDevice, pToolCount: *mut u32, pToolProperties: *mut VkPhysicalDeviceToolProperties) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceToolProperties)(physicalDevice, pToolCount, pToolProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceToolPropertiesEXT(&self, physicalDevice: VkPhysicalDevice, pToolCount: *mut u32, pToolProperties: *mut VkPhysicalDeviceToolProperties) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceToolPropertiesEXT)(physicalDevice, pToolCount, pToolProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceUbmPresentationSupportSEC(&self, physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, device: *mut ubm_device) -> VkBool32 {
+        unsafe { (self.GetPhysicalDeviceUbmPresentationSupportSEC)(physicalDevice, queueFamilyIndex, device) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceVideoCapabilitiesKHR(&self, physicalDevice: VkPhysicalDevice, pVideoProfile: *const VkVideoProfileInfoKHR, pCapabilities: *mut VkVideoCapabilitiesKHR) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceVideoCapabilitiesKHR)(physicalDevice, pVideoProfile, pCapabilities) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR(&self, physicalDevice: VkPhysicalDevice, pQualityLevelInfo: *const VkPhysicalDeviceVideoEncodeQualityLevelInfoKHR, pQualityLevelProperties: *mut VkVideoEncodeQualityLevelPropertiesKHR) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceVideoEncodeQualityLevelPropertiesKHR)(physicalDevice, pQualityLevelInfo, pQualityLevelProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceVideoFormatPropertiesKHR(&self, physicalDevice: VkPhysicalDevice, pVideoFormatInfo: *const VkPhysicalDeviceVideoFormatInfoKHR, pVideoFormatPropertyCount: *mut u32, pVideoFormatProperties: *mut VkVideoFormatPropertiesKHR) -> VkResult {
+        unsafe { (self.GetPhysicalDeviceVideoFormatPropertiesKHR)(physicalDevice, pVideoFormatInfo, pVideoFormatPropertyCount, pVideoFormatProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceWaylandPresentationSupportKHR(&self, physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, display: *mut wl_display) -> VkBool32 {
+        unsafe { (self.GetPhysicalDeviceWaylandPresentationSupportKHR)(physicalDevice, queueFamilyIndex, display) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceWin32PresentationSupportKHR(&self, physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32) -> VkBool32 {
+        unsafe { (self.GetPhysicalDeviceWin32PresentationSupportKHR)(physicalDevice, queueFamilyIndex) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceXcbPresentationSupportKHR(&self, physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, connection: *mut xcb_connection_t, visual_id: xcb_visualid_t) -> VkBool32 {
+        unsafe { (self.GetPhysicalDeviceXcbPresentationSupportKHR)(physicalDevice, queueFamilyIndex, connection, visual_id) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPhysicalDeviceXlibPresentationSupportKHR(&self, physicalDevice: VkPhysicalDevice, queueFamilyIndex: u32, dpy: *mut Display, visualID: VisualID) -> VkBool32 {
+        unsafe { (self.GetPhysicalDeviceXlibPresentationSupportKHR)(physicalDevice, queueFamilyIndex, dpy, visualID) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetRandROutputDisplayEXT(&self, physicalDevice: VkPhysicalDevice, dpy: *mut Display, rrOutput: RROutput, pDisplay: *mut VkDisplayKHR) -> VkResult {
+        unsafe { (self.GetRandROutputDisplayEXT)(physicalDevice, dpy, rrOutput, pDisplay) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetWinrtDisplayNV(&self, physicalDevice: VkPhysicalDevice, deviceRelativeId: u32, pDisplay: *mut VkDisplayKHR) -> VkResult {
+        unsafe { (self.GetWinrtDisplayNV)(physicalDevice, deviceRelativeId, pDisplay) }
+    }
+    #[inline(always)]
+    pub unsafe fn ReleaseDisplayEXT(&self, physicalDevice: VkPhysicalDevice, display: VkDisplayKHR) -> VkResult {
+        unsafe { (self.ReleaseDisplayEXT)(physicalDevice, display) }
+    }
+    #[inline(always)]
+    pub unsafe fn SubmitDebugUtilsMessageEXT(&self, instance: VkInstance, messageSeverity: VkDebugUtilsMessageSeverityFlagBitsEXT, messageTypes: VkDebugUtilsMessageTypeFlagsEXT, pCallbackData: *const VkDebugUtilsMessengerCallbackDataEXT) -> () {
+        unsafe { (self.SubmitDebugUtilsMessageEXT)(instance, messageSeverity, messageTypes, pCallbackData) }
+    }
+}
+dispatch_table! { DeviceDispatchCombined;
+    AcquireFullScreenExclusiveModeEXT(device: VkDevice, swapchain: VkSwapchainKHR) -> VkResult,PFN_vkAcquireFullScreenExclusiveModeEXT,c"vkAcquireFullScreenExclusiveModeEXT";
+    AcquireNextImage2KHR(device: VkDevice, pAcquireInfo: *const VkAcquireNextImageInfoKHR, pImageIndex: *mut u32) -> VkResult,PFN_vkAcquireNextImage2KHR,c"vkAcquireNextImage2KHR";
+    AcquireNextImageKHR(device: VkDevice, swapchain: VkSwapchainKHR, timeout: u64, semaphore: VkSemaphore, fence: VkFence, pImageIndex: *mut u32) -> VkResult,PFN_vkAcquireNextImageKHR,c"vkAcquireNextImageKHR";
+    AcquirePerformanceConfigurationINTEL(device: VkDevice, pAcquireInfo: *const VkPerformanceConfigurationAcquireInfoINTEL, pConfiguration: *mut VkPerformanceConfigurationINTEL) -> VkResult,PFN_vkAcquirePerformanceConfigurationINTEL,c"vkAcquirePerformanceConfigurationINTEL";
+    AcquireProfilingLockKHR(device: VkDevice, pInfo: *const VkAcquireProfilingLockInfoKHR) -> VkResult,PFN_vkAcquireProfilingLockKHR,c"vkAcquireProfilingLockKHR";
+    AllocateCommandBuffers(device: VkDevice, pAllocateInfo: *const VkCommandBufferAllocateInfo, pCommandBuffers: *mut VkCommandBuffer) -> VkResult,PFN_vkAllocateCommandBuffers,c"vkAllocateCommandBuffers";
+    AllocateDescriptorSets(device: VkDevice, pAllocateInfo: *const VkDescriptorSetAllocateInfo, pDescriptorSets: *mut VkDescriptorSet) -> VkResult,PFN_vkAllocateDescriptorSets,c"vkAllocateDescriptorSets";
+    AllocateMemory(device: VkDevice, pAllocateInfo: *const VkMemoryAllocateInfo, pAllocator: *const VkAllocationCallbacks, pMemory: *mut VkDeviceMemory) -> VkResult,PFN_vkAllocateMemory,c"vkAllocateMemory";
+    AntiLagUpdateAMD(device: VkDevice, pData: *const VkAntiLagDataAMD) -> (),PFN_vkAntiLagUpdateAMD,c"vkAntiLagUpdateAMD";
+    BeginCommandBuffer(commandBuffer: VkCommandBuffer, pBeginInfo: *const VkCommandBufferBeginInfo) -> VkResult,PFN_vkBeginCommandBuffer,c"vkBeginCommandBuffer";
+    BindAccelerationStructureMemoryNV(device: VkDevice, bindInfoCount: u32, pBindInfos: *const VkBindAccelerationStructureMemoryInfoNV) -> VkResult,PFN_vkBindAccelerationStructureMemoryNV,c"vkBindAccelerationStructureMemoryNV";
+    BindBufferMemory(device: VkDevice, buffer: VkBuffer, memory: VkDeviceMemory, memoryOffset: VkDeviceSize) -> VkResult,PFN_vkBindBufferMemory,c"vkBindBufferMemory";
+    BindBufferMemory2(device: VkDevice, bindInfoCount: u32, pBindInfos: *const VkBindBufferMemoryInfo) -> VkResult,PFN_vkBindBufferMemory2,c"vkBindBufferMemory2";
+    BindBufferMemory2KHR(device: VkDevice, bindInfoCount: u32, pBindInfos: *const VkBindBufferMemoryInfo) -> VkResult,PFN_vkBindBufferMemory2KHR,c"vkBindBufferMemory2KHR";
+    BindDataGraphPipelineSessionMemoryARM(device: VkDevice, bindInfoCount: u32, pBindInfos: *const VkBindDataGraphPipelineSessionMemoryInfoARM) -> VkResult,PFN_vkBindDataGraphPipelineSessionMemoryARM,c"vkBindDataGraphPipelineSessionMemoryARM";
+    BindImageMemory(device: VkDevice, image: VkImage, memory: VkDeviceMemory, memoryOffset: VkDeviceSize) -> VkResult,PFN_vkBindImageMemory,c"vkBindImageMemory";
+    BindImageMemory2(device: VkDevice, bindInfoCount: u32, pBindInfos: *const VkBindImageMemoryInfo) -> VkResult,PFN_vkBindImageMemory2,c"vkBindImageMemory2";
+    BindImageMemory2KHR(device: VkDevice, bindInfoCount: u32, pBindInfos: *const VkBindImageMemoryInfo) -> VkResult,PFN_vkBindImageMemory2KHR,c"vkBindImageMemory2KHR";
+    BindOpticalFlowSessionImageNV(device: VkDevice, session: VkOpticalFlowSessionNV, bindingPoint: VkOpticalFlowSessionBindingPointNV, view: VkImageView, layout: VkImageLayout) -> VkResult,PFN_vkBindOpticalFlowSessionImageNV,c"vkBindOpticalFlowSessionImageNV";
+    BindTensorMemoryARM(device: VkDevice, bindInfoCount: u32, pBindInfos: *const VkBindTensorMemoryInfoARM) -> VkResult,PFN_vkBindTensorMemoryARM,c"vkBindTensorMemoryARM";
+    BindVideoSessionMemoryKHR(device: VkDevice, videoSession: VkVideoSessionKHR, bindSessionMemoryInfoCount: u32, pBindSessionMemoryInfos: *const VkBindVideoSessionMemoryInfoKHR) -> VkResult,PFN_vkBindVideoSessionMemoryKHR,c"vkBindVideoSessionMemoryKHR";
+    BuildAccelerationStructuresKHR(device: VkDevice, deferredOperation: VkDeferredOperationKHR, infoCount: u32, pInfos: *const VkAccelerationStructureBuildGeometryInfoKHR, ppBuildRangeInfos: *const *const VkAccelerationStructureBuildRangeInfoKHR) -> VkResult,PFN_vkBuildAccelerationStructuresKHR,c"vkBuildAccelerationStructuresKHR";
+    BuildMicromapsEXT(device: VkDevice, deferredOperation: VkDeferredOperationKHR, infoCount: u32, pInfos: *const VkMicromapBuildInfoEXT) -> VkResult,PFN_vkBuildMicromapsEXT,c"vkBuildMicromapsEXT";
+    ClearShaderInstrumentationMetricsARM(device: VkDevice, instrumentation: VkShaderInstrumentationARM) -> (),PFN_vkClearShaderInstrumentationMetricsARM,c"vkClearShaderInstrumentationMetricsARM";
+    CmdBeginConditionalRendering2EXT(commandBuffer: VkCommandBuffer, pConditionalRenderingBegin: *const VkConditionalRenderingBeginInfo2EXT) -> (),PFN_vkCmdBeginConditionalRendering2EXT,c"vkCmdBeginConditionalRendering2EXT";
+    CmdBeginConditionalRenderingEXT(commandBuffer: VkCommandBuffer, pConditionalRenderingBegin: *const VkConditionalRenderingBeginInfoEXT) -> (),PFN_vkCmdBeginConditionalRenderingEXT,c"vkCmdBeginConditionalRenderingEXT";
+    CmdBeginCustomResolveEXT(commandBuffer: VkCommandBuffer, pBeginCustomResolveInfo: *const VkBeginCustomResolveInfoEXT) -> (),PFN_vkCmdBeginCustomResolveEXT,c"vkCmdBeginCustomResolveEXT";
+    CmdBeginDebugUtilsLabelEXT(commandBuffer: VkCommandBuffer, pLabelInfo: *const VkDebugUtilsLabelEXT) -> (),PFN_vkCmdBeginDebugUtilsLabelEXT,c"vkCmdBeginDebugUtilsLabelEXT";
+    CmdBeginGpaSampleAMD(commandBuffer: VkCommandBuffer, gpaSession: VkGpaSessionAMD, pGpaSampleBeginInfo: *const VkGpaSampleBeginInfoAMD, pSampleID: *mut u32) -> VkResult,PFN_vkCmdBeginGpaSampleAMD,c"vkCmdBeginGpaSampleAMD";
+    CmdBeginGpaSessionAMD(commandBuffer: VkCommandBuffer, gpaSession: VkGpaSessionAMD) -> VkResult,PFN_vkCmdBeginGpaSessionAMD,c"vkCmdBeginGpaSessionAMD";
+    CmdBeginPerTileExecutionQCOM(commandBuffer: VkCommandBuffer, pPerTileBeginInfo: *const VkPerTileBeginInfoQCOM) -> (),PFN_vkCmdBeginPerTileExecutionQCOM,c"vkCmdBeginPerTileExecutionQCOM";
+    CmdBeginQuery(commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, query: u32, flags: VkQueryControlFlags) -> (),PFN_vkCmdBeginQuery,c"vkCmdBeginQuery";
+    CmdBeginQueryIndexedEXT(commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, query: u32, flags: VkQueryControlFlags, index: u32) -> (),PFN_vkCmdBeginQueryIndexedEXT,c"vkCmdBeginQueryIndexedEXT";
+    CmdBeginRenderPass(commandBuffer: VkCommandBuffer, pRenderPassBegin: *const VkRenderPassBeginInfo, contents: VkSubpassContents) -> (),PFN_vkCmdBeginRenderPass,c"vkCmdBeginRenderPass";
+    CmdBeginRenderPass2(commandBuffer: VkCommandBuffer, pRenderPassBegin: *const VkRenderPassBeginInfo, pSubpassBeginInfo: *const VkSubpassBeginInfo) -> (),PFN_vkCmdBeginRenderPass2,c"vkCmdBeginRenderPass2";
+    CmdBeginRenderPass2KHR(commandBuffer: VkCommandBuffer, pRenderPassBegin: *const VkRenderPassBeginInfo, pSubpassBeginInfo: *const VkSubpassBeginInfo) -> (),PFN_vkCmdBeginRenderPass2KHR,c"vkCmdBeginRenderPass2KHR";
+    CmdBeginRendering(commandBuffer: VkCommandBuffer, pRenderingInfo: *const VkRenderingInfo) -> (),PFN_vkCmdBeginRendering,c"vkCmdBeginRendering";
+    CmdBeginRenderingKHR(commandBuffer: VkCommandBuffer, pRenderingInfo: *const VkRenderingInfo) -> (),PFN_vkCmdBeginRenderingKHR,c"vkCmdBeginRenderingKHR";
+    CmdBeginShaderInstrumentationARM(commandBuffer: VkCommandBuffer, instrumentation: VkShaderInstrumentationARM) -> (),PFN_vkCmdBeginShaderInstrumentationARM,c"vkCmdBeginShaderInstrumentationARM";
+    CmdBeginTransformFeedback2EXT(commandBuffer: VkCommandBuffer, firstCounterRange: u32, counterRangeCount: u32, pCounterInfos: *const VkBindTransformFeedbackBuffer2InfoEXT) -> (),PFN_vkCmdBeginTransformFeedback2EXT,c"vkCmdBeginTransformFeedback2EXT";
+    CmdBeginTransformFeedbackEXT(commandBuffer: VkCommandBuffer, firstCounterBuffer: u32, counterBufferCount: u32, pCounterBuffers: *const VkBuffer, pCounterBufferOffsets: *const VkDeviceSize) -> (),PFN_vkCmdBeginTransformFeedbackEXT,c"vkCmdBeginTransformFeedbackEXT";
+    CmdBeginVideoCodingKHR(commandBuffer: VkCommandBuffer, pBeginInfo: *const VkVideoBeginCodingInfoKHR) -> (),PFN_vkCmdBeginVideoCodingKHR,c"vkCmdBeginVideoCodingKHR";
+    CmdBindDescriptorBufferEmbeddedSamplers2EXT(commandBuffer: VkCommandBuffer, pBindDescriptorBufferEmbeddedSamplersInfo: *const VkBindDescriptorBufferEmbeddedSamplersInfoEXT) -> (),PFN_vkCmdBindDescriptorBufferEmbeddedSamplers2EXT,c"vkCmdBindDescriptorBufferEmbeddedSamplers2EXT";
+    CmdBindDescriptorBufferEmbeddedSamplersEXT(commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, layout: VkPipelineLayout, set: u32) -> (),PFN_vkCmdBindDescriptorBufferEmbeddedSamplersEXT,c"vkCmdBindDescriptorBufferEmbeddedSamplersEXT";
+    CmdBindDescriptorBuffersEXT(commandBuffer: VkCommandBuffer, bufferCount: u32, pBindingInfos: *const VkDescriptorBufferBindingInfoEXT) -> (),PFN_vkCmdBindDescriptorBuffersEXT,c"vkCmdBindDescriptorBuffersEXT";
+    CmdBindDescriptorSets(commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, layout: VkPipelineLayout, firstSet: u32, descriptorSetCount: u32, pDescriptorSets: *const VkDescriptorSet, dynamicOffsetCount: u32, pDynamicOffsets: *const u32) -> (),PFN_vkCmdBindDescriptorSets,c"vkCmdBindDescriptorSets";
+    CmdBindDescriptorSets2(commandBuffer: VkCommandBuffer, pBindDescriptorSetsInfo: *const VkBindDescriptorSetsInfo) -> (),PFN_vkCmdBindDescriptorSets2,c"vkCmdBindDescriptorSets2";
+    CmdBindDescriptorSets2KHR(commandBuffer: VkCommandBuffer, pBindDescriptorSetsInfo: *const VkBindDescriptorSetsInfo) -> (),PFN_vkCmdBindDescriptorSets2KHR,c"vkCmdBindDescriptorSets2KHR";
+    CmdBindIndexBuffer(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, indexType: VkIndexType) -> (),PFN_vkCmdBindIndexBuffer,c"vkCmdBindIndexBuffer";
+    CmdBindIndexBuffer2(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, size: VkDeviceSize, indexType: VkIndexType) -> (),PFN_vkCmdBindIndexBuffer2,c"vkCmdBindIndexBuffer2";
+    CmdBindIndexBuffer2KHR(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, size: VkDeviceSize, indexType: VkIndexType) -> (),PFN_vkCmdBindIndexBuffer2KHR,c"vkCmdBindIndexBuffer2KHR";
+    CmdBindIndexBuffer3KHR(commandBuffer: VkCommandBuffer, pInfo: *const VkBindIndexBuffer3InfoKHR) -> (),PFN_vkCmdBindIndexBuffer3KHR,c"vkCmdBindIndexBuffer3KHR";
+    CmdBindInvocationMaskHUAWEI(commandBuffer: VkCommandBuffer, imageView: VkImageView, imageLayout: VkImageLayout) -> (),PFN_vkCmdBindInvocationMaskHUAWEI,c"vkCmdBindInvocationMaskHUAWEI";
+    CmdBindPipeline(commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, pipeline: VkPipeline) -> (),PFN_vkCmdBindPipeline,c"vkCmdBindPipeline";
+    CmdBindPipelineShaderGroupNV(commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, pipeline: VkPipeline, groupIndex: u32) -> (),PFN_vkCmdBindPipelineShaderGroupNV,c"vkCmdBindPipelineShaderGroupNV";
+    CmdBindResourceHeapEXT(commandBuffer: VkCommandBuffer, pBindInfo: *const VkBindHeapInfoEXT) -> (),PFN_vkCmdBindResourceHeapEXT,c"vkCmdBindResourceHeapEXT";
+    CmdBindSamplerHeapEXT(commandBuffer: VkCommandBuffer, pBindInfo: *const VkBindHeapInfoEXT) -> (),PFN_vkCmdBindSamplerHeapEXT,c"vkCmdBindSamplerHeapEXT";
+    CmdBindShadersEXT(commandBuffer: VkCommandBuffer, stageCount: u32, pStages: *const VkShaderStageFlagBits, pShaders: *const VkShaderEXT) -> (),PFN_vkCmdBindShadersEXT,c"vkCmdBindShadersEXT";
+    CmdBindShadingRateImageNV(commandBuffer: VkCommandBuffer, imageView: VkImageView, imageLayout: VkImageLayout) -> (),PFN_vkCmdBindShadingRateImageNV,c"vkCmdBindShadingRateImageNV";
+    CmdBindTileMemoryQCOM(commandBuffer: VkCommandBuffer, pTileMemoryBindInfo: *const VkTileMemoryBindInfoQCOM) -> (),PFN_vkCmdBindTileMemoryQCOM,c"vkCmdBindTileMemoryQCOM";
+    CmdBindTransformFeedbackBuffers2EXT(commandBuffer: VkCommandBuffer, firstBinding: u32, bindingCount: u32, pBindingInfos: *const VkBindTransformFeedbackBuffer2InfoEXT) -> (),PFN_vkCmdBindTransformFeedbackBuffers2EXT,c"vkCmdBindTransformFeedbackBuffers2EXT";
+    CmdBindTransformFeedbackBuffersEXT(commandBuffer: VkCommandBuffer, firstBinding: u32, bindingCount: u32, pBuffers: *const VkBuffer, pOffsets: *const VkDeviceSize, pSizes: *const VkDeviceSize) -> (),PFN_vkCmdBindTransformFeedbackBuffersEXT,c"vkCmdBindTransformFeedbackBuffersEXT";
+    CmdBindVertexBuffers(commandBuffer: VkCommandBuffer, firstBinding: u32, bindingCount: u32, pBuffers: *const VkBuffer, pOffsets: *const VkDeviceSize) -> (),PFN_vkCmdBindVertexBuffers,c"vkCmdBindVertexBuffers";
+    CmdBindVertexBuffers2(commandBuffer: VkCommandBuffer, firstBinding: u32, bindingCount: u32, pBuffers: *const VkBuffer, pOffsets: *const VkDeviceSize, pSizes: *const VkDeviceSize, pStrides: *const VkDeviceSize) -> (),PFN_vkCmdBindVertexBuffers2,c"vkCmdBindVertexBuffers2";
+    CmdBindVertexBuffers2EXT(commandBuffer: VkCommandBuffer, firstBinding: u32, bindingCount: u32, pBuffers: *const VkBuffer, pOffsets: *const VkDeviceSize, pSizes: *const VkDeviceSize, pStrides: *const VkDeviceSize) -> (),PFN_vkCmdBindVertexBuffers2EXT,c"vkCmdBindVertexBuffers2EXT";
+    CmdBindVertexBuffers3KHR(commandBuffer: VkCommandBuffer, firstBinding: u32, bindingCount: u32, pBindingInfos: *const VkBindVertexBuffer3InfoKHR) -> (),PFN_vkCmdBindVertexBuffers3KHR,c"vkCmdBindVertexBuffers3KHR";
+    CmdBlitImage(commandBuffer: VkCommandBuffer, srcImage: VkImage, srcImageLayout: VkImageLayout, dstImage: VkImage, dstImageLayout: VkImageLayout, regionCount: u32, pRegions: *const VkImageBlit, filter: VkFilter) -> (),PFN_vkCmdBlitImage,c"vkCmdBlitImage";
+    CmdBlitImage2(commandBuffer: VkCommandBuffer, pBlitImageInfo: *const VkBlitImageInfo2) -> (),PFN_vkCmdBlitImage2,c"vkCmdBlitImage2";
+    CmdBlitImage2KHR(commandBuffer: VkCommandBuffer, pBlitImageInfo: *const VkBlitImageInfo2) -> (),PFN_vkCmdBlitImage2KHR,c"vkCmdBlitImage2KHR";
+    CmdBuildAccelerationStructureNV(commandBuffer: VkCommandBuffer, pInfo: *const VkAccelerationStructureInfoNV, instanceData: VkBuffer, instanceOffset: VkDeviceSize, update: VkBool32, dst: VkAccelerationStructureNV, src: VkAccelerationStructureNV, scratch: VkBuffer, scratchOffset: VkDeviceSize) -> (),PFN_vkCmdBuildAccelerationStructureNV,c"vkCmdBuildAccelerationStructureNV";
+    CmdBuildAccelerationStructuresIndirectKHR(commandBuffer: VkCommandBuffer, infoCount: u32, pInfos: *const VkAccelerationStructureBuildGeometryInfoKHR, pIndirectDeviceAddresses: *const VkDeviceAddress, pIndirectStrides: *const u32, ppMaxPrimitiveCounts: *const *const u32) -> (),PFN_vkCmdBuildAccelerationStructuresIndirectKHR,c"vkCmdBuildAccelerationStructuresIndirectKHR";
+    CmdBuildAccelerationStructuresKHR(commandBuffer: VkCommandBuffer, infoCount: u32, pInfos: *const VkAccelerationStructureBuildGeometryInfoKHR, ppBuildRangeInfos: *const *const VkAccelerationStructureBuildRangeInfoKHR) -> (),PFN_vkCmdBuildAccelerationStructuresKHR,c"vkCmdBuildAccelerationStructuresKHR";
+    CmdBuildClusterAccelerationStructureIndirectNV(commandBuffer: VkCommandBuffer, pCommandInfos: *const VkClusterAccelerationStructureCommandsInfoNV) -> (),PFN_vkCmdBuildClusterAccelerationStructureIndirectNV,c"vkCmdBuildClusterAccelerationStructureIndirectNV";
+    CmdBuildMicromapsEXT(commandBuffer: VkCommandBuffer, infoCount: u32, pInfos: *const VkMicromapBuildInfoEXT) -> (),PFN_vkCmdBuildMicromapsEXT,c"vkCmdBuildMicromapsEXT";
+    CmdBuildPartitionedAccelerationStructuresNV(commandBuffer: VkCommandBuffer, pBuildInfo: *const VkBuildPartitionedAccelerationStructureInfoNV) -> (),PFN_vkCmdBuildPartitionedAccelerationStructuresNV,c"vkCmdBuildPartitionedAccelerationStructuresNV";
+    CmdClearAttachments(commandBuffer: VkCommandBuffer, attachmentCount: u32, pAttachments: *const VkClearAttachment, rectCount: u32, pRects: *const VkClearRect) -> (),PFN_vkCmdClearAttachments,c"vkCmdClearAttachments";
+    CmdClearColorImage(commandBuffer: VkCommandBuffer, image: VkImage, imageLayout: VkImageLayout, pColor: *const VkClearColorValue, rangeCount: u32, pRanges: *const VkImageSubresourceRange) -> (),PFN_vkCmdClearColorImage,c"vkCmdClearColorImage";
+    CmdClearDepthStencilImage(commandBuffer: VkCommandBuffer, image: VkImage, imageLayout: VkImageLayout, pDepthStencil: *const VkClearDepthStencilValue, rangeCount: u32, pRanges: *const VkImageSubresourceRange) -> (),PFN_vkCmdClearDepthStencilImage,c"vkCmdClearDepthStencilImage";
+    CmdControlVideoCodingKHR(commandBuffer: VkCommandBuffer, pCodingControlInfo: *const VkVideoCodingControlInfoKHR) -> (),PFN_vkCmdControlVideoCodingKHR,c"vkCmdControlVideoCodingKHR";
+    CmdConvertCooperativeVectorMatrixNV(commandBuffer: VkCommandBuffer, infoCount: u32, pInfos: *const VkConvertCooperativeVectorMatrixInfoNV) -> (),PFN_vkCmdConvertCooperativeVectorMatrixNV,c"vkCmdConvertCooperativeVectorMatrixNV";
+    CmdCopyAccelerationStructureKHR(commandBuffer: VkCommandBuffer, pInfo: *const VkCopyAccelerationStructureInfoKHR) -> (),PFN_vkCmdCopyAccelerationStructureKHR,c"vkCmdCopyAccelerationStructureKHR";
+    CmdCopyAccelerationStructureNV(commandBuffer: VkCommandBuffer, dst: VkAccelerationStructureNV, src: VkAccelerationStructureNV, mode: VkCopyAccelerationStructureModeKHR) -> (),PFN_vkCmdCopyAccelerationStructureNV,c"vkCmdCopyAccelerationStructureNV";
+    CmdCopyAccelerationStructureToMemoryKHR(commandBuffer: VkCommandBuffer, pInfo: *const VkCopyAccelerationStructureToMemoryInfoKHR) -> (),PFN_vkCmdCopyAccelerationStructureToMemoryKHR,c"vkCmdCopyAccelerationStructureToMemoryKHR";
+    CmdCopyBuffer(commandBuffer: VkCommandBuffer, srcBuffer: VkBuffer, dstBuffer: VkBuffer, regionCount: u32, pRegions: *const VkBufferCopy) -> (),PFN_vkCmdCopyBuffer,c"vkCmdCopyBuffer";
+    CmdCopyBuffer2(commandBuffer: VkCommandBuffer, pCopyBufferInfo: *const VkCopyBufferInfo2) -> (),PFN_vkCmdCopyBuffer2,c"vkCmdCopyBuffer2";
+    CmdCopyBuffer2KHR(commandBuffer: VkCommandBuffer, pCopyBufferInfo: *const VkCopyBufferInfo2) -> (),PFN_vkCmdCopyBuffer2KHR,c"vkCmdCopyBuffer2KHR";
+    CmdCopyBufferToImage(commandBuffer: VkCommandBuffer, srcBuffer: VkBuffer, dstImage: VkImage, dstImageLayout: VkImageLayout, regionCount: u32, pRegions: *const VkBufferImageCopy) -> (),PFN_vkCmdCopyBufferToImage,c"vkCmdCopyBufferToImage";
+    CmdCopyBufferToImage2(commandBuffer: VkCommandBuffer, pCopyBufferToImageInfo: *const VkCopyBufferToImageInfo2) -> (),PFN_vkCmdCopyBufferToImage2,c"vkCmdCopyBufferToImage2";
+    CmdCopyBufferToImage2KHR(commandBuffer: VkCommandBuffer, pCopyBufferToImageInfo: *const VkCopyBufferToImageInfo2) -> (),PFN_vkCmdCopyBufferToImage2KHR,c"vkCmdCopyBufferToImage2KHR";
+    CmdCopyGpaSessionResultsAMD(commandBuffer: VkCommandBuffer, gpaSession: VkGpaSessionAMD) -> (),PFN_vkCmdCopyGpaSessionResultsAMD,c"vkCmdCopyGpaSessionResultsAMD";
+    CmdCopyImage(commandBuffer: VkCommandBuffer, srcImage: VkImage, srcImageLayout: VkImageLayout, dstImage: VkImage, dstImageLayout: VkImageLayout, regionCount: u32, pRegions: *const VkImageCopy) -> (),PFN_vkCmdCopyImage,c"vkCmdCopyImage";
+    CmdCopyImage2(commandBuffer: VkCommandBuffer, pCopyImageInfo: *const VkCopyImageInfo2) -> (),PFN_vkCmdCopyImage2,c"vkCmdCopyImage2";
+    CmdCopyImage2KHR(commandBuffer: VkCommandBuffer, pCopyImageInfo: *const VkCopyImageInfo2) -> (),PFN_vkCmdCopyImage2KHR,c"vkCmdCopyImage2KHR";
+    CmdCopyImageToBuffer(commandBuffer: VkCommandBuffer, srcImage: VkImage, srcImageLayout: VkImageLayout, dstBuffer: VkBuffer, regionCount: u32, pRegions: *const VkBufferImageCopy) -> (),PFN_vkCmdCopyImageToBuffer,c"vkCmdCopyImageToBuffer";
+    CmdCopyImageToBuffer2(commandBuffer: VkCommandBuffer, pCopyImageToBufferInfo: *const VkCopyImageToBufferInfo2) -> (),PFN_vkCmdCopyImageToBuffer2,c"vkCmdCopyImageToBuffer2";
+    CmdCopyImageToBuffer2KHR(commandBuffer: VkCommandBuffer, pCopyImageToBufferInfo: *const VkCopyImageToBufferInfo2) -> (),PFN_vkCmdCopyImageToBuffer2KHR,c"vkCmdCopyImageToBuffer2KHR";
+    CmdCopyImageToMemoryKHR(commandBuffer: VkCommandBuffer, pCopyMemoryInfo: *const VkCopyDeviceMemoryImageInfoKHR) -> (),PFN_vkCmdCopyImageToMemoryKHR,c"vkCmdCopyImageToMemoryKHR";
+    CmdCopyMemoryIndirectKHR(commandBuffer: VkCommandBuffer, pCopyMemoryIndirectInfo: *const VkCopyMemoryIndirectInfoKHR) -> (),PFN_vkCmdCopyMemoryIndirectKHR,c"vkCmdCopyMemoryIndirectKHR";
+    CmdCopyMemoryIndirectNV(commandBuffer: VkCommandBuffer, copyBufferAddress: VkDeviceAddress, copyCount: u32, stride: u32) -> (),PFN_vkCmdCopyMemoryIndirectNV,c"vkCmdCopyMemoryIndirectNV";
+    CmdCopyMemoryKHR(commandBuffer: VkCommandBuffer, pCopyMemoryInfo: *const VkCopyDeviceMemoryInfoKHR) -> (),PFN_vkCmdCopyMemoryKHR,c"vkCmdCopyMemoryKHR";
+    CmdCopyMemoryToAccelerationStructureKHR(commandBuffer: VkCommandBuffer, pInfo: *const VkCopyMemoryToAccelerationStructureInfoKHR) -> (),PFN_vkCmdCopyMemoryToAccelerationStructureKHR,c"vkCmdCopyMemoryToAccelerationStructureKHR";
+    CmdCopyMemoryToImageIndirectKHR(commandBuffer: VkCommandBuffer, pCopyMemoryToImageIndirectInfo: *const VkCopyMemoryToImageIndirectInfoKHR) -> (),PFN_vkCmdCopyMemoryToImageIndirectKHR,c"vkCmdCopyMemoryToImageIndirectKHR";
+    CmdCopyMemoryToImageIndirectNV(commandBuffer: VkCommandBuffer, copyBufferAddress: VkDeviceAddress, copyCount: u32, stride: u32, dstImage: VkImage, dstImageLayout: VkImageLayout, pImageSubresources: *const VkImageSubresourceLayers) -> (),PFN_vkCmdCopyMemoryToImageIndirectNV,c"vkCmdCopyMemoryToImageIndirectNV";
+    CmdCopyMemoryToImageKHR(commandBuffer: VkCommandBuffer, pCopyMemoryInfo: *const VkCopyDeviceMemoryImageInfoKHR) -> (),PFN_vkCmdCopyMemoryToImageKHR,c"vkCmdCopyMemoryToImageKHR";
+    CmdCopyMemoryToMicromapEXT(commandBuffer: VkCommandBuffer, pInfo: *const VkCopyMemoryToMicromapInfoEXT) -> (),PFN_vkCmdCopyMemoryToMicromapEXT,c"vkCmdCopyMemoryToMicromapEXT";
+    CmdCopyMicromapEXT(commandBuffer: VkCommandBuffer, pInfo: *const VkCopyMicromapInfoEXT) -> (),PFN_vkCmdCopyMicromapEXT,c"vkCmdCopyMicromapEXT";
+    CmdCopyMicromapToMemoryEXT(commandBuffer: VkCommandBuffer, pInfo: *const VkCopyMicromapToMemoryInfoEXT) -> (),PFN_vkCmdCopyMicromapToMemoryEXT,c"vkCmdCopyMicromapToMemoryEXT";
+    CmdCopyQueryPoolResults(commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, firstQuery: u32, queryCount: u32, dstBuffer: VkBuffer, dstOffset: VkDeviceSize, stride: VkDeviceSize, flags: VkQueryResultFlags) -> (),PFN_vkCmdCopyQueryPoolResults,c"vkCmdCopyQueryPoolResults";
+    CmdCopyQueryPoolResultsToMemoryKHR(commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, firstQuery: u32, queryCount: u32, pDstRange: *const VkStridedDeviceAddressRangeKHR, dstFlags: VkAddressCommandFlagsKHR, queryResultFlags: VkQueryResultFlags) -> (),PFN_vkCmdCopyQueryPoolResultsToMemoryKHR,c"vkCmdCopyQueryPoolResultsToMemoryKHR";
+    CmdCopyTensorARM(commandBuffer: VkCommandBuffer, pCopyTensorInfo: *const VkCopyTensorInfoARM) -> (),PFN_vkCmdCopyTensorARM,c"vkCmdCopyTensorARM";
+    CmdCuLaunchKernelNVX(commandBuffer: VkCommandBuffer, pLaunchInfo: *const VkCuLaunchInfoNVX) -> (),PFN_vkCmdCuLaunchKernelNVX,c"vkCmdCuLaunchKernelNVX";
+    CmdCudaLaunchKernelNV(commandBuffer: VkCommandBuffer, pLaunchInfo: *const VkCudaLaunchInfoNV) -> (),PFN_vkCmdCudaLaunchKernelNV,c"vkCmdCudaLaunchKernelNV";
+    CmdDebugMarkerBeginEXT(commandBuffer: VkCommandBuffer, pMarkerInfo: *const VkDebugMarkerMarkerInfoEXT) -> (),PFN_vkCmdDebugMarkerBeginEXT,c"vkCmdDebugMarkerBeginEXT";
+    CmdDebugMarkerEndEXT(commandBuffer: VkCommandBuffer) -> (),PFN_vkCmdDebugMarkerEndEXT,c"vkCmdDebugMarkerEndEXT";
+    CmdDebugMarkerInsertEXT(commandBuffer: VkCommandBuffer, pMarkerInfo: *const VkDebugMarkerMarkerInfoEXT) -> (),PFN_vkCmdDebugMarkerInsertEXT,c"vkCmdDebugMarkerInsertEXT";
+    CmdDecodeVideoKHR(commandBuffer: VkCommandBuffer, pDecodeInfo: *const VkVideoDecodeInfoKHR) -> (),PFN_vkCmdDecodeVideoKHR,c"vkCmdDecodeVideoKHR";
+    CmdDecompressMemoryEXT(commandBuffer: VkCommandBuffer, pDecompressMemoryInfoEXT: *const VkDecompressMemoryInfoEXT) -> (),PFN_vkCmdDecompressMemoryEXT,c"vkCmdDecompressMemoryEXT";
+    CmdDecompressMemoryIndirectCountEXT(commandBuffer: VkCommandBuffer, decompressionMethod: VkMemoryDecompressionMethodFlagsEXT, indirectCommandsAddress: VkDeviceAddress, indirectCommandsCountAddress: VkDeviceAddress, maxDecompressionCount: u32, stride: u32) -> (),PFN_vkCmdDecompressMemoryIndirectCountEXT,c"vkCmdDecompressMemoryIndirectCountEXT";
+    CmdDecompressMemoryIndirectCountNV(commandBuffer: VkCommandBuffer, indirectCommandsAddress: VkDeviceAddress, indirectCommandsCountAddress: VkDeviceAddress, stride: u32) -> (),PFN_vkCmdDecompressMemoryIndirectCountNV,c"vkCmdDecompressMemoryIndirectCountNV";
+    CmdDecompressMemoryNV(commandBuffer: VkCommandBuffer, decompressRegionCount: u32, pDecompressMemoryRegions: *const VkDecompressMemoryRegionNV) -> (),PFN_vkCmdDecompressMemoryNV,c"vkCmdDecompressMemoryNV";
+    CmdDispatch(commandBuffer: VkCommandBuffer, groupCountX: u32, groupCountY: u32, groupCountZ: u32) -> (),PFN_vkCmdDispatch,c"vkCmdDispatch";
+    CmdDispatchBase(commandBuffer: VkCommandBuffer, baseGroupX: u32, baseGroupY: u32, baseGroupZ: u32, groupCountX: u32, groupCountY: u32, groupCountZ: u32) -> (),PFN_vkCmdDispatchBase,c"vkCmdDispatchBase";
+    CmdDispatchBaseKHR(commandBuffer: VkCommandBuffer, baseGroupX: u32, baseGroupY: u32, baseGroupZ: u32, groupCountX: u32, groupCountY: u32, groupCountZ: u32) -> (),PFN_vkCmdDispatchBaseKHR,c"vkCmdDispatchBaseKHR";
+    CmdDispatchDataGraphARM(commandBuffer: VkCommandBuffer, session: VkDataGraphPipelineSessionARM, pInfo: *const VkDataGraphPipelineDispatchInfoARM) -> (),PFN_vkCmdDispatchDataGraphARM,c"vkCmdDispatchDataGraphARM";
+    CmdDispatchGraphAMDX(commandBuffer: VkCommandBuffer, scratch: VkDeviceAddress, scratchSize: VkDeviceSize, pCountInfo: *const VkDispatchGraphCountInfoAMDX) -> (),PFN_vkCmdDispatchGraphAMDX,c"vkCmdDispatchGraphAMDX";
+    CmdDispatchGraphIndirectAMDX(commandBuffer: VkCommandBuffer, scratch: VkDeviceAddress, scratchSize: VkDeviceSize, pCountInfo: *const VkDispatchGraphCountInfoAMDX) -> (),PFN_vkCmdDispatchGraphIndirectAMDX,c"vkCmdDispatchGraphIndirectAMDX";
+    CmdDispatchGraphIndirectCountAMDX(commandBuffer: VkCommandBuffer, scratch: VkDeviceAddress, scratchSize: VkDeviceSize, countInfo: VkDeviceAddress) -> (),PFN_vkCmdDispatchGraphIndirectCountAMDX,c"vkCmdDispatchGraphIndirectCountAMDX";
+    CmdDispatchIndirect(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize) -> (),PFN_vkCmdDispatchIndirect,c"vkCmdDispatchIndirect";
+    CmdDispatchIndirect2KHR(commandBuffer: VkCommandBuffer, pInfo: *const VkDispatchIndirect2InfoKHR) -> (),PFN_vkCmdDispatchIndirect2KHR,c"vkCmdDispatchIndirect2KHR";
+    CmdDispatchTileQCOM(commandBuffer: VkCommandBuffer, pDispatchTileInfo: *const VkDispatchTileInfoQCOM) -> (),PFN_vkCmdDispatchTileQCOM,c"vkCmdDispatchTileQCOM";
+    CmdDraw(commandBuffer: VkCommandBuffer, vertexCount: u32, instanceCount: u32, firstVertex: u32, firstInstance: u32) -> (),PFN_vkCmdDraw,c"vkCmdDraw";
+    CmdDrawClusterHUAWEI(commandBuffer: VkCommandBuffer, groupCountX: u32, groupCountY: u32, groupCountZ: u32) -> (),PFN_vkCmdDrawClusterHUAWEI,c"vkCmdDrawClusterHUAWEI";
+    CmdDrawClusterIndirectHUAWEI(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize) -> (),PFN_vkCmdDrawClusterIndirectHUAWEI,c"vkCmdDrawClusterIndirectHUAWEI";
+    CmdDrawIndexed(commandBuffer: VkCommandBuffer, indexCount: u32, instanceCount: u32, firstIndex: u32, vertexOffset: i32, firstInstance: u32) -> (),PFN_vkCmdDrawIndexed,c"vkCmdDrawIndexed";
+    CmdDrawIndexedIndirect(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, drawCount: u32, stride: u32) -> (),PFN_vkCmdDrawIndexedIndirect,c"vkCmdDrawIndexedIndirect";
+    CmdDrawIndexedIndirect2KHR(commandBuffer: VkCommandBuffer, pInfo: *const VkDrawIndirect2InfoKHR) -> (),PFN_vkCmdDrawIndexedIndirect2KHR,c"vkCmdDrawIndexedIndirect2KHR";
+    CmdDrawIndexedIndirectCount(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, countBuffer: VkBuffer, countBufferOffset: VkDeviceSize, maxDrawCount: u32, stride: u32) -> (),PFN_vkCmdDrawIndexedIndirectCount,c"vkCmdDrawIndexedIndirectCount";
+    CmdDrawIndexedIndirectCount2KHR(commandBuffer: VkCommandBuffer, pInfo: *const VkDrawIndirectCount2InfoKHR) -> (),PFN_vkCmdDrawIndexedIndirectCount2KHR,c"vkCmdDrawIndexedIndirectCount2KHR";
+    CmdDrawIndexedIndirectCountAMD(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, countBuffer: VkBuffer, countBufferOffset: VkDeviceSize, maxDrawCount: u32, stride: u32) -> (),PFN_vkCmdDrawIndexedIndirectCountAMD,c"vkCmdDrawIndexedIndirectCountAMD";
+    CmdDrawIndexedIndirectCountKHR(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, countBuffer: VkBuffer, countBufferOffset: VkDeviceSize, maxDrawCount: u32, stride: u32) -> (),PFN_vkCmdDrawIndexedIndirectCountKHR,c"vkCmdDrawIndexedIndirectCountKHR";
+    CmdDrawIndirect(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, drawCount: u32, stride: u32) -> (),PFN_vkCmdDrawIndirect,c"vkCmdDrawIndirect";
+    CmdDrawIndirect2KHR(commandBuffer: VkCommandBuffer, pInfo: *const VkDrawIndirect2InfoKHR) -> (),PFN_vkCmdDrawIndirect2KHR,c"vkCmdDrawIndirect2KHR";
+    CmdDrawIndirectByteCount2EXT(commandBuffer: VkCommandBuffer, instanceCount: u32, firstInstance: u32, pCounterInfo: *const VkBindTransformFeedbackBuffer2InfoEXT, counterOffset: u32, vertexStride: u32) -> (),PFN_vkCmdDrawIndirectByteCount2EXT,c"vkCmdDrawIndirectByteCount2EXT";
+    CmdDrawIndirectByteCountEXT(commandBuffer: VkCommandBuffer, instanceCount: u32, firstInstance: u32, counterBuffer: VkBuffer, counterBufferOffset: VkDeviceSize, counterOffset: u32, vertexStride: u32) -> (),PFN_vkCmdDrawIndirectByteCountEXT,c"vkCmdDrawIndirectByteCountEXT";
+    CmdDrawIndirectCount(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, countBuffer: VkBuffer, countBufferOffset: VkDeviceSize, maxDrawCount: u32, stride: u32) -> (),PFN_vkCmdDrawIndirectCount,c"vkCmdDrawIndirectCount";
+    CmdDrawIndirectCount2KHR(commandBuffer: VkCommandBuffer, pInfo: *const VkDrawIndirectCount2InfoKHR) -> (),PFN_vkCmdDrawIndirectCount2KHR,c"vkCmdDrawIndirectCount2KHR";
+    CmdDrawIndirectCountAMD(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, countBuffer: VkBuffer, countBufferOffset: VkDeviceSize, maxDrawCount: u32, stride: u32) -> (),PFN_vkCmdDrawIndirectCountAMD,c"vkCmdDrawIndirectCountAMD";
+    CmdDrawIndirectCountKHR(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, countBuffer: VkBuffer, countBufferOffset: VkDeviceSize, maxDrawCount: u32, stride: u32) -> (),PFN_vkCmdDrawIndirectCountKHR,c"vkCmdDrawIndirectCountKHR";
+    CmdDrawMeshTasksEXT(commandBuffer: VkCommandBuffer, groupCountX: u32, groupCountY: u32, groupCountZ: u32) -> (),PFN_vkCmdDrawMeshTasksEXT,c"vkCmdDrawMeshTasksEXT";
+    CmdDrawMeshTasksIndirect2EXT(commandBuffer: VkCommandBuffer, pInfo: *const VkDrawIndirect2InfoKHR) -> (),PFN_vkCmdDrawMeshTasksIndirect2EXT,c"vkCmdDrawMeshTasksIndirect2EXT";
+    CmdDrawMeshTasksIndirectCount2EXT(commandBuffer: VkCommandBuffer, pInfo: *const VkDrawIndirectCount2InfoKHR) -> (),PFN_vkCmdDrawMeshTasksIndirectCount2EXT,c"vkCmdDrawMeshTasksIndirectCount2EXT";
+    CmdDrawMeshTasksIndirectCountEXT(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, countBuffer: VkBuffer, countBufferOffset: VkDeviceSize, maxDrawCount: u32, stride: u32) -> (),PFN_vkCmdDrawMeshTasksIndirectCountEXT,c"vkCmdDrawMeshTasksIndirectCountEXT";
+    CmdDrawMeshTasksIndirectCountNV(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, countBuffer: VkBuffer, countBufferOffset: VkDeviceSize, maxDrawCount: u32, stride: u32) -> (),PFN_vkCmdDrawMeshTasksIndirectCountNV,c"vkCmdDrawMeshTasksIndirectCountNV";
+    CmdDrawMeshTasksIndirectEXT(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, drawCount: u32, stride: u32) -> (),PFN_vkCmdDrawMeshTasksIndirectEXT,c"vkCmdDrawMeshTasksIndirectEXT";
+    CmdDrawMeshTasksIndirectNV(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, drawCount: u32, stride: u32) -> (),PFN_vkCmdDrawMeshTasksIndirectNV,c"vkCmdDrawMeshTasksIndirectNV";
+    CmdDrawMeshTasksNV(commandBuffer: VkCommandBuffer, taskCount: u32, firstTask: u32) -> (),PFN_vkCmdDrawMeshTasksNV,c"vkCmdDrawMeshTasksNV";
+    CmdDrawMultiEXT(commandBuffer: VkCommandBuffer, drawCount: u32, pVertexInfo: *const VkMultiDrawInfoEXT, instanceCount: u32, firstInstance: u32, stride: u32) -> (),PFN_vkCmdDrawMultiEXT,c"vkCmdDrawMultiEXT";
+    CmdDrawMultiIndexedEXT(commandBuffer: VkCommandBuffer, drawCount: u32, pIndexInfo: *const VkMultiDrawIndexedInfoEXT, instanceCount: u32, firstInstance: u32, stride: u32, pVertexOffset: *const i32) -> (),PFN_vkCmdDrawMultiIndexedEXT,c"vkCmdDrawMultiIndexedEXT";
+    CmdEncodeVideoKHR(commandBuffer: VkCommandBuffer, pEncodeInfo: *const VkVideoEncodeInfoKHR) -> (),PFN_vkCmdEncodeVideoKHR,c"vkCmdEncodeVideoKHR";
+    CmdEndConditionalRenderingEXT(commandBuffer: VkCommandBuffer) -> (),PFN_vkCmdEndConditionalRenderingEXT,c"vkCmdEndConditionalRenderingEXT";
+    CmdEndDebugUtilsLabelEXT(commandBuffer: VkCommandBuffer) -> (),PFN_vkCmdEndDebugUtilsLabelEXT,c"vkCmdEndDebugUtilsLabelEXT";
+    CmdEndGpaSampleAMD(commandBuffer: VkCommandBuffer, gpaSession: VkGpaSessionAMD, sampleID: u32) -> (),PFN_vkCmdEndGpaSampleAMD,c"vkCmdEndGpaSampleAMD";
+    CmdEndGpaSessionAMD(commandBuffer: VkCommandBuffer, gpaSession: VkGpaSessionAMD) -> VkResult,PFN_vkCmdEndGpaSessionAMD,c"vkCmdEndGpaSessionAMD";
+    CmdEndPerTileExecutionQCOM(commandBuffer: VkCommandBuffer, pPerTileEndInfo: *const VkPerTileEndInfoQCOM) -> (),PFN_vkCmdEndPerTileExecutionQCOM,c"vkCmdEndPerTileExecutionQCOM";
+    CmdEndQuery(commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, query: u32) -> (),PFN_vkCmdEndQuery,c"vkCmdEndQuery";
+    CmdEndQueryIndexedEXT(commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, query: u32, index: u32) -> (),PFN_vkCmdEndQueryIndexedEXT,c"vkCmdEndQueryIndexedEXT";
+    CmdEndRenderPass(commandBuffer: VkCommandBuffer) -> (),PFN_vkCmdEndRenderPass,c"vkCmdEndRenderPass";
+    CmdEndRenderPass2(commandBuffer: VkCommandBuffer, pSubpassEndInfo: *const VkSubpassEndInfo) -> (),PFN_vkCmdEndRenderPass2,c"vkCmdEndRenderPass2";
+    CmdEndRenderPass2KHR(commandBuffer: VkCommandBuffer, pSubpassEndInfo: *const VkSubpassEndInfo) -> (),PFN_vkCmdEndRenderPass2KHR,c"vkCmdEndRenderPass2KHR";
+    CmdEndRendering(commandBuffer: VkCommandBuffer) -> (),PFN_vkCmdEndRendering,c"vkCmdEndRendering";
+    CmdEndRendering2EXT(commandBuffer: VkCommandBuffer, pRenderingEndInfo: *const VkRenderingEndInfoKHR) -> (),PFN_vkCmdEndRendering2EXT,c"vkCmdEndRendering2EXT";
+    CmdEndRendering2KHR(commandBuffer: VkCommandBuffer, pRenderingEndInfo: *const VkRenderingEndInfoKHR) -> (),PFN_vkCmdEndRendering2KHR,c"vkCmdEndRendering2KHR";
+    CmdEndRenderingKHR(commandBuffer: VkCommandBuffer) -> (),PFN_vkCmdEndRenderingKHR,c"vkCmdEndRenderingKHR";
+    CmdEndShaderInstrumentationARM(commandBuffer: VkCommandBuffer) -> (),PFN_vkCmdEndShaderInstrumentationARM,c"vkCmdEndShaderInstrumentationARM";
+    CmdEndTransformFeedback2EXT(commandBuffer: VkCommandBuffer, firstCounterRange: u32, counterRangeCount: u32, pCounterInfos: *const VkBindTransformFeedbackBuffer2InfoEXT) -> (),PFN_vkCmdEndTransformFeedback2EXT,c"vkCmdEndTransformFeedback2EXT";
+    CmdEndTransformFeedbackEXT(commandBuffer: VkCommandBuffer, firstCounterBuffer: u32, counterBufferCount: u32, pCounterBuffers: *const VkBuffer, pCounterBufferOffsets: *const VkDeviceSize) -> (),PFN_vkCmdEndTransformFeedbackEXT,c"vkCmdEndTransformFeedbackEXT";
+    CmdEndVideoCodingKHR(commandBuffer: VkCommandBuffer, pEndCodingInfo: *const VkVideoEndCodingInfoKHR) -> (),PFN_vkCmdEndVideoCodingKHR,c"vkCmdEndVideoCodingKHR";
+    CmdExecuteCommands(commandBuffer: VkCommandBuffer, commandBufferCount: u32, pCommandBuffers: *const VkCommandBuffer) -> (),PFN_vkCmdExecuteCommands,c"vkCmdExecuteCommands";
+    CmdExecuteGeneratedCommandsEXT(commandBuffer: VkCommandBuffer, isPreprocessed: VkBool32, pGeneratedCommandsInfo: *const VkGeneratedCommandsInfoEXT) -> (),PFN_vkCmdExecuteGeneratedCommandsEXT,c"vkCmdExecuteGeneratedCommandsEXT";
+    CmdExecuteGeneratedCommandsNV(commandBuffer: VkCommandBuffer, isPreprocessed: VkBool32, pGeneratedCommandsInfo: *const VkGeneratedCommandsInfoNV) -> (),PFN_vkCmdExecuteGeneratedCommandsNV,c"vkCmdExecuteGeneratedCommandsNV";
+    CmdFillBuffer(commandBuffer: VkCommandBuffer, dstBuffer: VkBuffer, dstOffset: VkDeviceSize, size: VkDeviceSize, data: u32) -> (),PFN_vkCmdFillBuffer,c"vkCmdFillBuffer";
+    CmdFillMemoryKHR(commandBuffer: VkCommandBuffer, pDstRange: *const VkDeviceAddressRangeKHR, dstFlags: VkAddressCommandFlagsKHR, data: u32) -> (),PFN_vkCmdFillMemoryKHR,c"vkCmdFillMemoryKHR";
+    CmdInitializeGraphScratchMemoryAMDX(commandBuffer: VkCommandBuffer, executionGraph: VkPipeline, scratch: VkDeviceAddress, scratchSize: VkDeviceSize) -> (),PFN_vkCmdInitializeGraphScratchMemoryAMDX,c"vkCmdInitializeGraphScratchMemoryAMDX";
+    CmdInsertDebugUtilsLabelEXT(commandBuffer: VkCommandBuffer, pLabelInfo: *const VkDebugUtilsLabelEXT) -> (),PFN_vkCmdInsertDebugUtilsLabelEXT,c"vkCmdInsertDebugUtilsLabelEXT";
+    CmdNextSubpass(commandBuffer: VkCommandBuffer, contents: VkSubpassContents) -> (),PFN_vkCmdNextSubpass,c"vkCmdNextSubpass";
+    CmdNextSubpass2(commandBuffer: VkCommandBuffer, pSubpassBeginInfo: *const VkSubpassBeginInfo, pSubpassEndInfo: *const VkSubpassEndInfo) -> (),PFN_vkCmdNextSubpass2,c"vkCmdNextSubpass2";
+    CmdNextSubpass2KHR(commandBuffer: VkCommandBuffer, pSubpassBeginInfo: *const VkSubpassBeginInfo, pSubpassEndInfo: *const VkSubpassEndInfo) -> (),PFN_vkCmdNextSubpass2KHR,c"vkCmdNextSubpass2KHR";
+    CmdOpticalFlowExecuteNV(commandBuffer: VkCommandBuffer, session: VkOpticalFlowSessionNV, pExecuteInfo: *const VkOpticalFlowExecuteInfoNV) -> (),PFN_vkCmdOpticalFlowExecuteNV,c"vkCmdOpticalFlowExecuteNV";
+    CmdPipelineBarrier(commandBuffer: VkCommandBuffer, srcStageMask: VkPipelineStageFlags, dstStageMask: VkPipelineStageFlags, dependencyFlags: VkDependencyFlags, memoryBarrierCount: u32, pMemoryBarriers: *const VkMemoryBarrier, bufferMemoryBarrierCount: u32, pBufferMemoryBarriers: *const VkBufferMemoryBarrier, imageMemoryBarrierCount: u32, pImageMemoryBarriers: *const VkImageMemoryBarrier) -> (),PFN_vkCmdPipelineBarrier,c"vkCmdPipelineBarrier";
+    CmdPipelineBarrier2(commandBuffer: VkCommandBuffer, pDependencyInfo: *const VkDependencyInfo) -> (),PFN_vkCmdPipelineBarrier2,c"vkCmdPipelineBarrier2";
+    CmdPipelineBarrier2KHR(commandBuffer: VkCommandBuffer, pDependencyInfo: *const VkDependencyInfo) -> (),PFN_vkCmdPipelineBarrier2KHR,c"vkCmdPipelineBarrier2KHR";
+    CmdPreprocessGeneratedCommandsEXT(commandBuffer: VkCommandBuffer, pGeneratedCommandsInfo: *const VkGeneratedCommandsInfoEXT, stateCommandBuffer: VkCommandBuffer) -> (),PFN_vkCmdPreprocessGeneratedCommandsEXT,c"vkCmdPreprocessGeneratedCommandsEXT";
+    CmdPreprocessGeneratedCommandsNV(commandBuffer: VkCommandBuffer, pGeneratedCommandsInfo: *const VkGeneratedCommandsInfoNV) -> (),PFN_vkCmdPreprocessGeneratedCommandsNV,c"vkCmdPreprocessGeneratedCommandsNV";
+    CmdPushConstants(commandBuffer: VkCommandBuffer, layout: VkPipelineLayout, stageFlags: VkShaderStageFlags, offset: u32, size: u32, pValues: *const c_void) -> (),PFN_vkCmdPushConstants,c"vkCmdPushConstants";
+    CmdPushConstants2(commandBuffer: VkCommandBuffer, pPushConstantsInfo: *const VkPushConstantsInfo) -> (),PFN_vkCmdPushConstants2,c"vkCmdPushConstants2";
+    CmdPushConstants2KHR(commandBuffer: VkCommandBuffer, pPushConstantsInfo: *const VkPushConstantsInfo) -> (),PFN_vkCmdPushConstants2KHR,c"vkCmdPushConstants2KHR";
+    CmdPushDataEXT(commandBuffer: VkCommandBuffer, pPushDataInfo: *const VkPushDataInfoEXT) -> (),PFN_vkCmdPushDataEXT,c"vkCmdPushDataEXT";
+    CmdPushDescriptorSet(commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, layout: VkPipelineLayout, set: u32, descriptorWriteCount: u32, pDescriptorWrites: *const VkWriteDescriptorSet) -> (),PFN_vkCmdPushDescriptorSet,c"vkCmdPushDescriptorSet";
+    CmdPushDescriptorSet2(commandBuffer: VkCommandBuffer, pPushDescriptorSetInfo: *const VkPushDescriptorSetInfo) -> (),PFN_vkCmdPushDescriptorSet2,c"vkCmdPushDescriptorSet2";
+    CmdPushDescriptorSet2KHR(commandBuffer: VkCommandBuffer, pPushDescriptorSetInfo: *const VkPushDescriptorSetInfo) -> (),PFN_vkCmdPushDescriptorSet2KHR,c"vkCmdPushDescriptorSet2KHR";
+    CmdPushDescriptorSetKHR(commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, layout: VkPipelineLayout, set: u32, descriptorWriteCount: u32, pDescriptorWrites: *const VkWriteDescriptorSet) -> (),PFN_vkCmdPushDescriptorSetKHR,c"vkCmdPushDescriptorSetKHR";
+    CmdPushDescriptorSetWithTemplate(commandBuffer: VkCommandBuffer, descriptorUpdateTemplate: VkDescriptorUpdateTemplate, layout: VkPipelineLayout, set: u32, pData: *const c_void) -> (),PFN_vkCmdPushDescriptorSetWithTemplate,c"vkCmdPushDescriptorSetWithTemplate";
+    CmdPushDescriptorSetWithTemplate2(commandBuffer: VkCommandBuffer, pPushDescriptorSetWithTemplateInfo: *const VkPushDescriptorSetWithTemplateInfo) -> (),PFN_vkCmdPushDescriptorSetWithTemplate2,c"vkCmdPushDescriptorSetWithTemplate2";
+    CmdPushDescriptorSetWithTemplate2KHR(commandBuffer: VkCommandBuffer, pPushDescriptorSetWithTemplateInfo: *const VkPushDescriptorSetWithTemplateInfo) -> (),PFN_vkCmdPushDescriptorSetWithTemplate2KHR,c"vkCmdPushDescriptorSetWithTemplate2KHR";
+    CmdPushDescriptorSetWithTemplateKHR(commandBuffer: VkCommandBuffer, descriptorUpdateTemplate: VkDescriptorUpdateTemplate, layout: VkPipelineLayout, set: u32, pData: *const c_void) -> (),PFN_vkCmdPushDescriptorSetWithTemplateKHR,c"vkCmdPushDescriptorSetWithTemplateKHR";
+    CmdResetEvent(commandBuffer: VkCommandBuffer, event: VkEvent, stageMask: VkPipelineStageFlags) -> (),PFN_vkCmdResetEvent,c"vkCmdResetEvent";
+    CmdResetEvent2(commandBuffer: VkCommandBuffer, event: VkEvent, stageMask: VkPipelineStageFlags2) -> (),PFN_vkCmdResetEvent2,c"vkCmdResetEvent2";
+    CmdResetEvent2KHR(commandBuffer: VkCommandBuffer, event: VkEvent, stageMask: VkPipelineStageFlags2) -> (),PFN_vkCmdResetEvent2KHR,c"vkCmdResetEvent2KHR";
+    CmdResetQueryPool(commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, firstQuery: u32, queryCount: u32) -> (),PFN_vkCmdResetQueryPool,c"vkCmdResetQueryPool";
+    CmdResolveImage(commandBuffer: VkCommandBuffer, srcImage: VkImage, srcImageLayout: VkImageLayout, dstImage: VkImage, dstImageLayout: VkImageLayout, regionCount: u32, pRegions: *const VkImageResolve) -> (),PFN_vkCmdResolveImage,c"vkCmdResolveImage";
+    CmdResolveImage2(commandBuffer: VkCommandBuffer, pResolveImageInfo: *const VkResolveImageInfo2) -> (),PFN_vkCmdResolveImage2,c"vkCmdResolveImage2";
+    CmdResolveImage2KHR(commandBuffer: VkCommandBuffer, pResolveImageInfo: *const VkResolveImageInfo2) -> (),PFN_vkCmdResolveImage2KHR,c"vkCmdResolveImage2KHR";
+    CmdSetAlphaToCoverageEnableEXT(commandBuffer: VkCommandBuffer, alphaToCoverageEnable: VkBool32) -> (),PFN_vkCmdSetAlphaToCoverageEnableEXT,c"vkCmdSetAlphaToCoverageEnableEXT";
+    CmdSetAlphaToOneEnableEXT(commandBuffer: VkCommandBuffer, alphaToOneEnable: VkBool32) -> (),PFN_vkCmdSetAlphaToOneEnableEXT,c"vkCmdSetAlphaToOneEnableEXT";
+    CmdSetAttachmentFeedbackLoopEnableEXT(commandBuffer: VkCommandBuffer, aspectMask: VkImageAspectFlags) -> (),PFN_vkCmdSetAttachmentFeedbackLoopEnableEXT,c"vkCmdSetAttachmentFeedbackLoopEnableEXT";
+    CmdSetBlendConstants(commandBuffer: VkCommandBuffer, blendConstants: *mut f32) -> (),PFN_vkCmdSetBlendConstants,c"vkCmdSetBlendConstants";
+    CmdSetCheckpointNV(commandBuffer: VkCommandBuffer, pCheckpointMarker: *const c_void) -> (),PFN_vkCmdSetCheckpointNV,c"vkCmdSetCheckpointNV";
+    CmdSetCoarseSampleOrderNV(commandBuffer: VkCommandBuffer, sampleOrderType: VkCoarseSampleOrderTypeNV, customSampleOrderCount: u32, pCustomSampleOrders: *const VkCoarseSampleOrderCustomNV) -> (),PFN_vkCmdSetCoarseSampleOrderNV,c"vkCmdSetCoarseSampleOrderNV";
+    CmdSetColorBlendAdvancedEXT(commandBuffer: VkCommandBuffer, firstAttachment: u32, attachmentCount: u32, pColorBlendAdvanced: *const VkColorBlendAdvancedEXT) -> (),PFN_vkCmdSetColorBlendAdvancedEXT,c"vkCmdSetColorBlendAdvancedEXT";
+    CmdSetColorBlendEnableEXT(commandBuffer: VkCommandBuffer, firstAttachment: u32, attachmentCount: u32, pColorBlendEnables: *const VkBool32) -> (),PFN_vkCmdSetColorBlendEnableEXT,c"vkCmdSetColorBlendEnableEXT";
+    CmdSetColorBlendEquationEXT(commandBuffer: VkCommandBuffer, firstAttachment: u32, attachmentCount: u32, pColorBlendEquations: *const VkColorBlendEquationEXT) -> (),PFN_vkCmdSetColorBlendEquationEXT,c"vkCmdSetColorBlendEquationEXT";
+    CmdSetColorWriteEnableEXT(commandBuffer: VkCommandBuffer, attachmentCount: u32, pColorWriteEnables: *const VkBool32) -> (),PFN_vkCmdSetColorWriteEnableEXT,c"vkCmdSetColorWriteEnableEXT";
+    CmdSetColorWriteMaskEXT(commandBuffer: VkCommandBuffer, firstAttachment: u32, attachmentCount: u32, pColorWriteMasks: *const VkColorComponentFlags) -> (),PFN_vkCmdSetColorWriteMaskEXT,c"vkCmdSetColorWriteMaskEXT";
+    CmdSetComputeOccupancyPriorityNV(commandBuffer: VkCommandBuffer, pParameters: *const VkComputeOccupancyPriorityParametersNV) -> (),PFN_vkCmdSetComputeOccupancyPriorityNV,c"vkCmdSetComputeOccupancyPriorityNV";
+    CmdSetConservativeRasterizationModeEXT(commandBuffer: VkCommandBuffer, conservativeRasterizationMode: VkConservativeRasterizationModeEXT) -> (),PFN_vkCmdSetConservativeRasterizationModeEXT,c"vkCmdSetConservativeRasterizationModeEXT";
+    CmdSetCoverageModulationModeNV(commandBuffer: VkCommandBuffer, coverageModulationMode: VkCoverageModulationModeNV) -> (),PFN_vkCmdSetCoverageModulationModeNV,c"vkCmdSetCoverageModulationModeNV";
+    CmdSetCoverageModulationTableEnableNV(commandBuffer: VkCommandBuffer, coverageModulationTableEnable: VkBool32) -> (),PFN_vkCmdSetCoverageModulationTableEnableNV,c"vkCmdSetCoverageModulationTableEnableNV";
+    CmdSetCoverageModulationTableNV(commandBuffer: VkCommandBuffer, coverageModulationTableCount: u32, pCoverageModulationTable: *const f32) -> (),PFN_vkCmdSetCoverageModulationTableNV,c"vkCmdSetCoverageModulationTableNV";
+    CmdSetCoverageReductionModeNV(commandBuffer: VkCommandBuffer, coverageReductionMode: VkCoverageReductionModeNV) -> (),PFN_vkCmdSetCoverageReductionModeNV,c"vkCmdSetCoverageReductionModeNV";
+    CmdSetCoverageToColorEnableNV(commandBuffer: VkCommandBuffer, coverageToColorEnable: VkBool32) -> (),PFN_vkCmdSetCoverageToColorEnableNV,c"vkCmdSetCoverageToColorEnableNV";
+    CmdSetCoverageToColorLocationNV(commandBuffer: VkCommandBuffer, coverageToColorLocation: u32) -> (),PFN_vkCmdSetCoverageToColorLocationNV,c"vkCmdSetCoverageToColorLocationNV";
+    CmdSetCullMode(commandBuffer: VkCommandBuffer, cullMode: VkCullModeFlags) -> (),PFN_vkCmdSetCullMode,c"vkCmdSetCullMode";
+    CmdSetCullModeEXT(commandBuffer: VkCommandBuffer, cullMode: VkCullModeFlags) -> (),PFN_vkCmdSetCullModeEXT,c"vkCmdSetCullModeEXT";
+    CmdSetDepthBias(commandBuffer: VkCommandBuffer, depthBiasConstantFactor: f32, depthBiasClamp: f32, depthBiasSlopeFactor: f32) -> (),PFN_vkCmdSetDepthBias,c"vkCmdSetDepthBias";
+    CmdSetDepthBias2EXT(commandBuffer: VkCommandBuffer, pDepthBiasInfo: *const VkDepthBiasInfoEXT) -> (),PFN_vkCmdSetDepthBias2EXT,c"vkCmdSetDepthBias2EXT";
+    CmdSetDepthBiasEnable(commandBuffer: VkCommandBuffer, depthBiasEnable: VkBool32) -> (),PFN_vkCmdSetDepthBiasEnable,c"vkCmdSetDepthBiasEnable";
+    CmdSetDepthBiasEnableEXT(commandBuffer: VkCommandBuffer, depthBiasEnable: VkBool32) -> (),PFN_vkCmdSetDepthBiasEnableEXT,c"vkCmdSetDepthBiasEnableEXT";
+    CmdSetDepthBounds(commandBuffer: VkCommandBuffer, minDepthBounds: f32, maxDepthBounds: f32) -> (),PFN_vkCmdSetDepthBounds,c"vkCmdSetDepthBounds";
+    CmdSetDepthBoundsTestEnable(commandBuffer: VkCommandBuffer, depthBoundsTestEnable: VkBool32) -> (),PFN_vkCmdSetDepthBoundsTestEnable,c"vkCmdSetDepthBoundsTestEnable";
+    CmdSetDepthBoundsTestEnableEXT(commandBuffer: VkCommandBuffer, depthBoundsTestEnable: VkBool32) -> (),PFN_vkCmdSetDepthBoundsTestEnableEXT,c"vkCmdSetDepthBoundsTestEnableEXT";
+    CmdSetDepthClampEnableEXT(commandBuffer: VkCommandBuffer, depthClampEnable: VkBool32) -> (),PFN_vkCmdSetDepthClampEnableEXT,c"vkCmdSetDepthClampEnableEXT";
+    CmdSetDepthClampRangeEXT(commandBuffer: VkCommandBuffer, depthClampMode: VkDepthClampModeEXT, pDepthClampRange: *const VkDepthClampRangeEXT) -> (),PFN_vkCmdSetDepthClampRangeEXT,c"vkCmdSetDepthClampRangeEXT";
+    CmdSetDepthClipEnableEXT(commandBuffer: VkCommandBuffer, depthClipEnable: VkBool32) -> (),PFN_vkCmdSetDepthClipEnableEXT,c"vkCmdSetDepthClipEnableEXT";
+    CmdSetDepthClipNegativeOneToOneEXT(commandBuffer: VkCommandBuffer, negativeOneToOne: VkBool32) -> (),PFN_vkCmdSetDepthClipNegativeOneToOneEXT,c"vkCmdSetDepthClipNegativeOneToOneEXT";
+    CmdSetDepthCompareOp(commandBuffer: VkCommandBuffer, depthCompareOp: VkCompareOp) -> (),PFN_vkCmdSetDepthCompareOp,c"vkCmdSetDepthCompareOp";
+    CmdSetDepthCompareOpEXT(commandBuffer: VkCommandBuffer, depthCompareOp: VkCompareOp) -> (),PFN_vkCmdSetDepthCompareOpEXT,c"vkCmdSetDepthCompareOpEXT";
+    CmdSetDepthTestEnable(commandBuffer: VkCommandBuffer, depthTestEnable: VkBool32) -> (),PFN_vkCmdSetDepthTestEnable,c"vkCmdSetDepthTestEnable";
+    CmdSetDepthTestEnableEXT(commandBuffer: VkCommandBuffer, depthTestEnable: VkBool32) -> (),PFN_vkCmdSetDepthTestEnableEXT,c"vkCmdSetDepthTestEnableEXT";
+    CmdSetDepthWriteEnable(commandBuffer: VkCommandBuffer, depthWriteEnable: VkBool32) -> (),PFN_vkCmdSetDepthWriteEnable,c"vkCmdSetDepthWriteEnable";
+    CmdSetDepthWriteEnableEXT(commandBuffer: VkCommandBuffer, depthWriteEnable: VkBool32) -> (),PFN_vkCmdSetDepthWriteEnableEXT,c"vkCmdSetDepthWriteEnableEXT";
+    CmdSetDescriptorBufferOffsets2EXT(commandBuffer: VkCommandBuffer, pSetDescriptorBufferOffsetsInfo: *const VkSetDescriptorBufferOffsetsInfoEXT) -> (),PFN_vkCmdSetDescriptorBufferOffsets2EXT,c"vkCmdSetDescriptorBufferOffsets2EXT";
+    CmdSetDescriptorBufferOffsetsEXT(commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, layout: VkPipelineLayout, firstSet: u32, setCount: u32, pBufferIndices: *const u32, pOffsets: *const VkDeviceSize) -> (),PFN_vkCmdSetDescriptorBufferOffsetsEXT,c"vkCmdSetDescriptorBufferOffsetsEXT";
+    CmdSetDeviceMask(commandBuffer: VkCommandBuffer, deviceMask: u32) -> (),PFN_vkCmdSetDeviceMask,c"vkCmdSetDeviceMask";
+    CmdSetDeviceMaskKHR(commandBuffer: VkCommandBuffer, deviceMask: u32) -> (),PFN_vkCmdSetDeviceMaskKHR,c"vkCmdSetDeviceMaskKHR";
+    CmdSetDiscardRectangleEXT(commandBuffer: VkCommandBuffer, firstDiscardRectangle: u32, discardRectangleCount: u32, pDiscardRectangles: *const VkRect2D) -> (),PFN_vkCmdSetDiscardRectangleEXT,c"vkCmdSetDiscardRectangleEXT";
+    CmdSetDiscardRectangleEnableEXT(commandBuffer: VkCommandBuffer, discardRectangleEnable: VkBool32) -> (),PFN_vkCmdSetDiscardRectangleEnableEXT,c"vkCmdSetDiscardRectangleEnableEXT";
+    CmdSetDiscardRectangleModeEXT(commandBuffer: VkCommandBuffer, discardRectangleMode: VkDiscardRectangleModeEXT) -> (),PFN_vkCmdSetDiscardRectangleModeEXT,c"vkCmdSetDiscardRectangleModeEXT";
+    CmdSetDispatchParametersARM(commandBuffer: VkCommandBuffer, pDispatchParameters: *const VkDispatchParametersARM) -> (),PFN_vkCmdSetDispatchParametersARM,c"vkCmdSetDispatchParametersARM";
+    CmdSetEvent(commandBuffer: VkCommandBuffer, event: VkEvent, stageMask: VkPipelineStageFlags) -> (),PFN_vkCmdSetEvent,c"vkCmdSetEvent";
+    CmdSetEvent2(commandBuffer: VkCommandBuffer, event: VkEvent, pDependencyInfo: *const VkDependencyInfo) -> (),PFN_vkCmdSetEvent2,c"vkCmdSetEvent2";
+    CmdSetEvent2KHR(commandBuffer: VkCommandBuffer, event: VkEvent, pDependencyInfo: *const VkDependencyInfo) -> (),PFN_vkCmdSetEvent2KHR,c"vkCmdSetEvent2KHR";
+    CmdSetExclusiveScissorEnableNV(commandBuffer: VkCommandBuffer, firstExclusiveScissor: u32, exclusiveScissorCount: u32, pExclusiveScissorEnables: *const VkBool32) -> (),PFN_vkCmdSetExclusiveScissorEnableNV,c"vkCmdSetExclusiveScissorEnableNV";
+    CmdSetExclusiveScissorNV(commandBuffer: VkCommandBuffer, firstExclusiveScissor: u32, exclusiveScissorCount: u32, pExclusiveScissors: *const VkRect2D) -> (),PFN_vkCmdSetExclusiveScissorNV,c"vkCmdSetExclusiveScissorNV";
+    CmdSetExtraPrimitiveOverestimationSizeEXT(commandBuffer: VkCommandBuffer, extraPrimitiveOverestimationSize: f32) -> (),PFN_vkCmdSetExtraPrimitiveOverestimationSizeEXT,c"vkCmdSetExtraPrimitiveOverestimationSizeEXT";
+    CmdSetFragmentShadingRateEnumNV(commandBuffer: VkCommandBuffer, shadingRate: VkFragmentShadingRateNV, combinerOps: *mut VkFragmentShadingRateCombinerOpKHR) -> (),PFN_vkCmdSetFragmentShadingRateEnumNV,c"vkCmdSetFragmentShadingRateEnumNV";
+    CmdSetFragmentShadingRateKHR(commandBuffer: VkCommandBuffer, pFragmentSize: *const VkExtent2D, combinerOps: *mut VkFragmentShadingRateCombinerOpKHR) -> (),PFN_vkCmdSetFragmentShadingRateKHR,c"vkCmdSetFragmentShadingRateKHR";
+    CmdSetFrontFace(commandBuffer: VkCommandBuffer, frontFace: VkFrontFace) -> (),PFN_vkCmdSetFrontFace,c"vkCmdSetFrontFace";
+    CmdSetFrontFaceEXT(commandBuffer: VkCommandBuffer, frontFace: VkFrontFace) -> (),PFN_vkCmdSetFrontFaceEXT,c"vkCmdSetFrontFaceEXT";
+    CmdSetLineRasterizationModeEXT(commandBuffer: VkCommandBuffer, lineRasterizationMode: VkLineRasterizationModeEXT) -> (),PFN_vkCmdSetLineRasterizationModeEXT,c"vkCmdSetLineRasterizationModeEXT";
+    CmdSetLineStipple(commandBuffer: VkCommandBuffer, lineStippleFactor: u32, lineStipplePattern: u16) -> (),PFN_vkCmdSetLineStipple,c"vkCmdSetLineStipple";
+    CmdSetLineStippleEXT(commandBuffer: VkCommandBuffer, lineStippleFactor: u32, lineStipplePattern: u16) -> (),PFN_vkCmdSetLineStippleEXT,c"vkCmdSetLineStippleEXT";
+    CmdSetLineStippleEnableEXT(commandBuffer: VkCommandBuffer, stippledLineEnable: VkBool32) -> (),PFN_vkCmdSetLineStippleEnableEXT,c"vkCmdSetLineStippleEnableEXT";
+    CmdSetLineStippleKHR(commandBuffer: VkCommandBuffer, lineStippleFactor: u32, lineStipplePattern: u16) -> (),PFN_vkCmdSetLineStippleKHR,c"vkCmdSetLineStippleKHR";
+    CmdSetLineWidth(commandBuffer: VkCommandBuffer, lineWidth: f32) -> (),PFN_vkCmdSetLineWidth,c"vkCmdSetLineWidth";
+    CmdSetLogicOpEXT(commandBuffer: VkCommandBuffer, logicOp: VkLogicOp) -> (),PFN_vkCmdSetLogicOpEXT,c"vkCmdSetLogicOpEXT";
+    CmdSetLogicOpEnableEXT(commandBuffer: VkCommandBuffer, logicOpEnable: VkBool32) -> (),PFN_vkCmdSetLogicOpEnableEXT,c"vkCmdSetLogicOpEnableEXT";
+    CmdSetPatchControlPointsEXT(commandBuffer: VkCommandBuffer, patchControlPoints: u32) -> (),PFN_vkCmdSetPatchControlPointsEXT,c"vkCmdSetPatchControlPointsEXT";
+    CmdSetPerformanceMarkerINTEL(commandBuffer: VkCommandBuffer, pMarkerInfo: *const VkPerformanceMarkerInfoINTEL) -> VkResult,PFN_vkCmdSetPerformanceMarkerINTEL,c"vkCmdSetPerformanceMarkerINTEL";
+    CmdSetPerformanceOverrideINTEL(commandBuffer: VkCommandBuffer, pOverrideInfo: *const VkPerformanceOverrideInfoINTEL) -> VkResult,PFN_vkCmdSetPerformanceOverrideINTEL,c"vkCmdSetPerformanceOverrideINTEL";
+    CmdSetPerformanceStreamMarkerINTEL(commandBuffer: VkCommandBuffer, pMarkerInfo: *const VkPerformanceStreamMarkerInfoINTEL) -> VkResult,PFN_vkCmdSetPerformanceStreamMarkerINTEL,c"vkCmdSetPerformanceStreamMarkerINTEL";
+    CmdSetPolygonModeEXT(commandBuffer: VkCommandBuffer, polygonMode: VkPolygonMode) -> (),PFN_vkCmdSetPolygonModeEXT,c"vkCmdSetPolygonModeEXT";
+    CmdSetPrimitiveRestartEnable(commandBuffer: VkCommandBuffer, primitiveRestartEnable: VkBool32) -> (),PFN_vkCmdSetPrimitiveRestartEnable,c"vkCmdSetPrimitiveRestartEnable";
+    CmdSetPrimitiveRestartEnableEXT(commandBuffer: VkCommandBuffer, primitiveRestartEnable: VkBool32) -> (),PFN_vkCmdSetPrimitiveRestartEnableEXT,c"vkCmdSetPrimitiveRestartEnableEXT";
+    CmdSetPrimitiveRestartIndexEXT(commandBuffer: VkCommandBuffer, primitiveRestartIndex: u32) -> (),PFN_vkCmdSetPrimitiveRestartIndexEXT,c"vkCmdSetPrimitiveRestartIndexEXT";
+    CmdSetPrimitiveTopology(commandBuffer: VkCommandBuffer, primitiveTopology: VkPrimitiveTopology) -> (),PFN_vkCmdSetPrimitiveTopology,c"vkCmdSetPrimitiveTopology";
+    CmdSetPrimitiveTopologyEXT(commandBuffer: VkCommandBuffer, primitiveTopology: VkPrimitiveTopology) -> (),PFN_vkCmdSetPrimitiveTopologyEXT,c"vkCmdSetPrimitiveTopologyEXT";
+    CmdSetProvokingVertexModeEXT(commandBuffer: VkCommandBuffer, provokingVertexMode: VkProvokingVertexModeEXT) -> (),PFN_vkCmdSetProvokingVertexModeEXT,c"vkCmdSetProvokingVertexModeEXT";
+    CmdSetRasterizationSamplesEXT(commandBuffer: VkCommandBuffer, rasterizationSamples: VkSampleCountFlagBits) -> (),PFN_vkCmdSetRasterizationSamplesEXT,c"vkCmdSetRasterizationSamplesEXT";
+    CmdSetRasterizationStreamEXT(commandBuffer: VkCommandBuffer, rasterizationStream: u32) -> (),PFN_vkCmdSetRasterizationStreamEXT,c"vkCmdSetRasterizationStreamEXT";
+    CmdSetRasterizerDiscardEnable(commandBuffer: VkCommandBuffer, rasterizerDiscardEnable: VkBool32) -> (),PFN_vkCmdSetRasterizerDiscardEnable,c"vkCmdSetRasterizerDiscardEnable";
+    CmdSetRasterizerDiscardEnableEXT(commandBuffer: VkCommandBuffer, rasterizerDiscardEnable: VkBool32) -> (),PFN_vkCmdSetRasterizerDiscardEnableEXT,c"vkCmdSetRasterizerDiscardEnableEXT";
+    CmdSetRayTracingPipelineStackSizeKHR(commandBuffer: VkCommandBuffer, pipelineStackSize: u32) -> (),PFN_vkCmdSetRayTracingPipelineStackSizeKHR,c"vkCmdSetRayTracingPipelineStackSizeKHR";
+    CmdSetRenderingAttachmentLocations(commandBuffer: VkCommandBuffer, pLocationInfo: *const VkRenderingAttachmentLocationInfo) -> (),PFN_vkCmdSetRenderingAttachmentLocations,c"vkCmdSetRenderingAttachmentLocations";
+    CmdSetRenderingAttachmentLocationsKHR(commandBuffer: VkCommandBuffer, pLocationInfo: *const VkRenderingAttachmentLocationInfo) -> (),PFN_vkCmdSetRenderingAttachmentLocationsKHR,c"vkCmdSetRenderingAttachmentLocationsKHR";
+    CmdSetRenderingInputAttachmentIndices(commandBuffer: VkCommandBuffer, pInputAttachmentIndexInfo: *const VkRenderingInputAttachmentIndexInfo) -> (),PFN_vkCmdSetRenderingInputAttachmentIndices,c"vkCmdSetRenderingInputAttachmentIndices";
+    CmdSetRenderingInputAttachmentIndicesKHR(commandBuffer: VkCommandBuffer, pInputAttachmentIndexInfo: *const VkRenderingInputAttachmentIndexInfo) -> (),PFN_vkCmdSetRenderingInputAttachmentIndicesKHR,c"vkCmdSetRenderingInputAttachmentIndicesKHR";
+    CmdSetRepresentativeFragmentTestEnableNV(commandBuffer: VkCommandBuffer, representativeFragmentTestEnable: VkBool32) -> (),PFN_vkCmdSetRepresentativeFragmentTestEnableNV,c"vkCmdSetRepresentativeFragmentTestEnableNV";
+    CmdSetSampleLocationsEXT(commandBuffer: VkCommandBuffer, pSampleLocationsInfo: *const VkSampleLocationsInfoEXT) -> (),PFN_vkCmdSetSampleLocationsEXT,c"vkCmdSetSampleLocationsEXT";
+    CmdSetSampleLocationsEnableEXT(commandBuffer: VkCommandBuffer, sampleLocationsEnable: VkBool32) -> (),PFN_vkCmdSetSampleLocationsEnableEXT,c"vkCmdSetSampleLocationsEnableEXT";
+    CmdSetSampleMaskEXT(commandBuffer: VkCommandBuffer, samples: VkSampleCountFlagBits, pSampleMask: *const VkSampleMask) -> (),PFN_vkCmdSetSampleMaskEXT,c"vkCmdSetSampleMaskEXT";
+    CmdSetScissor(commandBuffer: VkCommandBuffer, firstScissor: u32, scissorCount: u32, pScissors: *const VkRect2D) -> (),PFN_vkCmdSetScissor,c"vkCmdSetScissor";
+    CmdSetScissorWithCount(commandBuffer: VkCommandBuffer, scissorCount: u32, pScissors: *const VkRect2D) -> (),PFN_vkCmdSetScissorWithCount,c"vkCmdSetScissorWithCount";
+    CmdSetScissorWithCountEXT(commandBuffer: VkCommandBuffer, scissorCount: u32, pScissors: *const VkRect2D) -> (),PFN_vkCmdSetScissorWithCountEXT,c"vkCmdSetScissorWithCountEXT";
+    CmdSetShadingRateImageEnableNV(commandBuffer: VkCommandBuffer, shadingRateImageEnable: VkBool32) -> (),PFN_vkCmdSetShadingRateImageEnableNV,c"vkCmdSetShadingRateImageEnableNV";
+    CmdSetStencilCompareMask(commandBuffer: VkCommandBuffer, faceMask: VkStencilFaceFlags, compareMask: u32) -> (),PFN_vkCmdSetStencilCompareMask,c"vkCmdSetStencilCompareMask";
+    CmdSetStencilOp(commandBuffer: VkCommandBuffer, faceMask: VkStencilFaceFlags, failOp: VkStencilOp, passOp: VkStencilOp, depthFailOp: VkStencilOp, compareOp: VkCompareOp) -> (),PFN_vkCmdSetStencilOp,c"vkCmdSetStencilOp";
+    CmdSetStencilOpEXT(commandBuffer: VkCommandBuffer, faceMask: VkStencilFaceFlags, failOp: VkStencilOp, passOp: VkStencilOp, depthFailOp: VkStencilOp, compareOp: VkCompareOp) -> (),PFN_vkCmdSetStencilOpEXT,c"vkCmdSetStencilOpEXT";
+    CmdSetStencilReference(commandBuffer: VkCommandBuffer, faceMask: VkStencilFaceFlags, reference: u32) -> (),PFN_vkCmdSetStencilReference,c"vkCmdSetStencilReference";
+    CmdSetStencilTestEnable(commandBuffer: VkCommandBuffer, stencilTestEnable: VkBool32) -> (),PFN_vkCmdSetStencilTestEnable,c"vkCmdSetStencilTestEnable";
+    CmdSetStencilTestEnableEXT(commandBuffer: VkCommandBuffer, stencilTestEnable: VkBool32) -> (),PFN_vkCmdSetStencilTestEnableEXT,c"vkCmdSetStencilTestEnableEXT";
+    CmdSetStencilWriteMask(commandBuffer: VkCommandBuffer, faceMask: VkStencilFaceFlags, writeMask: u32) -> (),PFN_vkCmdSetStencilWriteMask,c"vkCmdSetStencilWriteMask";
+    CmdSetTessellationDomainOriginEXT(commandBuffer: VkCommandBuffer, domainOrigin: VkTessellationDomainOrigin) -> (),PFN_vkCmdSetTessellationDomainOriginEXT,c"vkCmdSetTessellationDomainOriginEXT";
+    CmdSetVertexInputEXT(commandBuffer: VkCommandBuffer, vertexBindingDescriptionCount: u32, pVertexBindingDescriptions: *const VkVertexInputBindingDescription2EXT, vertexAttributeDescriptionCount: u32, pVertexAttributeDescriptions: *const VkVertexInputAttributeDescription2EXT) -> (),PFN_vkCmdSetVertexInputEXT,c"vkCmdSetVertexInputEXT";
+    CmdSetViewport(commandBuffer: VkCommandBuffer, firstViewport: u32, viewportCount: u32, pViewports: *const VkViewport) -> (),PFN_vkCmdSetViewport,c"vkCmdSetViewport";
+    CmdSetViewportShadingRatePaletteNV(commandBuffer: VkCommandBuffer, firstViewport: u32, viewportCount: u32, pShadingRatePalettes: *const VkShadingRatePaletteNV) -> (),PFN_vkCmdSetViewportShadingRatePaletteNV,c"vkCmdSetViewportShadingRatePaletteNV";
+    CmdSetViewportSwizzleNV(commandBuffer: VkCommandBuffer, firstViewport: u32, viewportCount: u32, pViewportSwizzles: *const VkViewportSwizzleNV) -> (),PFN_vkCmdSetViewportSwizzleNV,c"vkCmdSetViewportSwizzleNV";
+    CmdSetViewportWScalingEnableNV(commandBuffer: VkCommandBuffer, viewportWScalingEnable: VkBool32) -> (),PFN_vkCmdSetViewportWScalingEnableNV,c"vkCmdSetViewportWScalingEnableNV";
+    CmdSetViewportWScalingNV(commandBuffer: VkCommandBuffer, firstViewport: u32, viewportCount: u32, pViewportWScalings: *const VkViewportWScalingNV) -> (),PFN_vkCmdSetViewportWScalingNV,c"vkCmdSetViewportWScalingNV";
+    CmdSetViewportWithCount(commandBuffer: VkCommandBuffer, viewportCount: u32, pViewports: *const VkViewport) -> (),PFN_vkCmdSetViewportWithCount,c"vkCmdSetViewportWithCount";
+    CmdSetViewportWithCountEXT(commandBuffer: VkCommandBuffer, viewportCount: u32, pViewports: *const VkViewport) -> (),PFN_vkCmdSetViewportWithCountEXT,c"vkCmdSetViewportWithCountEXT";
+    CmdSubpassShadingHUAWEI(commandBuffer: VkCommandBuffer) -> (),PFN_vkCmdSubpassShadingHUAWEI,c"vkCmdSubpassShadingHUAWEI";
+    CmdTraceRaysIndirect2KHR(commandBuffer: VkCommandBuffer, indirectDeviceAddress: VkDeviceAddress) -> (),PFN_vkCmdTraceRaysIndirect2KHR,c"vkCmdTraceRaysIndirect2KHR";
+    CmdTraceRaysIndirectKHR(commandBuffer: VkCommandBuffer, pRaygenShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, pMissShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, pHitShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, pCallableShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, indirectDeviceAddress: VkDeviceAddress) -> (),PFN_vkCmdTraceRaysIndirectKHR,c"vkCmdTraceRaysIndirectKHR";
+    CmdTraceRaysKHR(commandBuffer: VkCommandBuffer, pRaygenShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, pMissShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, pHitShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, pCallableShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, width: u32, height: u32, depth: u32) -> (),PFN_vkCmdTraceRaysKHR,c"vkCmdTraceRaysKHR";
+    CmdTraceRaysNV(commandBuffer: VkCommandBuffer, raygenShaderBindingTableBuffer: VkBuffer, raygenShaderBindingOffset: VkDeviceSize, missShaderBindingTableBuffer: VkBuffer, missShaderBindingOffset: VkDeviceSize, missShaderBindingStride: VkDeviceSize, hitShaderBindingTableBuffer: VkBuffer, hitShaderBindingOffset: VkDeviceSize, hitShaderBindingStride: VkDeviceSize, callableShaderBindingTableBuffer: VkBuffer, callableShaderBindingOffset: VkDeviceSize, callableShaderBindingStride: VkDeviceSize, width: u32, height: u32, depth: u32) -> (),PFN_vkCmdTraceRaysNV,c"vkCmdTraceRaysNV";
+    CmdUpdateBuffer(commandBuffer: VkCommandBuffer, dstBuffer: VkBuffer, dstOffset: VkDeviceSize, dataSize: VkDeviceSize, pData: *const c_void) -> (),PFN_vkCmdUpdateBuffer,c"vkCmdUpdateBuffer";
+    CmdUpdateMemoryKHR(commandBuffer: VkCommandBuffer, pDstRange: *const VkDeviceAddressRangeKHR, dstFlags: VkAddressCommandFlagsKHR, dataSize: VkDeviceSize, pData: *const c_void) -> (),PFN_vkCmdUpdateMemoryKHR,c"vkCmdUpdateMemoryKHR";
+    CmdUpdatePipelineIndirectBufferNV(commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, pipeline: VkPipeline) -> (),PFN_vkCmdUpdatePipelineIndirectBufferNV,c"vkCmdUpdatePipelineIndirectBufferNV";
+    CmdWaitEvents(commandBuffer: VkCommandBuffer, eventCount: u32, pEvents: *const VkEvent, srcStageMask: VkPipelineStageFlags, dstStageMask: VkPipelineStageFlags, memoryBarrierCount: u32, pMemoryBarriers: *const VkMemoryBarrier, bufferMemoryBarrierCount: u32, pBufferMemoryBarriers: *const VkBufferMemoryBarrier, imageMemoryBarrierCount: u32, pImageMemoryBarriers: *const VkImageMemoryBarrier) -> (),PFN_vkCmdWaitEvents,c"vkCmdWaitEvents";
+    CmdWaitEvents2(commandBuffer: VkCommandBuffer, eventCount: u32, pEvents: *const VkEvent, pDependencyInfos: *const VkDependencyInfo) -> (),PFN_vkCmdWaitEvents2,c"vkCmdWaitEvents2";
+    CmdWaitEvents2KHR(commandBuffer: VkCommandBuffer, eventCount: u32, pEvents: *const VkEvent, pDependencyInfos: *const VkDependencyInfo) -> (),PFN_vkCmdWaitEvents2KHR,c"vkCmdWaitEvents2KHR";
+    CmdWriteAccelerationStructuresPropertiesKHR(commandBuffer: VkCommandBuffer, accelerationStructureCount: u32, pAccelerationStructures: *const VkAccelerationStructureKHR, queryType: VkQueryType, queryPool: VkQueryPool, firstQuery: u32) -> (),PFN_vkCmdWriteAccelerationStructuresPropertiesKHR,c"vkCmdWriteAccelerationStructuresPropertiesKHR";
+    CmdWriteAccelerationStructuresPropertiesNV(commandBuffer: VkCommandBuffer, accelerationStructureCount: u32, pAccelerationStructures: *const VkAccelerationStructureNV, queryType: VkQueryType, queryPool: VkQueryPool, firstQuery: u32) -> (),PFN_vkCmdWriteAccelerationStructuresPropertiesNV,c"vkCmdWriteAccelerationStructuresPropertiesNV";
+    CmdWriteBufferMarker2AMD(commandBuffer: VkCommandBuffer, stage: VkPipelineStageFlags2, dstBuffer: VkBuffer, dstOffset: VkDeviceSize, marker: u32) -> (),PFN_vkCmdWriteBufferMarker2AMD,c"vkCmdWriteBufferMarker2AMD";
+    CmdWriteBufferMarkerAMD(commandBuffer: VkCommandBuffer, pipelineStage: VkPipelineStageFlagBits, dstBuffer: VkBuffer, dstOffset: VkDeviceSize, marker: u32) -> (),PFN_vkCmdWriteBufferMarkerAMD,c"vkCmdWriteBufferMarkerAMD";
+    CmdWriteMarkerToMemoryAMD(commandBuffer: VkCommandBuffer, pInfo: *const VkMemoryMarkerInfoAMD) -> (),PFN_vkCmdWriteMarkerToMemoryAMD,c"vkCmdWriteMarkerToMemoryAMD";
+    CmdWriteMicromapsPropertiesEXT(commandBuffer: VkCommandBuffer, micromapCount: u32, pMicromaps: *const VkMicromapEXT, queryType: VkQueryType, queryPool: VkQueryPool, firstQuery: u32) -> (),PFN_vkCmdWriteMicromapsPropertiesEXT,c"vkCmdWriteMicromapsPropertiesEXT";
+    CmdWriteTimestamp(commandBuffer: VkCommandBuffer, pipelineStage: VkPipelineStageFlagBits, queryPool: VkQueryPool, query: u32) -> (),PFN_vkCmdWriteTimestamp,c"vkCmdWriteTimestamp";
+    CmdWriteTimestamp2(commandBuffer: VkCommandBuffer, stage: VkPipelineStageFlags2, queryPool: VkQueryPool, query: u32) -> (),PFN_vkCmdWriteTimestamp2,c"vkCmdWriteTimestamp2";
+    CmdWriteTimestamp2KHR(commandBuffer: VkCommandBuffer, stage: VkPipelineStageFlags2, queryPool: VkQueryPool, query: u32) -> (),PFN_vkCmdWriteTimestamp2KHR,c"vkCmdWriteTimestamp2KHR";
+    CompileDeferredNV(device: VkDevice, pipeline: VkPipeline, shader: u32) -> VkResult,PFN_vkCompileDeferredNV,c"vkCompileDeferredNV";
+    ConvertCooperativeVectorMatrixNV(device: VkDevice, pInfo: *const VkConvertCooperativeVectorMatrixInfoNV) -> VkResult,PFN_vkConvertCooperativeVectorMatrixNV,c"vkConvertCooperativeVectorMatrixNV";
+    CopyAccelerationStructureKHR(device: VkDevice, deferredOperation: VkDeferredOperationKHR, pInfo: *const VkCopyAccelerationStructureInfoKHR) -> VkResult,PFN_vkCopyAccelerationStructureKHR,c"vkCopyAccelerationStructureKHR";
+    CopyAccelerationStructureToMemoryKHR(device: VkDevice, deferredOperation: VkDeferredOperationKHR, pInfo: *const VkCopyAccelerationStructureToMemoryInfoKHR) -> VkResult,PFN_vkCopyAccelerationStructureToMemoryKHR,c"vkCopyAccelerationStructureToMemoryKHR";
+    CopyImageToImage(device: VkDevice, pCopyImageToImageInfo: *const VkCopyImageToImageInfo) -> VkResult,PFN_vkCopyImageToImage,c"vkCopyImageToImage";
+    CopyImageToImageEXT(device: VkDevice, pCopyImageToImageInfo: *const VkCopyImageToImageInfo) -> VkResult,PFN_vkCopyImageToImageEXT,c"vkCopyImageToImageEXT";
+    CopyImageToMemory(device: VkDevice, pCopyImageToMemoryInfo: *const VkCopyImageToMemoryInfo) -> VkResult,PFN_vkCopyImageToMemory,c"vkCopyImageToMemory";
+    CopyImageToMemoryEXT(device: VkDevice, pCopyImageToMemoryInfo: *const VkCopyImageToMemoryInfo) -> VkResult,PFN_vkCopyImageToMemoryEXT,c"vkCopyImageToMemoryEXT";
+    CopyMemoryToAccelerationStructureKHR(device: VkDevice, deferredOperation: VkDeferredOperationKHR, pInfo: *const VkCopyMemoryToAccelerationStructureInfoKHR) -> VkResult,PFN_vkCopyMemoryToAccelerationStructureKHR,c"vkCopyMemoryToAccelerationStructureKHR";
+    CopyMemoryToImage(device: VkDevice, pCopyMemoryToImageInfo: *const VkCopyMemoryToImageInfo) -> VkResult,PFN_vkCopyMemoryToImage,c"vkCopyMemoryToImage";
+    CopyMemoryToImageEXT(device: VkDevice, pCopyMemoryToImageInfo: *const VkCopyMemoryToImageInfo) -> VkResult,PFN_vkCopyMemoryToImageEXT,c"vkCopyMemoryToImageEXT";
+    CopyMemoryToMicromapEXT(device: VkDevice, deferredOperation: VkDeferredOperationKHR, pInfo: *const VkCopyMemoryToMicromapInfoEXT) -> VkResult,PFN_vkCopyMemoryToMicromapEXT,c"vkCopyMemoryToMicromapEXT";
+    CopyMicromapEXT(device: VkDevice, deferredOperation: VkDeferredOperationKHR, pInfo: *const VkCopyMicromapInfoEXT) -> VkResult,PFN_vkCopyMicromapEXT,c"vkCopyMicromapEXT";
+    CopyMicromapToMemoryEXT(device: VkDevice, deferredOperation: VkDeferredOperationKHR, pInfo: *const VkCopyMicromapToMemoryInfoEXT) -> VkResult,PFN_vkCopyMicromapToMemoryEXT,c"vkCopyMicromapToMemoryEXT";
+    CreateAccelerationStructure2KHR(device: VkDevice, pCreateInfo: *const VkAccelerationStructureCreateInfo2KHR, pAllocator: *const VkAllocationCallbacks, pAccelerationStructure: *mut VkAccelerationStructureKHR) -> VkResult,PFN_vkCreateAccelerationStructure2KHR,c"vkCreateAccelerationStructure2KHR";
+    CreateAccelerationStructureKHR(device: VkDevice, pCreateInfo: *const VkAccelerationStructureCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pAccelerationStructure: *mut VkAccelerationStructureKHR) -> VkResult,PFN_vkCreateAccelerationStructureKHR,c"vkCreateAccelerationStructureKHR";
+    CreateAccelerationStructureNV(device: VkDevice, pCreateInfo: *const VkAccelerationStructureCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pAccelerationStructure: *mut VkAccelerationStructureNV) -> VkResult,PFN_vkCreateAccelerationStructureNV,c"vkCreateAccelerationStructureNV";
+    CreateBuffer(device: VkDevice, pCreateInfo: *const VkBufferCreateInfo, pAllocator: *const VkAllocationCallbacks, pBuffer: *mut VkBuffer) -> VkResult,PFN_vkCreateBuffer,c"vkCreateBuffer";
+    CreateBufferCollectionFUCHSIA(device: VkDevice, pCreateInfo: *const VkBufferCollectionCreateInfoFUCHSIA, pAllocator: *const VkAllocationCallbacks, pCollection: *mut VkBufferCollectionFUCHSIA) -> VkResult,PFN_vkCreateBufferCollectionFUCHSIA,c"vkCreateBufferCollectionFUCHSIA";
+    CreateBufferView(device: VkDevice, pCreateInfo: *const VkBufferViewCreateInfo, pAllocator: *const VkAllocationCallbacks, pView: *mut VkBufferView) -> VkResult,PFN_vkCreateBufferView,c"vkCreateBufferView";
+    CreateCommandPool(device: VkDevice, pCreateInfo: *const VkCommandPoolCreateInfo, pAllocator: *const VkAllocationCallbacks, pCommandPool: *mut VkCommandPool) -> VkResult,PFN_vkCreateCommandPool,c"vkCreateCommandPool";
+    CreateComputePipelines(device: VkDevice, pipelineCache: VkPipelineCache, createInfoCount: u32, pCreateInfos: *const VkComputePipelineCreateInfo, pAllocator: *const VkAllocationCallbacks, pPipelines: *mut VkPipeline) -> VkResult,PFN_vkCreateComputePipelines,c"vkCreateComputePipelines";
+    CreateCuFunctionNVX(device: VkDevice, pCreateInfo: *const VkCuFunctionCreateInfoNVX, pAllocator: *const VkAllocationCallbacks, pFunction: *mut VkCuFunctionNVX) -> VkResult,PFN_vkCreateCuFunctionNVX,c"vkCreateCuFunctionNVX";
+    CreateCuModuleNVX(device: VkDevice, pCreateInfo: *const VkCuModuleCreateInfoNVX, pAllocator: *const VkAllocationCallbacks, pModule: *mut VkCuModuleNVX) -> VkResult,PFN_vkCreateCuModuleNVX,c"vkCreateCuModuleNVX";
+    CreateCudaFunctionNV(device: VkDevice, pCreateInfo: *const VkCudaFunctionCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pFunction: *mut VkCudaFunctionNV) -> VkResult,PFN_vkCreateCudaFunctionNV,c"vkCreateCudaFunctionNV";
+    CreateCudaModuleNV(device: VkDevice, pCreateInfo: *const VkCudaModuleCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pModule: *mut VkCudaModuleNV) -> VkResult,PFN_vkCreateCudaModuleNV,c"vkCreateCudaModuleNV";
+    CreateDataGraphPipelineSessionARM(device: VkDevice, pCreateInfo: *const VkDataGraphPipelineSessionCreateInfoARM, pAllocator: *const VkAllocationCallbacks, pSession: *mut VkDataGraphPipelineSessionARM) -> VkResult,PFN_vkCreateDataGraphPipelineSessionARM,c"vkCreateDataGraphPipelineSessionARM";
+    CreateDataGraphPipelinesARM(device: VkDevice, deferredOperation: VkDeferredOperationKHR, pipelineCache: VkPipelineCache, createInfoCount: u32, pCreateInfos: *const VkDataGraphPipelineCreateInfoARM, pAllocator: *const VkAllocationCallbacks, pPipelines: *mut VkPipeline) -> VkResult,PFN_vkCreateDataGraphPipelinesARM,c"vkCreateDataGraphPipelinesARM";
+    CreateDeferredOperationKHR(device: VkDevice, pAllocator: *const VkAllocationCallbacks, pDeferredOperation: *mut VkDeferredOperationKHR) -> VkResult,PFN_vkCreateDeferredOperationKHR,c"vkCreateDeferredOperationKHR";
+    CreateDescriptorPool(device: VkDevice, pCreateInfo: *const VkDescriptorPoolCreateInfo, pAllocator: *const VkAllocationCallbacks, pDescriptorPool: *mut VkDescriptorPool) -> VkResult,PFN_vkCreateDescriptorPool,c"vkCreateDescriptorPool";
+    CreateDescriptorSetLayout(device: VkDevice, pCreateInfo: *const VkDescriptorSetLayoutCreateInfo, pAllocator: *const VkAllocationCallbacks, pSetLayout: *mut VkDescriptorSetLayout) -> VkResult,PFN_vkCreateDescriptorSetLayout,c"vkCreateDescriptorSetLayout";
+    CreateDescriptorUpdateTemplate(device: VkDevice, pCreateInfo: *const VkDescriptorUpdateTemplateCreateInfo, pAllocator: *const VkAllocationCallbacks, pDescriptorUpdateTemplate: *mut VkDescriptorUpdateTemplate) -> VkResult,PFN_vkCreateDescriptorUpdateTemplate,c"vkCreateDescriptorUpdateTemplate";
+    CreateDescriptorUpdateTemplateKHR(device: VkDevice, pCreateInfo: *const VkDescriptorUpdateTemplateCreateInfo, pAllocator: *const VkAllocationCallbacks, pDescriptorUpdateTemplate: *mut VkDescriptorUpdateTemplate) -> VkResult,PFN_vkCreateDescriptorUpdateTemplateKHR,c"vkCreateDescriptorUpdateTemplateKHR";
+    CreateEvent(device: VkDevice, pCreateInfo: *const VkEventCreateInfo, pAllocator: *const VkAllocationCallbacks, pEvent: *mut VkEvent) -> VkResult,PFN_vkCreateEvent,c"vkCreateEvent";
+    CreateExecutionGraphPipelinesAMDX(device: VkDevice, pipelineCache: VkPipelineCache, createInfoCount: u32, pCreateInfos: *const VkExecutionGraphPipelineCreateInfoAMDX, pAllocator: *const VkAllocationCallbacks, pPipelines: *mut VkPipeline) -> VkResult,PFN_vkCreateExecutionGraphPipelinesAMDX,c"vkCreateExecutionGraphPipelinesAMDX";
+    CreateExternalComputeQueueNV(device: VkDevice, pCreateInfo: *const VkExternalComputeQueueCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pExternalQueue: *mut VkExternalComputeQueueNV) -> VkResult,PFN_vkCreateExternalComputeQueueNV,c"vkCreateExternalComputeQueueNV";
+    CreateFence(device: VkDevice, pCreateInfo: *const VkFenceCreateInfo, pAllocator: *const VkAllocationCallbacks, pFence: *mut VkFence) -> VkResult,PFN_vkCreateFence,c"vkCreateFence";
+    CreateFramebuffer(device: VkDevice, pCreateInfo: *const VkFramebufferCreateInfo, pAllocator: *const VkAllocationCallbacks, pFramebuffer: *mut VkFramebuffer) -> VkResult,PFN_vkCreateFramebuffer,c"vkCreateFramebuffer";
+    CreateGpaSessionAMD(device: VkDevice, pCreateInfo: *const VkGpaSessionCreateInfoAMD, pAllocator: *const VkAllocationCallbacks, pGpaSession: *mut VkGpaSessionAMD) -> VkResult,PFN_vkCreateGpaSessionAMD,c"vkCreateGpaSessionAMD";
+    CreateGraphicsPipelines(device: VkDevice, pipelineCache: VkPipelineCache, createInfoCount: u32, pCreateInfos: *const VkGraphicsPipelineCreateInfo, pAllocator: *const VkAllocationCallbacks, pPipelines: *mut VkPipeline) -> VkResult,PFN_vkCreateGraphicsPipelines,c"vkCreateGraphicsPipelines";
+    CreateImage(device: VkDevice, pCreateInfo: *const VkImageCreateInfo, pAllocator: *const VkAllocationCallbacks, pImage: *mut VkImage) -> VkResult,PFN_vkCreateImage,c"vkCreateImage";
+    CreateImageView(device: VkDevice, pCreateInfo: *const VkImageViewCreateInfo, pAllocator: *const VkAllocationCallbacks, pView: *mut VkImageView) -> VkResult,PFN_vkCreateImageView,c"vkCreateImageView";
+    CreateIndirectCommandsLayoutEXT(device: VkDevice, pCreateInfo: *const VkIndirectCommandsLayoutCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pIndirectCommandsLayout: *mut VkIndirectCommandsLayoutEXT) -> VkResult,PFN_vkCreateIndirectCommandsLayoutEXT,c"vkCreateIndirectCommandsLayoutEXT";
+    CreateIndirectCommandsLayoutNV(device: VkDevice, pCreateInfo: *const VkIndirectCommandsLayoutCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pIndirectCommandsLayout: *mut VkIndirectCommandsLayoutNV) -> VkResult,PFN_vkCreateIndirectCommandsLayoutNV,c"vkCreateIndirectCommandsLayoutNV";
+    CreateIndirectExecutionSetEXT(device: VkDevice, pCreateInfo: *const VkIndirectExecutionSetCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pIndirectExecutionSet: *mut VkIndirectExecutionSetEXT) -> VkResult,PFN_vkCreateIndirectExecutionSetEXT,c"vkCreateIndirectExecutionSetEXT";
+    CreateMicromapEXT(device: VkDevice, pCreateInfo: *const VkMicromapCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pMicromap: *mut VkMicromapEXT) -> VkResult,PFN_vkCreateMicromapEXT,c"vkCreateMicromapEXT";
+    CreateOpticalFlowSessionNV(device: VkDevice, pCreateInfo: *const VkOpticalFlowSessionCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pSession: *mut VkOpticalFlowSessionNV) -> VkResult,PFN_vkCreateOpticalFlowSessionNV,c"vkCreateOpticalFlowSessionNV";
+    CreatePipelineBinariesKHR(device: VkDevice, pCreateInfo: *const VkPipelineBinaryCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pBinaries: *mut VkPipelineBinaryHandlesInfoKHR) -> VkResult,PFN_vkCreatePipelineBinariesKHR,c"vkCreatePipelineBinariesKHR";
+    CreatePipelineCache(device: VkDevice, pCreateInfo: *const VkPipelineCacheCreateInfo, pAllocator: *const VkAllocationCallbacks, pPipelineCache: *mut VkPipelineCache) -> VkResult,PFN_vkCreatePipelineCache,c"vkCreatePipelineCache";
+    CreatePipelineLayout(device: VkDevice, pCreateInfo: *const VkPipelineLayoutCreateInfo, pAllocator: *const VkAllocationCallbacks, pPipelineLayout: *mut VkPipelineLayout) -> VkResult,PFN_vkCreatePipelineLayout,c"vkCreatePipelineLayout";
+    CreatePrivateDataSlot(device: VkDevice, pCreateInfo: *const VkPrivateDataSlotCreateInfo, pAllocator: *const VkAllocationCallbacks, pPrivateDataSlot: *mut VkPrivateDataSlot) -> VkResult,PFN_vkCreatePrivateDataSlot,c"vkCreatePrivateDataSlot";
+    CreatePrivateDataSlotEXT(device: VkDevice, pCreateInfo: *const VkPrivateDataSlotCreateInfo, pAllocator: *const VkAllocationCallbacks, pPrivateDataSlot: *mut VkPrivateDataSlot) -> VkResult,PFN_vkCreatePrivateDataSlotEXT,c"vkCreatePrivateDataSlotEXT";
+    CreateQueryPool(device: VkDevice, pCreateInfo: *const VkQueryPoolCreateInfo, pAllocator: *const VkAllocationCallbacks, pQueryPool: *mut VkQueryPool) -> VkResult,PFN_vkCreateQueryPool,c"vkCreateQueryPool";
+    CreateRayTracingPipelinesKHR(device: VkDevice, deferredOperation: VkDeferredOperationKHR, pipelineCache: VkPipelineCache, createInfoCount: u32, pCreateInfos: *const VkRayTracingPipelineCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pPipelines: *mut VkPipeline) -> VkResult,PFN_vkCreateRayTracingPipelinesKHR,c"vkCreateRayTracingPipelinesKHR";
+    CreateRayTracingPipelinesNV(device: VkDevice, pipelineCache: VkPipelineCache, createInfoCount: u32, pCreateInfos: *const VkRayTracingPipelineCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pPipelines: *mut VkPipeline) -> VkResult,PFN_vkCreateRayTracingPipelinesNV,c"vkCreateRayTracingPipelinesNV";
+    CreateRenderPass(device: VkDevice, pCreateInfo: *const VkRenderPassCreateInfo, pAllocator: *const VkAllocationCallbacks, pRenderPass: *mut VkRenderPass) -> VkResult,PFN_vkCreateRenderPass,c"vkCreateRenderPass";
+    CreateRenderPass2(device: VkDevice, pCreateInfo: *const VkRenderPassCreateInfo2, pAllocator: *const VkAllocationCallbacks, pRenderPass: *mut VkRenderPass) -> VkResult,PFN_vkCreateRenderPass2,c"vkCreateRenderPass2";
+    CreateRenderPass2KHR(device: VkDevice, pCreateInfo: *const VkRenderPassCreateInfo2, pAllocator: *const VkAllocationCallbacks, pRenderPass: *mut VkRenderPass) -> VkResult,PFN_vkCreateRenderPass2KHR,c"vkCreateRenderPass2KHR";
+    CreateSampler(device: VkDevice, pCreateInfo: *const VkSamplerCreateInfo, pAllocator: *const VkAllocationCallbacks, pSampler: *mut VkSampler) -> VkResult,PFN_vkCreateSampler,c"vkCreateSampler";
+    CreateSamplerYcbcrConversion(device: VkDevice, pCreateInfo: *const VkSamplerYcbcrConversionCreateInfo, pAllocator: *const VkAllocationCallbacks, pYcbcrConversion: *mut VkSamplerYcbcrConversion) -> VkResult,PFN_vkCreateSamplerYcbcrConversion,c"vkCreateSamplerYcbcrConversion";
+    CreateSamplerYcbcrConversionKHR(device: VkDevice, pCreateInfo: *const VkSamplerYcbcrConversionCreateInfo, pAllocator: *const VkAllocationCallbacks, pYcbcrConversion: *mut VkSamplerYcbcrConversion) -> VkResult,PFN_vkCreateSamplerYcbcrConversionKHR,c"vkCreateSamplerYcbcrConversionKHR";
+    CreateSemaphore(device: VkDevice, pCreateInfo: *const VkSemaphoreCreateInfo, pAllocator: *const VkAllocationCallbacks, pSemaphore: *mut VkSemaphore) -> VkResult,PFN_vkCreateSemaphore,c"vkCreateSemaphore";
+    CreateShaderInstrumentationARM(device: VkDevice, pCreateInfo: *const VkShaderInstrumentationCreateInfoARM, pAllocator: *const VkAllocationCallbacks, pInstrumentation: *mut VkShaderInstrumentationARM) -> VkResult,PFN_vkCreateShaderInstrumentationARM,c"vkCreateShaderInstrumentationARM";
+    CreateShaderModule(device: VkDevice, pCreateInfo: *const VkShaderModuleCreateInfo, pAllocator: *const VkAllocationCallbacks, pShaderModule: *mut VkShaderModule) -> VkResult,PFN_vkCreateShaderModule,c"vkCreateShaderModule";
+    CreateShadersEXT(device: VkDevice, createInfoCount: u32, pCreateInfos: *const VkShaderCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pShaders: *mut VkShaderEXT) -> VkResult,PFN_vkCreateShadersEXT,c"vkCreateShadersEXT";
+    CreateSharedSwapchainsKHR(device: VkDevice, swapchainCount: u32, pCreateInfos: *const VkSwapchainCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSwapchains: *mut VkSwapchainKHR) -> VkResult,PFN_vkCreateSharedSwapchainsKHR,c"vkCreateSharedSwapchainsKHR";
+    CreateSwapchainKHR(device: VkDevice, pCreateInfo: *const VkSwapchainCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSwapchain: *mut VkSwapchainKHR) -> VkResult,PFN_vkCreateSwapchainKHR,c"vkCreateSwapchainKHR";
+    CreateTensorARM(device: VkDevice, pCreateInfo: *const VkTensorCreateInfoARM, pAllocator: *const VkAllocationCallbacks, pTensor: *mut VkTensorARM) -> VkResult,PFN_vkCreateTensorARM,c"vkCreateTensorARM";
+    CreateTensorViewARM(device: VkDevice, pCreateInfo: *const VkTensorViewCreateInfoARM, pAllocator: *const VkAllocationCallbacks, pView: *mut VkTensorViewARM) -> VkResult,PFN_vkCreateTensorViewARM,c"vkCreateTensorViewARM";
+    CreateValidationCacheEXT(device: VkDevice, pCreateInfo: *const VkValidationCacheCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pValidationCache: *mut VkValidationCacheEXT) -> VkResult,PFN_vkCreateValidationCacheEXT,c"vkCreateValidationCacheEXT";
+    CreateVideoSessionKHR(device: VkDevice, pCreateInfo: *const VkVideoSessionCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pVideoSession: *mut VkVideoSessionKHR) -> VkResult,PFN_vkCreateVideoSessionKHR,c"vkCreateVideoSessionKHR";
+    CreateVideoSessionParametersKHR(device: VkDevice, pCreateInfo: *const VkVideoSessionParametersCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pVideoSessionParameters: *mut VkVideoSessionParametersKHR) -> VkResult,PFN_vkCreateVideoSessionParametersKHR,c"vkCreateVideoSessionParametersKHR";
+    DebugMarkerSetObjectNameEXT(device: VkDevice, pNameInfo: *const VkDebugMarkerObjectNameInfoEXT) -> VkResult,PFN_vkDebugMarkerSetObjectNameEXT,c"vkDebugMarkerSetObjectNameEXT";
+    DebugMarkerSetObjectTagEXT(device: VkDevice, pTagInfo: *const VkDebugMarkerObjectTagInfoEXT) -> VkResult,PFN_vkDebugMarkerSetObjectTagEXT,c"vkDebugMarkerSetObjectTagEXT";
+    DeferredOperationJoinKHR(device: VkDevice, operation: VkDeferredOperationKHR) -> VkResult,PFN_vkDeferredOperationJoinKHR,c"vkDeferredOperationJoinKHR";
+    DestroyAccelerationStructureKHR(device: VkDevice, accelerationStructure: VkAccelerationStructureKHR, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyAccelerationStructureKHR,c"vkDestroyAccelerationStructureKHR";
+    DestroyAccelerationStructureNV(device: VkDevice, accelerationStructure: VkAccelerationStructureNV, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyAccelerationStructureNV,c"vkDestroyAccelerationStructureNV";
+    DestroyBuffer(device: VkDevice, buffer: VkBuffer, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyBuffer,c"vkDestroyBuffer";
+    DestroyBufferCollectionFUCHSIA(device: VkDevice, collection: VkBufferCollectionFUCHSIA, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyBufferCollectionFUCHSIA,c"vkDestroyBufferCollectionFUCHSIA";
+    DestroyBufferView(device: VkDevice, bufferView: VkBufferView, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyBufferView,c"vkDestroyBufferView";
+    DestroyCommandPool(device: VkDevice, commandPool: VkCommandPool, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyCommandPool,c"vkDestroyCommandPool";
+    DestroyCuFunctionNVX(device: VkDevice, function: VkCuFunctionNVX, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyCuFunctionNVX,c"vkDestroyCuFunctionNVX";
+    DestroyCuModuleNVX(device: VkDevice, module: VkCuModuleNVX, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyCuModuleNVX,c"vkDestroyCuModuleNVX";
+    DestroyCudaFunctionNV(device: VkDevice, function: VkCudaFunctionNV, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyCudaFunctionNV,c"vkDestroyCudaFunctionNV";
+    DestroyCudaModuleNV(device: VkDevice, module: VkCudaModuleNV, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyCudaModuleNV,c"vkDestroyCudaModuleNV";
+    DestroyDataGraphPipelineSessionARM(device: VkDevice, session: VkDataGraphPipelineSessionARM, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyDataGraphPipelineSessionARM,c"vkDestroyDataGraphPipelineSessionARM";
+    DestroyDeferredOperationKHR(device: VkDevice, operation: VkDeferredOperationKHR, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyDeferredOperationKHR,c"vkDestroyDeferredOperationKHR";
+    DestroyDescriptorPool(device: VkDevice, descriptorPool: VkDescriptorPool, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyDescriptorPool,c"vkDestroyDescriptorPool";
+    DestroyDescriptorSetLayout(device: VkDevice, descriptorSetLayout: VkDescriptorSetLayout, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyDescriptorSetLayout,c"vkDestroyDescriptorSetLayout";
+    DestroyDescriptorUpdateTemplate(device: VkDevice, descriptorUpdateTemplate: VkDescriptorUpdateTemplate, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyDescriptorUpdateTemplate,c"vkDestroyDescriptorUpdateTemplate";
+    DestroyDescriptorUpdateTemplateKHR(device: VkDevice, descriptorUpdateTemplate: VkDescriptorUpdateTemplate, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyDescriptorUpdateTemplateKHR,c"vkDestroyDescriptorUpdateTemplateKHR";
+    DestroyDevice(device: VkDevice, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyDevice,c"vkDestroyDevice";
+    DestroyEvent(device: VkDevice, event: VkEvent, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyEvent,c"vkDestroyEvent";
+    DestroyExternalComputeQueueNV(device: VkDevice, externalQueue: VkExternalComputeQueueNV, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyExternalComputeQueueNV,c"vkDestroyExternalComputeQueueNV";
+    DestroyFence(device: VkDevice, fence: VkFence, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyFence,c"vkDestroyFence";
+    DestroyFramebuffer(device: VkDevice, framebuffer: VkFramebuffer, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyFramebuffer,c"vkDestroyFramebuffer";
+    DestroyGpaSessionAMD(device: VkDevice, gpaSession: VkGpaSessionAMD, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyGpaSessionAMD,c"vkDestroyGpaSessionAMD";
+    DestroyImage(device: VkDevice, image: VkImage, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyImage,c"vkDestroyImage";
+    DestroyImageView(device: VkDevice, imageView: VkImageView, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyImageView,c"vkDestroyImageView";
+    DestroyIndirectCommandsLayoutEXT(device: VkDevice, indirectCommandsLayout: VkIndirectCommandsLayoutEXT, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyIndirectCommandsLayoutEXT,c"vkDestroyIndirectCommandsLayoutEXT";
+    DestroyIndirectCommandsLayoutNV(device: VkDevice, indirectCommandsLayout: VkIndirectCommandsLayoutNV, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyIndirectCommandsLayoutNV,c"vkDestroyIndirectCommandsLayoutNV";
+    DestroyIndirectExecutionSetEXT(device: VkDevice, indirectExecutionSet: VkIndirectExecutionSetEXT, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyIndirectExecutionSetEXT,c"vkDestroyIndirectExecutionSetEXT";
+    DestroyMicromapEXT(device: VkDevice, micromap: VkMicromapEXT, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyMicromapEXT,c"vkDestroyMicromapEXT";
+    DestroyOpticalFlowSessionNV(device: VkDevice, session: VkOpticalFlowSessionNV, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyOpticalFlowSessionNV,c"vkDestroyOpticalFlowSessionNV";
+    DestroyPipeline(device: VkDevice, pipeline: VkPipeline, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyPipeline,c"vkDestroyPipeline";
+    DestroyPipelineBinaryKHR(device: VkDevice, pipelineBinary: VkPipelineBinaryKHR, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyPipelineBinaryKHR,c"vkDestroyPipelineBinaryKHR";
+    DestroyPipelineCache(device: VkDevice, pipelineCache: VkPipelineCache, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyPipelineCache,c"vkDestroyPipelineCache";
+    DestroyPipelineLayout(device: VkDevice, pipelineLayout: VkPipelineLayout, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyPipelineLayout,c"vkDestroyPipelineLayout";
+    DestroyPrivateDataSlot(device: VkDevice, privateDataSlot: VkPrivateDataSlot, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyPrivateDataSlot,c"vkDestroyPrivateDataSlot";
+    DestroyPrivateDataSlotEXT(device: VkDevice, privateDataSlot: VkPrivateDataSlot, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyPrivateDataSlotEXT,c"vkDestroyPrivateDataSlotEXT";
+    DestroyQueryPool(device: VkDevice, queryPool: VkQueryPool, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyQueryPool,c"vkDestroyQueryPool";
+    DestroyRenderPass(device: VkDevice, renderPass: VkRenderPass, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyRenderPass,c"vkDestroyRenderPass";
+    DestroySampler(device: VkDevice, sampler: VkSampler, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroySampler,c"vkDestroySampler";
+    DestroySamplerYcbcrConversion(device: VkDevice, ycbcrConversion: VkSamplerYcbcrConversion, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroySamplerYcbcrConversion,c"vkDestroySamplerYcbcrConversion";
+    DestroySamplerYcbcrConversionKHR(device: VkDevice, ycbcrConversion: VkSamplerYcbcrConversion, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroySamplerYcbcrConversionKHR,c"vkDestroySamplerYcbcrConversionKHR";
+    DestroySemaphore(device: VkDevice, semaphore: VkSemaphore, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroySemaphore,c"vkDestroySemaphore";
+    DestroyShaderEXT(device: VkDevice, shader: VkShaderEXT, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyShaderEXT,c"vkDestroyShaderEXT";
+    DestroyShaderInstrumentationARM(device: VkDevice, instrumentation: VkShaderInstrumentationARM, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyShaderInstrumentationARM,c"vkDestroyShaderInstrumentationARM";
+    DestroyShaderModule(device: VkDevice, shaderModule: VkShaderModule, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyShaderModule,c"vkDestroyShaderModule";
+    DestroySwapchainKHR(device: VkDevice, swapchain: VkSwapchainKHR, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroySwapchainKHR,c"vkDestroySwapchainKHR";
+    DestroyTensorARM(device: VkDevice, tensor: VkTensorARM, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyTensorARM,c"vkDestroyTensorARM";
+    DestroyTensorViewARM(device: VkDevice, tensorView: VkTensorViewARM, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyTensorViewARM,c"vkDestroyTensorViewARM";
+    DestroyValidationCacheEXT(device: VkDevice, validationCache: VkValidationCacheEXT, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyValidationCacheEXT,c"vkDestroyValidationCacheEXT";
+    DestroyVideoSessionKHR(device: VkDevice, videoSession: VkVideoSessionKHR, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyVideoSessionKHR,c"vkDestroyVideoSessionKHR";
+    DestroyVideoSessionParametersKHR(device: VkDevice, videoSessionParameters: VkVideoSessionParametersKHR, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkDestroyVideoSessionParametersKHR,c"vkDestroyVideoSessionParametersKHR";
+    DeviceWaitIdle(device: VkDevice) -> VkResult,PFN_vkDeviceWaitIdle,c"vkDeviceWaitIdle";
+    DisplayPowerControlEXT(device: VkDevice, display: VkDisplayKHR, pDisplayPowerInfo: *const VkDisplayPowerInfoEXT) -> VkResult,PFN_vkDisplayPowerControlEXT,c"vkDisplayPowerControlEXT";
+    EndCommandBuffer(commandBuffer: VkCommandBuffer) -> VkResult,PFN_vkEndCommandBuffer,c"vkEndCommandBuffer";
+    ExportMetalObjectsEXT(device: VkDevice, pMetalObjectsInfo: *mut VkExportMetalObjectsInfoEXT) -> (),PFN_vkExportMetalObjectsEXT,c"vkExportMetalObjectsEXT";
+    FlushMappedMemoryRanges(device: VkDevice, memoryRangeCount: u32, pMemoryRanges: *const VkMappedMemoryRange) -> VkResult,PFN_vkFlushMappedMemoryRanges,c"vkFlushMappedMemoryRanges";
+    FreeCommandBuffers(device: VkDevice, commandPool: VkCommandPool, commandBufferCount: u32, pCommandBuffers: *const VkCommandBuffer) -> (),PFN_vkFreeCommandBuffers,c"vkFreeCommandBuffers";
+    FreeDescriptorSets(device: VkDevice, descriptorPool: VkDescriptorPool, descriptorSetCount: u32, pDescriptorSets: *const VkDescriptorSet) -> VkResult,PFN_vkFreeDescriptorSets,c"vkFreeDescriptorSets";
+    FreeMemory(device: VkDevice, memory: VkDeviceMemory, pAllocator: *const VkAllocationCallbacks) -> (),PFN_vkFreeMemory,c"vkFreeMemory";
+    GetAccelerationStructureBuildSizesKHR(device: VkDevice, buildType: VkAccelerationStructureBuildTypeKHR, pBuildInfo: *const VkAccelerationStructureBuildGeometryInfoKHR, pMaxPrimitiveCounts: *const u32, pSizeInfo: *mut VkAccelerationStructureBuildSizesInfoKHR) -> (),PFN_vkGetAccelerationStructureBuildSizesKHR,c"vkGetAccelerationStructureBuildSizesKHR";
+    GetAccelerationStructureDeviceAddressKHR(device: VkDevice, pInfo: *const VkAccelerationStructureDeviceAddressInfoKHR) -> VkDeviceAddress,PFN_vkGetAccelerationStructureDeviceAddressKHR,c"vkGetAccelerationStructureDeviceAddressKHR";
+    GetAccelerationStructureHandleNV(device: VkDevice, accelerationStructure: VkAccelerationStructureNV, dataSize: usize, pData: *mut c_void) -> VkResult,PFN_vkGetAccelerationStructureHandleNV,c"vkGetAccelerationStructureHandleNV";
+    GetAccelerationStructureMemoryRequirementsNV(device: VkDevice, pInfo: *const VkAccelerationStructureMemoryRequirementsInfoNV, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetAccelerationStructureMemoryRequirementsNV,c"vkGetAccelerationStructureMemoryRequirementsNV";
+    GetAccelerationStructureOpaqueCaptureDescriptorDataEXT(device: VkDevice, pInfo: *const VkAccelerationStructureCaptureDescriptorDataInfoEXT, pData: *mut c_void) -> VkResult,PFN_vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT,c"vkGetAccelerationStructureOpaqueCaptureDescriptorDataEXT";
+    GetAndroidHardwareBufferPropertiesANDROID(device: VkDevice, buffer: *const AHardwareBuffer, pProperties: *mut VkAndroidHardwareBufferPropertiesANDROID) -> VkResult,PFN_vkGetAndroidHardwareBufferPropertiesANDROID,c"vkGetAndroidHardwareBufferPropertiesANDROID";
+    GetBufferCollectionPropertiesFUCHSIA(device: VkDevice, collection: VkBufferCollectionFUCHSIA, pProperties: *mut VkBufferCollectionPropertiesFUCHSIA) -> VkResult,PFN_vkGetBufferCollectionPropertiesFUCHSIA,c"vkGetBufferCollectionPropertiesFUCHSIA";
+    GetBufferDeviceAddress(device: VkDevice, pInfo: *const VkBufferDeviceAddressInfo) -> VkDeviceAddress,PFN_vkGetBufferDeviceAddress,c"vkGetBufferDeviceAddress";
+    GetBufferDeviceAddressEXT(device: VkDevice, pInfo: *const VkBufferDeviceAddressInfo) -> VkDeviceAddress,PFN_vkGetBufferDeviceAddressEXT,c"vkGetBufferDeviceAddressEXT";
+    GetBufferDeviceAddressKHR(device: VkDevice, pInfo: *const VkBufferDeviceAddressInfo) -> VkDeviceAddress,PFN_vkGetBufferDeviceAddressKHR,c"vkGetBufferDeviceAddressKHR";
+    GetBufferMemoryRequirements(device: VkDevice, buffer: VkBuffer, pMemoryRequirements: *mut VkMemoryRequirements) -> (),PFN_vkGetBufferMemoryRequirements,c"vkGetBufferMemoryRequirements";
+    GetBufferMemoryRequirements2(device: VkDevice, pInfo: *const VkBufferMemoryRequirementsInfo2, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetBufferMemoryRequirements2,c"vkGetBufferMemoryRequirements2";
+    GetBufferMemoryRequirements2KHR(device: VkDevice, pInfo: *const VkBufferMemoryRequirementsInfo2, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetBufferMemoryRequirements2KHR,c"vkGetBufferMemoryRequirements2KHR";
+    GetBufferOpaqueCaptureAddress(device: VkDevice, pInfo: *const VkBufferDeviceAddressInfo) -> u64,PFN_vkGetBufferOpaqueCaptureAddress,c"vkGetBufferOpaqueCaptureAddress";
+    GetBufferOpaqueCaptureAddressKHR(device: VkDevice, pInfo: *const VkBufferDeviceAddressInfo) -> u64,PFN_vkGetBufferOpaqueCaptureAddressKHR,c"vkGetBufferOpaqueCaptureAddressKHR";
+    GetBufferOpaqueCaptureDescriptorDataEXT(device: VkDevice, pInfo: *const VkBufferCaptureDescriptorDataInfoEXT, pData: *mut c_void) -> VkResult,PFN_vkGetBufferOpaqueCaptureDescriptorDataEXT,c"vkGetBufferOpaqueCaptureDescriptorDataEXT";
+    GetCalibratedTimestampsEXT(device: VkDevice, timestampCount: u32, pTimestampInfos: *const VkCalibratedTimestampInfoKHR, pTimestamps: *mut u64, pMaxDeviation: *mut u64) -> VkResult,PFN_vkGetCalibratedTimestampsEXT,c"vkGetCalibratedTimestampsEXT";
+    GetCalibratedTimestampsKHR(device: VkDevice, timestampCount: u32, pTimestampInfos: *const VkCalibratedTimestampInfoKHR, pTimestamps: *mut u64, pMaxDeviation: *mut u64) -> VkResult,PFN_vkGetCalibratedTimestampsKHR,c"vkGetCalibratedTimestampsKHR";
+    GetClusterAccelerationStructureBuildSizesNV(device: VkDevice, pInfo: *const VkClusterAccelerationStructureInputInfoNV, pSizeInfo: *mut VkAccelerationStructureBuildSizesInfoKHR) -> (),PFN_vkGetClusterAccelerationStructureBuildSizesNV,c"vkGetClusterAccelerationStructureBuildSizesNV";
+    GetCudaModuleCacheNV(device: VkDevice, module: VkCudaModuleNV, pCacheSize: *mut usize, pCacheData: *mut c_void) -> VkResult,PFN_vkGetCudaModuleCacheNV,c"vkGetCudaModuleCacheNV";
+    GetDataGraphPipelineAvailablePropertiesARM(device: VkDevice, pPipelineInfo: *const VkDataGraphPipelineInfoARM, pPropertiesCount: *mut u32, pProperties: *mut VkDataGraphPipelinePropertyARM) -> VkResult,PFN_vkGetDataGraphPipelineAvailablePropertiesARM,c"vkGetDataGraphPipelineAvailablePropertiesARM";
+    GetDataGraphPipelinePropertiesARM(device: VkDevice, pPipelineInfo: *const VkDataGraphPipelineInfoARM, propertiesCount: u32, pProperties: *mut VkDataGraphPipelinePropertyQueryResultARM) -> VkResult,PFN_vkGetDataGraphPipelinePropertiesARM,c"vkGetDataGraphPipelinePropertiesARM";
+    GetDataGraphPipelineSessionBindPointRequirementsARM(device: VkDevice, pInfo: *const VkDataGraphPipelineSessionBindPointRequirementsInfoARM, pBindPointRequirementCount: *mut u32, pBindPointRequirements: *mut VkDataGraphPipelineSessionBindPointRequirementARM) -> VkResult,PFN_vkGetDataGraphPipelineSessionBindPointRequirementsARM,c"vkGetDataGraphPipelineSessionBindPointRequirementsARM";
+    GetDataGraphPipelineSessionMemoryRequirementsARM(device: VkDevice, pInfo: *const VkDataGraphPipelineSessionMemoryRequirementsInfoARM, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetDataGraphPipelineSessionMemoryRequirementsARM,c"vkGetDataGraphPipelineSessionMemoryRequirementsARM";
+    GetDeferredOperationMaxConcurrencyKHR(device: VkDevice, operation: VkDeferredOperationKHR) -> u32,PFN_vkGetDeferredOperationMaxConcurrencyKHR,c"vkGetDeferredOperationMaxConcurrencyKHR";
+    GetDeferredOperationResultKHR(device: VkDevice, operation: VkDeferredOperationKHR) -> VkResult,PFN_vkGetDeferredOperationResultKHR,c"vkGetDeferredOperationResultKHR";
+    GetDescriptorEXT(device: VkDevice, pDescriptorInfo: *const VkDescriptorGetInfoEXT, dataSize: usize, pDescriptor: *mut c_void) -> (),PFN_vkGetDescriptorEXT,c"vkGetDescriptorEXT";
+    GetDescriptorSetHostMappingVALVE(device: VkDevice, descriptorSet: VkDescriptorSet, ppData: *mut *mut c_void) -> (),PFN_vkGetDescriptorSetHostMappingVALVE,c"vkGetDescriptorSetHostMappingVALVE";
+    GetDescriptorSetLayoutBindingOffsetEXT(device: VkDevice, layout: VkDescriptorSetLayout, binding: u32, pOffset: *mut VkDeviceSize) -> (),PFN_vkGetDescriptorSetLayoutBindingOffsetEXT,c"vkGetDescriptorSetLayoutBindingOffsetEXT";
+    GetDescriptorSetLayoutHostMappingInfoVALVE(device: VkDevice, pBindingReference: *const VkDescriptorSetBindingReferenceVALVE, pHostMapping: *mut VkDescriptorSetLayoutHostMappingInfoVALVE) -> (),PFN_vkGetDescriptorSetLayoutHostMappingInfoVALVE,c"vkGetDescriptorSetLayoutHostMappingInfoVALVE";
+    GetDescriptorSetLayoutSizeEXT(device: VkDevice, layout: VkDescriptorSetLayout, pLayoutSizeInBytes: *mut VkDeviceSize) -> (),PFN_vkGetDescriptorSetLayoutSizeEXT,c"vkGetDescriptorSetLayoutSizeEXT";
+    GetDescriptorSetLayoutSupport(device: VkDevice, pCreateInfo: *const VkDescriptorSetLayoutCreateInfo, pSupport: *mut VkDescriptorSetLayoutSupport) -> (),PFN_vkGetDescriptorSetLayoutSupport,c"vkGetDescriptorSetLayoutSupport";
+    GetDescriptorSetLayoutSupportKHR(device: VkDevice, pCreateInfo: *const VkDescriptorSetLayoutCreateInfo, pSupport: *mut VkDescriptorSetLayoutSupport) -> (),PFN_vkGetDescriptorSetLayoutSupportKHR,c"vkGetDescriptorSetLayoutSupportKHR";
+    GetDeviceAccelerationStructureCompatibilityKHR(device: VkDevice, pVersionInfo: *const VkAccelerationStructureVersionInfoKHR, pCompatibility: *mut VkAccelerationStructureCompatibilityKHR) -> (),PFN_vkGetDeviceAccelerationStructureCompatibilityKHR,c"vkGetDeviceAccelerationStructureCompatibilityKHR";
+    GetDeviceBufferMemoryRequirements(device: VkDevice, pInfo: *const VkDeviceBufferMemoryRequirements, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetDeviceBufferMemoryRequirements,c"vkGetDeviceBufferMemoryRequirements";
+    GetDeviceBufferMemoryRequirementsKHR(device: VkDevice, pInfo: *const VkDeviceBufferMemoryRequirements, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetDeviceBufferMemoryRequirementsKHR,c"vkGetDeviceBufferMemoryRequirementsKHR";
+    GetDeviceCombinedImageSamplerIndexNVX(device: VkDevice, imageViewIndex: u64, samplerIndex: u64) -> u64,PFN_vkGetDeviceCombinedImageSamplerIndexNVX,c"vkGetDeviceCombinedImageSamplerIndexNVX";
+    GetDeviceFaultDebugInfoKHR(device: VkDevice, pDebugInfo: *mut VkDeviceFaultDebugInfoKHR) -> VkResult,PFN_vkGetDeviceFaultDebugInfoKHR,c"vkGetDeviceFaultDebugInfoKHR";
+    GetDeviceFaultInfoEXT(device: VkDevice, pFaultCounts: *mut VkDeviceFaultCountsEXT, pFaultInfo: *mut VkDeviceFaultInfoEXT) -> VkResult,PFN_vkGetDeviceFaultInfoEXT,c"vkGetDeviceFaultInfoEXT";
+    GetDeviceFaultReportsKHR(device: VkDevice, timeout: u64, pFaultCounts: *mut u32, pFaultInfo: *mut VkDeviceFaultInfoKHR) -> VkResult,PFN_vkGetDeviceFaultReportsKHR,c"vkGetDeviceFaultReportsKHR";
+    GetDeviceGroupPeerMemoryFeatures(device: VkDevice, heapIndex: u32, localDeviceIndex: u32, remoteDeviceIndex: u32, pPeerMemoryFeatures: *mut VkPeerMemoryFeatureFlags) -> (),PFN_vkGetDeviceGroupPeerMemoryFeatures,c"vkGetDeviceGroupPeerMemoryFeatures";
+    GetDeviceGroupPeerMemoryFeaturesKHR(device: VkDevice, heapIndex: u32, localDeviceIndex: u32, remoteDeviceIndex: u32, pPeerMemoryFeatures: *mut VkPeerMemoryFeatureFlags) -> (),PFN_vkGetDeviceGroupPeerMemoryFeaturesKHR,c"vkGetDeviceGroupPeerMemoryFeaturesKHR";
+    GetDeviceGroupPresentCapabilitiesKHR(device: VkDevice, pDeviceGroupPresentCapabilities: *mut VkDeviceGroupPresentCapabilitiesKHR) -> VkResult,PFN_vkGetDeviceGroupPresentCapabilitiesKHR,c"vkGetDeviceGroupPresentCapabilitiesKHR";
+    GetDeviceGroupSurfacePresentModes2EXT(device: VkDevice, pSurfaceInfo: *const VkPhysicalDeviceSurfaceInfo2KHR, pModes: *mut VkDeviceGroupPresentModeFlagsKHR) -> VkResult,PFN_vkGetDeviceGroupSurfacePresentModes2EXT,c"vkGetDeviceGroupSurfacePresentModes2EXT";
+    GetDeviceGroupSurfacePresentModesKHR(device: VkDevice, surface: VkSurfaceKHR, pModes: *mut VkDeviceGroupPresentModeFlagsKHR) -> VkResult,PFN_vkGetDeviceGroupSurfacePresentModesKHR,c"vkGetDeviceGroupSurfacePresentModesKHR";
+    GetDeviceImageMemoryRequirements(device: VkDevice, pInfo: *const VkDeviceImageMemoryRequirements, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetDeviceImageMemoryRequirements,c"vkGetDeviceImageMemoryRequirements";
+    GetDeviceImageMemoryRequirementsKHR(device: VkDevice, pInfo: *const VkDeviceImageMemoryRequirements, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetDeviceImageMemoryRequirementsKHR,c"vkGetDeviceImageMemoryRequirementsKHR";
+    GetDeviceImageSparseMemoryRequirements(device: VkDevice, pInfo: *const VkDeviceImageMemoryRequirements, pSparseMemoryRequirementCount: *mut u32, pSparseMemoryRequirements: *mut VkSparseImageMemoryRequirements2) -> (),PFN_vkGetDeviceImageSparseMemoryRequirements,c"vkGetDeviceImageSparseMemoryRequirements";
+    GetDeviceImageSparseMemoryRequirementsKHR(device: VkDevice, pInfo: *const VkDeviceImageMemoryRequirements, pSparseMemoryRequirementCount: *mut u32, pSparseMemoryRequirements: *mut VkSparseImageMemoryRequirements2) -> (),PFN_vkGetDeviceImageSparseMemoryRequirementsKHR,c"vkGetDeviceImageSparseMemoryRequirementsKHR";
+    GetDeviceImageSubresourceLayout(device: VkDevice, pInfo: *const VkDeviceImageSubresourceInfo, pLayout: *mut VkSubresourceLayout2) -> (),PFN_vkGetDeviceImageSubresourceLayout,c"vkGetDeviceImageSubresourceLayout";
+    GetDeviceImageSubresourceLayoutKHR(device: VkDevice, pInfo: *const VkDeviceImageSubresourceInfo, pLayout: *mut VkSubresourceLayout2) -> (),PFN_vkGetDeviceImageSubresourceLayoutKHR,c"vkGetDeviceImageSubresourceLayoutKHR";
+    GetDeviceMemoryCommitment(device: VkDevice, memory: VkDeviceMemory, pCommittedMemoryInBytes: *mut VkDeviceSize) -> (),PFN_vkGetDeviceMemoryCommitment,c"vkGetDeviceMemoryCommitment";
+    GetDeviceMemoryOpaqueCaptureAddress(device: VkDevice, pInfo: *const VkDeviceMemoryOpaqueCaptureAddressInfo) -> u64,PFN_vkGetDeviceMemoryOpaqueCaptureAddress,c"vkGetDeviceMemoryOpaqueCaptureAddress";
+    GetDeviceMemoryOpaqueCaptureAddressKHR(device: VkDevice, pInfo: *const VkDeviceMemoryOpaqueCaptureAddressInfo) -> u64,PFN_vkGetDeviceMemoryOpaqueCaptureAddressKHR,c"vkGetDeviceMemoryOpaqueCaptureAddressKHR";
+    GetDeviceMicromapCompatibilityEXT(device: VkDevice, pVersionInfo: *const VkMicromapVersionInfoEXT, pCompatibility: *mut VkAccelerationStructureCompatibilityKHR) -> (),PFN_vkGetDeviceMicromapCompatibilityEXT,c"vkGetDeviceMicromapCompatibilityEXT";
+    GetDeviceQueue(device: VkDevice, queueFamilyIndex: u32, queueIndex: u32, pQueue: *mut VkQueue) -> (),PFN_vkGetDeviceQueue,c"vkGetDeviceQueue";
+    GetDeviceQueue2(device: VkDevice, pQueueInfo: *const VkDeviceQueueInfo2, pQueue: *mut VkQueue) -> (),PFN_vkGetDeviceQueue2,c"vkGetDeviceQueue2";
+    GetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI(device: VkDevice, renderpass: VkRenderPass, pMaxWorkgroupSize: *mut VkExtent2D) -> VkResult,PFN_vkGetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI,c"vkGetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI";
+    GetDeviceTensorMemoryRequirementsARM(device: VkDevice, pInfo: *const VkDeviceTensorMemoryRequirementsARM, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetDeviceTensorMemoryRequirementsARM,c"vkGetDeviceTensorMemoryRequirementsARM";
+    GetDynamicRenderingTilePropertiesQCOM(device: VkDevice, pRenderingInfo: *const VkRenderingInfo, pProperties: *mut VkTilePropertiesQCOM) -> VkResult,PFN_vkGetDynamicRenderingTilePropertiesQCOM,c"vkGetDynamicRenderingTilePropertiesQCOM";
+    GetEncodedVideoSessionParametersKHR(device: VkDevice, pVideoSessionParametersInfo: *const VkVideoEncodeSessionParametersGetInfoKHR, pFeedbackInfo: *mut VkVideoEncodeSessionParametersFeedbackInfoKHR, pDataSize: *mut usize, pData: *mut c_void) -> VkResult,PFN_vkGetEncodedVideoSessionParametersKHR,c"vkGetEncodedVideoSessionParametersKHR";
+    GetEventStatus(device: VkDevice, event: VkEvent) -> VkResult,PFN_vkGetEventStatus,c"vkGetEventStatus";
+    GetExecutionGraphPipelineNodeIndexAMDX(device: VkDevice, executionGraph: VkPipeline, pNodeInfo: *const VkPipelineShaderStageNodeCreateInfoAMDX, pNodeIndex: *mut u32) -> VkResult,PFN_vkGetExecutionGraphPipelineNodeIndexAMDX,c"vkGetExecutionGraphPipelineNodeIndexAMDX";
+    GetExecutionGraphPipelineScratchSizeAMDX(device: VkDevice, executionGraph: VkPipeline, pSizeInfo: *mut VkExecutionGraphPipelineScratchSizeAMDX) -> VkResult,PFN_vkGetExecutionGraphPipelineScratchSizeAMDX,c"vkGetExecutionGraphPipelineScratchSizeAMDX";
+    GetFenceFdKHR(device: VkDevice, pGetFdInfo: *const VkFenceGetFdInfoKHR, pFd: *mut c_int) -> VkResult,PFN_vkGetFenceFdKHR,c"vkGetFenceFdKHR";
+    GetFenceStatus(device: VkDevice, fence: VkFence) -> VkResult,PFN_vkGetFenceStatus,c"vkGetFenceStatus";
+    GetFenceWin32HandleKHR(device: VkDevice, pGetWin32HandleInfo: *const VkFenceGetWin32HandleInfoKHR, pHandle: *mut HANDLE) -> VkResult,PFN_vkGetFenceWin32HandleKHR,c"vkGetFenceWin32HandleKHR";
+    GetFramebufferTilePropertiesQCOM(device: VkDevice, framebuffer: VkFramebuffer, pPropertiesCount: *mut u32, pProperties: *mut VkTilePropertiesQCOM) -> VkResult,PFN_vkGetFramebufferTilePropertiesQCOM,c"vkGetFramebufferTilePropertiesQCOM";
+    GetGeneratedCommandsMemoryRequirementsEXT(device: VkDevice, pInfo: *const VkGeneratedCommandsMemoryRequirementsInfoEXT, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetGeneratedCommandsMemoryRequirementsEXT,c"vkGetGeneratedCommandsMemoryRequirementsEXT";
+    GetGeneratedCommandsMemoryRequirementsNV(device: VkDevice, pInfo: *const VkGeneratedCommandsMemoryRequirementsInfoNV, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetGeneratedCommandsMemoryRequirementsNV,c"vkGetGeneratedCommandsMemoryRequirementsNV";
+    GetGpaDeviceClockInfoAMD(device: VkDevice, pInfo: *mut VkGpaDeviceGetClockInfoAMD) -> VkResult,PFN_vkGetGpaDeviceClockInfoAMD,c"vkGetGpaDeviceClockInfoAMD";
+    GetGpaSessionResultsAMD(device: VkDevice, gpaSession: VkGpaSessionAMD, sampleID: u32, pSizeInBytes: *mut usize, pData: *mut c_void) -> VkResult,PFN_vkGetGpaSessionResultsAMD,c"vkGetGpaSessionResultsAMD";
+    GetGpaSessionStatusAMD(device: VkDevice, gpaSession: VkGpaSessionAMD) -> VkResult,PFN_vkGetGpaSessionStatusAMD,c"vkGetGpaSessionStatusAMD";
+    GetImageDrmFormatModifierPropertiesEXT(device: VkDevice, image: VkImage, pProperties: *mut VkImageDrmFormatModifierPropertiesEXT) -> VkResult,PFN_vkGetImageDrmFormatModifierPropertiesEXT,c"vkGetImageDrmFormatModifierPropertiesEXT";
+    GetImageMemoryRequirements(device: VkDevice, image: VkImage, pMemoryRequirements: *mut VkMemoryRequirements) -> (),PFN_vkGetImageMemoryRequirements,c"vkGetImageMemoryRequirements";
+    GetImageMemoryRequirements2(device: VkDevice, pInfo: *const VkImageMemoryRequirementsInfo2, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetImageMemoryRequirements2,c"vkGetImageMemoryRequirements2";
+    GetImageMemoryRequirements2KHR(device: VkDevice, pInfo: *const VkImageMemoryRequirementsInfo2, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetImageMemoryRequirements2KHR,c"vkGetImageMemoryRequirements2KHR";
+    GetImageOpaqueCaptureDataEXT(device: VkDevice, imageCount: u32, pImages: *const VkImage, pDatas: *mut VkHostAddressRangeEXT) -> VkResult,PFN_vkGetImageOpaqueCaptureDataEXT,c"vkGetImageOpaqueCaptureDataEXT";
+    GetImageOpaqueCaptureDescriptorDataEXT(device: VkDevice, pInfo: *const VkImageCaptureDescriptorDataInfoEXT, pData: *mut c_void) -> VkResult,PFN_vkGetImageOpaqueCaptureDescriptorDataEXT,c"vkGetImageOpaqueCaptureDescriptorDataEXT";
+    GetImageSparseMemoryRequirements(device: VkDevice, image: VkImage, pSparseMemoryRequirementCount: *mut u32, pSparseMemoryRequirements: *mut VkSparseImageMemoryRequirements) -> (),PFN_vkGetImageSparseMemoryRequirements,c"vkGetImageSparseMemoryRequirements";
+    GetImageSparseMemoryRequirements2(device: VkDevice, pInfo: *const VkImageSparseMemoryRequirementsInfo2, pSparseMemoryRequirementCount: *mut u32, pSparseMemoryRequirements: *mut VkSparseImageMemoryRequirements2) -> (),PFN_vkGetImageSparseMemoryRequirements2,c"vkGetImageSparseMemoryRequirements2";
+    GetImageSparseMemoryRequirements2KHR(device: VkDevice, pInfo: *const VkImageSparseMemoryRequirementsInfo2, pSparseMemoryRequirementCount: *mut u32, pSparseMemoryRequirements: *mut VkSparseImageMemoryRequirements2) -> (),PFN_vkGetImageSparseMemoryRequirements2KHR,c"vkGetImageSparseMemoryRequirements2KHR";
+    GetImageSubresourceLayout(device: VkDevice, image: VkImage, pSubresource: *const VkImageSubresource, pLayout: *mut VkSubresourceLayout) -> (),PFN_vkGetImageSubresourceLayout,c"vkGetImageSubresourceLayout";
+    GetImageSubresourceLayout2(device: VkDevice, image: VkImage, pSubresource: *const VkImageSubresource2, pLayout: *mut VkSubresourceLayout2) -> (),PFN_vkGetImageSubresourceLayout2,c"vkGetImageSubresourceLayout2";
+    GetImageSubresourceLayout2EXT(device: VkDevice, image: VkImage, pSubresource: *const VkImageSubresource2, pLayout: *mut VkSubresourceLayout2) -> (),PFN_vkGetImageSubresourceLayout2EXT,c"vkGetImageSubresourceLayout2EXT";
+    GetImageSubresourceLayout2KHR(device: VkDevice, image: VkImage, pSubresource: *const VkImageSubresource2, pLayout: *mut VkSubresourceLayout2) -> (),PFN_vkGetImageSubresourceLayout2KHR,c"vkGetImageSubresourceLayout2KHR";
+    GetImageViewAddressNVX(device: VkDevice, imageView: VkImageView, pProperties: *mut VkImageViewAddressPropertiesNVX) -> VkResult,PFN_vkGetImageViewAddressNVX,c"vkGetImageViewAddressNVX";
+    GetImageViewHandle64NVX(device: VkDevice, pInfo: *const VkImageViewHandleInfoNVX) -> u64,PFN_vkGetImageViewHandle64NVX,c"vkGetImageViewHandle64NVX";
+    GetImageViewHandleNVX(device: VkDevice, pInfo: *const VkImageViewHandleInfoNVX) -> u32,PFN_vkGetImageViewHandleNVX,c"vkGetImageViewHandleNVX";
+    GetImageViewOpaqueCaptureDescriptorDataEXT(device: VkDevice, pInfo: *const VkImageViewCaptureDescriptorDataInfoEXT, pData: *mut c_void) -> VkResult,PFN_vkGetImageViewOpaqueCaptureDescriptorDataEXT,c"vkGetImageViewOpaqueCaptureDescriptorDataEXT";
+    GetLatencyTimingsLegacyNV(device: VkDevice, pTimings: *mut c_void) -> (),PFN_vkGetLatencyTimingsLegacyNV,c"vkGetLatencyTimingsLegacyNV";
+    GetLatencyTimingsNV(device: VkDevice, swapchain: VkSwapchainKHR, pLatencyMarkerInfo: *mut VkGetLatencyMarkerInfoNV) -> (),PFN_vkGetLatencyTimingsNV,c"vkGetLatencyTimingsNV";
+    GetMemoryAndroidHardwareBufferANDROID(device: VkDevice, pInfo: *const VkMemoryGetAndroidHardwareBufferInfoANDROID, pBuffer: *mut *mut AHardwareBuffer) -> VkResult,PFN_vkGetMemoryAndroidHardwareBufferANDROID,c"vkGetMemoryAndroidHardwareBufferANDROID";
+    GetMemoryFdKHR(device: VkDevice, pGetFdInfo: *const VkMemoryGetFdInfoKHR, pFd: *mut c_int) -> VkResult,PFN_vkGetMemoryFdKHR,c"vkGetMemoryFdKHR";
+    GetMemoryFdPropertiesKHR(device: VkDevice, handleType: VkExternalMemoryHandleTypeFlagBits, fd: c_int, pMemoryFdProperties: *mut VkMemoryFdPropertiesKHR) -> VkResult,PFN_vkGetMemoryFdPropertiesKHR,c"vkGetMemoryFdPropertiesKHR";
+    GetMemoryHostPointerPropertiesEXT(device: VkDevice, handleType: VkExternalMemoryHandleTypeFlagBits, pHostPointer: *const c_void, pMemoryHostPointerProperties: *mut VkMemoryHostPointerPropertiesEXT) -> VkResult,PFN_vkGetMemoryHostPointerPropertiesEXT,c"vkGetMemoryHostPointerPropertiesEXT";
+    GetMemoryMetalHandleEXT(device: VkDevice, pGetMetalHandleInfo: *const VkMemoryGetMetalHandleInfoEXT, pHandle: *mut *mut c_void) -> VkResult,PFN_vkGetMemoryMetalHandleEXT,c"vkGetMemoryMetalHandleEXT";
+    GetMemoryMetalHandlePropertiesEXT(device: VkDevice, handleType: VkExternalMemoryHandleTypeFlagBits, pHandle: *const c_void, pMemoryMetalHandleProperties: *mut VkMemoryMetalHandlePropertiesEXT) -> VkResult,PFN_vkGetMemoryMetalHandlePropertiesEXT,c"vkGetMemoryMetalHandlePropertiesEXT";
+    GetMemoryNativeBufferOHOS(device: VkDevice, pInfo: *const VkMemoryGetNativeBufferInfoOHOS, pBuffer: *mut *mut OH_NativeBuffer) -> VkResult,PFN_vkGetMemoryNativeBufferOHOS,c"vkGetMemoryNativeBufferOHOS";
+    GetMemoryRemoteAddressNV(device: VkDevice, pMemoryGetRemoteAddressInfo: *const VkMemoryGetRemoteAddressInfoNV, pAddress: *mut VkRemoteAddressNV) -> VkResult,PFN_vkGetMemoryRemoteAddressNV,c"vkGetMemoryRemoteAddressNV";
+    GetMemoryWin32HandleKHR(device: VkDevice, pGetWin32HandleInfo: *const VkMemoryGetWin32HandleInfoKHR, pHandle: *mut HANDLE) -> VkResult,PFN_vkGetMemoryWin32HandleKHR,c"vkGetMemoryWin32HandleKHR";
+    GetMemoryWin32HandleNV(device: VkDevice, memory: VkDeviceMemory, handleType: VkExternalMemoryHandleTypeFlagsNV, pHandle: *mut HANDLE) -> VkResult,PFN_vkGetMemoryWin32HandleNV,c"vkGetMemoryWin32HandleNV";
+    GetMemoryWin32HandlePropertiesKHR(device: VkDevice, handleType: VkExternalMemoryHandleTypeFlagBits, handle: HANDLE, pMemoryWin32HandleProperties: *mut VkMemoryWin32HandlePropertiesKHR) -> VkResult,PFN_vkGetMemoryWin32HandlePropertiesKHR,c"vkGetMemoryWin32HandlePropertiesKHR";
+    GetMemoryZirconHandleFUCHSIA(device: VkDevice, pGetZirconHandleInfo: *const VkMemoryGetZirconHandleInfoFUCHSIA, pZirconHandle: *mut zx_handle_t) -> VkResult,PFN_vkGetMemoryZirconHandleFUCHSIA,c"vkGetMemoryZirconHandleFUCHSIA";
+    GetMemoryZirconHandlePropertiesFUCHSIA(device: VkDevice, handleType: VkExternalMemoryHandleTypeFlagBits, zirconHandle: zx_handle_t, pMemoryZirconHandleProperties: *mut VkMemoryZirconHandlePropertiesFUCHSIA) -> VkResult,PFN_vkGetMemoryZirconHandlePropertiesFUCHSIA,c"vkGetMemoryZirconHandlePropertiesFUCHSIA";
+    GetMicromapBuildSizesEXT(device: VkDevice, buildType: VkAccelerationStructureBuildTypeKHR, pBuildInfo: *const VkMicromapBuildInfoEXT, pSizeInfo: *mut VkMicromapBuildSizesInfoEXT) -> (),PFN_vkGetMicromapBuildSizesEXT,c"vkGetMicromapBuildSizesEXT";
+    GetNativeBufferPropertiesOHOS(device: VkDevice, buffer: *const OH_NativeBuffer, pProperties: *mut VkNativeBufferPropertiesOHOS) -> VkResult,PFN_vkGetNativeBufferPropertiesOHOS,c"vkGetNativeBufferPropertiesOHOS";
+    GetPartitionedAccelerationStructuresBuildSizesNV(device: VkDevice, pInfo: *const VkPartitionedAccelerationStructureInstancesInputNV, pSizeInfo: *mut VkAccelerationStructureBuildSizesInfoKHR) -> (),PFN_vkGetPartitionedAccelerationStructuresBuildSizesNV,c"vkGetPartitionedAccelerationStructuresBuildSizesNV";
+    GetPastPresentationTimingEXT(device: VkDevice, pPastPresentationTimingInfo: *const VkPastPresentationTimingInfoEXT, pPastPresentationTimingProperties: *mut VkPastPresentationTimingPropertiesEXT) -> VkResult,PFN_vkGetPastPresentationTimingEXT,c"vkGetPastPresentationTimingEXT";
+    GetPastPresentationTimingGOOGLE(device: VkDevice, swapchain: VkSwapchainKHR, pPresentationTimingCount: *mut u32, pPresentationTimings: *mut VkPastPresentationTimingGOOGLE) -> VkResult,PFN_vkGetPastPresentationTimingGOOGLE,c"vkGetPastPresentationTimingGOOGLE";
+    GetPerformanceParameterINTEL(device: VkDevice, parameter: VkPerformanceParameterTypeINTEL, pValue: *mut VkPerformanceValueINTEL) -> VkResult,PFN_vkGetPerformanceParameterINTEL,c"vkGetPerformanceParameterINTEL";
+    GetPipelineBinaryDataKHR(device: VkDevice, pInfo: *const VkPipelineBinaryDataInfoKHR, pPipelineBinaryKey: *mut VkPipelineBinaryKeyKHR, pPipelineBinaryDataSize: *mut usize, pPipelineBinaryData: *mut c_void) -> VkResult,PFN_vkGetPipelineBinaryDataKHR,c"vkGetPipelineBinaryDataKHR";
+    GetPipelineCacheData(device: VkDevice, pipelineCache: VkPipelineCache, pDataSize: *mut usize, pData: *mut c_void) -> VkResult,PFN_vkGetPipelineCacheData,c"vkGetPipelineCacheData";
+    GetPipelineExecutableInternalRepresentationsKHR(device: VkDevice, pExecutableInfo: *const VkPipelineExecutableInfoKHR, pInternalRepresentationCount: *mut u32, pInternalRepresentations: *mut VkPipelineExecutableInternalRepresentationKHR) -> VkResult,PFN_vkGetPipelineExecutableInternalRepresentationsKHR,c"vkGetPipelineExecutableInternalRepresentationsKHR";
+    GetPipelineExecutablePropertiesKHR(device: VkDevice, pPipelineInfo: *const VkPipelineInfoKHR, pExecutableCount: *mut u32, pProperties: *mut VkPipelineExecutablePropertiesKHR) -> VkResult,PFN_vkGetPipelineExecutablePropertiesKHR,c"vkGetPipelineExecutablePropertiesKHR";
+    GetPipelineExecutableStatisticsKHR(device: VkDevice, pExecutableInfo: *const VkPipelineExecutableInfoKHR, pStatisticCount: *mut u32, pStatistics: *mut VkPipelineExecutableStatisticKHR) -> VkResult,PFN_vkGetPipelineExecutableStatisticsKHR,c"vkGetPipelineExecutableStatisticsKHR";
+    GetPipelineIndirectDeviceAddressNV(device: VkDevice, pInfo: *const VkPipelineIndirectDeviceAddressInfoNV) -> VkDeviceAddress,PFN_vkGetPipelineIndirectDeviceAddressNV,c"vkGetPipelineIndirectDeviceAddressNV";
+    GetPipelineIndirectMemoryRequirementsNV(device: VkDevice, pCreateInfo: *const VkComputePipelineCreateInfo, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetPipelineIndirectMemoryRequirementsNV,c"vkGetPipelineIndirectMemoryRequirementsNV";
+    GetPipelineKeyKHR(device: VkDevice, pPipelineCreateInfo: *const VkPipelineCreateInfoKHR, pPipelineKey: *mut VkPipelineBinaryKeyKHR) -> VkResult,PFN_vkGetPipelineKeyKHR,c"vkGetPipelineKeyKHR";
+    GetPipelinePropertiesEXT(device: VkDevice, pPipelineInfo: *const VkPipelineInfoKHR, pPipelineProperties: *mut VkBaseOutStructure) -> VkResult,PFN_vkGetPipelinePropertiesEXT,c"vkGetPipelinePropertiesEXT";
+    GetPrivateData(device: VkDevice, objectType: VkObjectType, objectHandle: u64, privateDataSlot: VkPrivateDataSlot, pData: *mut u64) -> (),PFN_vkGetPrivateData,c"vkGetPrivateData";
+    GetPrivateDataEXT(device: VkDevice, objectType: VkObjectType, objectHandle: u64, privateDataSlot: VkPrivateDataSlot, pData: *mut u64) -> (),PFN_vkGetPrivateDataEXT,c"vkGetPrivateDataEXT";
+    GetQueryPoolResults(device: VkDevice, queryPool: VkQueryPool, firstQuery: u32, queryCount: u32, dataSize: usize, pData: *mut c_void, stride: VkDeviceSize, flags: VkQueryResultFlags) -> VkResult,PFN_vkGetQueryPoolResults,c"vkGetQueryPoolResults";
+    GetQueueCheckpointData2NV(queue: VkQueue, pCheckpointDataCount: *mut u32, pCheckpointData: *mut VkCheckpointData2NV) -> (),PFN_vkGetQueueCheckpointData2NV,c"vkGetQueueCheckpointData2NV";
+    GetQueueCheckpointDataNV(queue: VkQueue, pCheckpointDataCount: *mut u32, pCheckpointData: *mut VkCheckpointDataNV) -> (),PFN_vkGetQueueCheckpointDataNV,c"vkGetQueueCheckpointDataNV";
+    GetRayTracingCaptureReplayShaderGroupHandlesKHR(device: VkDevice, pipeline: VkPipeline, firstGroup: u32, groupCount: u32, dataSize: usize, pData: *mut c_void) -> VkResult,PFN_vkGetRayTracingCaptureReplayShaderGroupHandlesKHR,c"vkGetRayTracingCaptureReplayShaderGroupHandlesKHR";
+    GetRayTracingShaderGroupHandlesKHR(device: VkDevice, pipeline: VkPipeline, firstGroup: u32, groupCount: u32, dataSize: usize, pData: *mut c_void) -> VkResult,PFN_vkGetRayTracingShaderGroupHandlesKHR,c"vkGetRayTracingShaderGroupHandlesKHR";
+    GetRayTracingShaderGroupHandlesNV(device: VkDevice, pipeline: VkPipeline, firstGroup: u32, groupCount: u32, dataSize: usize, pData: *mut c_void) -> VkResult,PFN_vkGetRayTracingShaderGroupHandlesNV,c"vkGetRayTracingShaderGroupHandlesNV";
+    GetRayTracingShaderGroupStackSizeKHR(device: VkDevice, pipeline: VkPipeline, group: u32, groupShader: VkShaderGroupShaderKHR) -> VkDeviceSize,PFN_vkGetRayTracingShaderGroupStackSizeKHR,c"vkGetRayTracingShaderGroupStackSizeKHR";
+    GetRefreshCycleDurationGOOGLE(device: VkDevice, swapchain: VkSwapchainKHR, pDisplayTimingProperties: *mut VkRefreshCycleDurationGOOGLE) -> VkResult,PFN_vkGetRefreshCycleDurationGOOGLE,c"vkGetRefreshCycleDurationGOOGLE";
+    GetRenderAreaGranularity(device: VkDevice, renderPass: VkRenderPass, pGranularity: *mut VkExtent2D) -> (),PFN_vkGetRenderAreaGranularity,c"vkGetRenderAreaGranularity";
+    GetRenderingAreaGranularity(device: VkDevice, pRenderingAreaInfo: *const VkRenderingAreaInfo, pGranularity: *mut VkExtent2D) -> (),PFN_vkGetRenderingAreaGranularity,c"vkGetRenderingAreaGranularity";
+    GetRenderingAreaGranularityKHR(device: VkDevice, pRenderingAreaInfo: *const VkRenderingAreaInfo, pGranularity: *mut VkExtent2D) -> (),PFN_vkGetRenderingAreaGranularityKHR,c"vkGetRenderingAreaGranularityKHR";
+    GetSamplerOpaqueCaptureDescriptorDataEXT(device: VkDevice, pInfo: *const VkSamplerCaptureDescriptorDataInfoEXT, pData: *mut c_void) -> VkResult,PFN_vkGetSamplerOpaqueCaptureDescriptorDataEXT,c"vkGetSamplerOpaqueCaptureDescriptorDataEXT";
+    GetScreenBufferPropertiesQNX(device: VkDevice, buffer: *const _screen_buffer, pProperties: *mut VkScreenBufferPropertiesQNX) -> VkResult,PFN_vkGetScreenBufferPropertiesQNX,c"vkGetScreenBufferPropertiesQNX";
+    GetSemaphoreCounterValue(device: VkDevice, semaphore: VkSemaphore, pValue: *mut u64) -> VkResult,PFN_vkGetSemaphoreCounterValue,c"vkGetSemaphoreCounterValue";
+    GetSemaphoreCounterValueKHR(device: VkDevice, semaphore: VkSemaphore, pValue: *mut u64) -> VkResult,PFN_vkGetSemaphoreCounterValueKHR,c"vkGetSemaphoreCounterValueKHR";
+    GetSemaphoreFdKHR(device: VkDevice, pGetFdInfo: *const VkSemaphoreGetFdInfoKHR, pFd: *mut c_int) -> VkResult,PFN_vkGetSemaphoreFdKHR,c"vkGetSemaphoreFdKHR";
+    GetSemaphoreWin32HandleKHR(device: VkDevice, pGetWin32HandleInfo: *const VkSemaphoreGetWin32HandleInfoKHR, pHandle: *mut HANDLE) -> VkResult,PFN_vkGetSemaphoreWin32HandleKHR,c"vkGetSemaphoreWin32HandleKHR";
+    GetSemaphoreZirconHandleFUCHSIA(device: VkDevice, pGetZirconHandleInfo: *const VkSemaphoreGetZirconHandleInfoFUCHSIA, pZirconHandle: *mut zx_handle_t) -> VkResult,PFN_vkGetSemaphoreZirconHandleFUCHSIA,c"vkGetSemaphoreZirconHandleFUCHSIA";
+    GetShaderBinaryDataEXT(device: VkDevice, shader: VkShaderEXT, pDataSize: *mut usize, pData: *mut c_void) -> VkResult,PFN_vkGetShaderBinaryDataEXT,c"vkGetShaderBinaryDataEXT";
+    GetShaderInfoAMD(device: VkDevice, pipeline: VkPipeline, shaderStage: VkShaderStageFlagBits, infoType: VkShaderInfoTypeAMD, pInfoSize: *mut usize, pInfo: *mut c_void) -> VkResult,PFN_vkGetShaderInfoAMD,c"vkGetShaderInfoAMD";
+    GetShaderInstrumentationValuesARM(device: VkDevice, instrumentation: VkShaderInstrumentationARM, pMetricBlockCount: *mut u32, pMetricValues: *mut c_void, flags: VkShaderInstrumentationValuesFlagsARM) -> VkResult,PFN_vkGetShaderInstrumentationValuesARM,c"vkGetShaderInstrumentationValuesARM";
+    GetShaderModuleCreateInfoIdentifierEXT(device: VkDevice, pCreateInfo: *const VkShaderModuleCreateInfo, pIdentifier: *mut VkShaderModuleIdentifierEXT) -> (),PFN_vkGetShaderModuleCreateInfoIdentifierEXT,c"vkGetShaderModuleCreateInfoIdentifierEXT";
+    GetShaderModuleIdentifierEXT(device: VkDevice, shaderModule: VkShaderModule, pIdentifier: *mut VkShaderModuleIdentifierEXT) -> (),PFN_vkGetShaderModuleIdentifierEXT,c"vkGetShaderModuleIdentifierEXT";
+    GetSleepStatusLegacyNV(device: VkDevice, pLowLatencyMode: *mut VkBool32) -> (),PFN_vkGetSleepStatusLegacyNV,c"vkGetSleepStatusLegacyNV";
+    GetSwapchainCounterEXT(device: VkDevice, swapchain: VkSwapchainKHR, counter: VkSurfaceCounterFlagBitsEXT, pCounterValue: *mut u64) -> VkResult,PFN_vkGetSwapchainCounterEXT,c"vkGetSwapchainCounterEXT";
+    GetSwapchainImagesKHR(device: VkDevice, swapchain: VkSwapchainKHR, pSwapchainImageCount: *mut u32, pSwapchainImages: *mut VkImage) -> VkResult,PFN_vkGetSwapchainImagesKHR,c"vkGetSwapchainImagesKHR";
+    GetSwapchainStatusKHR(device: VkDevice, swapchain: VkSwapchainKHR) -> VkResult,PFN_vkGetSwapchainStatusKHR,c"vkGetSwapchainStatusKHR";
+    GetSwapchainTimeDomainPropertiesEXT(device: VkDevice, swapchain: VkSwapchainKHR, pSwapchainTimeDomainProperties: *mut VkSwapchainTimeDomainPropertiesEXT, pTimeDomainsCounter: *mut u64) -> VkResult,PFN_vkGetSwapchainTimeDomainPropertiesEXT,c"vkGetSwapchainTimeDomainPropertiesEXT";
+    GetSwapchainTimingPropertiesEXT(device: VkDevice, swapchain: VkSwapchainKHR, pSwapchainTimingProperties: *mut VkSwapchainTimingPropertiesEXT, pSwapchainTimingPropertiesCounter: *mut u64) -> VkResult,PFN_vkGetSwapchainTimingPropertiesEXT,c"vkGetSwapchainTimingPropertiesEXT";
+    GetTensorMemoryRequirementsARM(device: VkDevice, pInfo: *const VkTensorMemoryRequirementsInfoARM, pMemoryRequirements: *mut VkMemoryRequirements2) -> (),PFN_vkGetTensorMemoryRequirementsARM,c"vkGetTensorMemoryRequirementsARM";
+    GetTensorOpaqueCaptureDataARM(device: VkDevice, tensorCount: u32, pTensors: *const VkTensorARM, pDatas: *mut VkHostAddressRangeEXT) -> VkResult,PFN_vkGetTensorOpaqueCaptureDataARM,c"vkGetTensorOpaqueCaptureDataARM";
+    GetTensorOpaqueCaptureDescriptorDataARM(device: VkDevice, pInfo: *const VkTensorCaptureDescriptorDataInfoARM, pData: *mut c_void) -> VkResult,PFN_vkGetTensorOpaqueCaptureDescriptorDataARM,c"vkGetTensorOpaqueCaptureDescriptorDataARM";
+    GetTensorViewOpaqueCaptureDescriptorDataARM(device: VkDevice, pInfo: *const VkTensorViewCaptureDescriptorDataInfoARM, pData: *mut c_void) -> VkResult,PFN_vkGetTensorViewOpaqueCaptureDescriptorDataARM,c"vkGetTensorViewOpaqueCaptureDescriptorDataARM";
+    GetValidationCacheDataEXT(device: VkDevice, validationCache: VkValidationCacheEXT, pDataSize: *mut usize, pData: *mut c_void) -> VkResult,PFN_vkGetValidationCacheDataEXT,c"vkGetValidationCacheDataEXT";
+    GetVideoSessionMemoryRequirementsKHR(device: VkDevice, videoSession: VkVideoSessionKHR, pMemoryRequirementsCount: *mut u32, pMemoryRequirements: *mut VkVideoSessionMemoryRequirementsKHR) -> VkResult,PFN_vkGetVideoSessionMemoryRequirementsKHR,c"vkGetVideoSessionMemoryRequirementsKHR";
+    ImportFenceFdKHR(device: VkDevice, pImportFenceFdInfo: *const VkImportFenceFdInfoKHR) -> VkResult,PFN_vkImportFenceFdKHR,c"vkImportFenceFdKHR";
+    ImportFenceWin32HandleKHR(device: VkDevice, pImportFenceWin32HandleInfo: *const VkImportFenceWin32HandleInfoKHR) -> VkResult,PFN_vkImportFenceWin32HandleKHR,c"vkImportFenceWin32HandleKHR";
+    ImportSemaphoreFdKHR(device: VkDevice, pImportSemaphoreFdInfo: *const VkImportSemaphoreFdInfoKHR) -> VkResult,PFN_vkImportSemaphoreFdKHR,c"vkImportSemaphoreFdKHR";
+    ImportSemaphoreWin32HandleKHR(device: VkDevice, pImportSemaphoreWin32HandleInfo: *const VkImportSemaphoreWin32HandleInfoKHR) -> VkResult,PFN_vkImportSemaphoreWin32HandleKHR,c"vkImportSemaphoreWin32HandleKHR";
+    ImportSemaphoreZirconHandleFUCHSIA(device: VkDevice, pImportSemaphoreZirconHandleInfo: *const VkImportSemaphoreZirconHandleInfoFUCHSIA) -> VkResult,PFN_vkImportSemaphoreZirconHandleFUCHSIA,c"vkImportSemaphoreZirconHandleFUCHSIA";
+    InitializePerformanceApiINTEL(device: VkDevice, pInitializeInfo: *const VkInitializePerformanceApiInfoINTEL) -> VkResult,PFN_vkInitializePerformanceApiINTEL,c"vkInitializePerformanceApiINTEL";
+    InvalidateMappedMemoryRanges(device: VkDevice, memoryRangeCount: u32, pMemoryRanges: *const VkMappedMemoryRange) -> VkResult,PFN_vkInvalidateMappedMemoryRanges,c"vkInvalidateMappedMemoryRanges";
+    LatencySleepLegacyNV(device: VkDevice, signalSemaphore: VkSemaphore, value: u64) -> (),PFN_vkLatencySleepLegacyNV,c"vkLatencySleepLegacyNV";
+    LatencySleepNV(device: VkDevice, swapchain: VkSwapchainKHR, pSleepInfo: *const VkLatencySleepInfoNV) -> VkResult,PFN_vkLatencySleepNV,c"vkLatencySleepNV";
+    MapMemory(device: VkDevice, memory: VkDeviceMemory, offset: VkDeviceSize, size: VkDeviceSize, flags: VkMemoryMapFlags, ppData: *mut *mut c_void) -> VkResult,PFN_vkMapMemory,c"vkMapMemory";
+    MapMemory2(device: VkDevice, pMemoryMapInfo: *const VkMemoryMapInfo, ppData: *mut *mut c_void) -> VkResult,PFN_vkMapMemory2,c"vkMapMemory2";
+    MapMemory2KHR(device: VkDevice, pMemoryMapInfo: *const VkMemoryMapInfo, ppData: *mut *mut c_void) -> VkResult,PFN_vkMapMemory2KHR,c"vkMapMemory2KHR";
+    MergePipelineCaches(device: VkDevice, dstCache: VkPipelineCache, srcCacheCount: u32, pSrcCaches: *const VkPipelineCache) -> VkResult,PFN_vkMergePipelineCaches,c"vkMergePipelineCaches";
+    MergeValidationCachesEXT(device: VkDevice, dstCache: VkValidationCacheEXT, srcCacheCount: u32, pSrcCaches: *const VkValidationCacheEXT) -> VkResult,PFN_vkMergeValidationCachesEXT,c"vkMergeValidationCachesEXT";
+    QueueBeginDebugUtilsLabelEXT(queue: VkQueue, pLabelInfo: *const VkDebugUtilsLabelEXT) -> (),PFN_vkQueueBeginDebugUtilsLabelEXT,c"vkQueueBeginDebugUtilsLabelEXT";
+    QueueBindSparse(queue: VkQueue, bindInfoCount: u32, pBindInfo: *const VkBindSparseInfo, fence: VkFence) -> VkResult,PFN_vkQueueBindSparse,c"vkQueueBindSparse";
+    QueueEndDebugUtilsLabelEXT(queue: VkQueue) -> (),PFN_vkQueueEndDebugUtilsLabelEXT,c"vkQueueEndDebugUtilsLabelEXT";
+    QueueInsertDebugUtilsLabelEXT(queue: VkQueue, pLabelInfo: *const VkDebugUtilsLabelEXT) -> (),PFN_vkQueueInsertDebugUtilsLabelEXT,c"vkQueueInsertDebugUtilsLabelEXT";
+    QueueNotifyOutOfBandLegacyNV(queue: VkQueue, queueType: u32) -> (),PFN_vkQueueNotifyOutOfBandLegacyNV,c"vkQueueNotifyOutOfBandLegacyNV";
+    QueueNotifyOutOfBandNV(queue: VkQueue, pQueueTypeInfo: *const VkOutOfBandQueueTypeInfoNV) -> (),PFN_vkQueueNotifyOutOfBandNV,c"vkQueueNotifyOutOfBandNV";
+    QueuePresentKHR(queue: VkQueue, pPresentInfo: *const VkPresentInfoKHR) -> VkResult,PFN_vkQueuePresentKHR,c"vkQueuePresentKHR";
+    QueueSetPerfHintQCOM(queue: VkQueue, pPerfHintInfo: *const VkPerfHintInfoQCOM) -> VkResult,PFN_vkQueueSetPerfHintQCOM,c"vkQueueSetPerfHintQCOM";
+    QueueSetPerformanceConfigurationINTEL(queue: VkQueue, configuration: VkPerformanceConfigurationINTEL) -> VkResult,PFN_vkQueueSetPerformanceConfigurationINTEL,c"vkQueueSetPerformanceConfigurationINTEL";
+    QueueSubmit(queue: VkQueue, submitCount: u32, pSubmits: *const VkSubmitInfo, fence: VkFence) -> VkResult,PFN_vkQueueSubmit,c"vkQueueSubmit";
+    QueueSubmit2(queue: VkQueue, submitCount: u32, pSubmits: *const VkSubmitInfo2, fence: VkFence) -> VkResult,PFN_vkQueueSubmit2,c"vkQueueSubmit2";
+    QueueSubmit2KHR(queue: VkQueue, submitCount: u32, pSubmits: *const VkSubmitInfo2, fence: VkFence) -> VkResult,PFN_vkQueueSubmit2KHR,c"vkQueueSubmit2KHR";
+    QueueWaitIdle(queue: VkQueue) -> VkResult,PFN_vkQueueWaitIdle,c"vkQueueWaitIdle";
+    RegisterCustomBorderColorEXT(device: VkDevice, pBorderColor: *const VkSamplerCustomBorderColorCreateInfoEXT, requestIndex: VkBool32, pIndex: *mut u32) -> VkResult,PFN_vkRegisterCustomBorderColorEXT,c"vkRegisterCustomBorderColorEXT";
+    RegisterDeviceEventEXT(device: VkDevice, pDeviceEventInfo: *const VkDeviceEventInfoEXT, pAllocator: *const VkAllocationCallbacks, pFence: *mut VkFence) -> VkResult,PFN_vkRegisterDeviceEventEXT,c"vkRegisterDeviceEventEXT";
+    RegisterDisplayEventEXT(device: VkDevice, display: VkDisplayKHR, pDisplayEventInfo: *const VkDisplayEventInfoEXT, pAllocator: *const VkAllocationCallbacks, pFence: *mut VkFence) -> VkResult,PFN_vkRegisterDisplayEventEXT,c"vkRegisterDisplayEventEXT";
+    ReleaseCapturedPipelineDataKHR(device: VkDevice, pInfo: *const VkReleaseCapturedPipelineDataInfoKHR, pAllocator: *const VkAllocationCallbacks) -> VkResult,PFN_vkReleaseCapturedPipelineDataKHR,c"vkReleaseCapturedPipelineDataKHR";
+    ReleaseFullScreenExclusiveModeEXT(device: VkDevice, swapchain: VkSwapchainKHR) -> VkResult,PFN_vkReleaseFullScreenExclusiveModeEXT,c"vkReleaseFullScreenExclusiveModeEXT";
+    ReleasePerformanceConfigurationINTEL(device: VkDevice, configuration: VkPerformanceConfigurationINTEL) -> VkResult,PFN_vkReleasePerformanceConfigurationINTEL,c"vkReleasePerformanceConfigurationINTEL";
+    ReleaseProfilingLockKHR(device: VkDevice) -> (),PFN_vkReleaseProfilingLockKHR,c"vkReleaseProfilingLockKHR";
+    ReleaseSwapchainImagesEXT(device: VkDevice, pReleaseInfo: *const VkReleaseSwapchainImagesInfoKHR) -> VkResult,PFN_vkReleaseSwapchainImagesEXT,c"vkReleaseSwapchainImagesEXT";
+    ReleaseSwapchainImagesKHR(device: VkDevice, pReleaseInfo: *const VkReleaseSwapchainImagesInfoKHR) -> VkResult,PFN_vkReleaseSwapchainImagesKHR,c"vkReleaseSwapchainImagesKHR";
+    ResetCommandBuffer(commandBuffer: VkCommandBuffer, flags: VkCommandBufferResetFlags) -> VkResult,PFN_vkResetCommandBuffer,c"vkResetCommandBuffer";
+    ResetCommandPool(device: VkDevice, commandPool: VkCommandPool, flags: VkCommandPoolResetFlags) -> VkResult,PFN_vkResetCommandPool,c"vkResetCommandPool";
+    ResetDescriptorPool(device: VkDevice, descriptorPool: VkDescriptorPool, flags: VkDescriptorPoolResetFlags) -> VkResult,PFN_vkResetDescriptorPool,c"vkResetDescriptorPool";
+    ResetEvent(device: VkDevice, event: VkEvent) -> VkResult,PFN_vkResetEvent,c"vkResetEvent";
+    ResetFences(device: VkDevice, fenceCount: u32, pFences: *const VkFence) -> VkResult,PFN_vkResetFences,c"vkResetFences";
+    ResetGpaSessionAMD(device: VkDevice, gpaSession: VkGpaSessionAMD) -> VkResult,PFN_vkResetGpaSessionAMD,c"vkResetGpaSessionAMD";
+    ResetQueryPool(device: VkDevice, queryPool: VkQueryPool, firstQuery: u32, queryCount: u32) -> (),PFN_vkResetQueryPool,c"vkResetQueryPool";
+    ResetQueryPoolEXT(device: VkDevice, queryPool: VkQueryPool, firstQuery: u32, queryCount: u32) -> (),PFN_vkResetQueryPoolEXT,c"vkResetQueryPoolEXT";
+    SetBufferCollectionBufferConstraintsFUCHSIA(device: VkDevice, collection: VkBufferCollectionFUCHSIA, pBufferConstraintsInfo: *const VkBufferConstraintsInfoFUCHSIA) -> VkResult,PFN_vkSetBufferCollectionBufferConstraintsFUCHSIA,c"vkSetBufferCollectionBufferConstraintsFUCHSIA";
+    SetBufferCollectionImageConstraintsFUCHSIA(device: VkDevice, collection: VkBufferCollectionFUCHSIA, pImageConstraintsInfo: *const VkImageConstraintsInfoFUCHSIA) -> VkResult,PFN_vkSetBufferCollectionImageConstraintsFUCHSIA,c"vkSetBufferCollectionImageConstraintsFUCHSIA";
+    SetDebugUtilsObjectNameEXT(device: VkDevice, pNameInfo: *const VkDebugUtilsObjectNameInfoEXT) -> VkResult,PFN_vkSetDebugUtilsObjectNameEXT,c"vkSetDebugUtilsObjectNameEXT";
+    SetDebugUtilsObjectTagEXT(device: VkDevice, pTagInfo: *const VkDebugUtilsObjectTagInfoEXT) -> VkResult,PFN_vkSetDebugUtilsObjectTagEXT,c"vkSetDebugUtilsObjectTagEXT";
+    SetDeviceMemoryPriorityEXT(device: VkDevice, memory: VkDeviceMemory, priority: f32) -> (),PFN_vkSetDeviceMemoryPriorityEXT,c"vkSetDeviceMemoryPriorityEXT";
+    SetEvent(device: VkDevice, event: VkEvent) -> VkResult,PFN_vkSetEvent,c"vkSetEvent";
+    SetGpaDeviceClockModeAMD(device: VkDevice, pInfo: *mut VkGpaDeviceClockModeInfoAMD) -> VkResult,PFN_vkSetGpaDeviceClockModeAMD,c"vkSetGpaDeviceClockModeAMD";
+    SetHdrMetadataEXT(device: VkDevice, swapchainCount: u32, pSwapchains: *const VkSwapchainKHR, pMetadata: *const VkHdrMetadataEXT) -> (),PFN_vkSetHdrMetadataEXT,c"vkSetHdrMetadataEXT";
+    SetLatencyMarkerLegacyNV(device: VkDevice, frameID: u64, marker: u32) -> (),PFN_vkSetLatencyMarkerLegacyNV,c"vkSetLatencyMarkerLegacyNV";
+    SetLatencyMarkerNV(device: VkDevice, swapchain: VkSwapchainKHR, pLatencyMarkerInfo: *const VkSetLatencyMarkerInfoNV) -> (),PFN_vkSetLatencyMarkerNV,c"vkSetLatencyMarkerNV";
+    SetLatencySleepModeLegacyNV(device: VkDevice, lowLatencyMode: VkBool32, lowLatencyBoost: VkBool32, minimumIntervalUs: u32) -> (),PFN_vkSetLatencySleepModeLegacyNV,c"vkSetLatencySleepModeLegacyNV";
+    SetLatencySleepModeNV(device: VkDevice, swapchain: VkSwapchainKHR, pSleepModeInfo: *const VkLatencySleepModeInfoNV) -> VkResult,PFN_vkSetLatencySleepModeNV,c"vkSetLatencySleepModeNV";
+    SetLocalDimmingAMD(device: VkDevice, swapChain: VkSwapchainKHR, localDimmingEnable: VkBool32) -> (),PFN_vkSetLocalDimmingAMD,c"vkSetLocalDimmingAMD";
+    SetPrivateData(device: VkDevice, objectType: VkObjectType, objectHandle: u64, privateDataSlot: VkPrivateDataSlot, data: u64) -> VkResult,PFN_vkSetPrivateData,c"vkSetPrivateData";
+    SetPrivateDataEXT(device: VkDevice, objectType: VkObjectType, objectHandle: u64, privateDataSlot: VkPrivateDataSlot, data: u64) -> VkResult,PFN_vkSetPrivateDataEXT,c"vkSetPrivateDataEXT";
+    SetSwapchainPresentTimingQueueSizeEXT(device: VkDevice, swapchain: VkSwapchainKHR, size: u32) -> VkResult,PFN_vkSetSwapchainPresentTimingQueueSizeEXT,c"vkSetSwapchainPresentTimingQueueSizeEXT";
+    ShutdownLatencyDeviceLegacyNV(device: VkDevice) -> (),PFN_vkShutdownLatencyDeviceLegacyNV,c"vkShutdownLatencyDeviceLegacyNV";
+    SignalSemaphore(device: VkDevice, pSignalInfo: *const VkSemaphoreSignalInfo) -> VkResult,PFN_vkSignalSemaphore,c"vkSignalSemaphore";
+    SignalSemaphoreKHR(device: VkDevice, pSignalInfo: *const VkSemaphoreSignalInfo) -> VkResult,PFN_vkSignalSemaphoreKHR,c"vkSignalSemaphoreKHR";
+    TransitionImageLayout(device: VkDevice, transitionCount: u32, pTransitions: *const VkHostImageLayoutTransitionInfo) -> VkResult,PFN_vkTransitionImageLayout,c"vkTransitionImageLayout";
+    TransitionImageLayoutEXT(device: VkDevice, transitionCount: u32, pTransitions: *const VkHostImageLayoutTransitionInfo) -> VkResult,PFN_vkTransitionImageLayoutEXT,c"vkTransitionImageLayoutEXT";
+    TrimCommandPool(device: VkDevice, commandPool: VkCommandPool, flags: VkCommandPoolTrimFlags) -> (),PFN_vkTrimCommandPool,c"vkTrimCommandPool";
+    TrimCommandPoolKHR(device: VkDevice, commandPool: VkCommandPool, flags: VkCommandPoolTrimFlags) -> (),PFN_vkTrimCommandPoolKHR,c"vkTrimCommandPoolKHR";
+    UninitializePerformanceApiINTEL(device: VkDevice) -> (),PFN_vkUninitializePerformanceApiINTEL,c"vkUninitializePerformanceApiINTEL";
+    UnmapMemory(device: VkDevice, memory: VkDeviceMemory) -> (),PFN_vkUnmapMemory,c"vkUnmapMemory";
+    UnmapMemory2(device: VkDevice, pMemoryUnmapInfo: *const VkMemoryUnmapInfo) -> VkResult,PFN_vkUnmapMemory2,c"vkUnmapMemory2";
+    UnmapMemory2KHR(device: VkDevice, pMemoryUnmapInfo: *const VkMemoryUnmapInfo) -> VkResult,PFN_vkUnmapMemory2KHR,c"vkUnmapMemory2KHR";
+    UnregisterCustomBorderColorEXT(device: VkDevice, index: u32) -> (),PFN_vkUnregisterCustomBorderColorEXT,c"vkUnregisterCustomBorderColorEXT";
+    UpdateDescriptorSetWithTemplate(device: VkDevice, descriptorSet: VkDescriptorSet, descriptorUpdateTemplate: VkDescriptorUpdateTemplate, pData: *const c_void) -> (),PFN_vkUpdateDescriptorSetWithTemplate,c"vkUpdateDescriptorSetWithTemplate";
+    UpdateDescriptorSetWithTemplateKHR(device: VkDevice, descriptorSet: VkDescriptorSet, descriptorUpdateTemplate: VkDescriptorUpdateTemplate, pData: *const c_void) -> (),PFN_vkUpdateDescriptorSetWithTemplateKHR,c"vkUpdateDescriptorSetWithTemplateKHR";
+    UpdateDescriptorSets(device: VkDevice, descriptorWriteCount: u32, pDescriptorWrites: *const VkWriteDescriptorSet, descriptorCopyCount: u32, pDescriptorCopies: *const VkCopyDescriptorSet) -> (),PFN_vkUpdateDescriptorSets,c"vkUpdateDescriptorSets";
+    UpdateIndirectExecutionSetPipelineEXT(device: VkDevice, indirectExecutionSet: VkIndirectExecutionSetEXT, executionSetWriteCount: u32, pExecutionSetWrites: *const VkWriteIndirectExecutionSetPipelineEXT) -> (),PFN_vkUpdateIndirectExecutionSetPipelineEXT,c"vkUpdateIndirectExecutionSetPipelineEXT";
+    UpdateIndirectExecutionSetShaderEXT(device: VkDevice, indirectExecutionSet: VkIndirectExecutionSetEXT, executionSetWriteCount: u32, pExecutionSetWrites: *const VkWriteIndirectExecutionSetShaderEXT) -> (),PFN_vkUpdateIndirectExecutionSetShaderEXT,c"vkUpdateIndirectExecutionSetShaderEXT";
+    UpdateVideoSessionParametersKHR(device: VkDevice, videoSessionParameters: VkVideoSessionParametersKHR, pUpdateInfo: *const VkVideoSessionParametersUpdateInfoKHR) -> VkResult,PFN_vkUpdateVideoSessionParametersKHR,c"vkUpdateVideoSessionParametersKHR";
+    WaitForFences(device: VkDevice, fenceCount: u32, pFences: *const VkFence, waitAll: VkBool32, timeout: u64) -> VkResult,PFN_vkWaitForFences,c"vkWaitForFences";
+    WaitForPresent2KHR(device: VkDevice, swapchain: VkSwapchainKHR, pPresentWait2Info: *const VkPresentWait2InfoKHR) -> VkResult,PFN_vkWaitForPresent2KHR,c"vkWaitForPresent2KHR";
+    WaitForPresentKHR(device: VkDevice, swapchain: VkSwapchainKHR, presentId: u64, timeout: u64) -> VkResult,PFN_vkWaitForPresentKHR,c"vkWaitForPresentKHR";
+    WaitSemaphores(device: VkDevice, pWaitInfo: *const VkSemaphoreWaitInfo, timeout: u64) -> VkResult,PFN_vkWaitSemaphores,c"vkWaitSemaphores";
+    WaitSemaphoresKHR(device: VkDevice, pWaitInfo: *const VkSemaphoreWaitInfo, timeout: u64) -> VkResult,PFN_vkWaitSemaphoresKHR,c"vkWaitSemaphoresKHR";
+    WriteAccelerationStructuresPropertiesKHR(device: VkDevice, accelerationStructureCount: u32, pAccelerationStructures: *const VkAccelerationStructureKHR, queryType: VkQueryType, dataSize: usize, pData: *mut c_void, stride: usize) -> VkResult,PFN_vkWriteAccelerationStructuresPropertiesKHR,c"vkWriteAccelerationStructuresPropertiesKHR";
+    WriteMicromapsPropertiesEXT(device: VkDevice, micromapCount: u32, pMicromaps: *const VkMicromapEXT, queryType: VkQueryType, dataSize: usize, pData: *mut c_void, stride: usize) -> VkResult,PFN_vkWriteMicromapsPropertiesEXT,c"vkWriteMicromapsPropertiesEXT";
+    WriteResourceDescriptorsEXT(device: VkDevice, resourceCount: u32, pResources: *const VkResourceDescriptorInfoEXT, pDescriptors: *const VkHostAddressRangeEXT) -> VkResult,PFN_vkWriteResourceDescriptorsEXT,c"vkWriteResourceDescriptorsEXT";
+    WriteSamplerDescriptorsEXT(device: VkDevice, samplerCount: u32, pSamplers: *const VkSamplerCreateInfo, pDescriptors: *const VkHostAddressRangeEXT) -> VkResult,PFN_vkWriteSamplerDescriptorsEXT,c"vkWriteSamplerDescriptorsEXT";
+}
+impl DeviceDispatchCombined {
+    #[inline(always)]
+    pub unsafe fn AcquireFullScreenExclusiveModeEXT(&self, device: VkDevice, swapchain: VkSwapchainKHR) -> VkResult {
+        unsafe { (self.AcquireFullScreenExclusiveModeEXT)(device, swapchain) }
+    }
+    #[inline(always)]
+    pub unsafe fn AcquireNextImage2KHR(&self, device: VkDevice, pAcquireInfo: *const VkAcquireNextImageInfoKHR, pImageIndex: *mut u32) -> VkResult {
+        unsafe { (self.AcquireNextImage2KHR)(device, pAcquireInfo, pImageIndex) }
+    }
+    #[inline(always)]
+    pub unsafe fn AcquireNextImageKHR(&self, device: VkDevice, swapchain: VkSwapchainKHR, timeout: u64, semaphore: VkSemaphore, fence: VkFence, pImageIndex: *mut u32) -> VkResult {
+        unsafe { (self.AcquireNextImageKHR)(device, swapchain, timeout, semaphore, fence, pImageIndex) }
+    }
+    #[inline(always)]
+    pub unsafe fn AcquirePerformanceConfigurationINTEL(&self, device: VkDevice, pAcquireInfo: *const VkPerformanceConfigurationAcquireInfoINTEL, pConfiguration: *mut VkPerformanceConfigurationINTEL) -> VkResult {
+        unsafe { (self.AcquirePerformanceConfigurationINTEL)(device, pAcquireInfo, pConfiguration) }
+    }
+    #[inline(always)]
+    pub unsafe fn AcquireProfilingLockKHR(&self, device: VkDevice, pInfo: *const VkAcquireProfilingLockInfoKHR) -> VkResult {
+        unsafe { (self.AcquireProfilingLockKHR)(device, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn AllocateCommandBuffers(&self, device: VkDevice, pAllocateInfo: *const VkCommandBufferAllocateInfo, pCommandBuffers: *mut VkCommandBuffer) -> VkResult {
+        unsafe { (self.AllocateCommandBuffers)(device, pAllocateInfo, pCommandBuffers) }
+    }
+    #[inline(always)]
+    pub unsafe fn AllocateDescriptorSets(&self, device: VkDevice, pAllocateInfo: *const VkDescriptorSetAllocateInfo, pDescriptorSets: *mut VkDescriptorSet) -> VkResult {
+        unsafe { (self.AllocateDescriptorSets)(device, pAllocateInfo, pDescriptorSets) }
+    }
+    #[inline(always)]
+    pub unsafe fn AllocateMemory(&self, device: VkDevice, pAllocateInfo: *const VkMemoryAllocateInfo, pAllocator: *const VkAllocationCallbacks, pMemory: *mut VkDeviceMemory) -> VkResult {
+        unsafe { (self.AllocateMemory)(device, pAllocateInfo, pAllocator, pMemory) }
+    }
+    #[inline(always)]
+    pub unsafe fn AntiLagUpdateAMD(&self, device: VkDevice, pData: *const VkAntiLagDataAMD) -> () {
+        unsafe { (self.AntiLagUpdateAMD)(device, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn BeginCommandBuffer(&self, commandBuffer: VkCommandBuffer, pBeginInfo: *const VkCommandBufferBeginInfo) -> VkResult {
+        unsafe { (self.BeginCommandBuffer)(commandBuffer, pBeginInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn BindAccelerationStructureMemoryNV(&self, device: VkDevice, bindInfoCount: u32, pBindInfos: *const VkBindAccelerationStructureMemoryInfoNV) -> VkResult {
+        unsafe { (self.BindAccelerationStructureMemoryNV)(device, bindInfoCount, pBindInfos) }
+    }
+    #[inline(always)]
+    pub unsafe fn BindBufferMemory(&self, device: VkDevice, buffer: VkBuffer, memory: VkDeviceMemory, memoryOffset: VkDeviceSize) -> VkResult {
+        unsafe { (self.BindBufferMemory)(device, buffer, memory, memoryOffset) }
+    }
+    #[inline(always)]
+    pub unsafe fn BindBufferMemory2(&self, device: VkDevice, bindInfoCount: u32, pBindInfos: *const VkBindBufferMemoryInfo) -> VkResult {
+        unsafe { (self.BindBufferMemory2)(device, bindInfoCount, pBindInfos) }
+    }
+    #[inline(always)]
+    pub unsafe fn BindBufferMemory2KHR(&self, device: VkDevice, bindInfoCount: u32, pBindInfos: *const VkBindBufferMemoryInfo) -> VkResult {
+        unsafe { (self.BindBufferMemory2KHR)(device, bindInfoCount, pBindInfos) }
+    }
+    #[inline(always)]
+    pub unsafe fn BindDataGraphPipelineSessionMemoryARM(&self, device: VkDevice, bindInfoCount: u32, pBindInfos: *const VkBindDataGraphPipelineSessionMemoryInfoARM) -> VkResult {
+        unsafe { (self.BindDataGraphPipelineSessionMemoryARM)(device, bindInfoCount, pBindInfos) }
+    }
+    #[inline(always)]
+    pub unsafe fn BindImageMemory(&self, device: VkDevice, image: VkImage, memory: VkDeviceMemory, memoryOffset: VkDeviceSize) -> VkResult {
+        unsafe { (self.BindImageMemory)(device, image, memory, memoryOffset) }
+    }
+    #[inline(always)]
+    pub unsafe fn BindImageMemory2(&self, device: VkDevice, bindInfoCount: u32, pBindInfos: *const VkBindImageMemoryInfo) -> VkResult {
+        unsafe { (self.BindImageMemory2)(device, bindInfoCount, pBindInfos) }
+    }
+    #[inline(always)]
+    pub unsafe fn BindImageMemory2KHR(&self, device: VkDevice, bindInfoCount: u32, pBindInfos: *const VkBindImageMemoryInfo) -> VkResult {
+        unsafe { (self.BindImageMemory2KHR)(device, bindInfoCount, pBindInfos) }
+    }
+    #[inline(always)]
+    pub unsafe fn BindOpticalFlowSessionImageNV(&self, device: VkDevice, session: VkOpticalFlowSessionNV, bindingPoint: VkOpticalFlowSessionBindingPointNV, view: VkImageView, layout: VkImageLayout) -> VkResult {
+        unsafe { (self.BindOpticalFlowSessionImageNV)(device, session, bindingPoint, view, layout) }
+    }
+    #[inline(always)]
+    pub unsafe fn BindTensorMemoryARM(&self, device: VkDevice, bindInfoCount: u32, pBindInfos: *const VkBindTensorMemoryInfoARM) -> VkResult {
+        unsafe { (self.BindTensorMemoryARM)(device, bindInfoCount, pBindInfos) }
+    }
+    #[inline(always)]
+    pub unsafe fn BindVideoSessionMemoryKHR(&self, device: VkDevice, videoSession: VkVideoSessionKHR, bindSessionMemoryInfoCount: u32, pBindSessionMemoryInfos: *const VkBindVideoSessionMemoryInfoKHR) -> VkResult {
+        unsafe { (self.BindVideoSessionMemoryKHR)(device, videoSession, bindSessionMemoryInfoCount, pBindSessionMemoryInfos) }
+    }
+    #[inline(always)]
+    pub unsafe fn BuildAccelerationStructuresKHR(&self, device: VkDevice, deferredOperation: VkDeferredOperationKHR, infoCount: u32, pInfos: *const VkAccelerationStructureBuildGeometryInfoKHR, ppBuildRangeInfos: *const *const VkAccelerationStructureBuildRangeInfoKHR) -> VkResult {
+        unsafe { (self.BuildAccelerationStructuresKHR)(device, deferredOperation, infoCount, pInfos, ppBuildRangeInfos) }
+    }
+    #[inline(always)]
+    pub unsafe fn BuildMicromapsEXT(&self, device: VkDevice, deferredOperation: VkDeferredOperationKHR, infoCount: u32, pInfos: *const VkMicromapBuildInfoEXT) -> VkResult {
+        unsafe { (self.BuildMicromapsEXT)(device, deferredOperation, infoCount, pInfos) }
+    }
+    #[inline(always)]
+    pub unsafe fn ClearShaderInstrumentationMetricsARM(&self, device: VkDevice, instrumentation: VkShaderInstrumentationARM) -> () {
+        unsafe { (self.ClearShaderInstrumentationMetricsARM)(device, instrumentation) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBeginConditionalRendering2EXT(&self, commandBuffer: VkCommandBuffer, pConditionalRenderingBegin: *const VkConditionalRenderingBeginInfo2EXT) -> () {
+        unsafe { (self.CmdBeginConditionalRendering2EXT)(commandBuffer, pConditionalRenderingBegin) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBeginConditionalRenderingEXT(&self, commandBuffer: VkCommandBuffer, pConditionalRenderingBegin: *const VkConditionalRenderingBeginInfoEXT) -> () {
+        unsafe { (self.CmdBeginConditionalRenderingEXT)(commandBuffer, pConditionalRenderingBegin) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBeginCustomResolveEXT(&self, commandBuffer: VkCommandBuffer, pBeginCustomResolveInfo: *const VkBeginCustomResolveInfoEXT) -> () {
+        unsafe { (self.CmdBeginCustomResolveEXT)(commandBuffer, pBeginCustomResolveInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBeginDebugUtilsLabelEXT(&self, commandBuffer: VkCommandBuffer, pLabelInfo: *const VkDebugUtilsLabelEXT) -> () {
+        unsafe { (self.CmdBeginDebugUtilsLabelEXT)(commandBuffer, pLabelInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBeginGpaSampleAMD(&self, commandBuffer: VkCommandBuffer, gpaSession: VkGpaSessionAMD, pGpaSampleBeginInfo: *const VkGpaSampleBeginInfoAMD, pSampleID: *mut u32) -> VkResult {
+        unsafe { (self.CmdBeginGpaSampleAMD)(commandBuffer, gpaSession, pGpaSampleBeginInfo, pSampleID) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBeginGpaSessionAMD(&self, commandBuffer: VkCommandBuffer, gpaSession: VkGpaSessionAMD) -> VkResult {
+        unsafe { (self.CmdBeginGpaSessionAMD)(commandBuffer, gpaSession) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBeginPerTileExecutionQCOM(&self, commandBuffer: VkCommandBuffer, pPerTileBeginInfo: *const VkPerTileBeginInfoQCOM) -> () {
+        unsafe { (self.CmdBeginPerTileExecutionQCOM)(commandBuffer, pPerTileBeginInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBeginQuery(&self, commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, query: u32, flags: VkQueryControlFlags) -> () {
+        unsafe { (self.CmdBeginQuery)(commandBuffer, queryPool, query, flags) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBeginQueryIndexedEXT(&self, commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, query: u32, flags: VkQueryControlFlags, index: u32) -> () {
+        unsafe { (self.CmdBeginQueryIndexedEXT)(commandBuffer, queryPool, query, flags, index) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBeginRenderPass(&self, commandBuffer: VkCommandBuffer, pRenderPassBegin: *const VkRenderPassBeginInfo, contents: VkSubpassContents) -> () {
+        unsafe { (self.CmdBeginRenderPass)(commandBuffer, pRenderPassBegin, contents) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBeginRenderPass2(&self, commandBuffer: VkCommandBuffer, pRenderPassBegin: *const VkRenderPassBeginInfo, pSubpassBeginInfo: *const VkSubpassBeginInfo) -> () {
+        unsafe { (self.CmdBeginRenderPass2)(commandBuffer, pRenderPassBegin, pSubpassBeginInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBeginRenderPass2KHR(&self, commandBuffer: VkCommandBuffer, pRenderPassBegin: *const VkRenderPassBeginInfo, pSubpassBeginInfo: *const VkSubpassBeginInfo) -> () {
+        unsafe { (self.CmdBeginRenderPass2KHR)(commandBuffer, pRenderPassBegin, pSubpassBeginInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBeginRendering(&self, commandBuffer: VkCommandBuffer, pRenderingInfo: *const VkRenderingInfo) -> () {
+        unsafe { (self.CmdBeginRendering)(commandBuffer, pRenderingInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBeginRenderingKHR(&self, commandBuffer: VkCommandBuffer, pRenderingInfo: *const VkRenderingInfo) -> () {
+        unsafe { (self.CmdBeginRenderingKHR)(commandBuffer, pRenderingInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBeginShaderInstrumentationARM(&self, commandBuffer: VkCommandBuffer, instrumentation: VkShaderInstrumentationARM) -> () {
+        unsafe { (self.CmdBeginShaderInstrumentationARM)(commandBuffer, instrumentation) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBeginTransformFeedback2EXT(&self, commandBuffer: VkCommandBuffer, firstCounterRange: u32, counterRangeCount: u32, pCounterInfos: *const VkBindTransformFeedbackBuffer2InfoEXT) -> () {
+        unsafe { (self.CmdBeginTransformFeedback2EXT)(commandBuffer, firstCounterRange, counterRangeCount, pCounterInfos) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBeginTransformFeedbackEXT(&self, commandBuffer: VkCommandBuffer, firstCounterBuffer: u32, counterBufferCount: u32, pCounterBuffers: *const VkBuffer, pCounterBufferOffsets: *const VkDeviceSize) -> () {
+        unsafe { (self.CmdBeginTransformFeedbackEXT)(commandBuffer, firstCounterBuffer, counterBufferCount, pCounterBuffers, pCounterBufferOffsets) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBeginVideoCodingKHR(&self, commandBuffer: VkCommandBuffer, pBeginInfo: *const VkVideoBeginCodingInfoKHR) -> () {
+        unsafe { (self.CmdBeginVideoCodingKHR)(commandBuffer, pBeginInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindDescriptorBufferEmbeddedSamplers2EXT(&self, commandBuffer: VkCommandBuffer, pBindDescriptorBufferEmbeddedSamplersInfo: *const VkBindDescriptorBufferEmbeddedSamplersInfoEXT) -> () {
+        unsafe { (self.CmdBindDescriptorBufferEmbeddedSamplers2EXT)(commandBuffer, pBindDescriptorBufferEmbeddedSamplersInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindDescriptorBufferEmbeddedSamplersEXT(&self, commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, layout: VkPipelineLayout, set: u32) -> () {
+        unsafe { (self.CmdBindDescriptorBufferEmbeddedSamplersEXT)(commandBuffer, pipelineBindPoint, layout, set) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindDescriptorBuffersEXT(&self, commandBuffer: VkCommandBuffer, bufferCount: u32, pBindingInfos: *const VkDescriptorBufferBindingInfoEXT) -> () {
+        unsafe { (self.CmdBindDescriptorBuffersEXT)(commandBuffer, bufferCount, pBindingInfos) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindDescriptorSets(&self, commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, layout: VkPipelineLayout, firstSet: u32, descriptorSetCount: u32, pDescriptorSets: *const VkDescriptorSet, dynamicOffsetCount: u32, pDynamicOffsets: *const u32) -> () {
+        unsafe { (self.CmdBindDescriptorSets)(commandBuffer, pipelineBindPoint, layout, firstSet, descriptorSetCount, pDescriptorSets, dynamicOffsetCount, pDynamicOffsets) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindDescriptorSets2(&self, commandBuffer: VkCommandBuffer, pBindDescriptorSetsInfo: *const VkBindDescriptorSetsInfo) -> () {
+        unsafe { (self.CmdBindDescriptorSets2)(commandBuffer, pBindDescriptorSetsInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindDescriptorSets2KHR(&self, commandBuffer: VkCommandBuffer, pBindDescriptorSetsInfo: *const VkBindDescriptorSetsInfo) -> () {
+        unsafe { (self.CmdBindDescriptorSets2KHR)(commandBuffer, pBindDescriptorSetsInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindIndexBuffer(&self, commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, indexType: VkIndexType) -> () {
+        unsafe { (self.CmdBindIndexBuffer)(commandBuffer, buffer, offset, indexType) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindIndexBuffer2(&self, commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, size: VkDeviceSize, indexType: VkIndexType) -> () {
+        unsafe { (self.CmdBindIndexBuffer2)(commandBuffer, buffer, offset, size, indexType) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindIndexBuffer2KHR(&self, commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, size: VkDeviceSize, indexType: VkIndexType) -> () {
+        unsafe { (self.CmdBindIndexBuffer2KHR)(commandBuffer, buffer, offset, size, indexType) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindIndexBuffer3KHR(&self, commandBuffer: VkCommandBuffer, pInfo: *const VkBindIndexBuffer3InfoKHR) -> () {
+        unsafe { (self.CmdBindIndexBuffer3KHR)(commandBuffer, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindInvocationMaskHUAWEI(&self, commandBuffer: VkCommandBuffer, imageView: VkImageView, imageLayout: VkImageLayout) -> () {
+        unsafe { (self.CmdBindInvocationMaskHUAWEI)(commandBuffer, imageView, imageLayout) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindPipeline(&self, commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, pipeline: VkPipeline) -> () {
+        unsafe { (self.CmdBindPipeline)(commandBuffer, pipelineBindPoint, pipeline) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindPipelineShaderGroupNV(&self, commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, pipeline: VkPipeline, groupIndex: u32) -> () {
+        unsafe { (self.CmdBindPipelineShaderGroupNV)(commandBuffer, pipelineBindPoint, pipeline, groupIndex) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindResourceHeapEXT(&self, commandBuffer: VkCommandBuffer, pBindInfo: *const VkBindHeapInfoEXT) -> () {
+        unsafe { (self.CmdBindResourceHeapEXT)(commandBuffer, pBindInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindSamplerHeapEXT(&self, commandBuffer: VkCommandBuffer, pBindInfo: *const VkBindHeapInfoEXT) -> () {
+        unsafe { (self.CmdBindSamplerHeapEXT)(commandBuffer, pBindInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindShadersEXT(&self, commandBuffer: VkCommandBuffer, stageCount: u32, pStages: *const VkShaderStageFlagBits, pShaders: *const VkShaderEXT) -> () {
+        unsafe { (self.CmdBindShadersEXT)(commandBuffer, stageCount, pStages, pShaders) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindShadingRateImageNV(&self, commandBuffer: VkCommandBuffer, imageView: VkImageView, imageLayout: VkImageLayout) -> () {
+        unsafe { (self.CmdBindShadingRateImageNV)(commandBuffer, imageView, imageLayout) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindTileMemoryQCOM(&self, commandBuffer: VkCommandBuffer, pTileMemoryBindInfo: *const VkTileMemoryBindInfoQCOM) -> () {
+        unsafe { (self.CmdBindTileMemoryQCOM)(commandBuffer, pTileMemoryBindInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindTransformFeedbackBuffers2EXT(&self, commandBuffer: VkCommandBuffer, firstBinding: u32, bindingCount: u32, pBindingInfos: *const VkBindTransformFeedbackBuffer2InfoEXT) -> () {
+        unsafe { (self.CmdBindTransformFeedbackBuffers2EXT)(commandBuffer, firstBinding, bindingCount, pBindingInfos) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindTransformFeedbackBuffersEXT(&self, commandBuffer: VkCommandBuffer, firstBinding: u32, bindingCount: u32, pBuffers: *const VkBuffer, pOffsets: *const VkDeviceSize, pSizes: *const VkDeviceSize) -> () {
+        unsafe { (self.CmdBindTransformFeedbackBuffersEXT)(commandBuffer, firstBinding, bindingCount, pBuffers, pOffsets, pSizes) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindVertexBuffers(&self, commandBuffer: VkCommandBuffer, firstBinding: u32, bindingCount: u32, pBuffers: *const VkBuffer, pOffsets: *const VkDeviceSize) -> () {
+        unsafe { (self.CmdBindVertexBuffers)(commandBuffer, firstBinding, bindingCount, pBuffers, pOffsets) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindVertexBuffers2(&self, commandBuffer: VkCommandBuffer, firstBinding: u32, bindingCount: u32, pBuffers: *const VkBuffer, pOffsets: *const VkDeviceSize, pSizes: *const VkDeviceSize, pStrides: *const VkDeviceSize) -> () {
+        unsafe { (self.CmdBindVertexBuffers2)(commandBuffer, firstBinding, bindingCount, pBuffers, pOffsets, pSizes, pStrides) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindVertexBuffers2EXT(&self, commandBuffer: VkCommandBuffer, firstBinding: u32, bindingCount: u32, pBuffers: *const VkBuffer, pOffsets: *const VkDeviceSize, pSizes: *const VkDeviceSize, pStrides: *const VkDeviceSize) -> () {
+        unsafe { (self.CmdBindVertexBuffers2EXT)(commandBuffer, firstBinding, bindingCount, pBuffers, pOffsets, pSizes, pStrides) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBindVertexBuffers3KHR(&self, commandBuffer: VkCommandBuffer, firstBinding: u32, bindingCount: u32, pBindingInfos: *const VkBindVertexBuffer3InfoKHR) -> () {
+        unsafe { (self.CmdBindVertexBuffers3KHR)(commandBuffer, firstBinding, bindingCount, pBindingInfos) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBlitImage(&self, commandBuffer: VkCommandBuffer, srcImage: VkImage, srcImageLayout: VkImageLayout, dstImage: VkImage, dstImageLayout: VkImageLayout, regionCount: u32, pRegions: *const VkImageBlit, filter: VkFilter) -> () {
+        unsafe { (self.CmdBlitImage)(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions, filter) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBlitImage2(&self, commandBuffer: VkCommandBuffer, pBlitImageInfo: *const VkBlitImageInfo2) -> () {
+        unsafe { (self.CmdBlitImage2)(commandBuffer, pBlitImageInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBlitImage2KHR(&self, commandBuffer: VkCommandBuffer, pBlitImageInfo: *const VkBlitImageInfo2) -> () {
+        unsafe { (self.CmdBlitImage2KHR)(commandBuffer, pBlitImageInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBuildAccelerationStructureNV(&self, commandBuffer: VkCommandBuffer, pInfo: *const VkAccelerationStructureInfoNV, instanceData: VkBuffer, instanceOffset: VkDeviceSize, update: VkBool32, dst: VkAccelerationStructureNV, src: VkAccelerationStructureNV, scratch: VkBuffer, scratchOffset: VkDeviceSize) -> () {
+        unsafe { (self.CmdBuildAccelerationStructureNV)(commandBuffer, pInfo, instanceData, instanceOffset, update, dst, src, scratch, scratchOffset) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBuildAccelerationStructuresIndirectKHR(&self, commandBuffer: VkCommandBuffer, infoCount: u32, pInfos: *const VkAccelerationStructureBuildGeometryInfoKHR, pIndirectDeviceAddresses: *const VkDeviceAddress, pIndirectStrides: *const u32, ppMaxPrimitiveCounts: *const *const u32) -> () {
+        unsafe { (self.CmdBuildAccelerationStructuresIndirectKHR)(commandBuffer, infoCount, pInfos, pIndirectDeviceAddresses, pIndirectStrides, ppMaxPrimitiveCounts) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBuildAccelerationStructuresKHR(&self, commandBuffer: VkCommandBuffer, infoCount: u32, pInfos: *const VkAccelerationStructureBuildGeometryInfoKHR, ppBuildRangeInfos: *const *const VkAccelerationStructureBuildRangeInfoKHR) -> () {
+        unsafe { (self.CmdBuildAccelerationStructuresKHR)(commandBuffer, infoCount, pInfos, ppBuildRangeInfos) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBuildClusterAccelerationStructureIndirectNV(&self, commandBuffer: VkCommandBuffer, pCommandInfos: *const VkClusterAccelerationStructureCommandsInfoNV) -> () {
+        unsafe { (self.CmdBuildClusterAccelerationStructureIndirectNV)(commandBuffer, pCommandInfos) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBuildMicromapsEXT(&self, commandBuffer: VkCommandBuffer, infoCount: u32, pInfos: *const VkMicromapBuildInfoEXT) -> () {
+        unsafe { (self.CmdBuildMicromapsEXT)(commandBuffer, infoCount, pInfos) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdBuildPartitionedAccelerationStructuresNV(&self, commandBuffer: VkCommandBuffer, pBuildInfo: *const VkBuildPartitionedAccelerationStructureInfoNV) -> () {
+        unsafe { (self.CmdBuildPartitionedAccelerationStructuresNV)(commandBuffer, pBuildInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdClearAttachments(&self, commandBuffer: VkCommandBuffer, attachmentCount: u32, pAttachments: *const VkClearAttachment, rectCount: u32, pRects: *const VkClearRect) -> () {
+        unsafe { (self.CmdClearAttachments)(commandBuffer, attachmentCount, pAttachments, rectCount, pRects) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdClearColorImage(&self, commandBuffer: VkCommandBuffer, image: VkImage, imageLayout: VkImageLayout, pColor: *const VkClearColorValue, rangeCount: u32, pRanges: *const VkImageSubresourceRange) -> () {
+        unsafe { (self.CmdClearColorImage)(commandBuffer, image, imageLayout, pColor, rangeCount, pRanges) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdClearDepthStencilImage(&self, commandBuffer: VkCommandBuffer, image: VkImage, imageLayout: VkImageLayout, pDepthStencil: *const VkClearDepthStencilValue, rangeCount: u32, pRanges: *const VkImageSubresourceRange) -> () {
+        unsafe { (self.CmdClearDepthStencilImage)(commandBuffer, image, imageLayout, pDepthStencil, rangeCount, pRanges) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdControlVideoCodingKHR(&self, commandBuffer: VkCommandBuffer, pCodingControlInfo: *const VkVideoCodingControlInfoKHR) -> () {
+        unsafe { (self.CmdControlVideoCodingKHR)(commandBuffer, pCodingControlInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdConvertCooperativeVectorMatrixNV(&self, commandBuffer: VkCommandBuffer, infoCount: u32, pInfos: *const VkConvertCooperativeVectorMatrixInfoNV) -> () {
+        unsafe { (self.CmdConvertCooperativeVectorMatrixNV)(commandBuffer, infoCount, pInfos) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyAccelerationStructureKHR(&self, commandBuffer: VkCommandBuffer, pInfo: *const VkCopyAccelerationStructureInfoKHR) -> () {
+        unsafe { (self.CmdCopyAccelerationStructureKHR)(commandBuffer, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyAccelerationStructureNV(&self, commandBuffer: VkCommandBuffer, dst: VkAccelerationStructureNV, src: VkAccelerationStructureNV, mode: VkCopyAccelerationStructureModeKHR) -> () {
+        unsafe { (self.CmdCopyAccelerationStructureNV)(commandBuffer, dst, src, mode) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyAccelerationStructureToMemoryKHR(&self, commandBuffer: VkCommandBuffer, pInfo: *const VkCopyAccelerationStructureToMemoryInfoKHR) -> () {
+        unsafe { (self.CmdCopyAccelerationStructureToMemoryKHR)(commandBuffer, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyBuffer(&self, commandBuffer: VkCommandBuffer, srcBuffer: VkBuffer, dstBuffer: VkBuffer, regionCount: u32, pRegions: *const VkBufferCopy) -> () {
+        unsafe { (self.CmdCopyBuffer)(commandBuffer, srcBuffer, dstBuffer, regionCount, pRegions) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyBuffer2(&self, commandBuffer: VkCommandBuffer, pCopyBufferInfo: *const VkCopyBufferInfo2) -> () {
+        unsafe { (self.CmdCopyBuffer2)(commandBuffer, pCopyBufferInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyBuffer2KHR(&self, commandBuffer: VkCommandBuffer, pCopyBufferInfo: *const VkCopyBufferInfo2) -> () {
+        unsafe { (self.CmdCopyBuffer2KHR)(commandBuffer, pCopyBufferInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyBufferToImage(&self, commandBuffer: VkCommandBuffer, srcBuffer: VkBuffer, dstImage: VkImage, dstImageLayout: VkImageLayout, regionCount: u32, pRegions: *const VkBufferImageCopy) -> () {
+        unsafe { (self.CmdCopyBufferToImage)(commandBuffer, srcBuffer, dstImage, dstImageLayout, regionCount, pRegions) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyBufferToImage2(&self, commandBuffer: VkCommandBuffer, pCopyBufferToImageInfo: *const VkCopyBufferToImageInfo2) -> () {
+        unsafe { (self.CmdCopyBufferToImage2)(commandBuffer, pCopyBufferToImageInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyBufferToImage2KHR(&self, commandBuffer: VkCommandBuffer, pCopyBufferToImageInfo: *const VkCopyBufferToImageInfo2) -> () {
+        unsafe { (self.CmdCopyBufferToImage2KHR)(commandBuffer, pCopyBufferToImageInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyGpaSessionResultsAMD(&self, commandBuffer: VkCommandBuffer, gpaSession: VkGpaSessionAMD) -> () {
+        unsafe { (self.CmdCopyGpaSessionResultsAMD)(commandBuffer, gpaSession) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyImage(&self, commandBuffer: VkCommandBuffer, srcImage: VkImage, srcImageLayout: VkImageLayout, dstImage: VkImage, dstImageLayout: VkImageLayout, regionCount: u32, pRegions: *const VkImageCopy) -> () {
+        unsafe { (self.CmdCopyImage)(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyImage2(&self, commandBuffer: VkCommandBuffer, pCopyImageInfo: *const VkCopyImageInfo2) -> () {
+        unsafe { (self.CmdCopyImage2)(commandBuffer, pCopyImageInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyImage2KHR(&self, commandBuffer: VkCommandBuffer, pCopyImageInfo: *const VkCopyImageInfo2) -> () {
+        unsafe { (self.CmdCopyImage2KHR)(commandBuffer, pCopyImageInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyImageToBuffer(&self, commandBuffer: VkCommandBuffer, srcImage: VkImage, srcImageLayout: VkImageLayout, dstBuffer: VkBuffer, regionCount: u32, pRegions: *const VkBufferImageCopy) -> () {
+        unsafe { (self.CmdCopyImageToBuffer)(commandBuffer, srcImage, srcImageLayout, dstBuffer, regionCount, pRegions) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyImageToBuffer2(&self, commandBuffer: VkCommandBuffer, pCopyImageToBufferInfo: *const VkCopyImageToBufferInfo2) -> () {
+        unsafe { (self.CmdCopyImageToBuffer2)(commandBuffer, pCopyImageToBufferInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyImageToBuffer2KHR(&self, commandBuffer: VkCommandBuffer, pCopyImageToBufferInfo: *const VkCopyImageToBufferInfo2) -> () {
+        unsafe { (self.CmdCopyImageToBuffer2KHR)(commandBuffer, pCopyImageToBufferInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyImageToMemoryKHR(&self, commandBuffer: VkCommandBuffer, pCopyMemoryInfo: *const VkCopyDeviceMemoryImageInfoKHR) -> () {
+        unsafe { (self.CmdCopyImageToMemoryKHR)(commandBuffer, pCopyMemoryInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyMemoryIndirectKHR(&self, commandBuffer: VkCommandBuffer, pCopyMemoryIndirectInfo: *const VkCopyMemoryIndirectInfoKHR) -> () {
+        unsafe { (self.CmdCopyMemoryIndirectKHR)(commandBuffer, pCopyMemoryIndirectInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyMemoryIndirectNV(&self, commandBuffer: VkCommandBuffer, copyBufferAddress: VkDeviceAddress, copyCount: u32, stride: u32) -> () {
+        unsafe { (self.CmdCopyMemoryIndirectNV)(commandBuffer, copyBufferAddress, copyCount, stride) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyMemoryKHR(&self, commandBuffer: VkCommandBuffer, pCopyMemoryInfo: *const VkCopyDeviceMemoryInfoKHR) -> () {
+        unsafe { (self.CmdCopyMemoryKHR)(commandBuffer, pCopyMemoryInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyMemoryToAccelerationStructureKHR(&self, commandBuffer: VkCommandBuffer, pInfo: *const VkCopyMemoryToAccelerationStructureInfoKHR) -> () {
+        unsafe { (self.CmdCopyMemoryToAccelerationStructureKHR)(commandBuffer, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyMemoryToImageIndirectKHR(&self, commandBuffer: VkCommandBuffer, pCopyMemoryToImageIndirectInfo: *const VkCopyMemoryToImageIndirectInfoKHR) -> () {
+        unsafe { (self.CmdCopyMemoryToImageIndirectKHR)(commandBuffer, pCopyMemoryToImageIndirectInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyMemoryToImageIndirectNV(&self, commandBuffer: VkCommandBuffer, copyBufferAddress: VkDeviceAddress, copyCount: u32, stride: u32, dstImage: VkImage, dstImageLayout: VkImageLayout, pImageSubresources: *const VkImageSubresourceLayers) -> () {
+        unsafe { (self.CmdCopyMemoryToImageIndirectNV)(commandBuffer, copyBufferAddress, copyCount, stride, dstImage, dstImageLayout, pImageSubresources) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyMemoryToImageKHR(&self, commandBuffer: VkCommandBuffer, pCopyMemoryInfo: *const VkCopyDeviceMemoryImageInfoKHR) -> () {
+        unsafe { (self.CmdCopyMemoryToImageKHR)(commandBuffer, pCopyMemoryInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyMemoryToMicromapEXT(&self, commandBuffer: VkCommandBuffer, pInfo: *const VkCopyMemoryToMicromapInfoEXT) -> () {
+        unsafe { (self.CmdCopyMemoryToMicromapEXT)(commandBuffer, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyMicromapEXT(&self, commandBuffer: VkCommandBuffer, pInfo: *const VkCopyMicromapInfoEXT) -> () {
+        unsafe { (self.CmdCopyMicromapEXT)(commandBuffer, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyMicromapToMemoryEXT(&self, commandBuffer: VkCommandBuffer, pInfo: *const VkCopyMicromapToMemoryInfoEXT) -> () {
+        unsafe { (self.CmdCopyMicromapToMemoryEXT)(commandBuffer, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyQueryPoolResults(&self, commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, firstQuery: u32, queryCount: u32, dstBuffer: VkBuffer, dstOffset: VkDeviceSize, stride: VkDeviceSize, flags: VkQueryResultFlags) -> () {
+        unsafe { (self.CmdCopyQueryPoolResults)(commandBuffer, queryPool, firstQuery, queryCount, dstBuffer, dstOffset, stride, flags) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyQueryPoolResultsToMemoryKHR(&self, commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, firstQuery: u32, queryCount: u32, pDstRange: *const VkStridedDeviceAddressRangeKHR, dstFlags: VkAddressCommandFlagsKHR, queryResultFlags: VkQueryResultFlags) -> () {
+        unsafe { (self.CmdCopyQueryPoolResultsToMemoryKHR)(commandBuffer, queryPool, firstQuery, queryCount, pDstRange, dstFlags, queryResultFlags) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCopyTensorARM(&self, commandBuffer: VkCommandBuffer, pCopyTensorInfo: *const VkCopyTensorInfoARM) -> () {
+        unsafe { (self.CmdCopyTensorARM)(commandBuffer, pCopyTensorInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCuLaunchKernelNVX(&self, commandBuffer: VkCommandBuffer, pLaunchInfo: *const VkCuLaunchInfoNVX) -> () {
+        unsafe { (self.CmdCuLaunchKernelNVX)(commandBuffer, pLaunchInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdCudaLaunchKernelNV(&self, commandBuffer: VkCommandBuffer, pLaunchInfo: *const VkCudaLaunchInfoNV) -> () {
+        unsafe { (self.CmdCudaLaunchKernelNV)(commandBuffer, pLaunchInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDebugMarkerBeginEXT(&self, commandBuffer: VkCommandBuffer, pMarkerInfo: *const VkDebugMarkerMarkerInfoEXT) -> () {
+        unsafe { (self.CmdDebugMarkerBeginEXT)(commandBuffer, pMarkerInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDebugMarkerEndEXT(&self, commandBuffer: VkCommandBuffer) -> () {
+        unsafe { (self.CmdDebugMarkerEndEXT)(commandBuffer) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDebugMarkerInsertEXT(&self, commandBuffer: VkCommandBuffer, pMarkerInfo: *const VkDebugMarkerMarkerInfoEXT) -> () {
+        unsafe { (self.CmdDebugMarkerInsertEXT)(commandBuffer, pMarkerInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDecodeVideoKHR(&self, commandBuffer: VkCommandBuffer, pDecodeInfo: *const VkVideoDecodeInfoKHR) -> () {
+        unsafe { (self.CmdDecodeVideoKHR)(commandBuffer, pDecodeInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDecompressMemoryEXT(&self, commandBuffer: VkCommandBuffer, pDecompressMemoryInfoEXT: *const VkDecompressMemoryInfoEXT) -> () {
+        unsafe { (self.CmdDecompressMemoryEXT)(commandBuffer, pDecompressMemoryInfoEXT) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDecompressMemoryIndirectCountEXT(&self, commandBuffer: VkCommandBuffer, decompressionMethod: VkMemoryDecompressionMethodFlagsEXT, indirectCommandsAddress: VkDeviceAddress, indirectCommandsCountAddress: VkDeviceAddress, maxDecompressionCount: u32, stride: u32) -> () {
+        unsafe { (self.CmdDecompressMemoryIndirectCountEXT)(commandBuffer, decompressionMethod, indirectCommandsAddress, indirectCommandsCountAddress, maxDecompressionCount, stride) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDecompressMemoryIndirectCountNV(&self, commandBuffer: VkCommandBuffer, indirectCommandsAddress: VkDeviceAddress, indirectCommandsCountAddress: VkDeviceAddress, stride: u32) -> () {
+        unsafe { (self.CmdDecompressMemoryIndirectCountNV)(commandBuffer, indirectCommandsAddress, indirectCommandsCountAddress, stride) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDecompressMemoryNV(&self, commandBuffer: VkCommandBuffer, decompressRegionCount: u32, pDecompressMemoryRegions: *const VkDecompressMemoryRegionNV) -> () {
+        unsafe { (self.CmdDecompressMemoryNV)(commandBuffer, decompressRegionCount, pDecompressMemoryRegions) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDispatch(&self, commandBuffer: VkCommandBuffer, groupCountX: u32, groupCountY: u32, groupCountZ: u32) -> () {
+        unsafe { (self.CmdDispatch)(commandBuffer, groupCountX, groupCountY, groupCountZ) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDispatchBase(&self, commandBuffer: VkCommandBuffer, baseGroupX: u32, baseGroupY: u32, baseGroupZ: u32, groupCountX: u32, groupCountY: u32, groupCountZ: u32) -> () {
+        unsafe { (self.CmdDispatchBase)(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY, groupCountZ) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDispatchBaseKHR(&self, commandBuffer: VkCommandBuffer, baseGroupX: u32, baseGroupY: u32, baseGroupZ: u32, groupCountX: u32, groupCountY: u32, groupCountZ: u32) -> () {
+        unsafe { (self.CmdDispatchBaseKHR)(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY, groupCountZ) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDispatchDataGraphARM(&self, commandBuffer: VkCommandBuffer, session: VkDataGraphPipelineSessionARM, pInfo: *const VkDataGraphPipelineDispatchInfoARM) -> () {
+        unsafe { (self.CmdDispatchDataGraphARM)(commandBuffer, session, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDispatchGraphAMDX(&self, commandBuffer: VkCommandBuffer, scratch: VkDeviceAddress, scratchSize: VkDeviceSize, pCountInfo: *const VkDispatchGraphCountInfoAMDX) -> () {
+        unsafe { (self.CmdDispatchGraphAMDX)(commandBuffer, scratch, scratchSize, pCountInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDispatchGraphIndirectAMDX(&self, commandBuffer: VkCommandBuffer, scratch: VkDeviceAddress, scratchSize: VkDeviceSize, pCountInfo: *const VkDispatchGraphCountInfoAMDX) -> () {
+        unsafe { (self.CmdDispatchGraphIndirectAMDX)(commandBuffer, scratch, scratchSize, pCountInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDispatchGraphIndirectCountAMDX(&self, commandBuffer: VkCommandBuffer, scratch: VkDeviceAddress, scratchSize: VkDeviceSize, countInfo: VkDeviceAddress) -> () {
+        unsafe { (self.CmdDispatchGraphIndirectCountAMDX)(commandBuffer, scratch, scratchSize, countInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDispatchIndirect(&self, commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize) -> () {
+        unsafe { (self.CmdDispatchIndirect)(commandBuffer, buffer, offset) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDispatchIndirect2KHR(&self, commandBuffer: VkCommandBuffer, pInfo: *const VkDispatchIndirect2InfoKHR) -> () {
+        unsafe { (self.CmdDispatchIndirect2KHR)(commandBuffer, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDispatchTileQCOM(&self, commandBuffer: VkCommandBuffer, pDispatchTileInfo: *const VkDispatchTileInfoQCOM) -> () {
+        unsafe { (self.CmdDispatchTileQCOM)(commandBuffer, pDispatchTileInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDraw(&self, commandBuffer: VkCommandBuffer, vertexCount: u32, instanceCount: u32, firstVertex: u32, firstInstance: u32) -> () {
+        unsafe { (self.CmdDraw)(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawClusterHUAWEI(&self, commandBuffer: VkCommandBuffer, groupCountX: u32, groupCountY: u32, groupCountZ: u32) -> () {
+        unsafe { (self.CmdDrawClusterHUAWEI)(commandBuffer, groupCountX, groupCountY, groupCountZ) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawClusterIndirectHUAWEI(&self, commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize) -> () {
+        unsafe { (self.CmdDrawClusterIndirectHUAWEI)(commandBuffer, buffer, offset) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawIndexed(&self, commandBuffer: VkCommandBuffer, indexCount: u32, instanceCount: u32, firstIndex: u32, vertexOffset: i32, firstInstance: u32) -> () {
+        unsafe { (self.CmdDrawIndexed)(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawIndexedIndirect(&self, commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, drawCount: u32, stride: u32) -> () {
+        unsafe { (self.CmdDrawIndexedIndirect)(commandBuffer, buffer, offset, drawCount, stride) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawIndexedIndirect2KHR(&self, commandBuffer: VkCommandBuffer, pInfo: *const VkDrawIndirect2InfoKHR) -> () {
+        unsafe { (self.CmdDrawIndexedIndirect2KHR)(commandBuffer, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawIndexedIndirectCount(&self, commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, countBuffer: VkBuffer, countBufferOffset: VkDeviceSize, maxDrawCount: u32, stride: u32) -> () {
+        unsafe { (self.CmdDrawIndexedIndirectCount)(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawIndexedIndirectCount2KHR(&self, commandBuffer: VkCommandBuffer, pInfo: *const VkDrawIndirectCount2InfoKHR) -> () {
+        unsafe { (self.CmdDrawIndexedIndirectCount2KHR)(commandBuffer, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawIndexedIndirectCountAMD(&self, commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, countBuffer: VkBuffer, countBufferOffset: VkDeviceSize, maxDrawCount: u32, stride: u32) -> () {
+        unsafe { (self.CmdDrawIndexedIndirectCountAMD)(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawIndexedIndirectCountKHR(&self, commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, countBuffer: VkBuffer, countBufferOffset: VkDeviceSize, maxDrawCount: u32, stride: u32) -> () {
+        unsafe { (self.CmdDrawIndexedIndirectCountKHR)(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawIndirect(&self, commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, drawCount: u32, stride: u32) -> () {
+        unsafe { (self.CmdDrawIndirect)(commandBuffer, buffer, offset, drawCount, stride) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawIndirect2KHR(&self, commandBuffer: VkCommandBuffer, pInfo: *const VkDrawIndirect2InfoKHR) -> () {
+        unsafe { (self.CmdDrawIndirect2KHR)(commandBuffer, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawIndirectByteCount2EXT(&self, commandBuffer: VkCommandBuffer, instanceCount: u32, firstInstance: u32, pCounterInfo: *const VkBindTransformFeedbackBuffer2InfoEXT, counterOffset: u32, vertexStride: u32) -> () {
+        unsafe { (self.CmdDrawIndirectByteCount2EXT)(commandBuffer, instanceCount, firstInstance, pCounterInfo, counterOffset, vertexStride) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawIndirectByteCountEXT(&self, commandBuffer: VkCommandBuffer, instanceCount: u32, firstInstance: u32, counterBuffer: VkBuffer, counterBufferOffset: VkDeviceSize, counterOffset: u32, vertexStride: u32) -> () {
+        unsafe { (self.CmdDrawIndirectByteCountEXT)(commandBuffer, instanceCount, firstInstance, counterBuffer, counterBufferOffset, counterOffset, vertexStride) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawIndirectCount(&self, commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, countBuffer: VkBuffer, countBufferOffset: VkDeviceSize, maxDrawCount: u32, stride: u32) -> () {
+        unsafe { (self.CmdDrawIndirectCount)(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawIndirectCount2KHR(&self, commandBuffer: VkCommandBuffer, pInfo: *const VkDrawIndirectCount2InfoKHR) -> () {
+        unsafe { (self.CmdDrawIndirectCount2KHR)(commandBuffer, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawIndirectCountAMD(&self, commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, countBuffer: VkBuffer, countBufferOffset: VkDeviceSize, maxDrawCount: u32, stride: u32) -> () {
+        unsafe { (self.CmdDrawIndirectCountAMD)(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawIndirectCountKHR(&self, commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, countBuffer: VkBuffer, countBufferOffset: VkDeviceSize, maxDrawCount: u32, stride: u32) -> () {
+        unsafe { (self.CmdDrawIndirectCountKHR)(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawMeshTasksEXT(&self, commandBuffer: VkCommandBuffer, groupCountX: u32, groupCountY: u32, groupCountZ: u32) -> () {
+        unsafe { (self.CmdDrawMeshTasksEXT)(commandBuffer, groupCountX, groupCountY, groupCountZ) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawMeshTasksIndirect2EXT(&self, commandBuffer: VkCommandBuffer, pInfo: *const VkDrawIndirect2InfoKHR) -> () {
+        unsafe { (self.CmdDrawMeshTasksIndirect2EXT)(commandBuffer, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawMeshTasksIndirectCount2EXT(&self, commandBuffer: VkCommandBuffer, pInfo: *const VkDrawIndirectCount2InfoKHR) -> () {
+        unsafe { (self.CmdDrawMeshTasksIndirectCount2EXT)(commandBuffer, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawMeshTasksIndirectCountEXT(&self, commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, countBuffer: VkBuffer, countBufferOffset: VkDeviceSize, maxDrawCount: u32, stride: u32) -> () {
+        unsafe { (self.CmdDrawMeshTasksIndirectCountEXT)(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawMeshTasksIndirectCountNV(&self, commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, countBuffer: VkBuffer, countBufferOffset: VkDeviceSize, maxDrawCount: u32, stride: u32) -> () {
+        unsafe { (self.CmdDrawMeshTasksIndirectCountNV)(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawMeshTasksIndirectEXT(&self, commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, drawCount: u32, stride: u32) -> () {
+        unsafe { (self.CmdDrawMeshTasksIndirectEXT)(commandBuffer, buffer, offset, drawCount, stride) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawMeshTasksIndirectNV(&self, commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, drawCount: u32, stride: u32) -> () {
+        unsafe { (self.CmdDrawMeshTasksIndirectNV)(commandBuffer, buffer, offset, drawCount, stride) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawMeshTasksNV(&self, commandBuffer: VkCommandBuffer, taskCount: u32, firstTask: u32) -> () {
+        unsafe { (self.CmdDrawMeshTasksNV)(commandBuffer, taskCount, firstTask) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawMultiEXT(&self, commandBuffer: VkCommandBuffer, drawCount: u32, pVertexInfo: *const VkMultiDrawInfoEXT, instanceCount: u32, firstInstance: u32, stride: u32) -> () {
+        unsafe { (self.CmdDrawMultiEXT)(commandBuffer, drawCount, pVertexInfo, instanceCount, firstInstance, stride) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdDrawMultiIndexedEXT(&self, commandBuffer: VkCommandBuffer, drawCount: u32, pIndexInfo: *const VkMultiDrawIndexedInfoEXT, instanceCount: u32, firstInstance: u32, stride: u32, pVertexOffset: *const i32) -> () {
+        unsafe { (self.CmdDrawMultiIndexedEXT)(commandBuffer, drawCount, pIndexInfo, instanceCount, firstInstance, stride, pVertexOffset) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdEncodeVideoKHR(&self, commandBuffer: VkCommandBuffer, pEncodeInfo: *const VkVideoEncodeInfoKHR) -> () {
+        unsafe { (self.CmdEncodeVideoKHR)(commandBuffer, pEncodeInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdEndConditionalRenderingEXT(&self, commandBuffer: VkCommandBuffer) -> () {
+        unsafe { (self.CmdEndConditionalRenderingEXT)(commandBuffer) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdEndDebugUtilsLabelEXT(&self, commandBuffer: VkCommandBuffer) -> () {
+        unsafe { (self.CmdEndDebugUtilsLabelEXT)(commandBuffer) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdEndGpaSampleAMD(&self, commandBuffer: VkCommandBuffer, gpaSession: VkGpaSessionAMD, sampleID: u32) -> () {
+        unsafe { (self.CmdEndGpaSampleAMD)(commandBuffer, gpaSession, sampleID) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdEndGpaSessionAMD(&self, commandBuffer: VkCommandBuffer, gpaSession: VkGpaSessionAMD) -> VkResult {
+        unsafe { (self.CmdEndGpaSessionAMD)(commandBuffer, gpaSession) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdEndPerTileExecutionQCOM(&self, commandBuffer: VkCommandBuffer, pPerTileEndInfo: *const VkPerTileEndInfoQCOM) -> () {
+        unsafe { (self.CmdEndPerTileExecutionQCOM)(commandBuffer, pPerTileEndInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdEndQuery(&self, commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, query: u32) -> () {
+        unsafe { (self.CmdEndQuery)(commandBuffer, queryPool, query) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdEndQueryIndexedEXT(&self, commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, query: u32, index: u32) -> () {
+        unsafe { (self.CmdEndQueryIndexedEXT)(commandBuffer, queryPool, query, index) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdEndRenderPass(&self, commandBuffer: VkCommandBuffer) -> () {
+        unsafe { (self.CmdEndRenderPass)(commandBuffer) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdEndRenderPass2(&self, commandBuffer: VkCommandBuffer, pSubpassEndInfo: *const VkSubpassEndInfo) -> () {
+        unsafe { (self.CmdEndRenderPass2)(commandBuffer, pSubpassEndInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdEndRenderPass2KHR(&self, commandBuffer: VkCommandBuffer, pSubpassEndInfo: *const VkSubpassEndInfo) -> () {
+        unsafe { (self.CmdEndRenderPass2KHR)(commandBuffer, pSubpassEndInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdEndRendering(&self, commandBuffer: VkCommandBuffer) -> () {
+        unsafe { (self.CmdEndRendering)(commandBuffer) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdEndRendering2EXT(&self, commandBuffer: VkCommandBuffer, pRenderingEndInfo: *const VkRenderingEndInfoKHR) -> () {
+        unsafe { (self.CmdEndRendering2EXT)(commandBuffer, pRenderingEndInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdEndRendering2KHR(&self, commandBuffer: VkCommandBuffer, pRenderingEndInfo: *const VkRenderingEndInfoKHR) -> () {
+        unsafe { (self.CmdEndRendering2KHR)(commandBuffer, pRenderingEndInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdEndRenderingKHR(&self, commandBuffer: VkCommandBuffer) -> () {
+        unsafe { (self.CmdEndRenderingKHR)(commandBuffer) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdEndShaderInstrumentationARM(&self, commandBuffer: VkCommandBuffer) -> () {
+        unsafe { (self.CmdEndShaderInstrumentationARM)(commandBuffer) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdEndTransformFeedback2EXT(&self, commandBuffer: VkCommandBuffer, firstCounterRange: u32, counterRangeCount: u32, pCounterInfos: *const VkBindTransformFeedbackBuffer2InfoEXT) -> () {
+        unsafe { (self.CmdEndTransformFeedback2EXT)(commandBuffer, firstCounterRange, counterRangeCount, pCounterInfos) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdEndTransformFeedbackEXT(&self, commandBuffer: VkCommandBuffer, firstCounterBuffer: u32, counterBufferCount: u32, pCounterBuffers: *const VkBuffer, pCounterBufferOffsets: *const VkDeviceSize) -> () {
+        unsafe { (self.CmdEndTransformFeedbackEXT)(commandBuffer, firstCounterBuffer, counterBufferCount, pCounterBuffers, pCounterBufferOffsets) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdEndVideoCodingKHR(&self, commandBuffer: VkCommandBuffer, pEndCodingInfo: *const VkVideoEndCodingInfoKHR) -> () {
+        unsafe { (self.CmdEndVideoCodingKHR)(commandBuffer, pEndCodingInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdExecuteCommands(&self, commandBuffer: VkCommandBuffer, commandBufferCount: u32, pCommandBuffers: *const VkCommandBuffer) -> () {
+        unsafe { (self.CmdExecuteCommands)(commandBuffer, commandBufferCount, pCommandBuffers) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdExecuteGeneratedCommandsEXT(&self, commandBuffer: VkCommandBuffer, isPreprocessed: VkBool32, pGeneratedCommandsInfo: *const VkGeneratedCommandsInfoEXT) -> () {
+        unsafe { (self.CmdExecuteGeneratedCommandsEXT)(commandBuffer, isPreprocessed, pGeneratedCommandsInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdExecuteGeneratedCommandsNV(&self, commandBuffer: VkCommandBuffer, isPreprocessed: VkBool32, pGeneratedCommandsInfo: *const VkGeneratedCommandsInfoNV) -> () {
+        unsafe { (self.CmdExecuteGeneratedCommandsNV)(commandBuffer, isPreprocessed, pGeneratedCommandsInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdFillBuffer(&self, commandBuffer: VkCommandBuffer, dstBuffer: VkBuffer, dstOffset: VkDeviceSize, size: VkDeviceSize, data: u32) -> () {
+        unsafe { (self.CmdFillBuffer)(commandBuffer, dstBuffer, dstOffset, size, data) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdFillMemoryKHR(&self, commandBuffer: VkCommandBuffer, pDstRange: *const VkDeviceAddressRangeKHR, dstFlags: VkAddressCommandFlagsKHR, data: u32) -> () {
+        unsafe { (self.CmdFillMemoryKHR)(commandBuffer, pDstRange, dstFlags, data) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdInitializeGraphScratchMemoryAMDX(&self, commandBuffer: VkCommandBuffer, executionGraph: VkPipeline, scratch: VkDeviceAddress, scratchSize: VkDeviceSize) -> () {
+        unsafe { (self.CmdInitializeGraphScratchMemoryAMDX)(commandBuffer, executionGraph, scratch, scratchSize) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdInsertDebugUtilsLabelEXT(&self, commandBuffer: VkCommandBuffer, pLabelInfo: *const VkDebugUtilsLabelEXT) -> () {
+        unsafe { (self.CmdInsertDebugUtilsLabelEXT)(commandBuffer, pLabelInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdNextSubpass(&self, commandBuffer: VkCommandBuffer, contents: VkSubpassContents) -> () {
+        unsafe { (self.CmdNextSubpass)(commandBuffer, contents) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdNextSubpass2(&self, commandBuffer: VkCommandBuffer, pSubpassBeginInfo: *const VkSubpassBeginInfo, pSubpassEndInfo: *const VkSubpassEndInfo) -> () {
+        unsafe { (self.CmdNextSubpass2)(commandBuffer, pSubpassBeginInfo, pSubpassEndInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdNextSubpass2KHR(&self, commandBuffer: VkCommandBuffer, pSubpassBeginInfo: *const VkSubpassBeginInfo, pSubpassEndInfo: *const VkSubpassEndInfo) -> () {
+        unsafe { (self.CmdNextSubpass2KHR)(commandBuffer, pSubpassBeginInfo, pSubpassEndInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdOpticalFlowExecuteNV(&self, commandBuffer: VkCommandBuffer, session: VkOpticalFlowSessionNV, pExecuteInfo: *const VkOpticalFlowExecuteInfoNV) -> () {
+        unsafe { (self.CmdOpticalFlowExecuteNV)(commandBuffer, session, pExecuteInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdPipelineBarrier(&self, commandBuffer: VkCommandBuffer, srcStageMask: VkPipelineStageFlags, dstStageMask: VkPipelineStageFlags, dependencyFlags: VkDependencyFlags, memoryBarrierCount: u32, pMemoryBarriers: *const VkMemoryBarrier, bufferMemoryBarrierCount: u32, pBufferMemoryBarriers: *const VkBufferMemoryBarrier, imageMemoryBarrierCount: u32, pImageMemoryBarriers: *const VkImageMemoryBarrier) -> () {
+        unsafe { (self.CmdPipelineBarrier)(commandBuffer, srcStageMask, dstStageMask, dependencyFlags, memoryBarrierCount, pMemoryBarriers, bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemoryBarrierCount, pImageMemoryBarriers) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdPipelineBarrier2(&self, commandBuffer: VkCommandBuffer, pDependencyInfo: *const VkDependencyInfo) -> () {
+        unsafe { (self.CmdPipelineBarrier2)(commandBuffer, pDependencyInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdPipelineBarrier2KHR(&self, commandBuffer: VkCommandBuffer, pDependencyInfo: *const VkDependencyInfo) -> () {
+        unsafe { (self.CmdPipelineBarrier2KHR)(commandBuffer, pDependencyInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdPreprocessGeneratedCommandsEXT(&self, commandBuffer: VkCommandBuffer, pGeneratedCommandsInfo: *const VkGeneratedCommandsInfoEXT, stateCommandBuffer: VkCommandBuffer) -> () {
+        unsafe { (self.CmdPreprocessGeneratedCommandsEXT)(commandBuffer, pGeneratedCommandsInfo, stateCommandBuffer) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdPreprocessGeneratedCommandsNV(&self, commandBuffer: VkCommandBuffer, pGeneratedCommandsInfo: *const VkGeneratedCommandsInfoNV) -> () {
+        unsafe { (self.CmdPreprocessGeneratedCommandsNV)(commandBuffer, pGeneratedCommandsInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdPushConstants(&self, commandBuffer: VkCommandBuffer, layout: VkPipelineLayout, stageFlags: VkShaderStageFlags, offset: u32, size: u32, pValues: *const c_void) -> () {
+        unsafe { (self.CmdPushConstants)(commandBuffer, layout, stageFlags, offset, size, pValues) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdPushConstants2(&self, commandBuffer: VkCommandBuffer, pPushConstantsInfo: *const VkPushConstantsInfo) -> () {
+        unsafe { (self.CmdPushConstants2)(commandBuffer, pPushConstantsInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdPushConstants2KHR(&self, commandBuffer: VkCommandBuffer, pPushConstantsInfo: *const VkPushConstantsInfo) -> () {
+        unsafe { (self.CmdPushConstants2KHR)(commandBuffer, pPushConstantsInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdPushDataEXT(&self, commandBuffer: VkCommandBuffer, pPushDataInfo: *const VkPushDataInfoEXT) -> () {
+        unsafe { (self.CmdPushDataEXT)(commandBuffer, pPushDataInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdPushDescriptorSet(&self, commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, layout: VkPipelineLayout, set: u32, descriptorWriteCount: u32, pDescriptorWrites: *const VkWriteDescriptorSet) -> () {
+        unsafe { (self.CmdPushDescriptorSet)(commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount, pDescriptorWrites) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdPushDescriptorSet2(&self, commandBuffer: VkCommandBuffer, pPushDescriptorSetInfo: *const VkPushDescriptorSetInfo) -> () {
+        unsafe { (self.CmdPushDescriptorSet2)(commandBuffer, pPushDescriptorSetInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdPushDescriptorSet2KHR(&self, commandBuffer: VkCommandBuffer, pPushDescriptorSetInfo: *const VkPushDescriptorSetInfo) -> () {
+        unsafe { (self.CmdPushDescriptorSet2KHR)(commandBuffer, pPushDescriptorSetInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdPushDescriptorSetKHR(&self, commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, layout: VkPipelineLayout, set: u32, descriptorWriteCount: u32, pDescriptorWrites: *const VkWriteDescriptorSet) -> () {
+        unsafe { (self.CmdPushDescriptorSetKHR)(commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount, pDescriptorWrites) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdPushDescriptorSetWithTemplate(&self, commandBuffer: VkCommandBuffer, descriptorUpdateTemplate: VkDescriptorUpdateTemplate, layout: VkPipelineLayout, set: u32, pData: *const c_void) -> () {
+        unsafe { (self.CmdPushDescriptorSetWithTemplate)(commandBuffer, descriptorUpdateTemplate, layout, set, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdPushDescriptorSetWithTemplate2(&self, commandBuffer: VkCommandBuffer, pPushDescriptorSetWithTemplateInfo: *const VkPushDescriptorSetWithTemplateInfo) -> () {
+        unsafe { (self.CmdPushDescriptorSetWithTemplate2)(commandBuffer, pPushDescriptorSetWithTemplateInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdPushDescriptorSetWithTemplate2KHR(&self, commandBuffer: VkCommandBuffer, pPushDescriptorSetWithTemplateInfo: *const VkPushDescriptorSetWithTemplateInfo) -> () {
+        unsafe { (self.CmdPushDescriptorSetWithTemplate2KHR)(commandBuffer, pPushDescriptorSetWithTemplateInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdPushDescriptorSetWithTemplateKHR(&self, commandBuffer: VkCommandBuffer, descriptorUpdateTemplate: VkDescriptorUpdateTemplate, layout: VkPipelineLayout, set: u32, pData: *const c_void) -> () {
+        unsafe { (self.CmdPushDescriptorSetWithTemplateKHR)(commandBuffer, descriptorUpdateTemplate, layout, set, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdResetEvent(&self, commandBuffer: VkCommandBuffer, event: VkEvent, stageMask: VkPipelineStageFlags) -> () {
+        unsafe { (self.CmdResetEvent)(commandBuffer, event, stageMask) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdResetEvent2(&self, commandBuffer: VkCommandBuffer, event: VkEvent, stageMask: VkPipelineStageFlags2) -> () {
+        unsafe { (self.CmdResetEvent2)(commandBuffer, event, stageMask) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdResetEvent2KHR(&self, commandBuffer: VkCommandBuffer, event: VkEvent, stageMask: VkPipelineStageFlags2) -> () {
+        unsafe { (self.CmdResetEvent2KHR)(commandBuffer, event, stageMask) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdResetQueryPool(&self, commandBuffer: VkCommandBuffer, queryPool: VkQueryPool, firstQuery: u32, queryCount: u32) -> () {
+        unsafe { (self.CmdResetQueryPool)(commandBuffer, queryPool, firstQuery, queryCount) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdResolveImage(&self, commandBuffer: VkCommandBuffer, srcImage: VkImage, srcImageLayout: VkImageLayout, dstImage: VkImage, dstImageLayout: VkImageLayout, regionCount: u32, pRegions: *const VkImageResolve) -> () {
+        unsafe { (self.CmdResolveImage)(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdResolveImage2(&self, commandBuffer: VkCommandBuffer, pResolveImageInfo: *const VkResolveImageInfo2) -> () {
+        unsafe { (self.CmdResolveImage2)(commandBuffer, pResolveImageInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdResolveImage2KHR(&self, commandBuffer: VkCommandBuffer, pResolveImageInfo: *const VkResolveImageInfo2) -> () {
+        unsafe { (self.CmdResolveImage2KHR)(commandBuffer, pResolveImageInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetAlphaToCoverageEnableEXT(&self, commandBuffer: VkCommandBuffer, alphaToCoverageEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetAlphaToCoverageEnableEXT)(commandBuffer, alphaToCoverageEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetAlphaToOneEnableEXT(&self, commandBuffer: VkCommandBuffer, alphaToOneEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetAlphaToOneEnableEXT)(commandBuffer, alphaToOneEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetAttachmentFeedbackLoopEnableEXT(&self, commandBuffer: VkCommandBuffer, aspectMask: VkImageAspectFlags) -> () {
+        unsafe { (self.CmdSetAttachmentFeedbackLoopEnableEXT)(commandBuffer, aspectMask) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetBlendConstants(&self, commandBuffer: VkCommandBuffer, blendConstants: *mut f32) -> () {
+        unsafe { (self.CmdSetBlendConstants)(commandBuffer, blendConstants) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetCheckpointNV(&self, commandBuffer: VkCommandBuffer, pCheckpointMarker: *const c_void) -> () {
+        unsafe { (self.CmdSetCheckpointNV)(commandBuffer, pCheckpointMarker) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetCoarseSampleOrderNV(&self, commandBuffer: VkCommandBuffer, sampleOrderType: VkCoarseSampleOrderTypeNV, customSampleOrderCount: u32, pCustomSampleOrders: *const VkCoarseSampleOrderCustomNV) -> () {
+        unsafe { (self.CmdSetCoarseSampleOrderNV)(commandBuffer, sampleOrderType, customSampleOrderCount, pCustomSampleOrders) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetColorBlendAdvancedEXT(&self, commandBuffer: VkCommandBuffer, firstAttachment: u32, attachmentCount: u32, pColorBlendAdvanced: *const VkColorBlendAdvancedEXT) -> () {
+        unsafe { (self.CmdSetColorBlendAdvancedEXT)(commandBuffer, firstAttachment, attachmentCount, pColorBlendAdvanced) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetColorBlendEnableEXT(&self, commandBuffer: VkCommandBuffer, firstAttachment: u32, attachmentCount: u32, pColorBlendEnables: *const VkBool32) -> () {
+        unsafe { (self.CmdSetColorBlendEnableEXT)(commandBuffer, firstAttachment, attachmentCount, pColorBlendEnables) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetColorBlendEquationEXT(&self, commandBuffer: VkCommandBuffer, firstAttachment: u32, attachmentCount: u32, pColorBlendEquations: *const VkColorBlendEquationEXT) -> () {
+        unsafe { (self.CmdSetColorBlendEquationEXT)(commandBuffer, firstAttachment, attachmentCount, pColorBlendEquations) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetColorWriteEnableEXT(&self, commandBuffer: VkCommandBuffer, attachmentCount: u32, pColorWriteEnables: *const VkBool32) -> () {
+        unsafe { (self.CmdSetColorWriteEnableEXT)(commandBuffer, attachmentCount, pColorWriteEnables) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetColorWriteMaskEXT(&self, commandBuffer: VkCommandBuffer, firstAttachment: u32, attachmentCount: u32, pColorWriteMasks: *const VkColorComponentFlags) -> () {
+        unsafe { (self.CmdSetColorWriteMaskEXT)(commandBuffer, firstAttachment, attachmentCount, pColorWriteMasks) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetComputeOccupancyPriorityNV(&self, commandBuffer: VkCommandBuffer, pParameters: *const VkComputeOccupancyPriorityParametersNV) -> () {
+        unsafe { (self.CmdSetComputeOccupancyPriorityNV)(commandBuffer, pParameters) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetConservativeRasterizationModeEXT(&self, commandBuffer: VkCommandBuffer, conservativeRasterizationMode: VkConservativeRasterizationModeEXT) -> () {
+        unsafe { (self.CmdSetConservativeRasterizationModeEXT)(commandBuffer, conservativeRasterizationMode) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetCoverageModulationModeNV(&self, commandBuffer: VkCommandBuffer, coverageModulationMode: VkCoverageModulationModeNV) -> () {
+        unsafe { (self.CmdSetCoverageModulationModeNV)(commandBuffer, coverageModulationMode) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetCoverageModulationTableEnableNV(&self, commandBuffer: VkCommandBuffer, coverageModulationTableEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetCoverageModulationTableEnableNV)(commandBuffer, coverageModulationTableEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetCoverageModulationTableNV(&self, commandBuffer: VkCommandBuffer, coverageModulationTableCount: u32, pCoverageModulationTable: *const f32) -> () {
+        unsafe { (self.CmdSetCoverageModulationTableNV)(commandBuffer, coverageModulationTableCount, pCoverageModulationTable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetCoverageReductionModeNV(&self, commandBuffer: VkCommandBuffer, coverageReductionMode: VkCoverageReductionModeNV) -> () {
+        unsafe { (self.CmdSetCoverageReductionModeNV)(commandBuffer, coverageReductionMode) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetCoverageToColorEnableNV(&self, commandBuffer: VkCommandBuffer, coverageToColorEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetCoverageToColorEnableNV)(commandBuffer, coverageToColorEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetCoverageToColorLocationNV(&self, commandBuffer: VkCommandBuffer, coverageToColorLocation: u32) -> () {
+        unsafe { (self.CmdSetCoverageToColorLocationNV)(commandBuffer, coverageToColorLocation) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetCullMode(&self, commandBuffer: VkCommandBuffer, cullMode: VkCullModeFlags) -> () {
+        unsafe { (self.CmdSetCullMode)(commandBuffer, cullMode) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetCullModeEXT(&self, commandBuffer: VkCommandBuffer, cullMode: VkCullModeFlags) -> () {
+        unsafe { (self.CmdSetCullModeEXT)(commandBuffer, cullMode) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDepthBias(&self, commandBuffer: VkCommandBuffer, depthBiasConstantFactor: f32, depthBiasClamp: f32, depthBiasSlopeFactor: f32) -> () {
+        unsafe { (self.CmdSetDepthBias)(commandBuffer, depthBiasConstantFactor, depthBiasClamp, depthBiasSlopeFactor) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDepthBias2EXT(&self, commandBuffer: VkCommandBuffer, pDepthBiasInfo: *const VkDepthBiasInfoEXT) -> () {
+        unsafe { (self.CmdSetDepthBias2EXT)(commandBuffer, pDepthBiasInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDepthBiasEnable(&self, commandBuffer: VkCommandBuffer, depthBiasEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetDepthBiasEnable)(commandBuffer, depthBiasEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDepthBiasEnableEXT(&self, commandBuffer: VkCommandBuffer, depthBiasEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetDepthBiasEnableEXT)(commandBuffer, depthBiasEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDepthBounds(&self, commandBuffer: VkCommandBuffer, minDepthBounds: f32, maxDepthBounds: f32) -> () {
+        unsafe { (self.CmdSetDepthBounds)(commandBuffer, minDepthBounds, maxDepthBounds) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDepthBoundsTestEnable(&self, commandBuffer: VkCommandBuffer, depthBoundsTestEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetDepthBoundsTestEnable)(commandBuffer, depthBoundsTestEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDepthBoundsTestEnableEXT(&self, commandBuffer: VkCommandBuffer, depthBoundsTestEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetDepthBoundsTestEnableEXT)(commandBuffer, depthBoundsTestEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDepthClampEnableEXT(&self, commandBuffer: VkCommandBuffer, depthClampEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetDepthClampEnableEXT)(commandBuffer, depthClampEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDepthClampRangeEXT(&self, commandBuffer: VkCommandBuffer, depthClampMode: VkDepthClampModeEXT, pDepthClampRange: *const VkDepthClampRangeEXT) -> () {
+        unsafe { (self.CmdSetDepthClampRangeEXT)(commandBuffer, depthClampMode, pDepthClampRange) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDepthClipEnableEXT(&self, commandBuffer: VkCommandBuffer, depthClipEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetDepthClipEnableEXT)(commandBuffer, depthClipEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDepthClipNegativeOneToOneEXT(&self, commandBuffer: VkCommandBuffer, negativeOneToOne: VkBool32) -> () {
+        unsafe { (self.CmdSetDepthClipNegativeOneToOneEXT)(commandBuffer, negativeOneToOne) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDepthCompareOp(&self, commandBuffer: VkCommandBuffer, depthCompareOp: VkCompareOp) -> () {
+        unsafe { (self.CmdSetDepthCompareOp)(commandBuffer, depthCompareOp) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDepthCompareOpEXT(&self, commandBuffer: VkCommandBuffer, depthCompareOp: VkCompareOp) -> () {
+        unsafe { (self.CmdSetDepthCompareOpEXT)(commandBuffer, depthCompareOp) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDepthTestEnable(&self, commandBuffer: VkCommandBuffer, depthTestEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetDepthTestEnable)(commandBuffer, depthTestEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDepthTestEnableEXT(&self, commandBuffer: VkCommandBuffer, depthTestEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetDepthTestEnableEXT)(commandBuffer, depthTestEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDepthWriteEnable(&self, commandBuffer: VkCommandBuffer, depthWriteEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetDepthWriteEnable)(commandBuffer, depthWriteEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDepthWriteEnableEXT(&self, commandBuffer: VkCommandBuffer, depthWriteEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetDepthWriteEnableEXT)(commandBuffer, depthWriteEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDescriptorBufferOffsets2EXT(&self, commandBuffer: VkCommandBuffer, pSetDescriptorBufferOffsetsInfo: *const VkSetDescriptorBufferOffsetsInfoEXT) -> () {
+        unsafe { (self.CmdSetDescriptorBufferOffsets2EXT)(commandBuffer, pSetDescriptorBufferOffsetsInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDescriptorBufferOffsetsEXT(&self, commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, layout: VkPipelineLayout, firstSet: u32, setCount: u32, pBufferIndices: *const u32, pOffsets: *const VkDeviceSize) -> () {
+        unsafe { (self.CmdSetDescriptorBufferOffsetsEXT)(commandBuffer, pipelineBindPoint, layout, firstSet, setCount, pBufferIndices, pOffsets) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDeviceMask(&self, commandBuffer: VkCommandBuffer, deviceMask: u32) -> () {
+        unsafe { (self.CmdSetDeviceMask)(commandBuffer, deviceMask) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDeviceMaskKHR(&self, commandBuffer: VkCommandBuffer, deviceMask: u32) -> () {
+        unsafe { (self.CmdSetDeviceMaskKHR)(commandBuffer, deviceMask) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDiscardRectangleEXT(&self, commandBuffer: VkCommandBuffer, firstDiscardRectangle: u32, discardRectangleCount: u32, pDiscardRectangles: *const VkRect2D) -> () {
+        unsafe { (self.CmdSetDiscardRectangleEXT)(commandBuffer, firstDiscardRectangle, discardRectangleCount, pDiscardRectangles) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDiscardRectangleEnableEXT(&self, commandBuffer: VkCommandBuffer, discardRectangleEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetDiscardRectangleEnableEXT)(commandBuffer, discardRectangleEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDiscardRectangleModeEXT(&self, commandBuffer: VkCommandBuffer, discardRectangleMode: VkDiscardRectangleModeEXT) -> () {
+        unsafe { (self.CmdSetDiscardRectangleModeEXT)(commandBuffer, discardRectangleMode) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetDispatchParametersARM(&self, commandBuffer: VkCommandBuffer, pDispatchParameters: *const VkDispatchParametersARM) -> () {
+        unsafe { (self.CmdSetDispatchParametersARM)(commandBuffer, pDispatchParameters) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetEvent(&self, commandBuffer: VkCommandBuffer, event: VkEvent, stageMask: VkPipelineStageFlags) -> () {
+        unsafe { (self.CmdSetEvent)(commandBuffer, event, stageMask) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetEvent2(&self, commandBuffer: VkCommandBuffer, event: VkEvent, pDependencyInfo: *const VkDependencyInfo) -> () {
+        unsafe { (self.CmdSetEvent2)(commandBuffer, event, pDependencyInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetEvent2KHR(&self, commandBuffer: VkCommandBuffer, event: VkEvent, pDependencyInfo: *const VkDependencyInfo) -> () {
+        unsafe { (self.CmdSetEvent2KHR)(commandBuffer, event, pDependencyInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetExclusiveScissorEnableNV(&self, commandBuffer: VkCommandBuffer, firstExclusiveScissor: u32, exclusiveScissorCount: u32, pExclusiveScissorEnables: *const VkBool32) -> () {
+        unsafe { (self.CmdSetExclusiveScissorEnableNV)(commandBuffer, firstExclusiveScissor, exclusiveScissorCount, pExclusiveScissorEnables) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetExclusiveScissorNV(&self, commandBuffer: VkCommandBuffer, firstExclusiveScissor: u32, exclusiveScissorCount: u32, pExclusiveScissors: *const VkRect2D) -> () {
+        unsafe { (self.CmdSetExclusiveScissorNV)(commandBuffer, firstExclusiveScissor, exclusiveScissorCount, pExclusiveScissors) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetExtraPrimitiveOverestimationSizeEXT(&self, commandBuffer: VkCommandBuffer, extraPrimitiveOverestimationSize: f32) -> () {
+        unsafe { (self.CmdSetExtraPrimitiveOverestimationSizeEXT)(commandBuffer, extraPrimitiveOverestimationSize) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetFragmentShadingRateEnumNV(&self, commandBuffer: VkCommandBuffer, shadingRate: VkFragmentShadingRateNV, combinerOps: *mut VkFragmentShadingRateCombinerOpKHR) -> () {
+        unsafe { (self.CmdSetFragmentShadingRateEnumNV)(commandBuffer, shadingRate, combinerOps) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetFragmentShadingRateKHR(&self, commandBuffer: VkCommandBuffer, pFragmentSize: *const VkExtent2D, combinerOps: *mut VkFragmentShadingRateCombinerOpKHR) -> () {
+        unsafe { (self.CmdSetFragmentShadingRateKHR)(commandBuffer, pFragmentSize, combinerOps) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetFrontFace(&self, commandBuffer: VkCommandBuffer, frontFace: VkFrontFace) -> () {
+        unsafe { (self.CmdSetFrontFace)(commandBuffer, frontFace) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetFrontFaceEXT(&self, commandBuffer: VkCommandBuffer, frontFace: VkFrontFace) -> () {
+        unsafe { (self.CmdSetFrontFaceEXT)(commandBuffer, frontFace) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetLineRasterizationModeEXT(&self, commandBuffer: VkCommandBuffer, lineRasterizationMode: VkLineRasterizationModeEXT) -> () {
+        unsafe { (self.CmdSetLineRasterizationModeEXT)(commandBuffer, lineRasterizationMode) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetLineStipple(&self, commandBuffer: VkCommandBuffer, lineStippleFactor: u32, lineStipplePattern: u16) -> () {
+        unsafe { (self.CmdSetLineStipple)(commandBuffer, lineStippleFactor, lineStipplePattern) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetLineStippleEXT(&self, commandBuffer: VkCommandBuffer, lineStippleFactor: u32, lineStipplePattern: u16) -> () {
+        unsafe { (self.CmdSetLineStippleEXT)(commandBuffer, lineStippleFactor, lineStipplePattern) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetLineStippleEnableEXT(&self, commandBuffer: VkCommandBuffer, stippledLineEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetLineStippleEnableEXT)(commandBuffer, stippledLineEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetLineStippleKHR(&self, commandBuffer: VkCommandBuffer, lineStippleFactor: u32, lineStipplePattern: u16) -> () {
+        unsafe { (self.CmdSetLineStippleKHR)(commandBuffer, lineStippleFactor, lineStipplePattern) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetLineWidth(&self, commandBuffer: VkCommandBuffer, lineWidth: f32) -> () {
+        unsafe { (self.CmdSetLineWidth)(commandBuffer, lineWidth) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetLogicOpEXT(&self, commandBuffer: VkCommandBuffer, logicOp: VkLogicOp) -> () {
+        unsafe { (self.CmdSetLogicOpEXT)(commandBuffer, logicOp) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetLogicOpEnableEXT(&self, commandBuffer: VkCommandBuffer, logicOpEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetLogicOpEnableEXT)(commandBuffer, logicOpEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetPatchControlPointsEXT(&self, commandBuffer: VkCommandBuffer, patchControlPoints: u32) -> () {
+        unsafe { (self.CmdSetPatchControlPointsEXT)(commandBuffer, patchControlPoints) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetPerformanceMarkerINTEL(&self, commandBuffer: VkCommandBuffer, pMarkerInfo: *const VkPerformanceMarkerInfoINTEL) -> VkResult {
+        unsafe { (self.CmdSetPerformanceMarkerINTEL)(commandBuffer, pMarkerInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetPerformanceOverrideINTEL(&self, commandBuffer: VkCommandBuffer, pOverrideInfo: *const VkPerformanceOverrideInfoINTEL) -> VkResult {
+        unsafe { (self.CmdSetPerformanceOverrideINTEL)(commandBuffer, pOverrideInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetPerformanceStreamMarkerINTEL(&self, commandBuffer: VkCommandBuffer, pMarkerInfo: *const VkPerformanceStreamMarkerInfoINTEL) -> VkResult {
+        unsafe { (self.CmdSetPerformanceStreamMarkerINTEL)(commandBuffer, pMarkerInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetPolygonModeEXT(&self, commandBuffer: VkCommandBuffer, polygonMode: VkPolygonMode) -> () {
+        unsafe { (self.CmdSetPolygonModeEXT)(commandBuffer, polygonMode) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetPrimitiveRestartEnable(&self, commandBuffer: VkCommandBuffer, primitiveRestartEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetPrimitiveRestartEnable)(commandBuffer, primitiveRestartEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetPrimitiveRestartEnableEXT(&self, commandBuffer: VkCommandBuffer, primitiveRestartEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetPrimitiveRestartEnableEXT)(commandBuffer, primitiveRestartEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetPrimitiveRestartIndexEXT(&self, commandBuffer: VkCommandBuffer, primitiveRestartIndex: u32) -> () {
+        unsafe { (self.CmdSetPrimitiveRestartIndexEXT)(commandBuffer, primitiveRestartIndex) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetPrimitiveTopology(&self, commandBuffer: VkCommandBuffer, primitiveTopology: VkPrimitiveTopology) -> () {
+        unsafe { (self.CmdSetPrimitiveTopology)(commandBuffer, primitiveTopology) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetPrimitiveTopologyEXT(&self, commandBuffer: VkCommandBuffer, primitiveTopology: VkPrimitiveTopology) -> () {
+        unsafe { (self.CmdSetPrimitiveTopologyEXT)(commandBuffer, primitiveTopology) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetProvokingVertexModeEXT(&self, commandBuffer: VkCommandBuffer, provokingVertexMode: VkProvokingVertexModeEXT) -> () {
+        unsafe { (self.CmdSetProvokingVertexModeEXT)(commandBuffer, provokingVertexMode) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetRasterizationSamplesEXT(&self, commandBuffer: VkCommandBuffer, rasterizationSamples: VkSampleCountFlagBits) -> () {
+        unsafe { (self.CmdSetRasterizationSamplesEXT)(commandBuffer, rasterizationSamples) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetRasterizationStreamEXT(&self, commandBuffer: VkCommandBuffer, rasterizationStream: u32) -> () {
+        unsafe { (self.CmdSetRasterizationStreamEXT)(commandBuffer, rasterizationStream) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetRasterizerDiscardEnable(&self, commandBuffer: VkCommandBuffer, rasterizerDiscardEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetRasterizerDiscardEnable)(commandBuffer, rasterizerDiscardEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetRasterizerDiscardEnableEXT(&self, commandBuffer: VkCommandBuffer, rasterizerDiscardEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetRasterizerDiscardEnableEXT)(commandBuffer, rasterizerDiscardEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetRayTracingPipelineStackSizeKHR(&self, commandBuffer: VkCommandBuffer, pipelineStackSize: u32) -> () {
+        unsafe { (self.CmdSetRayTracingPipelineStackSizeKHR)(commandBuffer, pipelineStackSize) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetRenderingAttachmentLocations(&self, commandBuffer: VkCommandBuffer, pLocationInfo: *const VkRenderingAttachmentLocationInfo) -> () {
+        unsafe { (self.CmdSetRenderingAttachmentLocations)(commandBuffer, pLocationInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetRenderingAttachmentLocationsKHR(&self, commandBuffer: VkCommandBuffer, pLocationInfo: *const VkRenderingAttachmentLocationInfo) -> () {
+        unsafe { (self.CmdSetRenderingAttachmentLocationsKHR)(commandBuffer, pLocationInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetRenderingInputAttachmentIndices(&self, commandBuffer: VkCommandBuffer, pInputAttachmentIndexInfo: *const VkRenderingInputAttachmentIndexInfo) -> () {
+        unsafe { (self.CmdSetRenderingInputAttachmentIndices)(commandBuffer, pInputAttachmentIndexInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetRenderingInputAttachmentIndicesKHR(&self, commandBuffer: VkCommandBuffer, pInputAttachmentIndexInfo: *const VkRenderingInputAttachmentIndexInfo) -> () {
+        unsafe { (self.CmdSetRenderingInputAttachmentIndicesKHR)(commandBuffer, pInputAttachmentIndexInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetRepresentativeFragmentTestEnableNV(&self, commandBuffer: VkCommandBuffer, representativeFragmentTestEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetRepresentativeFragmentTestEnableNV)(commandBuffer, representativeFragmentTestEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetSampleLocationsEXT(&self, commandBuffer: VkCommandBuffer, pSampleLocationsInfo: *const VkSampleLocationsInfoEXT) -> () {
+        unsafe { (self.CmdSetSampleLocationsEXT)(commandBuffer, pSampleLocationsInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetSampleLocationsEnableEXT(&self, commandBuffer: VkCommandBuffer, sampleLocationsEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetSampleLocationsEnableEXT)(commandBuffer, sampleLocationsEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetSampleMaskEXT(&self, commandBuffer: VkCommandBuffer, samples: VkSampleCountFlagBits, pSampleMask: *const VkSampleMask) -> () {
+        unsafe { (self.CmdSetSampleMaskEXT)(commandBuffer, samples, pSampleMask) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetScissor(&self, commandBuffer: VkCommandBuffer, firstScissor: u32, scissorCount: u32, pScissors: *const VkRect2D) -> () {
+        unsafe { (self.CmdSetScissor)(commandBuffer, firstScissor, scissorCount, pScissors) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetScissorWithCount(&self, commandBuffer: VkCommandBuffer, scissorCount: u32, pScissors: *const VkRect2D) -> () {
+        unsafe { (self.CmdSetScissorWithCount)(commandBuffer, scissorCount, pScissors) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetScissorWithCountEXT(&self, commandBuffer: VkCommandBuffer, scissorCount: u32, pScissors: *const VkRect2D) -> () {
+        unsafe { (self.CmdSetScissorWithCountEXT)(commandBuffer, scissorCount, pScissors) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetShadingRateImageEnableNV(&self, commandBuffer: VkCommandBuffer, shadingRateImageEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetShadingRateImageEnableNV)(commandBuffer, shadingRateImageEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetStencilCompareMask(&self, commandBuffer: VkCommandBuffer, faceMask: VkStencilFaceFlags, compareMask: u32) -> () {
+        unsafe { (self.CmdSetStencilCompareMask)(commandBuffer, faceMask, compareMask) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetStencilOp(&self, commandBuffer: VkCommandBuffer, faceMask: VkStencilFaceFlags, failOp: VkStencilOp, passOp: VkStencilOp, depthFailOp: VkStencilOp, compareOp: VkCompareOp) -> () {
+        unsafe { (self.CmdSetStencilOp)(commandBuffer, faceMask, failOp, passOp, depthFailOp, compareOp) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetStencilOpEXT(&self, commandBuffer: VkCommandBuffer, faceMask: VkStencilFaceFlags, failOp: VkStencilOp, passOp: VkStencilOp, depthFailOp: VkStencilOp, compareOp: VkCompareOp) -> () {
+        unsafe { (self.CmdSetStencilOpEXT)(commandBuffer, faceMask, failOp, passOp, depthFailOp, compareOp) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetStencilReference(&self, commandBuffer: VkCommandBuffer, faceMask: VkStencilFaceFlags, reference: u32) -> () {
+        unsafe { (self.CmdSetStencilReference)(commandBuffer, faceMask, reference) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetStencilTestEnable(&self, commandBuffer: VkCommandBuffer, stencilTestEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetStencilTestEnable)(commandBuffer, stencilTestEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetStencilTestEnableEXT(&self, commandBuffer: VkCommandBuffer, stencilTestEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetStencilTestEnableEXT)(commandBuffer, stencilTestEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetStencilWriteMask(&self, commandBuffer: VkCommandBuffer, faceMask: VkStencilFaceFlags, writeMask: u32) -> () {
+        unsafe { (self.CmdSetStencilWriteMask)(commandBuffer, faceMask, writeMask) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetTessellationDomainOriginEXT(&self, commandBuffer: VkCommandBuffer, domainOrigin: VkTessellationDomainOrigin) -> () {
+        unsafe { (self.CmdSetTessellationDomainOriginEXT)(commandBuffer, domainOrigin) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetVertexInputEXT(&self, commandBuffer: VkCommandBuffer, vertexBindingDescriptionCount: u32, pVertexBindingDescriptions: *const VkVertexInputBindingDescription2EXT, vertexAttributeDescriptionCount: u32, pVertexAttributeDescriptions: *const VkVertexInputAttributeDescription2EXT) -> () {
+        unsafe { (self.CmdSetVertexInputEXT)(commandBuffer, vertexBindingDescriptionCount, pVertexBindingDescriptions, vertexAttributeDescriptionCount, pVertexAttributeDescriptions) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetViewport(&self, commandBuffer: VkCommandBuffer, firstViewport: u32, viewportCount: u32, pViewports: *const VkViewport) -> () {
+        unsafe { (self.CmdSetViewport)(commandBuffer, firstViewport, viewportCount, pViewports) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetViewportShadingRatePaletteNV(&self, commandBuffer: VkCommandBuffer, firstViewport: u32, viewportCount: u32, pShadingRatePalettes: *const VkShadingRatePaletteNV) -> () {
+        unsafe { (self.CmdSetViewportShadingRatePaletteNV)(commandBuffer, firstViewport, viewportCount, pShadingRatePalettes) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetViewportSwizzleNV(&self, commandBuffer: VkCommandBuffer, firstViewport: u32, viewportCount: u32, pViewportSwizzles: *const VkViewportSwizzleNV) -> () {
+        unsafe { (self.CmdSetViewportSwizzleNV)(commandBuffer, firstViewport, viewportCount, pViewportSwizzles) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetViewportWScalingEnableNV(&self, commandBuffer: VkCommandBuffer, viewportWScalingEnable: VkBool32) -> () {
+        unsafe { (self.CmdSetViewportWScalingEnableNV)(commandBuffer, viewportWScalingEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetViewportWScalingNV(&self, commandBuffer: VkCommandBuffer, firstViewport: u32, viewportCount: u32, pViewportWScalings: *const VkViewportWScalingNV) -> () {
+        unsafe { (self.CmdSetViewportWScalingNV)(commandBuffer, firstViewport, viewportCount, pViewportWScalings) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetViewportWithCount(&self, commandBuffer: VkCommandBuffer, viewportCount: u32, pViewports: *const VkViewport) -> () {
+        unsafe { (self.CmdSetViewportWithCount)(commandBuffer, viewportCount, pViewports) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSetViewportWithCountEXT(&self, commandBuffer: VkCommandBuffer, viewportCount: u32, pViewports: *const VkViewport) -> () {
+        unsafe { (self.CmdSetViewportWithCountEXT)(commandBuffer, viewportCount, pViewports) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdSubpassShadingHUAWEI(&self, commandBuffer: VkCommandBuffer) -> () {
+        unsafe { (self.CmdSubpassShadingHUAWEI)(commandBuffer) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdTraceRaysIndirect2KHR(&self, commandBuffer: VkCommandBuffer, indirectDeviceAddress: VkDeviceAddress) -> () {
+        unsafe { (self.CmdTraceRaysIndirect2KHR)(commandBuffer, indirectDeviceAddress) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdTraceRaysIndirectKHR(&self, commandBuffer: VkCommandBuffer, pRaygenShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, pMissShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, pHitShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, pCallableShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, indirectDeviceAddress: VkDeviceAddress) -> () {
+        unsafe { (self.CmdTraceRaysIndirectKHR)(commandBuffer, pRaygenShaderBindingTable, pMissShaderBindingTable, pHitShaderBindingTable, pCallableShaderBindingTable, indirectDeviceAddress) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdTraceRaysKHR(&self, commandBuffer: VkCommandBuffer, pRaygenShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, pMissShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, pHitShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, pCallableShaderBindingTable: *const VkStridedDeviceAddressRegionKHR, width: u32, height: u32, depth: u32) -> () {
+        unsafe { (self.CmdTraceRaysKHR)(commandBuffer, pRaygenShaderBindingTable, pMissShaderBindingTable, pHitShaderBindingTable, pCallableShaderBindingTable, width, height, depth) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdTraceRaysNV(&self, commandBuffer: VkCommandBuffer, raygenShaderBindingTableBuffer: VkBuffer, raygenShaderBindingOffset: VkDeviceSize, missShaderBindingTableBuffer: VkBuffer, missShaderBindingOffset: VkDeviceSize, missShaderBindingStride: VkDeviceSize, hitShaderBindingTableBuffer: VkBuffer, hitShaderBindingOffset: VkDeviceSize, hitShaderBindingStride: VkDeviceSize, callableShaderBindingTableBuffer: VkBuffer, callableShaderBindingOffset: VkDeviceSize, callableShaderBindingStride: VkDeviceSize, width: u32, height: u32, depth: u32) -> () {
+        unsafe { (self.CmdTraceRaysNV)(commandBuffer, raygenShaderBindingTableBuffer, raygenShaderBindingOffset, missShaderBindingTableBuffer, missShaderBindingOffset, missShaderBindingStride, hitShaderBindingTableBuffer, hitShaderBindingOffset, hitShaderBindingStride, callableShaderBindingTableBuffer, callableShaderBindingOffset, callableShaderBindingStride, width, height, depth) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdUpdateBuffer(&self, commandBuffer: VkCommandBuffer, dstBuffer: VkBuffer, dstOffset: VkDeviceSize, dataSize: VkDeviceSize, pData: *const c_void) -> () {
+        unsafe { (self.CmdUpdateBuffer)(commandBuffer, dstBuffer, dstOffset, dataSize, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdUpdateMemoryKHR(&self, commandBuffer: VkCommandBuffer, pDstRange: *const VkDeviceAddressRangeKHR, dstFlags: VkAddressCommandFlagsKHR, dataSize: VkDeviceSize, pData: *const c_void) -> () {
+        unsafe { (self.CmdUpdateMemoryKHR)(commandBuffer, pDstRange, dstFlags, dataSize, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdUpdatePipelineIndirectBufferNV(&self, commandBuffer: VkCommandBuffer, pipelineBindPoint: VkPipelineBindPoint, pipeline: VkPipeline) -> () {
+        unsafe { (self.CmdUpdatePipelineIndirectBufferNV)(commandBuffer, pipelineBindPoint, pipeline) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdWaitEvents(&self, commandBuffer: VkCommandBuffer, eventCount: u32, pEvents: *const VkEvent, srcStageMask: VkPipelineStageFlags, dstStageMask: VkPipelineStageFlags, memoryBarrierCount: u32, pMemoryBarriers: *const VkMemoryBarrier, bufferMemoryBarrierCount: u32, pBufferMemoryBarriers: *const VkBufferMemoryBarrier, imageMemoryBarrierCount: u32, pImageMemoryBarriers: *const VkImageMemoryBarrier) -> () {
+        unsafe { (self.CmdWaitEvents)(commandBuffer, eventCount, pEvents, srcStageMask, dstStageMask, memoryBarrierCount, pMemoryBarriers, bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemoryBarrierCount, pImageMemoryBarriers) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdWaitEvents2(&self, commandBuffer: VkCommandBuffer, eventCount: u32, pEvents: *const VkEvent, pDependencyInfos: *const VkDependencyInfo) -> () {
+        unsafe { (self.CmdWaitEvents2)(commandBuffer, eventCount, pEvents, pDependencyInfos) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdWaitEvents2KHR(&self, commandBuffer: VkCommandBuffer, eventCount: u32, pEvents: *const VkEvent, pDependencyInfos: *const VkDependencyInfo) -> () {
+        unsafe { (self.CmdWaitEvents2KHR)(commandBuffer, eventCount, pEvents, pDependencyInfos) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdWriteAccelerationStructuresPropertiesKHR(&self, commandBuffer: VkCommandBuffer, accelerationStructureCount: u32, pAccelerationStructures: *const VkAccelerationStructureKHR, queryType: VkQueryType, queryPool: VkQueryPool, firstQuery: u32) -> () {
+        unsafe { (self.CmdWriteAccelerationStructuresPropertiesKHR)(commandBuffer, accelerationStructureCount, pAccelerationStructures, queryType, queryPool, firstQuery) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdWriteAccelerationStructuresPropertiesNV(&self, commandBuffer: VkCommandBuffer, accelerationStructureCount: u32, pAccelerationStructures: *const VkAccelerationStructureNV, queryType: VkQueryType, queryPool: VkQueryPool, firstQuery: u32) -> () {
+        unsafe { (self.CmdWriteAccelerationStructuresPropertiesNV)(commandBuffer, accelerationStructureCount, pAccelerationStructures, queryType, queryPool, firstQuery) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdWriteBufferMarker2AMD(&self, commandBuffer: VkCommandBuffer, stage: VkPipelineStageFlags2, dstBuffer: VkBuffer, dstOffset: VkDeviceSize, marker: u32) -> () {
+        unsafe { (self.CmdWriteBufferMarker2AMD)(commandBuffer, stage, dstBuffer, dstOffset, marker) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdWriteBufferMarkerAMD(&self, commandBuffer: VkCommandBuffer, pipelineStage: VkPipelineStageFlagBits, dstBuffer: VkBuffer, dstOffset: VkDeviceSize, marker: u32) -> () {
+        unsafe { (self.CmdWriteBufferMarkerAMD)(commandBuffer, pipelineStage, dstBuffer, dstOffset, marker) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdWriteMarkerToMemoryAMD(&self, commandBuffer: VkCommandBuffer, pInfo: *const VkMemoryMarkerInfoAMD) -> () {
+        unsafe { (self.CmdWriteMarkerToMemoryAMD)(commandBuffer, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdWriteMicromapsPropertiesEXT(&self, commandBuffer: VkCommandBuffer, micromapCount: u32, pMicromaps: *const VkMicromapEXT, queryType: VkQueryType, queryPool: VkQueryPool, firstQuery: u32) -> () {
+        unsafe { (self.CmdWriteMicromapsPropertiesEXT)(commandBuffer, micromapCount, pMicromaps, queryType, queryPool, firstQuery) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdWriteTimestamp(&self, commandBuffer: VkCommandBuffer, pipelineStage: VkPipelineStageFlagBits, queryPool: VkQueryPool, query: u32) -> () {
+        unsafe { (self.CmdWriteTimestamp)(commandBuffer, pipelineStage, queryPool, query) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdWriteTimestamp2(&self, commandBuffer: VkCommandBuffer, stage: VkPipelineStageFlags2, queryPool: VkQueryPool, query: u32) -> () {
+        unsafe { (self.CmdWriteTimestamp2)(commandBuffer, stage, queryPool, query) }
+    }
+    #[inline(always)]
+    pub unsafe fn CmdWriteTimestamp2KHR(&self, commandBuffer: VkCommandBuffer, stage: VkPipelineStageFlags2, queryPool: VkQueryPool, query: u32) -> () {
+        unsafe { (self.CmdWriteTimestamp2KHR)(commandBuffer, stage, queryPool, query) }
+    }
+    #[inline(always)]
+    pub unsafe fn CompileDeferredNV(&self, device: VkDevice, pipeline: VkPipeline, shader: u32) -> VkResult {
+        unsafe { (self.CompileDeferredNV)(device, pipeline, shader) }
+    }
+    #[inline(always)]
+    pub unsafe fn ConvertCooperativeVectorMatrixNV(&self, device: VkDevice, pInfo: *const VkConvertCooperativeVectorMatrixInfoNV) -> VkResult {
+        unsafe { (self.ConvertCooperativeVectorMatrixNV)(device, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CopyAccelerationStructureKHR(&self, device: VkDevice, deferredOperation: VkDeferredOperationKHR, pInfo: *const VkCopyAccelerationStructureInfoKHR) -> VkResult {
+        unsafe { (self.CopyAccelerationStructureKHR)(device, deferredOperation, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CopyAccelerationStructureToMemoryKHR(&self, device: VkDevice, deferredOperation: VkDeferredOperationKHR, pInfo: *const VkCopyAccelerationStructureToMemoryInfoKHR) -> VkResult {
+        unsafe { (self.CopyAccelerationStructureToMemoryKHR)(device, deferredOperation, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CopyImageToImage(&self, device: VkDevice, pCopyImageToImageInfo: *const VkCopyImageToImageInfo) -> VkResult {
+        unsafe { (self.CopyImageToImage)(device, pCopyImageToImageInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CopyImageToImageEXT(&self, device: VkDevice, pCopyImageToImageInfo: *const VkCopyImageToImageInfo) -> VkResult {
+        unsafe { (self.CopyImageToImageEXT)(device, pCopyImageToImageInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CopyImageToMemory(&self, device: VkDevice, pCopyImageToMemoryInfo: *const VkCopyImageToMemoryInfo) -> VkResult {
+        unsafe { (self.CopyImageToMemory)(device, pCopyImageToMemoryInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CopyImageToMemoryEXT(&self, device: VkDevice, pCopyImageToMemoryInfo: *const VkCopyImageToMemoryInfo) -> VkResult {
+        unsafe { (self.CopyImageToMemoryEXT)(device, pCopyImageToMemoryInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CopyMemoryToAccelerationStructureKHR(&self, device: VkDevice, deferredOperation: VkDeferredOperationKHR, pInfo: *const VkCopyMemoryToAccelerationStructureInfoKHR) -> VkResult {
+        unsafe { (self.CopyMemoryToAccelerationStructureKHR)(device, deferredOperation, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CopyMemoryToImage(&self, device: VkDevice, pCopyMemoryToImageInfo: *const VkCopyMemoryToImageInfo) -> VkResult {
+        unsafe { (self.CopyMemoryToImage)(device, pCopyMemoryToImageInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CopyMemoryToImageEXT(&self, device: VkDevice, pCopyMemoryToImageInfo: *const VkCopyMemoryToImageInfo) -> VkResult {
+        unsafe { (self.CopyMemoryToImageEXT)(device, pCopyMemoryToImageInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CopyMemoryToMicromapEXT(&self, device: VkDevice, deferredOperation: VkDeferredOperationKHR, pInfo: *const VkCopyMemoryToMicromapInfoEXT) -> VkResult {
+        unsafe { (self.CopyMemoryToMicromapEXT)(device, deferredOperation, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CopyMicromapEXT(&self, device: VkDevice, deferredOperation: VkDeferredOperationKHR, pInfo: *const VkCopyMicromapInfoEXT) -> VkResult {
+        unsafe { (self.CopyMicromapEXT)(device, deferredOperation, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CopyMicromapToMemoryEXT(&self, device: VkDevice, deferredOperation: VkDeferredOperationKHR, pInfo: *const VkCopyMicromapToMemoryInfoEXT) -> VkResult {
+        unsafe { (self.CopyMicromapToMemoryEXT)(device, deferredOperation, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateAccelerationStructure2KHR(&self, device: VkDevice, pCreateInfo: *const VkAccelerationStructureCreateInfo2KHR, pAllocator: *const VkAllocationCallbacks, pAccelerationStructure: *mut VkAccelerationStructureKHR) -> VkResult {
+        unsafe { (self.CreateAccelerationStructure2KHR)(device, pCreateInfo, pAllocator, pAccelerationStructure) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateAccelerationStructureKHR(&self, device: VkDevice, pCreateInfo: *const VkAccelerationStructureCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pAccelerationStructure: *mut VkAccelerationStructureKHR) -> VkResult {
+        unsafe { (self.CreateAccelerationStructureKHR)(device, pCreateInfo, pAllocator, pAccelerationStructure) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateAccelerationStructureNV(&self, device: VkDevice, pCreateInfo: *const VkAccelerationStructureCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pAccelerationStructure: *mut VkAccelerationStructureNV) -> VkResult {
+        unsafe { (self.CreateAccelerationStructureNV)(device, pCreateInfo, pAllocator, pAccelerationStructure) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateBuffer(&self, device: VkDevice, pCreateInfo: *const VkBufferCreateInfo, pAllocator: *const VkAllocationCallbacks, pBuffer: *mut VkBuffer) -> VkResult {
+        unsafe { (self.CreateBuffer)(device, pCreateInfo, pAllocator, pBuffer) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateBufferCollectionFUCHSIA(&self, device: VkDevice, pCreateInfo: *const VkBufferCollectionCreateInfoFUCHSIA, pAllocator: *const VkAllocationCallbacks, pCollection: *mut VkBufferCollectionFUCHSIA) -> VkResult {
+        unsafe { (self.CreateBufferCollectionFUCHSIA)(device, pCreateInfo, pAllocator, pCollection) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateBufferView(&self, device: VkDevice, pCreateInfo: *const VkBufferViewCreateInfo, pAllocator: *const VkAllocationCallbacks, pView: *mut VkBufferView) -> VkResult {
+        unsafe { (self.CreateBufferView)(device, pCreateInfo, pAllocator, pView) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateCommandPool(&self, device: VkDevice, pCreateInfo: *const VkCommandPoolCreateInfo, pAllocator: *const VkAllocationCallbacks, pCommandPool: *mut VkCommandPool) -> VkResult {
+        unsafe { (self.CreateCommandPool)(device, pCreateInfo, pAllocator, pCommandPool) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateComputePipelines(&self, device: VkDevice, pipelineCache: VkPipelineCache, createInfoCount: u32, pCreateInfos: *const VkComputePipelineCreateInfo, pAllocator: *const VkAllocationCallbacks, pPipelines: *mut VkPipeline) -> VkResult {
+        unsafe { (self.CreateComputePipelines)(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateCuFunctionNVX(&self, device: VkDevice, pCreateInfo: *const VkCuFunctionCreateInfoNVX, pAllocator: *const VkAllocationCallbacks, pFunction: *mut VkCuFunctionNVX) -> VkResult {
+        unsafe { (self.CreateCuFunctionNVX)(device, pCreateInfo, pAllocator, pFunction) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateCuModuleNVX(&self, device: VkDevice, pCreateInfo: *const VkCuModuleCreateInfoNVX, pAllocator: *const VkAllocationCallbacks, pModule: *mut VkCuModuleNVX) -> VkResult {
+        unsafe { (self.CreateCuModuleNVX)(device, pCreateInfo, pAllocator, pModule) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateCudaFunctionNV(&self, device: VkDevice, pCreateInfo: *const VkCudaFunctionCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pFunction: *mut VkCudaFunctionNV) -> VkResult {
+        unsafe { (self.CreateCudaFunctionNV)(device, pCreateInfo, pAllocator, pFunction) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateCudaModuleNV(&self, device: VkDevice, pCreateInfo: *const VkCudaModuleCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pModule: *mut VkCudaModuleNV) -> VkResult {
+        unsafe { (self.CreateCudaModuleNV)(device, pCreateInfo, pAllocator, pModule) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateDataGraphPipelineSessionARM(&self, device: VkDevice, pCreateInfo: *const VkDataGraphPipelineSessionCreateInfoARM, pAllocator: *const VkAllocationCallbacks, pSession: *mut VkDataGraphPipelineSessionARM) -> VkResult {
+        unsafe { (self.CreateDataGraphPipelineSessionARM)(device, pCreateInfo, pAllocator, pSession) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateDataGraphPipelinesARM(&self, device: VkDevice, deferredOperation: VkDeferredOperationKHR, pipelineCache: VkPipelineCache, createInfoCount: u32, pCreateInfos: *const VkDataGraphPipelineCreateInfoARM, pAllocator: *const VkAllocationCallbacks, pPipelines: *mut VkPipeline) -> VkResult {
+        unsafe { (self.CreateDataGraphPipelinesARM)(device, deferredOperation, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateDeferredOperationKHR(&self, device: VkDevice, pAllocator: *const VkAllocationCallbacks, pDeferredOperation: *mut VkDeferredOperationKHR) -> VkResult {
+        unsafe { (self.CreateDeferredOperationKHR)(device, pAllocator, pDeferredOperation) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateDescriptorPool(&self, device: VkDevice, pCreateInfo: *const VkDescriptorPoolCreateInfo, pAllocator: *const VkAllocationCallbacks, pDescriptorPool: *mut VkDescriptorPool) -> VkResult {
+        unsafe { (self.CreateDescriptorPool)(device, pCreateInfo, pAllocator, pDescriptorPool) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateDescriptorSetLayout(&self, device: VkDevice, pCreateInfo: *const VkDescriptorSetLayoutCreateInfo, pAllocator: *const VkAllocationCallbacks, pSetLayout: *mut VkDescriptorSetLayout) -> VkResult {
+        unsafe { (self.CreateDescriptorSetLayout)(device, pCreateInfo, pAllocator, pSetLayout) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateDescriptorUpdateTemplate(&self, device: VkDevice, pCreateInfo: *const VkDescriptorUpdateTemplateCreateInfo, pAllocator: *const VkAllocationCallbacks, pDescriptorUpdateTemplate: *mut VkDescriptorUpdateTemplate) -> VkResult {
+        unsafe { (self.CreateDescriptorUpdateTemplate)(device, pCreateInfo, pAllocator, pDescriptorUpdateTemplate) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateDescriptorUpdateTemplateKHR(&self, device: VkDevice, pCreateInfo: *const VkDescriptorUpdateTemplateCreateInfo, pAllocator: *const VkAllocationCallbacks, pDescriptorUpdateTemplate: *mut VkDescriptorUpdateTemplate) -> VkResult {
+        unsafe { (self.CreateDescriptorUpdateTemplateKHR)(device, pCreateInfo, pAllocator, pDescriptorUpdateTemplate) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateEvent(&self, device: VkDevice, pCreateInfo: *const VkEventCreateInfo, pAllocator: *const VkAllocationCallbacks, pEvent: *mut VkEvent) -> VkResult {
+        unsafe { (self.CreateEvent)(device, pCreateInfo, pAllocator, pEvent) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateExecutionGraphPipelinesAMDX(&self, device: VkDevice, pipelineCache: VkPipelineCache, createInfoCount: u32, pCreateInfos: *const VkExecutionGraphPipelineCreateInfoAMDX, pAllocator: *const VkAllocationCallbacks, pPipelines: *mut VkPipeline) -> VkResult {
+        unsafe { (self.CreateExecutionGraphPipelinesAMDX)(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateExternalComputeQueueNV(&self, device: VkDevice, pCreateInfo: *const VkExternalComputeQueueCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pExternalQueue: *mut VkExternalComputeQueueNV) -> VkResult {
+        unsafe { (self.CreateExternalComputeQueueNV)(device, pCreateInfo, pAllocator, pExternalQueue) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateFence(&self, device: VkDevice, pCreateInfo: *const VkFenceCreateInfo, pAllocator: *const VkAllocationCallbacks, pFence: *mut VkFence) -> VkResult {
+        unsafe { (self.CreateFence)(device, pCreateInfo, pAllocator, pFence) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateFramebuffer(&self, device: VkDevice, pCreateInfo: *const VkFramebufferCreateInfo, pAllocator: *const VkAllocationCallbacks, pFramebuffer: *mut VkFramebuffer) -> VkResult {
+        unsafe { (self.CreateFramebuffer)(device, pCreateInfo, pAllocator, pFramebuffer) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateGpaSessionAMD(&self, device: VkDevice, pCreateInfo: *const VkGpaSessionCreateInfoAMD, pAllocator: *const VkAllocationCallbacks, pGpaSession: *mut VkGpaSessionAMD) -> VkResult {
+        unsafe { (self.CreateGpaSessionAMD)(device, pCreateInfo, pAllocator, pGpaSession) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateGraphicsPipelines(&self, device: VkDevice, pipelineCache: VkPipelineCache, createInfoCount: u32, pCreateInfos: *const VkGraphicsPipelineCreateInfo, pAllocator: *const VkAllocationCallbacks, pPipelines: *mut VkPipeline) -> VkResult {
+        unsafe { (self.CreateGraphicsPipelines)(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateImage(&self, device: VkDevice, pCreateInfo: *const VkImageCreateInfo, pAllocator: *const VkAllocationCallbacks, pImage: *mut VkImage) -> VkResult {
+        unsafe { (self.CreateImage)(device, pCreateInfo, pAllocator, pImage) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateImageView(&self, device: VkDevice, pCreateInfo: *const VkImageViewCreateInfo, pAllocator: *const VkAllocationCallbacks, pView: *mut VkImageView) -> VkResult {
+        unsafe { (self.CreateImageView)(device, pCreateInfo, pAllocator, pView) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateIndirectCommandsLayoutEXT(&self, device: VkDevice, pCreateInfo: *const VkIndirectCommandsLayoutCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pIndirectCommandsLayout: *mut VkIndirectCommandsLayoutEXT) -> VkResult {
+        unsafe { (self.CreateIndirectCommandsLayoutEXT)(device, pCreateInfo, pAllocator, pIndirectCommandsLayout) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateIndirectCommandsLayoutNV(&self, device: VkDevice, pCreateInfo: *const VkIndirectCommandsLayoutCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pIndirectCommandsLayout: *mut VkIndirectCommandsLayoutNV) -> VkResult {
+        unsafe { (self.CreateIndirectCommandsLayoutNV)(device, pCreateInfo, pAllocator, pIndirectCommandsLayout) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateIndirectExecutionSetEXT(&self, device: VkDevice, pCreateInfo: *const VkIndirectExecutionSetCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pIndirectExecutionSet: *mut VkIndirectExecutionSetEXT) -> VkResult {
+        unsafe { (self.CreateIndirectExecutionSetEXT)(device, pCreateInfo, pAllocator, pIndirectExecutionSet) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateMicromapEXT(&self, device: VkDevice, pCreateInfo: *const VkMicromapCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pMicromap: *mut VkMicromapEXT) -> VkResult {
+        unsafe { (self.CreateMicromapEXT)(device, pCreateInfo, pAllocator, pMicromap) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateOpticalFlowSessionNV(&self, device: VkDevice, pCreateInfo: *const VkOpticalFlowSessionCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pSession: *mut VkOpticalFlowSessionNV) -> VkResult {
+        unsafe { (self.CreateOpticalFlowSessionNV)(device, pCreateInfo, pAllocator, pSession) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreatePipelineBinariesKHR(&self, device: VkDevice, pCreateInfo: *const VkPipelineBinaryCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pBinaries: *mut VkPipelineBinaryHandlesInfoKHR) -> VkResult {
+        unsafe { (self.CreatePipelineBinariesKHR)(device, pCreateInfo, pAllocator, pBinaries) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreatePipelineCache(&self, device: VkDevice, pCreateInfo: *const VkPipelineCacheCreateInfo, pAllocator: *const VkAllocationCallbacks, pPipelineCache: *mut VkPipelineCache) -> VkResult {
+        unsafe { (self.CreatePipelineCache)(device, pCreateInfo, pAllocator, pPipelineCache) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreatePipelineLayout(&self, device: VkDevice, pCreateInfo: *const VkPipelineLayoutCreateInfo, pAllocator: *const VkAllocationCallbacks, pPipelineLayout: *mut VkPipelineLayout) -> VkResult {
+        unsafe { (self.CreatePipelineLayout)(device, pCreateInfo, pAllocator, pPipelineLayout) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreatePrivateDataSlot(&self, device: VkDevice, pCreateInfo: *const VkPrivateDataSlotCreateInfo, pAllocator: *const VkAllocationCallbacks, pPrivateDataSlot: *mut VkPrivateDataSlot) -> VkResult {
+        unsafe { (self.CreatePrivateDataSlot)(device, pCreateInfo, pAllocator, pPrivateDataSlot) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreatePrivateDataSlotEXT(&self, device: VkDevice, pCreateInfo: *const VkPrivateDataSlotCreateInfo, pAllocator: *const VkAllocationCallbacks, pPrivateDataSlot: *mut VkPrivateDataSlot) -> VkResult {
+        unsafe { (self.CreatePrivateDataSlotEXT)(device, pCreateInfo, pAllocator, pPrivateDataSlot) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateQueryPool(&self, device: VkDevice, pCreateInfo: *const VkQueryPoolCreateInfo, pAllocator: *const VkAllocationCallbacks, pQueryPool: *mut VkQueryPool) -> VkResult {
+        unsafe { (self.CreateQueryPool)(device, pCreateInfo, pAllocator, pQueryPool) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateRayTracingPipelinesKHR(&self, device: VkDevice, deferredOperation: VkDeferredOperationKHR, pipelineCache: VkPipelineCache, createInfoCount: u32, pCreateInfos: *const VkRayTracingPipelineCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pPipelines: *mut VkPipeline) -> VkResult {
+        unsafe { (self.CreateRayTracingPipelinesKHR)(device, deferredOperation, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateRayTracingPipelinesNV(&self, device: VkDevice, pipelineCache: VkPipelineCache, createInfoCount: u32, pCreateInfos: *const VkRayTracingPipelineCreateInfoNV, pAllocator: *const VkAllocationCallbacks, pPipelines: *mut VkPipeline) -> VkResult {
+        unsafe { (self.CreateRayTracingPipelinesNV)(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateRenderPass(&self, device: VkDevice, pCreateInfo: *const VkRenderPassCreateInfo, pAllocator: *const VkAllocationCallbacks, pRenderPass: *mut VkRenderPass) -> VkResult {
+        unsafe { (self.CreateRenderPass)(device, pCreateInfo, pAllocator, pRenderPass) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateRenderPass2(&self, device: VkDevice, pCreateInfo: *const VkRenderPassCreateInfo2, pAllocator: *const VkAllocationCallbacks, pRenderPass: *mut VkRenderPass) -> VkResult {
+        unsafe { (self.CreateRenderPass2)(device, pCreateInfo, pAllocator, pRenderPass) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateRenderPass2KHR(&self, device: VkDevice, pCreateInfo: *const VkRenderPassCreateInfo2, pAllocator: *const VkAllocationCallbacks, pRenderPass: *mut VkRenderPass) -> VkResult {
+        unsafe { (self.CreateRenderPass2KHR)(device, pCreateInfo, pAllocator, pRenderPass) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateSampler(&self, device: VkDevice, pCreateInfo: *const VkSamplerCreateInfo, pAllocator: *const VkAllocationCallbacks, pSampler: *mut VkSampler) -> VkResult {
+        unsafe { (self.CreateSampler)(device, pCreateInfo, pAllocator, pSampler) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateSamplerYcbcrConversion(&self, device: VkDevice, pCreateInfo: *const VkSamplerYcbcrConversionCreateInfo, pAllocator: *const VkAllocationCallbacks, pYcbcrConversion: *mut VkSamplerYcbcrConversion) -> VkResult {
+        unsafe { (self.CreateSamplerYcbcrConversion)(device, pCreateInfo, pAllocator, pYcbcrConversion) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateSamplerYcbcrConversionKHR(&self, device: VkDevice, pCreateInfo: *const VkSamplerYcbcrConversionCreateInfo, pAllocator: *const VkAllocationCallbacks, pYcbcrConversion: *mut VkSamplerYcbcrConversion) -> VkResult {
+        unsafe { (self.CreateSamplerYcbcrConversionKHR)(device, pCreateInfo, pAllocator, pYcbcrConversion) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateSemaphore(&self, device: VkDevice, pCreateInfo: *const VkSemaphoreCreateInfo, pAllocator: *const VkAllocationCallbacks, pSemaphore: *mut VkSemaphore) -> VkResult {
+        unsafe { (self.CreateSemaphore)(device, pCreateInfo, pAllocator, pSemaphore) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateShaderInstrumentationARM(&self, device: VkDevice, pCreateInfo: *const VkShaderInstrumentationCreateInfoARM, pAllocator: *const VkAllocationCallbacks, pInstrumentation: *mut VkShaderInstrumentationARM) -> VkResult {
+        unsafe { (self.CreateShaderInstrumentationARM)(device, pCreateInfo, pAllocator, pInstrumentation) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateShaderModule(&self, device: VkDevice, pCreateInfo: *const VkShaderModuleCreateInfo, pAllocator: *const VkAllocationCallbacks, pShaderModule: *mut VkShaderModule) -> VkResult {
+        unsafe { (self.CreateShaderModule)(device, pCreateInfo, pAllocator, pShaderModule) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateShadersEXT(&self, device: VkDevice, createInfoCount: u32, pCreateInfos: *const VkShaderCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pShaders: *mut VkShaderEXT) -> VkResult {
+        unsafe { (self.CreateShadersEXT)(device, createInfoCount, pCreateInfos, pAllocator, pShaders) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateSharedSwapchainsKHR(&self, device: VkDevice, swapchainCount: u32, pCreateInfos: *const VkSwapchainCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSwapchains: *mut VkSwapchainKHR) -> VkResult {
+        unsafe { (self.CreateSharedSwapchainsKHR)(device, swapchainCount, pCreateInfos, pAllocator, pSwapchains) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateSwapchainKHR(&self, device: VkDevice, pCreateInfo: *const VkSwapchainCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSwapchain: *mut VkSwapchainKHR) -> VkResult {
+        unsafe { (self.CreateSwapchainKHR)(device, pCreateInfo, pAllocator, pSwapchain) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateTensorARM(&self, device: VkDevice, pCreateInfo: *const VkTensorCreateInfoARM, pAllocator: *const VkAllocationCallbacks, pTensor: *mut VkTensorARM) -> VkResult {
+        unsafe { (self.CreateTensorARM)(device, pCreateInfo, pAllocator, pTensor) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateTensorViewARM(&self, device: VkDevice, pCreateInfo: *const VkTensorViewCreateInfoARM, pAllocator: *const VkAllocationCallbacks, pView: *mut VkTensorViewARM) -> VkResult {
+        unsafe { (self.CreateTensorViewARM)(device, pCreateInfo, pAllocator, pView) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateValidationCacheEXT(&self, device: VkDevice, pCreateInfo: *const VkValidationCacheCreateInfoEXT, pAllocator: *const VkAllocationCallbacks, pValidationCache: *mut VkValidationCacheEXT) -> VkResult {
+        unsafe { (self.CreateValidationCacheEXT)(device, pCreateInfo, pAllocator, pValidationCache) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateVideoSessionKHR(&self, device: VkDevice, pCreateInfo: *const VkVideoSessionCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pVideoSession: *mut VkVideoSessionKHR) -> VkResult {
+        unsafe { (self.CreateVideoSessionKHR)(device, pCreateInfo, pAllocator, pVideoSession) }
+    }
+    #[inline(always)]
+    pub unsafe fn CreateVideoSessionParametersKHR(&self, device: VkDevice, pCreateInfo: *const VkVideoSessionParametersCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pVideoSessionParameters: *mut VkVideoSessionParametersKHR) -> VkResult {
+        unsafe { (self.CreateVideoSessionParametersKHR)(device, pCreateInfo, pAllocator, pVideoSessionParameters) }
+    }
+    #[inline(always)]
+    pub unsafe fn DebugMarkerSetObjectNameEXT(&self, device: VkDevice, pNameInfo: *const VkDebugMarkerObjectNameInfoEXT) -> VkResult {
+        unsafe { (self.DebugMarkerSetObjectNameEXT)(device, pNameInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn DebugMarkerSetObjectTagEXT(&self, device: VkDevice, pTagInfo: *const VkDebugMarkerObjectTagInfoEXT) -> VkResult {
+        unsafe { (self.DebugMarkerSetObjectTagEXT)(device, pTagInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn DeferredOperationJoinKHR(&self, device: VkDevice, operation: VkDeferredOperationKHR) -> VkResult {
+        unsafe { (self.DeferredOperationJoinKHR)(device, operation) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyAccelerationStructureKHR(&self, device: VkDevice, accelerationStructure: VkAccelerationStructureKHR, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyAccelerationStructureKHR)(device, accelerationStructure, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyAccelerationStructureNV(&self, device: VkDevice, accelerationStructure: VkAccelerationStructureNV, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyAccelerationStructureNV)(device, accelerationStructure, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyBuffer(&self, device: VkDevice, buffer: VkBuffer, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyBuffer)(device, buffer, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyBufferCollectionFUCHSIA(&self, device: VkDevice, collection: VkBufferCollectionFUCHSIA, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyBufferCollectionFUCHSIA)(device, collection, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyBufferView(&self, device: VkDevice, bufferView: VkBufferView, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyBufferView)(device, bufferView, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyCommandPool(&self, device: VkDevice, commandPool: VkCommandPool, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyCommandPool)(device, commandPool, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyCuFunctionNVX(&self, device: VkDevice, function: VkCuFunctionNVX, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyCuFunctionNVX)(device, function, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyCuModuleNVX(&self, device: VkDevice, module: VkCuModuleNVX, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyCuModuleNVX)(device, module, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyCudaFunctionNV(&self, device: VkDevice, function: VkCudaFunctionNV, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyCudaFunctionNV)(device, function, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyCudaModuleNV(&self, device: VkDevice, module: VkCudaModuleNV, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyCudaModuleNV)(device, module, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyDataGraphPipelineSessionARM(&self, device: VkDevice, session: VkDataGraphPipelineSessionARM, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyDataGraphPipelineSessionARM)(device, session, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyDeferredOperationKHR(&self, device: VkDevice, operation: VkDeferredOperationKHR, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyDeferredOperationKHR)(device, operation, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyDescriptorPool(&self, device: VkDevice, descriptorPool: VkDescriptorPool, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyDescriptorPool)(device, descriptorPool, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyDescriptorSetLayout(&self, device: VkDevice, descriptorSetLayout: VkDescriptorSetLayout, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyDescriptorSetLayout)(device, descriptorSetLayout, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyDescriptorUpdateTemplate(&self, device: VkDevice, descriptorUpdateTemplate: VkDescriptorUpdateTemplate, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyDescriptorUpdateTemplate)(device, descriptorUpdateTemplate, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyDescriptorUpdateTemplateKHR(&self, device: VkDevice, descriptorUpdateTemplate: VkDescriptorUpdateTemplate, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyDescriptorUpdateTemplateKHR)(device, descriptorUpdateTemplate, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyDevice(&self, device: VkDevice, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyDevice)(device, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyEvent(&self, device: VkDevice, event: VkEvent, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyEvent)(device, event, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyExternalComputeQueueNV(&self, device: VkDevice, externalQueue: VkExternalComputeQueueNV, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyExternalComputeQueueNV)(device, externalQueue, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyFence(&self, device: VkDevice, fence: VkFence, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyFence)(device, fence, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyFramebuffer(&self, device: VkDevice, framebuffer: VkFramebuffer, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyFramebuffer)(device, framebuffer, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyGpaSessionAMD(&self, device: VkDevice, gpaSession: VkGpaSessionAMD, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyGpaSessionAMD)(device, gpaSession, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyImage(&self, device: VkDevice, image: VkImage, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyImage)(device, image, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyImageView(&self, device: VkDevice, imageView: VkImageView, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyImageView)(device, imageView, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyIndirectCommandsLayoutEXT(&self, device: VkDevice, indirectCommandsLayout: VkIndirectCommandsLayoutEXT, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyIndirectCommandsLayoutEXT)(device, indirectCommandsLayout, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyIndirectCommandsLayoutNV(&self, device: VkDevice, indirectCommandsLayout: VkIndirectCommandsLayoutNV, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyIndirectCommandsLayoutNV)(device, indirectCommandsLayout, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyIndirectExecutionSetEXT(&self, device: VkDevice, indirectExecutionSet: VkIndirectExecutionSetEXT, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyIndirectExecutionSetEXT)(device, indirectExecutionSet, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyMicromapEXT(&self, device: VkDevice, micromap: VkMicromapEXT, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyMicromapEXT)(device, micromap, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyOpticalFlowSessionNV(&self, device: VkDevice, session: VkOpticalFlowSessionNV, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyOpticalFlowSessionNV)(device, session, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyPipeline(&self, device: VkDevice, pipeline: VkPipeline, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyPipeline)(device, pipeline, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyPipelineBinaryKHR(&self, device: VkDevice, pipelineBinary: VkPipelineBinaryKHR, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyPipelineBinaryKHR)(device, pipelineBinary, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyPipelineCache(&self, device: VkDevice, pipelineCache: VkPipelineCache, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyPipelineCache)(device, pipelineCache, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyPipelineLayout(&self, device: VkDevice, pipelineLayout: VkPipelineLayout, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyPipelineLayout)(device, pipelineLayout, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyPrivateDataSlot(&self, device: VkDevice, privateDataSlot: VkPrivateDataSlot, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyPrivateDataSlot)(device, privateDataSlot, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyPrivateDataSlotEXT(&self, device: VkDevice, privateDataSlot: VkPrivateDataSlot, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyPrivateDataSlotEXT)(device, privateDataSlot, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyQueryPool(&self, device: VkDevice, queryPool: VkQueryPool, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyQueryPool)(device, queryPool, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyRenderPass(&self, device: VkDevice, renderPass: VkRenderPass, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyRenderPass)(device, renderPass, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroySampler(&self, device: VkDevice, sampler: VkSampler, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroySampler)(device, sampler, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroySamplerYcbcrConversion(&self, device: VkDevice, ycbcrConversion: VkSamplerYcbcrConversion, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroySamplerYcbcrConversion)(device, ycbcrConversion, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroySamplerYcbcrConversionKHR(&self, device: VkDevice, ycbcrConversion: VkSamplerYcbcrConversion, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroySamplerYcbcrConversionKHR)(device, ycbcrConversion, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroySemaphore(&self, device: VkDevice, semaphore: VkSemaphore, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroySemaphore)(device, semaphore, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyShaderEXT(&self, device: VkDevice, shader: VkShaderEXT, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyShaderEXT)(device, shader, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyShaderInstrumentationARM(&self, device: VkDevice, instrumentation: VkShaderInstrumentationARM, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyShaderInstrumentationARM)(device, instrumentation, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyShaderModule(&self, device: VkDevice, shaderModule: VkShaderModule, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyShaderModule)(device, shaderModule, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroySwapchainKHR(&self, device: VkDevice, swapchain: VkSwapchainKHR, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroySwapchainKHR)(device, swapchain, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyTensorARM(&self, device: VkDevice, tensor: VkTensorARM, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyTensorARM)(device, tensor, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyTensorViewARM(&self, device: VkDevice, tensorView: VkTensorViewARM, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyTensorViewARM)(device, tensorView, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyValidationCacheEXT(&self, device: VkDevice, validationCache: VkValidationCacheEXT, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyValidationCacheEXT)(device, validationCache, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyVideoSessionKHR(&self, device: VkDevice, videoSession: VkVideoSessionKHR, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyVideoSessionKHR)(device, videoSession, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DestroyVideoSessionParametersKHR(&self, device: VkDevice, videoSessionParameters: VkVideoSessionParametersKHR, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.DestroyVideoSessionParametersKHR)(device, videoSessionParameters, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn DeviceWaitIdle(&self, device: VkDevice) -> VkResult {
+        unsafe { (self.DeviceWaitIdle)(device) }
+    }
+    #[inline(always)]
+    pub unsafe fn DisplayPowerControlEXT(&self, device: VkDevice, display: VkDisplayKHR, pDisplayPowerInfo: *const VkDisplayPowerInfoEXT) -> VkResult {
+        unsafe { (self.DisplayPowerControlEXT)(device, display, pDisplayPowerInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn EndCommandBuffer(&self, commandBuffer: VkCommandBuffer) -> VkResult {
+        unsafe { (self.EndCommandBuffer)(commandBuffer) }
+    }
+    #[inline(always)]
+    pub unsafe fn ExportMetalObjectsEXT(&self, device: VkDevice, pMetalObjectsInfo: *mut VkExportMetalObjectsInfoEXT) -> () {
+        unsafe { (self.ExportMetalObjectsEXT)(device, pMetalObjectsInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn FlushMappedMemoryRanges(&self, device: VkDevice, memoryRangeCount: u32, pMemoryRanges: *const VkMappedMemoryRange) -> VkResult {
+        unsafe { (self.FlushMappedMemoryRanges)(device, memoryRangeCount, pMemoryRanges) }
+    }
+    #[inline(always)]
+    pub unsafe fn FreeCommandBuffers(&self, device: VkDevice, commandPool: VkCommandPool, commandBufferCount: u32, pCommandBuffers: *const VkCommandBuffer) -> () {
+        unsafe { (self.FreeCommandBuffers)(device, commandPool, commandBufferCount, pCommandBuffers) }
+    }
+    #[inline(always)]
+    pub unsafe fn FreeDescriptorSets(&self, device: VkDevice, descriptorPool: VkDescriptorPool, descriptorSetCount: u32, pDescriptorSets: *const VkDescriptorSet) -> VkResult {
+        unsafe { (self.FreeDescriptorSets)(device, descriptorPool, descriptorSetCount, pDescriptorSets) }
+    }
+    #[inline(always)]
+    pub unsafe fn FreeMemory(&self, device: VkDevice, memory: VkDeviceMemory, pAllocator: *const VkAllocationCallbacks) -> () {
+        unsafe { (self.FreeMemory)(device, memory, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetAccelerationStructureBuildSizesKHR(&self, device: VkDevice, buildType: VkAccelerationStructureBuildTypeKHR, pBuildInfo: *const VkAccelerationStructureBuildGeometryInfoKHR, pMaxPrimitiveCounts: *const u32, pSizeInfo: *mut VkAccelerationStructureBuildSizesInfoKHR) -> () {
+        unsafe { (self.GetAccelerationStructureBuildSizesKHR)(device, buildType, pBuildInfo, pMaxPrimitiveCounts, pSizeInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetAccelerationStructureDeviceAddressKHR(&self, device: VkDevice, pInfo: *const VkAccelerationStructureDeviceAddressInfoKHR) -> VkDeviceAddress {
+        unsafe { (self.GetAccelerationStructureDeviceAddressKHR)(device, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetAccelerationStructureHandleNV(&self, device: VkDevice, accelerationStructure: VkAccelerationStructureNV, dataSize: usize, pData: *mut c_void) -> VkResult {
+        unsafe { (self.GetAccelerationStructureHandleNV)(device, accelerationStructure, dataSize, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetAccelerationStructureMemoryRequirementsNV(&self, device: VkDevice, pInfo: *const VkAccelerationStructureMemoryRequirementsInfoNV, pMemoryRequirements: *mut VkMemoryRequirements2) -> () {
+        unsafe { (self.GetAccelerationStructureMemoryRequirementsNV)(device, pInfo, pMemoryRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetAccelerationStructureOpaqueCaptureDescriptorDataEXT(&self, device: VkDevice, pInfo: *const VkAccelerationStructureCaptureDescriptorDataInfoEXT, pData: *mut c_void) -> VkResult {
+        unsafe { (self.GetAccelerationStructureOpaqueCaptureDescriptorDataEXT)(device, pInfo, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetAndroidHardwareBufferPropertiesANDROID(&self, device: VkDevice, buffer: *const AHardwareBuffer, pProperties: *mut VkAndroidHardwareBufferPropertiesANDROID) -> VkResult {
+        unsafe { (self.GetAndroidHardwareBufferPropertiesANDROID)(device, buffer, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetBufferCollectionPropertiesFUCHSIA(&self, device: VkDevice, collection: VkBufferCollectionFUCHSIA, pProperties: *mut VkBufferCollectionPropertiesFUCHSIA) -> VkResult {
+        unsafe { (self.GetBufferCollectionPropertiesFUCHSIA)(device, collection, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetBufferDeviceAddress(&self, device: VkDevice, pInfo: *const VkBufferDeviceAddressInfo) -> VkDeviceAddress {
+        unsafe { (self.GetBufferDeviceAddress)(device, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetBufferDeviceAddressEXT(&self, device: VkDevice, pInfo: *const VkBufferDeviceAddressInfo) -> VkDeviceAddress {
+        unsafe { (self.GetBufferDeviceAddressEXT)(device, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetBufferDeviceAddressKHR(&self, device: VkDevice, pInfo: *const VkBufferDeviceAddressInfo) -> VkDeviceAddress {
+        unsafe { (self.GetBufferDeviceAddressKHR)(device, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetBufferMemoryRequirements(&self, device: VkDevice, buffer: VkBuffer, pMemoryRequirements: *mut VkMemoryRequirements) -> () {
+        unsafe { (self.GetBufferMemoryRequirements)(device, buffer, pMemoryRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetBufferMemoryRequirements2(&self, device: VkDevice, pInfo: *const VkBufferMemoryRequirementsInfo2, pMemoryRequirements: *mut VkMemoryRequirements2) -> () {
+        unsafe { (self.GetBufferMemoryRequirements2)(device, pInfo, pMemoryRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetBufferMemoryRequirements2KHR(&self, device: VkDevice, pInfo: *const VkBufferMemoryRequirementsInfo2, pMemoryRequirements: *mut VkMemoryRequirements2) -> () {
+        unsafe { (self.GetBufferMemoryRequirements2KHR)(device, pInfo, pMemoryRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetBufferOpaqueCaptureAddress(&self, device: VkDevice, pInfo: *const VkBufferDeviceAddressInfo) -> u64 {
+        unsafe { (self.GetBufferOpaqueCaptureAddress)(device, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetBufferOpaqueCaptureAddressKHR(&self, device: VkDevice, pInfo: *const VkBufferDeviceAddressInfo) -> u64 {
+        unsafe { (self.GetBufferOpaqueCaptureAddressKHR)(device, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetBufferOpaqueCaptureDescriptorDataEXT(&self, device: VkDevice, pInfo: *const VkBufferCaptureDescriptorDataInfoEXT, pData: *mut c_void) -> VkResult {
+        unsafe { (self.GetBufferOpaqueCaptureDescriptorDataEXT)(device, pInfo, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetCalibratedTimestampsEXT(&self, device: VkDevice, timestampCount: u32, pTimestampInfos: *const VkCalibratedTimestampInfoKHR, pTimestamps: *mut u64, pMaxDeviation: *mut u64) -> VkResult {
+        unsafe { (self.GetCalibratedTimestampsEXT)(device, timestampCount, pTimestampInfos, pTimestamps, pMaxDeviation) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetCalibratedTimestampsKHR(&self, device: VkDevice, timestampCount: u32, pTimestampInfos: *const VkCalibratedTimestampInfoKHR, pTimestamps: *mut u64, pMaxDeviation: *mut u64) -> VkResult {
+        unsafe { (self.GetCalibratedTimestampsKHR)(device, timestampCount, pTimestampInfos, pTimestamps, pMaxDeviation) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetClusterAccelerationStructureBuildSizesNV(&self, device: VkDevice, pInfo: *const VkClusterAccelerationStructureInputInfoNV, pSizeInfo: *mut VkAccelerationStructureBuildSizesInfoKHR) -> () {
+        unsafe { (self.GetClusterAccelerationStructureBuildSizesNV)(device, pInfo, pSizeInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetCudaModuleCacheNV(&self, device: VkDevice, module: VkCudaModuleNV, pCacheSize: *mut usize, pCacheData: *mut c_void) -> VkResult {
+        unsafe { (self.GetCudaModuleCacheNV)(device, module, pCacheSize, pCacheData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDataGraphPipelineAvailablePropertiesARM(&self, device: VkDevice, pPipelineInfo: *const VkDataGraphPipelineInfoARM, pPropertiesCount: *mut u32, pProperties: *mut VkDataGraphPipelinePropertyARM) -> VkResult {
+        unsafe { (self.GetDataGraphPipelineAvailablePropertiesARM)(device, pPipelineInfo, pPropertiesCount, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDataGraphPipelinePropertiesARM(&self, device: VkDevice, pPipelineInfo: *const VkDataGraphPipelineInfoARM, propertiesCount: u32, pProperties: *mut VkDataGraphPipelinePropertyQueryResultARM) -> VkResult {
+        unsafe { (self.GetDataGraphPipelinePropertiesARM)(device, pPipelineInfo, propertiesCount, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDataGraphPipelineSessionBindPointRequirementsARM(&self, device: VkDevice, pInfo: *const VkDataGraphPipelineSessionBindPointRequirementsInfoARM, pBindPointRequirementCount: *mut u32, pBindPointRequirements: *mut VkDataGraphPipelineSessionBindPointRequirementARM) -> VkResult {
+        unsafe { (self.GetDataGraphPipelineSessionBindPointRequirementsARM)(device, pInfo, pBindPointRequirementCount, pBindPointRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDataGraphPipelineSessionMemoryRequirementsARM(&self, device: VkDevice, pInfo: *const VkDataGraphPipelineSessionMemoryRequirementsInfoARM, pMemoryRequirements: *mut VkMemoryRequirements2) -> () {
+        unsafe { (self.GetDataGraphPipelineSessionMemoryRequirementsARM)(device, pInfo, pMemoryRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeferredOperationMaxConcurrencyKHR(&self, device: VkDevice, operation: VkDeferredOperationKHR) -> u32 {
+        unsafe { (self.GetDeferredOperationMaxConcurrencyKHR)(device, operation) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeferredOperationResultKHR(&self, device: VkDevice, operation: VkDeferredOperationKHR) -> VkResult {
+        unsafe { (self.GetDeferredOperationResultKHR)(device, operation) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDescriptorEXT(&self, device: VkDevice, pDescriptorInfo: *const VkDescriptorGetInfoEXT, dataSize: usize, pDescriptor: *mut c_void) -> () {
+        unsafe { (self.GetDescriptorEXT)(device, pDescriptorInfo, dataSize, pDescriptor) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDescriptorSetHostMappingVALVE(&self, device: VkDevice, descriptorSet: VkDescriptorSet, ppData: *mut *mut c_void) -> () {
+        unsafe { (self.GetDescriptorSetHostMappingVALVE)(device, descriptorSet, ppData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDescriptorSetLayoutBindingOffsetEXT(&self, device: VkDevice, layout: VkDescriptorSetLayout, binding: u32, pOffset: *mut VkDeviceSize) -> () {
+        unsafe { (self.GetDescriptorSetLayoutBindingOffsetEXT)(device, layout, binding, pOffset) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDescriptorSetLayoutHostMappingInfoVALVE(&self, device: VkDevice, pBindingReference: *const VkDescriptorSetBindingReferenceVALVE, pHostMapping: *mut VkDescriptorSetLayoutHostMappingInfoVALVE) -> () {
+        unsafe { (self.GetDescriptorSetLayoutHostMappingInfoVALVE)(device, pBindingReference, pHostMapping) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDescriptorSetLayoutSizeEXT(&self, device: VkDevice, layout: VkDescriptorSetLayout, pLayoutSizeInBytes: *mut VkDeviceSize) -> () {
+        unsafe { (self.GetDescriptorSetLayoutSizeEXT)(device, layout, pLayoutSizeInBytes) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDescriptorSetLayoutSupport(&self, device: VkDevice, pCreateInfo: *const VkDescriptorSetLayoutCreateInfo, pSupport: *mut VkDescriptorSetLayoutSupport) -> () {
+        unsafe { (self.GetDescriptorSetLayoutSupport)(device, pCreateInfo, pSupport) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDescriptorSetLayoutSupportKHR(&self, device: VkDevice, pCreateInfo: *const VkDescriptorSetLayoutCreateInfo, pSupport: *mut VkDescriptorSetLayoutSupport) -> () {
+        unsafe { (self.GetDescriptorSetLayoutSupportKHR)(device, pCreateInfo, pSupport) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceAccelerationStructureCompatibilityKHR(&self, device: VkDevice, pVersionInfo: *const VkAccelerationStructureVersionInfoKHR, pCompatibility: *mut VkAccelerationStructureCompatibilityKHR) -> () {
+        unsafe { (self.GetDeviceAccelerationStructureCompatibilityKHR)(device, pVersionInfo, pCompatibility) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceBufferMemoryRequirements(&self, device: VkDevice, pInfo: *const VkDeviceBufferMemoryRequirements, pMemoryRequirements: *mut VkMemoryRequirements2) -> () {
+        unsafe { (self.GetDeviceBufferMemoryRequirements)(device, pInfo, pMemoryRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceBufferMemoryRequirementsKHR(&self, device: VkDevice, pInfo: *const VkDeviceBufferMemoryRequirements, pMemoryRequirements: *mut VkMemoryRequirements2) -> () {
+        unsafe { (self.GetDeviceBufferMemoryRequirementsKHR)(device, pInfo, pMemoryRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceCombinedImageSamplerIndexNVX(&self, device: VkDevice, imageViewIndex: u64, samplerIndex: u64) -> u64 {
+        unsafe { (self.GetDeviceCombinedImageSamplerIndexNVX)(device, imageViewIndex, samplerIndex) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceFaultDebugInfoKHR(&self, device: VkDevice, pDebugInfo: *mut VkDeviceFaultDebugInfoKHR) -> VkResult {
+        unsafe { (self.GetDeviceFaultDebugInfoKHR)(device, pDebugInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceFaultInfoEXT(&self, device: VkDevice, pFaultCounts: *mut VkDeviceFaultCountsEXT, pFaultInfo: *mut VkDeviceFaultInfoEXT) -> VkResult {
+        unsafe { (self.GetDeviceFaultInfoEXT)(device, pFaultCounts, pFaultInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceFaultReportsKHR(&self, device: VkDevice, timeout: u64, pFaultCounts: *mut u32, pFaultInfo: *mut VkDeviceFaultInfoKHR) -> VkResult {
+        unsafe { (self.GetDeviceFaultReportsKHR)(device, timeout, pFaultCounts, pFaultInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceGroupPeerMemoryFeatures(&self, device: VkDevice, heapIndex: u32, localDeviceIndex: u32, remoteDeviceIndex: u32, pPeerMemoryFeatures: *mut VkPeerMemoryFeatureFlags) -> () {
+        unsafe { (self.GetDeviceGroupPeerMemoryFeatures)(device, heapIndex, localDeviceIndex, remoteDeviceIndex, pPeerMemoryFeatures) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceGroupPeerMemoryFeaturesKHR(&self, device: VkDevice, heapIndex: u32, localDeviceIndex: u32, remoteDeviceIndex: u32, pPeerMemoryFeatures: *mut VkPeerMemoryFeatureFlags) -> () {
+        unsafe { (self.GetDeviceGroupPeerMemoryFeaturesKHR)(device, heapIndex, localDeviceIndex, remoteDeviceIndex, pPeerMemoryFeatures) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceGroupPresentCapabilitiesKHR(&self, device: VkDevice, pDeviceGroupPresentCapabilities: *mut VkDeviceGroupPresentCapabilitiesKHR) -> VkResult {
+        unsafe { (self.GetDeviceGroupPresentCapabilitiesKHR)(device, pDeviceGroupPresentCapabilities) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceGroupSurfacePresentModes2EXT(&self, device: VkDevice, pSurfaceInfo: *const VkPhysicalDeviceSurfaceInfo2KHR, pModes: *mut VkDeviceGroupPresentModeFlagsKHR) -> VkResult {
+        unsafe { (self.GetDeviceGroupSurfacePresentModes2EXT)(device, pSurfaceInfo, pModes) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceGroupSurfacePresentModesKHR(&self, device: VkDevice, surface: VkSurfaceKHR, pModes: *mut VkDeviceGroupPresentModeFlagsKHR) -> VkResult {
+        unsafe { (self.GetDeviceGroupSurfacePresentModesKHR)(device, surface, pModes) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceImageMemoryRequirements(&self, device: VkDevice, pInfo: *const VkDeviceImageMemoryRequirements, pMemoryRequirements: *mut VkMemoryRequirements2) -> () {
+        unsafe { (self.GetDeviceImageMemoryRequirements)(device, pInfo, pMemoryRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceImageMemoryRequirementsKHR(&self, device: VkDevice, pInfo: *const VkDeviceImageMemoryRequirements, pMemoryRequirements: *mut VkMemoryRequirements2) -> () {
+        unsafe { (self.GetDeviceImageMemoryRequirementsKHR)(device, pInfo, pMemoryRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceImageSparseMemoryRequirements(&self, device: VkDevice, pInfo: *const VkDeviceImageMemoryRequirements, pSparseMemoryRequirementCount: *mut u32, pSparseMemoryRequirements: *mut VkSparseImageMemoryRequirements2) -> () {
+        unsafe { (self.GetDeviceImageSparseMemoryRequirements)(device, pInfo, pSparseMemoryRequirementCount, pSparseMemoryRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceImageSparseMemoryRequirementsKHR(&self, device: VkDevice, pInfo: *const VkDeviceImageMemoryRequirements, pSparseMemoryRequirementCount: *mut u32, pSparseMemoryRequirements: *mut VkSparseImageMemoryRequirements2) -> () {
+        unsafe { (self.GetDeviceImageSparseMemoryRequirementsKHR)(device, pInfo, pSparseMemoryRequirementCount, pSparseMemoryRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceImageSubresourceLayout(&self, device: VkDevice, pInfo: *const VkDeviceImageSubresourceInfo, pLayout: *mut VkSubresourceLayout2) -> () {
+        unsafe { (self.GetDeviceImageSubresourceLayout)(device, pInfo, pLayout) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceImageSubresourceLayoutKHR(&self, device: VkDevice, pInfo: *const VkDeviceImageSubresourceInfo, pLayout: *mut VkSubresourceLayout2) -> () {
+        unsafe { (self.GetDeviceImageSubresourceLayoutKHR)(device, pInfo, pLayout) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceMemoryCommitment(&self, device: VkDevice, memory: VkDeviceMemory, pCommittedMemoryInBytes: *mut VkDeviceSize) -> () {
+        unsafe { (self.GetDeviceMemoryCommitment)(device, memory, pCommittedMemoryInBytes) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceMemoryOpaqueCaptureAddress(&self, device: VkDevice, pInfo: *const VkDeviceMemoryOpaqueCaptureAddressInfo) -> u64 {
+        unsafe { (self.GetDeviceMemoryOpaqueCaptureAddress)(device, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceMemoryOpaqueCaptureAddressKHR(&self, device: VkDevice, pInfo: *const VkDeviceMemoryOpaqueCaptureAddressInfo) -> u64 {
+        unsafe { (self.GetDeviceMemoryOpaqueCaptureAddressKHR)(device, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceMicromapCompatibilityEXT(&self, device: VkDevice, pVersionInfo: *const VkMicromapVersionInfoEXT, pCompatibility: *mut VkAccelerationStructureCompatibilityKHR) -> () {
+        unsafe { (self.GetDeviceMicromapCompatibilityEXT)(device, pVersionInfo, pCompatibility) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceQueue(&self, device: VkDevice, queueFamilyIndex: u32, queueIndex: u32, pQueue: *mut VkQueue) -> () {
+        unsafe { (self.GetDeviceQueue)(device, queueFamilyIndex, queueIndex, pQueue) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceQueue2(&self, device: VkDevice, pQueueInfo: *const VkDeviceQueueInfo2, pQueue: *mut VkQueue) -> () {
+        unsafe { (self.GetDeviceQueue2)(device, pQueueInfo, pQueue) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI(&self, device: VkDevice, renderpass: VkRenderPass, pMaxWorkgroupSize: *mut VkExtent2D) -> VkResult {
+        unsafe { (self.GetDeviceSubpassShadingMaxWorkgroupSizeHUAWEI)(device, renderpass, pMaxWorkgroupSize) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDeviceTensorMemoryRequirementsARM(&self, device: VkDevice, pInfo: *const VkDeviceTensorMemoryRequirementsARM, pMemoryRequirements: *mut VkMemoryRequirements2) -> () {
+        unsafe { (self.GetDeviceTensorMemoryRequirementsARM)(device, pInfo, pMemoryRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetDynamicRenderingTilePropertiesQCOM(&self, device: VkDevice, pRenderingInfo: *const VkRenderingInfo, pProperties: *mut VkTilePropertiesQCOM) -> VkResult {
+        unsafe { (self.GetDynamicRenderingTilePropertiesQCOM)(device, pRenderingInfo, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetEncodedVideoSessionParametersKHR(&self, device: VkDevice, pVideoSessionParametersInfo: *const VkVideoEncodeSessionParametersGetInfoKHR, pFeedbackInfo: *mut VkVideoEncodeSessionParametersFeedbackInfoKHR, pDataSize: *mut usize, pData: *mut c_void) -> VkResult {
+        unsafe { (self.GetEncodedVideoSessionParametersKHR)(device, pVideoSessionParametersInfo, pFeedbackInfo, pDataSize, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetEventStatus(&self, device: VkDevice, event: VkEvent) -> VkResult {
+        unsafe { (self.GetEventStatus)(device, event) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetExecutionGraphPipelineNodeIndexAMDX(&self, device: VkDevice, executionGraph: VkPipeline, pNodeInfo: *const VkPipelineShaderStageNodeCreateInfoAMDX, pNodeIndex: *mut u32) -> VkResult {
+        unsafe { (self.GetExecutionGraphPipelineNodeIndexAMDX)(device, executionGraph, pNodeInfo, pNodeIndex) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetExecutionGraphPipelineScratchSizeAMDX(&self, device: VkDevice, executionGraph: VkPipeline, pSizeInfo: *mut VkExecutionGraphPipelineScratchSizeAMDX) -> VkResult {
+        unsafe { (self.GetExecutionGraphPipelineScratchSizeAMDX)(device, executionGraph, pSizeInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetFenceFdKHR(&self, device: VkDevice, pGetFdInfo: *const VkFenceGetFdInfoKHR, pFd: *mut c_int) -> VkResult {
+        unsafe { (self.GetFenceFdKHR)(device, pGetFdInfo, pFd) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetFenceStatus(&self, device: VkDevice, fence: VkFence) -> VkResult {
+        unsafe { (self.GetFenceStatus)(device, fence) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetFenceWin32HandleKHR(&self, device: VkDevice, pGetWin32HandleInfo: *const VkFenceGetWin32HandleInfoKHR, pHandle: *mut HANDLE) -> VkResult {
+        unsafe { (self.GetFenceWin32HandleKHR)(device, pGetWin32HandleInfo, pHandle) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetFramebufferTilePropertiesQCOM(&self, device: VkDevice, framebuffer: VkFramebuffer, pPropertiesCount: *mut u32, pProperties: *mut VkTilePropertiesQCOM) -> VkResult {
+        unsafe { (self.GetFramebufferTilePropertiesQCOM)(device, framebuffer, pPropertiesCount, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetGeneratedCommandsMemoryRequirementsEXT(&self, device: VkDevice, pInfo: *const VkGeneratedCommandsMemoryRequirementsInfoEXT, pMemoryRequirements: *mut VkMemoryRequirements2) -> () {
+        unsafe { (self.GetGeneratedCommandsMemoryRequirementsEXT)(device, pInfo, pMemoryRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetGeneratedCommandsMemoryRequirementsNV(&self, device: VkDevice, pInfo: *const VkGeneratedCommandsMemoryRequirementsInfoNV, pMemoryRequirements: *mut VkMemoryRequirements2) -> () {
+        unsafe { (self.GetGeneratedCommandsMemoryRequirementsNV)(device, pInfo, pMemoryRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetGpaDeviceClockInfoAMD(&self, device: VkDevice, pInfo: *mut VkGpaDeviceGetClockInfoAMD) -> VkResult {
+        unsafe { (self.GetGpaDeviceClockInfoAMD)(device, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetGpaSessionResultsAMD(&self, device: VkDevice, gpaSession: VkGpaSessionAMD, sampleID: u32, pSizeInBytes: *mut usize, pData: *mut c_void) -> VkResult {
+        unsafe { (self.GetGpaSessionResultsAMD)(device, gpaSession, sampleID, pSizeInBytes, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetGpaSessionStatusAMD(&self, device: VkDevice, gpaSession: VkGpaSessionAMD) -> VkResult {
+        unsafe { (self.GetGpaSessionStatusAMD)(device, gpaSession) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetImageDrmFormatModifierPropertiesEXT(&self, device: VkDevice, image: VkImage, pProperties: *mut VkImageDrmFormatModifierPropertiesEXT) -> VkResult {
+        unsafe { (self.GetImageDrmFormatModifierPropertiesEXT)(device, image, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetImageMemoryRequirements(&self, device: VkDevice, image: VkImage, pMemoryRequirements: *mut VkMemoryRequirements) -> () {
+        unsafe { (self.GetImageMemoryRequirements)(device, image, pMemoryRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetImageMemoryRequirements2(&self, device: VkDevice, pInfo: *const VkImageMemoryRequirementsInfo2, pMemoryRequirements: *mut VkMemoryRequirements2) -> () {
+        unsafe { (self.GetImageMemoryRequirements2)(device, pInfo, pMemoryRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetImageMemoryRequirements2KHR(&self, device: VkDevice, pInfo: *const VkImageMemoryRequirementsInfo2, pMemoryRequirements: *mut VkMemoryRequirements2) -> () {
+        unsafe { (self.GetImageMemoryRequirements2KHR)(device, pInfo, pMemoryRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetImageOpaqueCaptureDataEXT(&self, device: VkDevice, imageCount: u32, pImages: *const VkImage, pDatas: *mut VkHostAddressRangeEXT) -> VkResult {
+        unsafe { (self.GetImageOpaqueCaptureDataEXT)(device, imageCount, pImages, pDatas) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetImageOpaqueCaptureDescriptorDataEXT(&self, device: VkDevice, pInfo: *const VkImageCaptureDescriptorDataInfoEXT, pData: *mut c_void) -> VkResult {
+        unsafe { (self.GetImageOpaqueCaptureDescriptorDataEXT)(device, pInfo, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetImageSparseMemoryRequirements(&self, device: VkDevice, image: VkImage, pSparseMemoryRequirementCount: *mut u32, pSparseMemoryRequirements: *mut VkSparseImageMemoryRequirements) -> () {
+        unsafe { (self.GetImageSparseMemoryRequirements)(device, image, pSparseMemoryRequirementCount, pSparseMemoryRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetImageSparseMemoryRequirements2(&self, device: VkDevice, pInfo: *const VkImageSparseMemoryRequirementsInfo2, pSparseMemoryRequirementCount: *mut u32, pSparseMemoryRequirements: *mut VkSparseImageMemoryRequirements2) -> () {
+        unsafe { (self.GetImageSparseMemoryRequirements2)(device, pInfo, pSparseMemoryRequirementCount, pSparseMemoryRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetImageSparseMemoryRequirements2KHR(&self, device: VkDevice, pInfo: *const VkImageSparseMemoryRequirementsInfo2, pSparseMemoryRequirementCount: *mut u32, pSparseMemoryRequirements: *mut VkSparseImageMemoryRequirements2) -> () {
+        unsafe { (self.GetImageSparseMemoryRequirements2KHR)(device, pInfo, pSparseMemoryRequirementCount, pSparseMemoryRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetImageSubresourceLayout(&self, device: VkDevice, image: VkImage, pSubresource: *const VkImageSubresource, pLayout: *mut VkSubresourceLayout) -> () {
+        unsafe { (self.GetImageSubresourceLayout)(device, image, pSubresource, pLayout) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetImageSubresourceLayout2(&self, device: VkDevice, image: VkImage, pSubresource: *const VkImageSubresource2, pLayout: *mut VkSubresourceLayout2) -> () {
+        unsafe { (self.GetImageSubresourceLayout2)(device, image, pSubresource, pLayout) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetImageSubresourceLayout2EXT(&self, device: VkDevice, image: VkImage, pSubresource: *const VkImageSubresource2, pLayout: *mut VkSubresourceLayout2) -> () {
+        unsafe { (self.GetImageSubresourceLayout2EXT)(device, image, pSubresource, pLayout) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetImageSubresourceLayout2KHR(&self, device: VkDevice, image: VkImage, pSubresource: *const VkImageSubresource2, pLayout: *mut VkSubresourceLayout2) -> () {
+        unsafe { (self.GetImageSubresourceLayout2KHR)(device, image, pSubresource, pLayout) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetImageViewAddressNVX(&self, device: VkDevice, imageView: VkImageView, pProperties: *mut VkImageViewAddressPropertiesNVX) -> VkResult {
+        unsafe { (self.GetImageViewAddressNVX)(device, imageView, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetImageViewHandle64NVX(&self, device: VkDevice, pInfo: *const VkImageViewHandleInfoNVX) -> u64 {
+        unsafe { (self.GetImageViewHandle64NVX)(device, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetImageViewHandleNVX(&self, device: VkDevice, pInfo: *const VkImageViewHandleInfoNVX) -> u32 {
+        unsafe { (self.GetImageViewHandleNVX)(device, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetImageViewOpaqueCaptureDescriptorDataEXT(&self, device: VkDevice, pInfo: *const VkImageViewCaptureDescriptorDataInfoEXT, pData: *mut c_void) -> VkResult {
+        unsafe { (self.GetImageViewOpaqueCaptureDescriptorDataEXT)(device, pInfo, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetLatencyTimingsLegacyNV(&self, device: VkDevice, pTimings: *mut c_void) -> () {
+        unsafe { (self.GetLatencyTimingsLegacyNV)(device, pTimings) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetLatencyTimingsNV(&self, device: VkDevice, swapchain: VkSwapchainKHR, pLatencyMarkerInfo: *mut VkGetLatencyMarkerInfoNV) -> () {
+        unsafe { (self.GetLatencyTimingsNV)(device, swapchain, pLatencyMarkerInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetMemoryAndroidHardwareBufferANDROID(&self, device: VkDevice, pInfo: *const VkMemoryGetAndroidHardwareBufferInfoANDROID, pBuffer: *mut *mut AHardwareBuffer) -> VkResult {
+        unsafe { (self.GetMemoryAndroidHardwareBufferANDROID)(device, pInfo, pBuffer) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetMemoryFdKHR(&self, device: VkDevice, pGetFdInfo: *const VkMemoryGetFdInfoKHR, pFd: *mut c_int) -> VkResult {
+        unsafe { (self.GetMemoryFdKHR)(device, pGetFdInfo, pFd) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetMemoryFdPropertiesKHR(&self, device: VkDevice, handleType: VkExternalMemoryHandleTypeFlagBits, fd: c_int, pMemoryFdProperties: *mut VkMemoryFdPropertiesKHR) -> VkResult {
+        unsafe { (self.GetMemoryFdPropertiesKHR)(device, handleType, fd, pMemoryFdProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetMemoryHostPointerPropertiesEXT(&self, device: VkDevice, handleType: VkExternalMemoryHandleTypeFlagBits, pHostPointer: *const c_void, pMemoryHostPointerProperties: *mut VkMemoryHostPointerPropertiesEXT) -> VkResult {
+        unsafe { (self.GetMemoryHostPointerPropertiesEXT)(device, handleType, pHostPointer, pMemoryHostPointerProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetMemoryMetalHandleEXT(&self, device: VkDevice, pGetMetalHandleInfo: *const VkMemoryGetMetalHandleInfoEXT, pHandle: *mut *mut c_void) -> VkResult {
+        unsafe { (self.GetMemoryMetalHandleEXT)(device, pGetMetalHandleInfo, pHandle) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetMemoryMetalHandlePropertiesEXT(&self, device: VkDevice, handleType: VkExternalMemoryHandleTypeFlagBits, pHandle: *const c_void, pMemoryMetalHandleProperties: *mut VkMemoryMetalHandlePropertiesEXT) -> VkResult {
+        unsafe { (self.GetMemoryMetalHandlePropertiesEXT)(device, handleType, pHandle, pMemoryMetalHandleProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetMemoryNativeBufferOHOS(&self, device: VkDevice, pInfo: *const VkMemoryGetNativeBufferInfoOHOS, pBuffer: *mut *mut OH_NativeBuffer) -> VkResult {
+        unsafe { (self.GetMemoryNativeBufferOHOS)(device, pInfo, pBuffer) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetMemoryRemoteAddressNV(&self, device: VkDevice, pMemoryGetRemoteAddressInfo: *const VkMemoryGetRemoteAddressInfoNV, pAddress: *mut VkRemoteAddressNV) -> VkResult {
+        unsafe { (self.GetMemoryRemoteAddressNV)(device, pMemoryGetRemoteAddressInfo, pAddress) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetMemoryWin32HandleKHR(&self, device: VkDevice, pGetWin32HandleInfo: *const VkMemoryGetWin32HandleInfoKHR, pHandle: *mut HANDLE) -> VkResult {
+        unsafe { (self.GetMemoryWin32HandleKHR)(device, pGetWin32HandleInfo, pHandle) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetMemoryWin32HandleNV(&self, device: VkDevice, memory: VkDeviceMemory, handleType: VkExternalMemoryHandleTypeFlagsNV, pHandle: *mut HANDLE) -> VkResult {
+        unsafe { (self.GetMemoryWin32HandleNV)(device, memory, handleType, pHandle) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetMemoryWin32HandlePropertiesKHR(&self, device: VkDevice, handleType: VkExternalMemoryHandleTypeFlagBits, handle: HANDLE, pMemoryWin32HandleProperties: *mut VkMemoryWin32HandlePropertiesKHR) -> VkResult {
+        unsafe { (self.GetMemoryWin32HandlePropertiesKHR)(device, handleType, handle, pMemoryWin32HandleProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetMemoryZirconHandleFUCHSIA(&self, device: VkDevice, pGetZirconHandleInfo: *const VkMemoryGetZirconHandleInfoFUCHSIA, pZirconHandle: *mut zx_handle_t) -> VkResult {
+        unsafe { (self.GetMemoryZirconHandleFUCHSIA)(device, pGetZirconHandleInfo, pZirconHandle) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetMemoryZirconHandlePropertiesFUCHSIA(&self, device: VkDevice, handleType: VkExternalMemoryHandleTypeFlagBits, zirconHandle: zx_handle_t, pMemoryZirconHandleProperties: *mut VkMemoryZirconHandlePropertiesFUCHSIA) -> VkResult {
+        unsafe { (self.GetMemoryZirconHandlePropertiesFUCHSIA)(device, handleType, zirconHandle, pMemoryZirconHandleProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetMicromapBuildSizesEXT(&self, device: VkDevice, buildType: VkAccelerationStructureBuildTypeKHR, pBuildInfo: *const VkMicromapBuildInfoEXT, pSizeInfo: *mut VkMicromapBuildSizesInfoEXT) -> () {
+        unsafe { (self.GetMicromapBuildSizesEXT)(device, buildType, pBuildInfo, pSizeInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetNativeBufferPropertiesOHOS(&self, device: VkDevice, buffer: *const OH_NativeBuffer, pProperties: *mut VkNativeBufferPropertiesOHOS) -> VkResult {
+        unsafe { (self.GetNativeBufferPropertiesOHOS)(device, buffer, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPartitionedAccelerationStructuresBuildSizesNV(&self, device: VkDevice, pInfo: *const VkPartitionedAccelerationStructureInstancesInputNV, pSizeInfo: *mut VkAccelerationStructureBuildSizesInfoKHR) -> () {
+        unsafe { (self.GetPartitionedAccelerationStructuresBuildSizesNV)(device, pInfo, pSizeInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPastPresentationTimingEXT(&self, device: VkDevice, pPastPresentationTimingInfo: *const VkPastPresentationTimingInfoEXT, pPastPresentationTimingProperties: *mut VkPastPresentationTimingPropertiesEXT) -> VkResult {
+        unsafe { (self.GetPastPresentationTimingEXT)(device, pPastPresentationTimingInfo, pPastPresentationTimingProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPastPresentationTimingGOOGLE(&self, device: VkDevice, swapchain: VkSwapchainKHR, pPresentationTimingCount: *mut u32, pPresentationTimings: *mut VkPastPresentationTimingGOOGLE) -> VkResult {
+        unsafe { (self.GetPastPresentationTimingGOOGLE)(device, swapchain, pPresentationTimingCount, pPresentationTimings) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPerformanceParameterINTEL(&self, device: VkDevice, parameter: VkPerformanceParameterTypeINTEL, pValue: *mut VkPerformanceValueINTEL) -> VkResult {
+        unsafe { (self.GetPerformanceParameterINTEL)(device, parameter, pValue) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPipelineBinaryDataKHR(&self, device: VkDevice, pInfo: *const VkPipelineBinaryDataInfoKHR, pPipelineBinaryKey: *mut VkPipelineBinaryKeyKHR, pPipelineBinaryDataSize: *mut usize, pPipelineBinaryData: *mut c_void) -> VkResult {
+        unsafe { (self.GetPipelineBinaryDataKHR)(device, pInfo, pPipelineBinaryKey, pPipelineBinaryDataSize, pPipelineBinaryData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPipelineCacheData(&self, device: VkDevice, pipelineCache: VkPipelineCache, pDataSize: *mut usize, pData: *mut c_void) -> VkResult {
+        unsafe { (self.GetPipelineCacheData)(device, pipelineCache, pDataSize, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPipelineExecutableInternalRepresentationsKHR(&self, device: VkDevice, pExecutableInfo: *const VkPipelineExecutableInfoKHR, pInternalRepresentationCount: *mut u32, pInternalRepresentations: *mut VkPipelineExecutableInternalRepresentationKHR) -> VkResult {
+        unsafe { (self.GetPipelineExecutableInternalRepresentationsKHR)(device, pExecutableInfo, pInternalRepresentationCount, pInternalRepresentations) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPipelineExecutablePropertiesKHR(&self, device: VkDevice, pPipelineInfo: *const VkPipelineInfoKHR, pExecutableCount: *mut u32, pProperties: *mut VkPipelineExecutablePropertiesKHR) -> VkResult {
+        unsafe { (self.GetPipelineExecutablePropertiesKHR)(device, pPipelineInfo, pExecutableCount, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPipelineExecutableStatisticsKHR(&self, device: VkDevice, pExecutableInfo: *const VkPipelineExecutableInfoKHR, pStatisticCount: *mut u32, pStatistics: *mut VkPipelineExecutableStatisticKHR) -> VkResult {
+        unsafe { (self.GetPipelineExecutableStatisticsKHR)(device, pExecutableInfo, pStatisticCount, pStatistics) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPipelineIndirectDeviceAddressNV(&self, device: VkDevice, pInfo: *const VkPipelineIndirectDeviceAddressInfoNV) -> VkDeviceAddress {
+        unsafe { (self.GetPipelineIndirectDeviceAddressNV)(device, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPipelineIndirectMemoryRequirementsNV(&self, device: VkDevice, pCreateInfo: *const VkComputePipelineCreateInfo, pMemoryRequirements: *mut VkMemoryRequirements2) -> () {
+        unsafe { (self.GetPipelineIndirectMemoryRequirementsNV)(device, pCreateInfo, pMemoryRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPipelineKeyKHR(&self, device: VkDevice, pPipelineCreateInfo: *const VkPipelineCreateInfoKHR, pPipelineKey: *mut VkPipelineBinaryKeyKHR) -> VkResult {
+        unsafe { (self.GetPipelineKeyKHR)(device, pPipelineCreateInfo, pPipelineKey) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPipelinePropertiesEXT(&self, device: VkDevice, pPipelineInfo: *const VkPipelineInfoKHR, pPipelineProperties: *mut VkBaseOutStructure) -> VkResult {
+        unsafe { (self.GetPipelinePropertiesEXT)(device, pPipelineInfo, pPipelineProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPrivateData(&self, device: VkDevice, objectType: VkObjectType, objectHandle: u64, privateDataSlot: VkPrivateDataSlot, pData: *mut u64) -> () {
+        unsafe { (self.GetPrivateData)(device, objectType, objectHandle, privateDataSlot, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetPrivateDataEXT(&self, device: VkDevice, objectType: VkObjectType, objectHandle: u64, privateDataSlot: VkPrivateDataSlot, pData: *mut u64) -> () {
+        unsafe { (self.GetPrivateDataEXT)(device, objectType, objectHandle, privateDataSlot, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetQueryPoolResults(&self, device: VkDevice, queryPool: VkQueryPool, firstQuery: u32, queryCount: u32, dataSize: usize, pData: *mut c_void, stride: VkDeviceSize, flags: VkQueryResultFlags) -> VkResult {
+        unsafe { (self.GetQueryPoolResults)(device, queryPool, firstQuery, queryCount, dataSize, pData, stride, flags) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetQueueCheckpointData2NV(&self, queue: VkQueue, pCheckpointDataCount: *mut u32, pCheckpointData: *mut VkCheckpointData2NV) -> () {
+        unsafe { (self.GetQueueCheckpointData2NV)(queue, pCheckpointDataCount, pCheckpointData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetQueueCheckpointDataNV(&self, queue: VkQueue, pCheckpointDataCount: *mut u32, pCheckpointData: *mut VkCheckpointDataNV) -> () {
+        unsafe { (self.GetQueueCheckpointDataNV)(queue, pCheckpointDataCount, pCheckpointData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetRayTracingCaptureReplayShaderGroupHandlesKHR(&self, device: VkDevice, pipeline: VkPipeline, firstGroup: u32, groupCount: u32, dataSize: usize, pData: *mut c_void) -> VkResult {
+        unsafe { (self.GetRayTracingCaptureReplayShaderGroupHandlesKHR)(device, pipeline, firstGroup, groupCount, dataSize, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetRayTracingShaderGroupHandlesKHR(&self, device: VkDevice, pipeline: VkPipeline, firstGroup: u32, groupCount: u32, dataSize: usize, pData: *mut c_void) -> VkResult {
+        unsafe { (self.GetRayTracingShaderGroupHandlesKHR)(device, pipeline, firstGroup, groupCount, dataSize, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetRayTracingShaderGroupHandlesNV(&self, device: VkDevice, pipeline: VkPipeline, firstGroup: u32, groupCount: u32, dataSize: usize, pData: *mut c_void) -> VkResult {
+        unsafe { (self.GetRayTracingShaderGroupHandlesNV)(device, pipeline, firstGroup, groupCount, dataSize, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetRayTracingShaderGroupStackSizeKHR(&self, device: VkDevice, pipeline: VkPipeline, group: u32, groupShader: VkShaderGroupShaderKHR) -> VkDeviceSize {
+        unsafe { (self.GetRayTracingShaderGroupStackSizeKHR)(device, pipeline, group, groupShader) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetRefreshCycleDurationGOOGLE(&self, device: VkDevice, swapchain: VkSwapchainKHR, pDisplayTimingProperties: *mut VkRefreshCycleDurationGOOGLE) -> VkResult {
+        unsafe { (self.GetRefreshCycleDurationGOOGLE)(device, swapchain, pDisplayTimingProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetRenderAreaGranularity(&self, device: VkDevice, renderPass: VkRenderPass, pGranularity: *mut VkExtent2D) -> () {
+        unsafe { (self.GetRenderAreaGranularity)(device, renderPass, pGranularity) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetRenderingAreaGranularity(&self, device: VkDevice, pRenderingAreaInfo: *const VkRenderingAreaInfo, pGranularity: *mut VkExtent2D) -> () {
+        unsafe { (self.GetRenderingAreaGranularity)(device, pRenderingAreaInfo, pGranularity) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetRenderingAreaGranularityKHR(&self, device: VkDevice, pRenderingAreaInfo: *const VkRenderingAreaInfo, pGranularity: *mut VkExtent2D) -> () {
+        unsafe { (self.GetRenderingAreaGranularityKHR)(device, pRenderingAreaInfo, pGranularity) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetSamplerOpaqueCaptureDescriptorDataEXT(&self, device: VkDevice, pInfo: *const VkSamplerCaptureDescriptorDataInfoEXT, pData: *mut c_void) -> VkResult {
+        unsafe { (self.GetSamplerOpaqueCaptureDescriptorDataEXT)(device, pInfo, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetScreenBufferPropertiesQNX(&self, device: VkDevice, buffer: *const _screen_buffer, pProperties: *mut VkScreenBufferPropertiesQNX) -> VkResult {
+        unsafe { (self.GetScreenBufferPropertiesQNX)(device, buffer, pProperties) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetSemaphoreCounterValue(&self, device: VkDevice, semaphore: VkSemaphore, pValue: *mut u64) -> VkResult {
+        unsafe { (self.GetSemaphoreCounterValue)(device, semaphore, pValue) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetSemaphoreCounterValueKHR(&self, device: VkDevice, semaphore: VkSemaphore, pValue: *mut u64) -> VkResult {
+        unsafe { (self.GetSemaphoreCounterValueKHR)(device, semaphore, pValue) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetSemaphoreFdKHR(&self, device: VkDevice, pGetFdInfo: *const VkSemaphoreGetFdInfoKHR, pFd: *mut c_int) -> VkResult {
+        unsafe { (self.GetSemaphoreFdKHR)(device, pGetFdInfo, pFd) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetSemaphoreWin32HandleKHR(&self, device: VkDevice, pGetWin32HandleInfo: *const VkSemaphoreGetWin32HandleInfoKHR, pHandle: *mut HANDLE) -> VkResult {
+        unsafe { (self.GetSemaphoreWin32HandleKHR)(device, pGetWin32HandleInfo, pHandle) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetSemaphoreZirconHandleFUCHSIA(&self, device: VkDevice, pGetZirconHandleInfo: *const VkSemaphoreGetZirconHandleInfoFUCHSIA, pZirconHandle: *mut zx_handle_t) -> VkResult {
+        unsafe { (self.GetSemaphoreZirconHandleFUCHSIA)(device, pGetZirconHandleInfo, pZirconHandle) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetShaderBinaryDataEXT(&self, device: VkDevice, shader: VkShaderEXT, pDataSize: *mut usize, pData: *mut c_void) -> VkResult {
+        unsafe { (self.GetShaderBinaryDataEXT)(device, shader, pDataSize, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetShaderInfoAMD(&self, device: VkDevice, pipeline: VkPipeline, shaderStage: VkShaderStageFlagBits, infoType: VkShaderInfoTypeAMD, pInfoSize: *mut usize, pInfo: *mut c_void) -> VkResult {
+        unsafe { (self.GetShaderInfoAMD)(device, pipeline, shaderStage, infoType, pInfoSize, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetShaderInstrumentationValuesARM(&self, device: VkDevice, instrumentation: VkShaderInstrumentationARM, pMetricBlockCount: *mut u32, pMetricValues: *mut c_void, flags: VkShaderInstrumentationValuesFlagsARM) -> VkResult {
+        unsafe { (self.GetShaderInstrumentationValuesARM)(device, instrumentation, pMetricBlockCount, pMetricValues, flags) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetShaderModuleCreateInfoIdentifierEXT(&self, device: VkDevice, pCreateInfo: *const VkShaderModuleCreateInfo, pIdentifier: *mut VkShaderModuleIdentifierEXT) -> () {
+        unsafe { (self.GetShaderModuleCreateInfoIdentifierEXT)(device, pCreateInfo, pIdentifier) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetShaderModuleIdentifierEXT(&self, device: VkDevice, shaderModule: VkShaderModule, pIdentifier: *mut VkShaderModuleIdentifierEXT) -> () {
+        unsafe { (self.GetShaderModuleIdentifierEXT)(device, shaderModule, pIdentifier) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetSleepStatusLegacyNV(&self, device: VkDevice, pLowLatencyMode: *mut VkBool32) -> () {
+        unsafe { (self.GetSleepStatusLegacyNV)(device, pLowLatencyMode) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetSwapchainCounterEXT(&self, device: VkDevice, swapchain: VkSwapchainKHR, counter: VkSurfaceCounterFlagBitsEXT, pCounterValue: *mut u64) -> VkResult {
+        unsafe { (self.GetSwapchainCounterEXT)(device, swapchain, counter, pCounterValue) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetSwapchainImagesKHR(&self, device: VkDevice, swapchain: VkSwapchainKHR, pSwapchainImageCount: *mut u32, pSwapchainImages: *mut VkImage) -> VkResult {
+        unsafe { (self.GetSwapchainImagesKHR)(device, swapchain, pSwapchainImageCount, pSwapchainImages) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetSwapchainStatusKHR(&self, device: VkDevice, swapchain: VkSwapchainKHR) -> VkResult {
+        unsafe { (self.GetSwapchainStatusKHR)(device, swapchain) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetSwapchainTimeDomainPropertiesEXT(&self, device: VkDevice, swapchain: VkSwapchainKHR, pSwapchainTimeDomainProperties: *mut VkSwapchainTimeDomainPropertiesEXT, pTimeDomainsCounter: *mut u64) -> VkResult {
+        unsafe { (self.GetSwapchainTimeDomainPropertiesEXT)(device, swapchain, pSwapchainTimeDomainProperties, pTimeDomainsCounter) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetSwapchainTimingPropertiesEXT(&self, device: VkDevice, swapchain: VkSwapchainKHR, pSwapchainTimingProperties: *mut VkSwapchainTimingPropertiesEXT, pSwapchainTimingPropertiesCounter: *mut u64) -> VkResult {
+        unsafe { (self.GetSwapchainTimingPropertiesEXT)(device, swapchain, pSwapchainTimingProperties, pSwapchainTimingPropertiesCounter) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetTensorMemoryRequirementsARM(&self, device: VkDevice, pInfo: *const VkTensorMemoryRequirementsInfoARM, pMemoryRequirements: *mut VkMemoryRequirements2) -> () {
+        unsafe { (self.GetTensorMemoryRequirementsARM)(device, pInfo, pMemoryRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetTensorOpaqueCaptureDataARM(&self, device: VkDevice, tensorCount: u32, pTensors: *const VkTensorARM, pDatas: *mut VkHostAddressRangeEXT) -> VkResult {
+        unsafe { (self.GetTensorOpaqueCaptureDataARM)(device, tensorCount, pTensors, pDatas) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetTensorOpaqueCaptureDescriptorDataARM(&self, device: VkDevice, pInfo: *const VkTensorCaptureDescriptorDataInfoARM, pData: *mut c_void) -> VkResult {
+        unsafe { (self.GetTensorOpaqueCaptureDescriptorDataARM)(device, pInfo, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetTensorViewOpaqueCaptureDescriptorDataARM(&self, device: VkDevice, pInfo: *const VkTensorViewCaptureDescriptorDataInfoARM, pData: *mut c_void) -> VkResult {
+        unsafe { (self.GetTensorViewOpaqueCaptureDescriptorDataARM)(device, pInfo, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetValidationCacheDataEXT(&self, device: VkDevice, validationCache: VkValidationCacheEXT, pDataSize: *mut usize, pData: *mut c_void) -> VkResult {
+        unsafe { (self.GetValidationCacheDataEXT)(device, validationCache, pDataSize, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn GetVideoSessionMemoryRequirementsKHR(&self, device: VkDevice, videoSession: VkVideoSessionKHR, pMemoryRequirementsCount: *mut u32, pMemoryRequirements: *mut VkVideoSessionMemoryRequirementsKHR) -> VkResult {
+        unsafe { (self.GetVideoSessionMemoryRequirementsKHR)(device, videoSession, pMemoryRequirementsCount, pMemoryRequirements) }
+    }
+    #[inline(always)]
+    pub unsafe fn ImportFenceFdKHR(&self, device: VkDevice, pImportFenceFdInfo: *const VkImportFenceFdInfoKHR) -> VkResult {
+        unsafe { (self.ImportFenceFdKHR)(device, pImportFenceFdInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn ImportFenceWin32HandleKHR(&self, device: VkDevice, pImportFenceWin32HandleInfo: *const VkImportFenceWin32HandleInfoKHR) -> VkResult {
+        unsafe { (self.ImportFenceWin32HandleKHR)(device, pImportFenceWin32HandleInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn ImportSemaphoreFdKHR(&self, device: VkDevice, pImportSemaphoreFdInfo: *const VkImportSemaphoreFdInfoKHR) -> VkResult {
+        unsafe { (self.ImportSemaphoreFdKHR)(device, pImportSemaphoreFdInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn ImportSemaphoreWin32HandleKHR(&self, device: VkDevice, pImportSemaphoreWin32HandleInfo: *const VkImportSemaphoreWin32HandleInfoKHR) -> VkResult {
+        unsafe { (self.ImportSemaphoreWin32HandleKHR)(device, pImportSemaphoreWin32HandleInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn ImportSemaphoreZirconHandleFUCHSIA(&self, device: VkDevice, pImportSemaphoreZirconHandleInfo: *const VkImportSemaphoreZirconHandleInfoFUCHSIA) -> VkResult {
+        unsafe { (self.ImportSemaphoreZirconHandleFUCHSIA)(device, pImportSemaphoreZirconHandleInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn InitializePerformanceApiINTEL(&self, device: VkDevice, pInitializeInfo: *const VkInitializePerformanceApiInfoINTEL) -> VkResult {
+        unsafe { (self.InitializePerformanceApiINTEL)(device, pInitializeInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn InvalidateMappedMemoryRanges(&self, device: VkDevice, memoryRangeCount: u32, pMemoryRanges: *const VkMappedMemoryRange) -> VkResult {
+        unsafe { (self.InvalidateMappedMemoryRanges)(device, memoryRangeCount, pMemoryRanges) }
+    }
+    #[inline(always)]
+    pub unsafe fn LatencySleepLegacyNV(&self, device: VkDevice, signalSemaphore: VkSemaphore, value: u64) -> () {
+        unsafe { (self.LatencySleepLegacyNV)(device, signalSemaphore, value) }
+    }
+    #[inline(always)]
+    pub unsafe fn LatencySleepNV(&self, device: VkDevice, swapchain: VkSwapchainKHR, pSleepInfo: *const VkLatencySleepInfoNV) -> VkResult {
+        unsafe { (self.LatencySleepNV)(device, swapchain, pSleepInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn MapMemory(&self, device: VkDevice, memory: VkDeviceMemory, offset: VkDeviceSize, size: VkDeviceSize, flags: VkMemoryMapFlags, ppData: *mut *mut c_void) -> VkResult {
+        unsafe { (self.MapMemory)(device, memory, offset, size, flags, ppData) }
+    }
+    #[inline(always)]
+    pub unsafe fn MapMemory2(&self, device: VkDevice, pMemoryMapInfo: *const VkMemoryMapInfo, ppData: *mut *mut c_void) -> VkResult {
+        unsafe { (self.MapMemory2)(device, pMemoryMapInfo, ppData) }
+    }
+    #[inline(always)]
+    pub unsafe fn MapMemory2KHR(&self, device: VkDevice, pMemoryMapInfo: *const VkMemoryMapInfo, ppData: *mut *mut c_void) -> VkResult {
+        unsafe { (self.MapMemory2KHR)(device, pMemoryMapInfo, ppData) }
+    }
+    #[inline(always)]
+    pub unsafe fn MergePipelineCaches(&self, device: VkDevice, dstCache: VkPipelineCache, srcCacheCount: u32, pSrcCaches: *const VkPipelineCache) -> VkResult {
+        unsafe { (self.MergePipelineCaches)(device, dstCache, srcCacheCount, pSrcCaches) }
+    }
+    #[inline(always)]
+    pub unsafe fn MergeValidationCachesEXT(&self, device: VkDevice, dstCache: VkValidationCacheEXT, srcCacheCount: u32, pSrcCaches: *const VkValidationCacheEXT) -> VkResult {
+        unsafe { (self.MergeValidationCachesEXT)(device, dstCache, srcCacheCount, pSrcCaches) }
+    }
+    #[inline(always)]
+    pub unsafe fn QueueBeginDebugUtilsLabelEXT(&self, queue: VkQueue, pLabelInfo: *const VkDebugUtilsLabelEXT) -> () {
+        unsafe { (self.QueueBeginDebugUtilsLabelEXT)(queue, pLabelInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn QueueBindSparse(&self, queue: VkQueue, bindInfoCount: u32, pBindInfo: *const VkBindSparseInfo, fence: VkFence) -> VkResult {
+        unsafe { (self.QueueBindSparse)(queue, bindInfoCount, pBindInfo, fence) }
+    }
+    #[inline(always)]
+    pub unsafe fn QueueEndDebugUtilsLabelEXT(&self, queue: VkQueue) -> () {
+        unsafe { (self.QueueEndDebugUtilsLabelEXT)(queue) }
+    }
+    #[inline(always)]
+    pub unsafe fn QueueInsertDebugUtilsLabelEXT(&self, queue: VkQueue, pLabelInfo: *const VkDebugUtilsLabelEXT) -> () {
+        unsafe { (self.QueueInsertDebugUtilsLabelEXT)(queue, pLabelInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn QueueNotifyOutOfBandLegacyNV(&self, queue: VkQueue, queueType: u32) -> () {
+        unsafe { (self.QueueNotifyOutOfBandLegacyNV)(queue, queueType) }
+    }
+    #[inline(always)]
+    pub unsafe fn QueueNotifyOutOfBandNV(&self, queue: VkQueue, pQueueTypeInfo: *const VkOutOfBandQueueTypeInfoNV) -> () {
+        unsafe { (self.QueueNotifyOutOfBandNV)(queue, pQueueTypeInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn QueuePresentKHR(&self, queue: VkQueue, pPresentInfo: *const VkPresentInfoKHR) -> VkResult {
+        unsafe { (self.QueuePresentKHR)(queue, pPresentInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn QueueSetPerfHintQCOM(&self, queue: VkQueue, pPerfHintInfo: *const VkPerfHintInfoQCOM) -> VkResult {
+        unsafe { (self.QueueSetPerfHintQCOM)(queue, pPerfHintInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn QueueSetPerformanceConfigurationINTEL(&self, queue: VkQueue, configuration: VkPerformanceConfigurationINTEL) -> VkResult {
+        unsafe { (self.QueueSetPerformanceConfigurationINTEL)(queue, configuration) }
+    }
+    #[inline(always)]
+    pub unsafe fn QueueSubmit(&self, queue: VkQueue, submitCount: u32, pSubmits: *const VkSubmitInfo, fence: VkFence) -> VkResult {
+        unsafe { (self.QueueSubmit)(queue, submitCount, pSubmits, fence) }
+    }
+    #[inline(always)]
+    pub unsafe fn QueueSubmit2(&self, queue: VkQueue, submitCount: u32, pSubmits: *const VkSubmitInfo2, fence: VkFence) -> VkResult {
+        unsafe { (self.QueueSubmit2)(queue, submitCount, pSubmits, fence) }
+    }
+    #[inline(always)]
+    pub unsafe fn QueueSubmit2KHR(&self, queue: VkQueue, submitCount: u32, pSubmits: *const VkSubmitInfo2, fence: VkFence) -> VkResult {
+        unsafe { (self.QueueSubmit2KHR)(queue, submitCount, pSubmits, fence) }
+    }
+    #[inline(always)]
+    pub unsafe fn QueueWaitIdle(&self, queue: VkQueue) -> VkResult {
+        unsafe { (self.QueueWaitIdle)(queue) }
+    }
+    #[inline(always)]
+    pub unsafe fn RegisterCustomBorderColorEXT(&self, device: VkDevice, pBorderColor: *const VkSamplerCustomBorderColorCreateInfoEXT, requestIndex: VkBool32, pIndex: *mut u32) -> VkResult {
+        unsafe { (self.RegisterCustomBorderColorEXT)(device, pBorderColor, requestIndex, pIndex) }
+    }
+    #[inline(always)]
+    pub unsafe fn RegisterDeviceEventEXT(&self, device: VkDevice, pDeviceEventInfo: *const VkDeviceEventInfoEXT, pAllocator: *const VkAllocationCallbacks, pFence: *mut VkFence) -> VkResult {
+        unsafe { (self.RegisterDeviceEventEXT)(device, pDeviceEventInfo, pAllocator, pFence) }
+    }
+    #[inline(always)]
+    pub unsafe fn RegisterDisplayEventEXT(&self, device: VkDevice, display: VkDisplayKHR, pDisplayEventInfo: *const VkDisplayEventInfoEXT, pAllocator: *const VkAllocationCallbacks, pFence: *mut VkFence) -> VkResult {
+        unsafe { (self.RegisterDisplayEventEXT)(device, display, pDisplayEventInfo, pAllocator, pFence) }
+    }
+    #[inline(always)]
+    pub unsafe fn ReleaseCapturedPipelineDataKHR(&self, device: VkDevice, pInfo: *const VkReleaseCapturedPipelineDataInfoKHR, pAllocator: *const VkAllocationCallbacks) -> VkResult {
+        unsafe { (self.ReleaseCapturedPipelineDataKHR)(device, pInfo, pAllocator) }
+    }
+    #[inline(always)]
+    pub unsafe fn ReleaseFullScreenExclusiveModeEXT(&self, device: VkDevice, swapchain: VkSwapchainKHR) -> VkResult {
+        unsafe { (self.ReleaseFullScreenExclusiveModeEXT)(device, swapchain) }
+    }
+    #[inline(always)]
+    pub unsafe fn ReleasePerformanceConfigurationINTEL(&self, device: VkDevice, configuration: VkPerformanceConfigurationINTEL) -> VkResult {
+        unsafe { (self.ReleasePerformanceConfigurationINTEL)(device, configuration) }
+    }
+    #[inline(always)]
+    pub unsafe fn ReleaseProfilingLockKHR(&self, device: VkDevice) -> () {
+        unsafe { (self.ReleaseProfilingLockKHR)(device) }
+    }
+    #[inline(always)]
+    pub unsafe fn ReleaseSwapchainImagesEXT(&self, device: VkDevice, pReleaseInfo: *const VkReleaseSwapchainImagesInfoKHR) -> VkResult {
+        unsafe { (self.ReleaseSwapchainImagesEXT)(device, pReleaseInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn ReleaseSwapchainImagesKHR(&self, device: VkDevice, pReleaseInfo: *const VkReleaseSwapchainImagesInfoKHR) -> VkResult {
+        unsafe { (self.ReleaseSwapchainImagesKHR)(device, pReleaseInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn ResetCommandBuffer(&self, commandBuffer: VkCommandBuffer, flags: VkCommandBufferResetFlags) -> VkResult {
+        unsafe { (self.ResetCommandBuffer)(commandBuffer, flags) }
+    }
+    #[inline(always)]
+    pub unsafe fn ResetCommandPool(&self, device: VkDevice, commandPool: VkCommandPool, flags: VkCommandPoolResetFlags) -> VkResult {
+        unsafe { (self.ResetCommandPool)(device, commandPool, flags) }
+    }
+    #[inline(always)]
+    pub unsafe fn ResetDescriptorPool(&self, device: VkDevice, descriptorPool: VkDescriptorPool, flags: VkDescriptorPoolResetFlags) -> VkResult {
+        unsafe { (self.ResetDescriptorPool)(device, descriptorPool, flags) }
+    }
+    #[inline(always)]
+    pub unsafe fn ResetEvent(&self, device: VkDevice, event: VkEvent) -> VkResult {
+        unsafe { (self.ResetEvent)(device, event) }
+    }
+    #[inline(always)]
+    pub unsafe fn ResetFences(&self, device: VkDevice, fenceCount: u32, pFences: *const VkFence) -> VkResult {
+        unsafe { (self.ResetFences)(device, fenceCount, pFences) }
+    }
+    #[inline(always)]
+    pub unsafe fn ResetGpaSessionAMD(&self, device: VkDevice, gpaSession: VkGpaSessionAMD) -> VkResult {
+        unsafe { (self.ResetGpaSessionAMD)(device, gpaSession) }
+    }
+    #[inline(always)]
+    pub unsafe fn ResetQueryPool(&self, device: VkDevice, queryPool: VkQueryPool, firstQuery: u32, queryCount: u32) -> () {
+        unsafe { (self.ResetQueryPool)(device, queryPool, firstQuery, queryCount) }
+    }
+    #[inline(always)]
+    pub unsafe fn ResetQueryPoolEXT(&self, device: VkDevice, queryPool: VkQueryPool, firstQuery: u32, queryCount: u32) -> () {
+        unsafe { (self.ResetQueryPoolEXT)(device, queryPool, firstQuery, queryCount) }
+    }
+    #[inline(always)]
+    pub unsafe fn SetBufferCollectionBufferConstraintsFUCHSIA(&self, device: VkDevice, collection: VkBufferCollectionFUCHSIA, pBufferConstraintsInfo: *const VkBufferConstraintsInfoFUCHSIA) -> VkResult {
+        unsafe { (self.SetBufferCollectionBufferConstraintsFUCHSIA)(device, collection, pBufferConstraintsInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn SetBufferCollectionImageConstraintsFUCHSIA(&self, device: VkDevice, collection: VkBufferCollectionFUCHSIA, pImageConstraintsInfo: *const VkImageConstraintsInfoFUCHSIA) -> VkResult {
+        unsafe { (self.SetBufferCollectionImageConstraintsFUCHSIA)(device, collection, pImageConstraintsInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn SetDebugUtilsObjectNameEXT(&self, device: VkDevice, pNameInfo: *const VkDebugUtilsObjectNameInfoEXT) -> VkResult {
+        unsafe { (self.SetDebugUtilsObjectNameEXT)(device, pNameInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn SetDebugUtilsObjectTagEXT(&self, device: VkDevice, pTagInfo: *const VkDebugUtilsObjectTagInfoEXT) -> VkResult {
+        unsafe { (self.SetDebugUtilsObjectTagEXT)(device, pTagInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn SetDeviceMemoryPriorityEXT(&self, device: VkDevice, memory: VkDeviceMemory, priority: f32) -> () {
+        unsafe { (self.SetDeviceMemoryPriorityEXT)(device, memory, priority) }
+    }
+    #[inline(always)]
+    pub unsafe fn SetEvent(&self, device: VkDevice, event: VkEvent) -> VkResult {
+        unsafe { (self.SetEvent)(device, event) }
+    }
+    #[inline(always)]
+    pub unsafe fn SetGpaDeviceClockModeAMD(&self, device: VkDevice, pInfo: *mut VkGpaDeviceClockModeInfoAMD) -> VkResult {
+        unsafe { (self.SetGpaDeviceClockModeAMD)(device, pInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn SetHdrMetadataEXT(&self, device: VkDevice, swapchainCount: u32, pSwapchains: *const VkSwapchainKHR, pMetadata: *const VkHdrMetadataEXT) -> () {
+        unsafe { (self.SetHdrMetadataEXT)(device, swapchainCount, pSwapchains, pMetadata) }
+    }
+    #[inline(always)]
+    pub unsafe fn SetLatencyMarkerLegacyNV(&self, device: VkDevice, frameID: u64, marker: u32) -> () {
+        unsafe { (self.SetLatencyMarkerLegacyNV)(device, frameID, marker) }
+    }
+    #[inline(always)]
+    pub unsafe fn SetLatencyMarkerNV(&self, device: VkDevice, swapchain: VkSwapchainKHR, pLatencyMarkerInfo: *const VkSetLatencyMarkerInfoNV) -> () {
+        unsafe { (self.SetLatencyMarkerNV)(device, swapchain, pLatencyMarkerInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn SetLatencySleepModeLegacyNV(&self, device: VkDevice, lowLatencyMode: VkBool32, lowLatencyBoost: VkBool32, minimumIntervalUs: u32) -> () {
+        unsafe { (self.SetLatencySleepModeLegacyNV)(device, lowLatencyMode, lowLatencyBoost, minimumIntervalUs) }
+    }
+    #[inline(always)]
+    pub unsafe fn SetLatencySleepModeNV(&self, device: VkDevice, swapchain: VkSwapchainKHR, pSleepModeInfo: *const VkLatencySleepModeInfoNV) -> VkResult {
+        unsafe { (self.SetLatencySleepModeNV)(device, swapchain, pSleepModeInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn SetLocalDimmingAMD(&self, device: VkDevice, swapChain: VkSwapchainKHR, localDimmingEnable: VkBool32) -> () {
+        unsafe { (self.SetLocalDimmingAMD)(device, swapChain, localDimmingEnable) }
+    }
+    #[inline(always)]
+    pub unsafe fn SetPrivateData(&self, device: VkDevice, objectType: VkObjectType, objectHandle: u64, privateDataSlot: VkPrivateDataSlot, data: u64) -> VkResult {
+        unsafe { (self.SetPrivateData)(device, objectType, objectHandle, privateDataSlot, data) }
+    }
+    #[inline(always)]
+    pub unsafe fn SetPrivateDataEXT(&self, device: VkDevice, objectType: VkObjectType, objectHandle: u64, privateDataSlot: VkPrivateDataSlot, data: u64) -> VkResult {
+        unsafe { (self.SetPrivateDataEXT)(device, objectType, objectHandle, privateDataSlot, data) }
+    }
+    #[inline(always)]
+    pub unsafe fn SetSwapchainPresentTimingQueueSizeEXT(&self, device: VkDevice, swapchain: VkSwapchainKHR, size: u32) -> VkResult {
+        unsafe { (self.SetSwapchainPresentTimingQueueSizeEXT)(device, swapchain, size) }
+    }
+    #[inline(always)]
+    pub unsafe fn ShutdownLatencyDeviceLegacyNV(&self, device: VkDevice) -> () {
+        unsafe { (self.ShutdownLatencyDeviceLegacyNV)(device) }
+    }
+    #[inline(always)]
+    pub unsafe fn SignalSemaphore(&self, device: VkDevice, pSignalInfo: *const VkSemaphoreSignalInfo) -> VkResult {
+        unsafe { (self.SignalSemaphore)(device, pSignalInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn SignalSemaphoreKHR(&self, device: VkDevice, pSignalInfo: *const VkSemaphoreSignalInfo) -> VkResult {
+        unsafe { (self.SignalSemaphoreKHR)(device, pSignalInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn TransitionImageLayout(&self, device: VkDevice, transitionCount: u32, pTransitions: *const VkHostImageLayoutTransitionInfo) -> VkResult {
+        unsafe { (self.TransitionImageLayout)(device, transitionCount, pTransitions) }
+    }
+    #[inline(always)]
+    pub unsafe fn TransitionImageLayoutEXT(&self, device: VkDevice, transitionCount: u32, pTransitions: *const VkHostImageLayoutTransitionInfo) -> VkResult {
+        unsafe { (self.TransitionImageLayoutEXT)(device, transitionCount, pTransitions) }
+    }
+    #[inline(always)]
+    pub unsafe fn TrimCommandPool(&self, device: VkDevice, commandPool: VkCommandPool, flags: VkCommandPoolTrimFlags) -> () {
+        unsafe { (self.TrimCommandPool)(device, commandPool, flags) }
+    }
+    #[inline(always)]
+    pub unsafe fn TrimCommandPoolKHR(&self, device: VkDevice, commandPool: VkCommandPool, flags: VkCommandPoolTrimFlags) -> () {
+        unsafe { (self.TrimCommandPoolKHR)(device, commandPool, flags) }
+    }
+    #[inline(always)]
+    pub unsafe fn UninitializePerformanceApiINTEL(&self, device: VkDevice) -> () {
+        unsafe { (self.UninitializePerformanceApiINTEL)(device) }
+    }
+    #[inline(always)]
+    pub unsafe fn UnmapMemory(&self, device: VkDevice, memory: VkDeviceMemory) -> () {
+        unsafe { (self.UnmapMemory)(device, memory) }
+    }
+    #[inline(always)]
+    pub unsafe fn UnmapMemory2(&self, device: VkDevice, pMemoryUnmapInfo: *const VkMemoryUnmapInfo) -> VkResult {
+        unsafe { (self.UnmapMemory2)(device, pMemoryUnmapInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn UnmapMemory2KHR(&self, device: VkDevice, pMemoryUnmapInfo: *const VkMemoryUnmapInfo) -> VkResult {
+        unsafe { (self.UnmapMemory2KHR)(device, pMemoryUnmapInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn UnregisterCustomBorderColorEXT(&self, device: VkDevice, index: u32) -> () {
+        unsafe { (self.UnregisterCustomBorderColorEXT)(device, index) }
+    }
+    #[inline(always)]
+    pub unsafe fn UpdateDescriptorSetWithTemplate(&self, device: VkDevice, descriptorSet: VkDescriptorSet, descriptorUpdateTemplate: VkDescriptorUpdateTemplate, pData: *const c_void) -> () {
+        unsafe { (self.UpdateDescriptorSetWithTemplate)(device, descriptorSet, descriptorUpdateTemplate, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn UpdateDescriptorSetWithTemplateKHR(&self, device: VkDevice, descriptorSet: VkDescriptorSet, descriptorUpdateTemplate: VkDescriptorUpdateTemplate, pData: *const c_void) -> () {
+        unsafe { (self.UpdateDescriptorSetWithTemplateKHR)(device, descriptorSet, descriptorUpdateTemplate, pData) }
+    }
+    #[inline(always)]
+    pub unsafe fn UpdateDescriptorSets(&self, device: VkDevice, descriptorWriteCount: u32, pDescriptorWrites: *const VkWriteDescriptorSet, descriptorCopyCount: u32, pDescriptorCopies: *const VkCopyDescriptorSet) -> () {
+        unsafe { (self.UpdateDescriptorSets)(device, descriptorWriteCount, pDescriptorWrites, descriptorCopyCount, pDescriptorCopies) }
+    }
+    #[inline(always)]
+    pub unsafe fn UpdateIndirectExecutionSetPipelineEXT(&self, device: VkDevice, indirectExecutionSet: VkIndirectExecutionSetEXT, executionSetWriteCount: u32, pExecutionSetWrites: *const VkWriteIndirectExecutionSetPipelineEXT) -> () {
+        unsafe { (self.UpdateIndirectExecutionSetPipelineEXT)(device, indirectExecutionSet, executionSetWriteCount, pExecutionSetWrites) }
+    }
+    #[inline(always)]
+    pub unsafe fn UpdateIndirectExecutionSetShaderEXT(&self, device: VkDevice, indirectExecutionSet: VkIndirectExecutionSetEXT, executionSetWriteCount: u32, pExecutionSetWrites: *const VkWriteIndirectExecutionSetShaderEXT) -> () {
+        unsafe { (self.UpdateIndirectExecutionSetShaderEXT)(device, indirectExecutionSet, executionSetWriteCount, pExecutionSetWrites) }
+    }
+    #[inline(always)]
+    pub unsafe fn UpdateVideoSessionParametersKHR(&self, device: VkDevice, videoSessionParameters: VkVideoSessionParametersKHR, pUpdateInfo: *const VkVideoSessionParametersUpdateInfoKHR) -> VkResult {
+        unsafe { (self.UpdateVideoSessionParametersKHR)(device, videoSessionParameters, pUpdateInfo) }
+    }
+    #[inline(always)]
+    pub unsafe fn WaitForFences(&self, device: VkDevice, fenceCount: u32, pFences: *const VkFence, waitAll: VkBool32, timeout: u64) -> VkResult {
+        unsafe { (self.WaitForFences)(device, fenceCount, pFences, waitAll, timeout) }
+    }
+    #[inline(always)]
+    pub unsafe fn WaitForPresent2KHR(&self, device: VkDevice, swapchain: VkSwapchainKHR, pPresentWait2Info: *const VkPresentWait2InfoKHR) -> VkResult {
+        unsafe { (self.WaitForPresent2KHR)(device, swapchain, pPresentWait2Info) }
+    }
+    #[inline(always)]
+    pub unsafe fn WaitForPresentKHR(&self, device: VkDevice, swapchain: VkSwapchainKHR, presentId: u64, timeout: u64) -> VkResult {
+        unsafe { (self.WaitForPresentKHR)(device, swapchain, presentId, timeout) }
+    }
+    #[inline(always)]
+    pub unsafe fn WaitSemaphores(&self, device: VkDevice, pWaitInfo: *const VkSemaphoreWaitInfo, timeout: u64) -> VkResult {
+        unsafe { (self.WaitSemaphores)(device, pWaitInfo, timeout) }
+    }
+    #[inline(always)]
+    pub unsafe fn WaitSemaphoresKHR(&self, device: VkDevice, pWaitInfo: *const VkSemaphoreWaitInfo, timeout: u64) -> VkResult {
+        unsafe { (self.WaitSemaphoresKHR)(device, pWaitInfo, timeout) }
+    }
+    #[inline(always)]
+    pub unsafe fn WriteAccelerationStructuresPropertiesKHR(&self, device: VkDevice, accelerationStructureCount: u32, pAccelerationStructures: *const VkAccelerationStructureKHR, queryType: VkQueryType, dataSize: usize, pData: *mut c_void, stride: usize) -> VkResult {
+        unsafe { (self.WriteAccelerationStructuresPropertiesKHR)(device, accelerationStructureCount, pAccelerationStructures, queryType, dataSize, pData, stride) }
+    }
+    #[inline(always)]
+    pub unsafe fn WriteMicromapsPropertiesEXT(&self, device: VkDevice, micromapCount: u32, pMicromaps: *const VkMicromapEXT, queryType: VkQueryType, dataSize: usize, pData: *mut c_void, stride: usize) -> VkResult {
+        unsafe { (self.WriteMicromapsPropertiesEXT)(device, micromapCount, pMicromaps, queryType, dataSize, pData, stride) }
+    }
+    #[inline(always)]
+    pub unsafe fn WriteResourceDescriptorsEXT(&self, device: VkDevice, resourceCount: u32, pResources: *const VkResourceDescriptorInfoEXT, pDescriptors: *const VkHostAddressRangeEXT) -> VkResult {
+        unsafe { (self.WriteResourceDescriptorsEXT)(device, resourceCount, pResources, pDescriptors) }
+    }
+    #[inline(always)]
+    pub unsafe fn WriteSamplerDescriptorsEXT(&self, device: VkDevice, samplerCount: u32, pSamplers: *const VkSamplerCreateInfo, pDescriptors: *const VkHostAddressRangeEXT) -> VkResult {
+        unsafe { (self.WriteSamplerDescriptorsEXT)(device, samplerCount, pSamplers, pDescriptors) }
     }
 }

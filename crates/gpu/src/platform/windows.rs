@@ -36,11 +36,12 @@ unsafe fn import_external_memory(
 ) -> VkDeviceMemory {
     // TODO proper error handling
     let mut win32_handle_properties = VkMemoryWin32HandlePropertiesKHR { .. };
-    device
-        .platform_extensions
-        .khr_external_memory_win32
-        .GetMemoryWin32HandlePropertiesKHR(device.vkd, handle_type, handle, &mut win32_handle_properties)
-        .check();
+    vkcall!(device.platform_extensions.khr_external_memory_win32.GetMemoryWin32HandlePropertiesKHR(
+        device.vkd,
+        handle_type,
+        handle,
+        &mut win32_handle_properties
+    ));
     // find a memory type that both matches the resource requirement and the external handle requirements for importing
     let memory_type_bits = memory_requirements.memoryTypeBits & win32_handle_properties.memoryTypeBits;
     let memory_type_index = device
@@ -119,7 +120,7 @@ impl Device {
             win32_handle_name,
             Some(DedicatedAllocation::Image(handle)),
         );
-        self.fns.BindImageMemory(self.vkd, handle, device_memory, 0).check();
+        vkcall!(self.fns.BindImageMemory(self.vkd, handle, device_memory, 0));
         let descriptors = self.register_image_descriptors(handle, &create_info);
         let attachment_view = self.create_attachment_image_view(handle, image_info.format);
         // transition image to GENERAL
@@ -249,7 +250,7 @@ impl Device {
         //    .khr_external_memory_win32
         //    .GetMemoryWin32HandleKHR(self.vkd, &get_win32_handle_info)
         //    .unwrap();
-        self.fns.BindImageMemory(self.vkd, handle, device_memory, 0).check();
+        vkcall!(self.fns.BindImageMemory(self.vkd, handle, device_memory, 0));
         let descriptors = self.register_image_descriptors(handle, &create_info);
         let attachment_view = self.create_attachment_image_view(handle, image_info.format);
         let image = Image {
@@ -324,10 +325,11 @@ impl Device {
             name: handle_name_wstr,
             ..
         };
-        self.platform_extensions
-            .khr_external_semaphore_win32
-            .ImportSemaphoreWin32HandleKHR(self.vkd, &import_semaphore_win32_handle_info)
-            .check();
+        vkcall!(
+            self.platform_extensions
+                .khr_external_semaphore_win32
+                .ImportSemaphoreWin32HandleKHR(self.vkd, &import_semaphore_win32_handle_info)
+        );
         semaphore
     }
 }

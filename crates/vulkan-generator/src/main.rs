@@ -3,7 +3,7 @@ use regex::Regex;
 use roxmltree::Node;
 use std::borrow::Cow;
 use std::cell::Cell;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs::File;
 use std::io;
 use std::io::{BufWriter, LineWriter, Write};
@@ -72,6 +72,7 @@ fn generate(out_dir: &Path, document: &roxmltree::Document) -> io::Result<()> {
         gen_extensions(&mut line_writer, registry, &mut enum_types, &mut tymap, &mut cmdmap)?;
         gen_core_dispatch_tables(&mut line_writer, registry, &cmdmap, &tymap)?;
         gen_ext_dispatch_tables(&mut line_writer, registry, &cmdmap, &tymap)?;
+        gen_combined_dispatch_tables(&mut line_writer, registry, &cmdmap, &tymap)?;
     }
     Ok(())
 }
@@ -120,9 +121,10 @@ struct CommandInfo<'a, 'input> {
     alias: Option<String>,
     func: FuncInfo,
     dispatch: DispatchType,
+    vulkan_supported: Cell<bool>,
     generated: Cell<bool>,
 }
-type CommandMap<'a, 'input> = HashMap<String, CommandInfo<'a, 'input>>;
+type CommandMap<'a, 'input> = BTreeMap<String, CommandInfo<'a, 'input>>;
 
 static PREAMBLE: &str = r#"use crate::macros::*;   // handle, nondispatchable_handle
 use crate::platform_types::*;
@@ -145,7 +147,7 @@ fn parse_types<'a, 'input>(registry: Node<'a, 'input>) -> TypeMap<'a, 'input> {
     let mut type_map = TypeMap::new();
     for types in children_tagged(registry, "types") {
         for node in children_tagged(types, "type") {
-            if !api_check(node) {
+            if !is_vulkan_api(node) {
                 continue;
             }
             if let Some(tyinfo) = parse_type(node, &type_map) {
@@ -181,7 +183,7 @@ fn parse_type<'a, 'input>(node: Node<'a, 'input>, tymap: &TypeMap<'a, 'input>) -
                 .unwrap()
                 .to_string();
             let ty = child_tagged(node, "type").map(|n| n.text().unwrap()).or_else(|| alias.as_deref()).unwrap();
-            let rust_ty = c_type_to_rust(ty, false).to_string();
+            let rust_ty = c_type_to_rust(ty, TypeContext::Field).to_string();
             cat = Category::Bitmask(rust_ty);
         }
         "handle" => {
@@ -217,7 +219,7 @@ fn parse_type<'a, 'input>(node: Node<'a, 'input>, tymap: &TypeMap<'a, 'input>) -
             let mut base_in_struct = false;
             let mut base_out_struct = false;
             for member in children_tagged(node, "member") {
-                if !api_check(member) {
+                if !is_vulkan_api(member) {
                     continue;
                 }
                 let text = node_text(&member);
@@ -301,7 +303,7 @@ fn gen_type(out: &mut Writer, tyinfo: &TypeInfo, tymap: &TypeMap) -> io::Result<
             indent(out);
             let mut s_type = None;
             for member in children_tagged(tyinfo.node, "member") {
-                if !api_check(member) {
+                if !is_vulkan_api(member) {
                     continue;
                 }
                 // PAIN: The text of <member> is actually C syntax for a struct member.
@@ -316,7 +318,7 @@ fn gen_type(out: &mut Writer, tyinfo: &TypeInfo, tymap: &TypeMap) -> io::Result<
                 let text = node_text(&member);
                 let decl = parse_c_declarator(&text).unwrap();
                 let name = sanitize_ident(decl.name.as_str());
-                let ty = decl.rust_type(false);
+                let ty = decl.rust_type(TypeContext::Field);
                 write!(out, "{name}: {ty}")?;
                 // Write default field values.
                 if !is_union {
@@ -439,19 +441,9 @@ fn gen_enum_value(
         if en.attribute("dir").is_some() {
             val = -val;
         }
-        if ty == "VkResult" {
-            // special-case VkResults
-            write!(out, "VkResult({val})")?;
-        } else {
-            write!(out, "{val}")?;
-        }
+        write!(out, "{val}")?;
     } else if let Some(value) = value {
-        if ty == "VkResult" {
-            // special-case VkResults
-            write!(out, "VkResult({value})")?;
-        } else {
-            write!(out, "{value}")?;
-        }
+        write!(out, "{value}")?;
     } else if let Some(alias) = alias {
         write!(out, "{alias}")?;
     };
@@ -483,16 +475,14 @@ fn gen_enums_block(out: &mut Writer, node: Node, enum_types: &mut EnumTypeMap) -
                 64 => "i64",
                 _ => panic!("unexpected bitwidth {bitwidth}"),
             };
-            if name != "VkResult" {
-                write!(out, "pub type {name} = {ty};\n")?;
-            }
+            write!(out, "pub type {name} = {ty};\n")?;
             for en in children_tagged(node, "enum") {
                 gen_enum_value(out, en, ty.to_string(), None, enum_types)?;
             }
         }
         "constants" => {
             for en in children_tagged(node, "enum") {
-                let ty = c_type_to_rust(en.attribute("type").unwrap(), false);
+                let ty = c_type_to_rust(en.attribute("type").unwrap(), TypeContext::Field);
                 gen_enum_value(out, en, ty.to_string(), None, enum_types)?;
             }
         }
@@ -507,7 +497,7 @@ fn parse_command_or_funcptr<'a, 'input>(node: Node<'a, 'input>) -> Option<FuncIn
     let proto = parse_c_declarator(&proto).unwrap();
     let mut params = vec![];
     for param in children_tagged(node, "param") {
-        if !api_check(param) {
+        if !is_vulkan_api(param) {
             continue;
         }
         let text = node_text(&param);
@@ -531,6 +521,7 @@ fn parse_command<'a, 'input>(
             alias: Some(alias.to_string()),
             func: alias_info.func.clone(),
             dispatch: alias_info.dispatch,
+            vulkan_supported: Cell::new(false),
             generated: Cell::new(false),
         })
     } else {
@@ -543,6 +534,7 @@ fn parse_command<'a, 'input>(
             alias: None,
             func: func_info,
             dispatch,
+            vulkan_supported: Cell::new(false),
             generated: Cell::new(false),
         })
     }
@@ -552,13 +544,14 @@ fn parse_commands<'a, 'input>(registry: Node<'a, 'input>) -> CommandMap<'a, 'inp
     let mut command_map = CommandMap::new();
     let commands = child_tagged(registry, "commands").unwrap();
     for cmd in children_tagged(commands, "command") {
-        if !api_check(cmd) {
+        if !is_vulkan_api(cmd) {
             continue;
         }
         if let Some(info) = parse_command(cmd, &command_map) {
             command_map.insert(info.name.clone(), info);
         }
     }
+    eprintln!("Parsed {} commands", command_map.len());
     command_map
 }
 
@@ -568,9 +561,9 @@ fn gen_func_sig(out: &mut Writer, func_info: &FuncInfo) -> io::Result<()> {
         if i > 0 {
             write!(out, ", ")?;
         }
-        write!(out, "{}: {}", sanitize_ident(&param.name), param.rust_type(false))?;
+        write!(out, "{}: {}", sanitize_ident(&param.name), param.rust_type(TypeContext::Param))?;
     }
-    write!(out, ") -> {}", func_info.proto.rust_type(true))?;
+    write!(out, ") -> {}", func_info.proto.rust_type(TypeContext::Return))?;
     Ok(())
 }
 
@@ -602,7 +595,7 @@ fn gen_features(
     cmdmap: &mut CommandMap,
 ) -> io::Result<()> {
     for feature in children_tagged(registry, "feature") {
-        if !api_check(feature) {
+        if !is_vulkan_api(feature) {
             continue;
         }
         let name = feature.attribute("name").unwrap();
@@ -691,7 +684,7 @@ fn gen_require(
     }
     for ty in children_tagged(require, "type") {
         let name = ty.attribute("name").unwrap();
-        eprintln!("generating  {name}");
+        //eprintln!("generating  {name}");
         let info = tymap.get(name).expect("type not found");
         if info.generated.get() {
             // PAIN: types,commands,etc. can be defined by multiple extensions.
@@ -731,7 +724,9 @@ fn gen_vk_dispatch_table(
         for cmd in funcs.iter() {
             let vk_cmd_name = &cmd.name;
             let cmd_name = vk_cmd_name.strip_prefix("vk").unwrap();
-            writeln!(out, "{cmd_name},PFN_{vk_cmd_name},c\"{vk_cmd_name}\";")?;
+            write!(out, "{cmd_name}")?;
+            gen_func_sig(out, &cmd.func)?;
+            writeln!(out, ",PFN_{vk_cmd_name},c\"{vk_cmd_name}\";")?;
         }
         dedent(out);
         writeln!(out, "}}")?;
@@ -770,17 +765,18 @@ fn looks_like_outparam_but_isnt(rty: &str) -> bool {
     }
 }*/
 
+/*
 fn is_outparam_blacklisted(cmd: &str) -> bool {
     static RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"^vkGetPhysicalDevice(\w*)PresentationSupport([A-Z0-9]*)$").unwrap());
     RE.is_match(cmd)
-}
+}*/
 
-fn gen_command_wrapper(out: &mut Writer, cmd: &CommandInfo, tymap: &TypeMap) -> io::Result<()> {
+fn gen_command_wrapper(out: &mut Writer, cmd: &CommandInfo, _tymap: &TypeMap) -> io::Result<()> {
     let nparams = cmd.func.params.len();
     let vk_cmd_name = &cmd.name;
     let cmd_name = vk_cmd_name.strip_prefix("vk").unwrap();
-    let return_type = cmd.func.proto.rust_type(true);
+    let return_type = cmd.func.proto.rust_type(TypeContext::Return);
     writeln!(out, "#[inline(always)]")?;
 
     // check for outparams
@@ -809,7 +805,7 @@ fn gen_command_wrapper(out: &mut Writer, cmd: &CommandInfo, tymap: &TypeMap) -> 
     if noutp > 0 {
         write!(out, "pub unsafe fn {cmd_name}(&self")?;
         for param in cmd.func.params.iter().take(nparams - noutp) {
-            write!(out, ", {}: {}", sanitize_ident(&param.name), param.rust_type(false))?;
+            write!(out, ", {}: {}", sanitize_ident(&param.name), param.rust_type(TypeContext::Param))?;
         }
         write!(out, ")")?;
 
@@ -820,12 +816,12 @@ fn gen_command_wrapper(out: &mut Writer, cmd: &CommandInfo, tymap: &TypeMap) -> 
                 "({})",
                 outparams
                     .iter()
-                    .map(|p| p.rust_type(false).strip_prefix("*mut ").unwrap().to_string())
+                    .map(|p| p.rust_type(TypeContext::Param).strip_prefix("*mut ").unwrap().to_string())
                     .collect::<Vec<_>>()
                     .join(", ")
             )
         } else {
-            outparams[0].rust_type(false).strip_prefix("*mut ").unwrap().to_string()
+            outparams[0].rust_type(TypeContext::Param).strip_prefix("*mut ").unwrap().to_string()
         };
 
         if return_type == "VkResult" {
@@ -877,7 +873,7 @@ fn gen_command_wrapper(out: &mut Writer, cmd: &CommandInfo, tymap: &TypeMap) -> 
     } else {
         write!(out, "pub unsafe fn {cmd_name}(&self")?;
         for param in cmd.func.params.iter() {
-            write!(out, ", {}: {}", sanitize_ident(&param.name), param.rust_type(false))?;
+            write!(out, ", {}: {}", sanitize_ident(&param.name), param.rust_type(TypeContext::Param))?;
         }
         writeln!(out, ") -> {return_type} {{",)?;
         indent(out);
@@ -1025,6 +1021,63 @@ fn gen_ext_dispatch_tables(out: &mut Writer, registry: Node, cmds: &CommandMap, 
     Ok(())
 }
 
+fn gen_combined_dispatch_tables(
+    out: &mut Writer,
+    registry: Node,
+    cmds: &CommandMap,
+    tymap: &TypeMap,
+) -> io::Result<()> {
+    // scan feature & extension tables for commands
+    // PAIN: we can't directly iterate over commands because the <commands> table doesn't specify
+    //       supported APIs (those are in individual <feature>/<extension> records).
+    for feature in children_tagged(registry, "feature") {
+        if !is_vulkan_api(feature) {
+            continue;
+        }
+        for req in children_tagged(feature, "require") {
+            for cmd in children_tagged(req, "command") {
+                let name = cmd.attribute("name").unwrap();
+                cmds[name].vulkan_supported.set(true);
+            }
+        }
+    }
+    let extensions = child_tagged(registry, "extensions").unwrap();
+    for ext in children_tagged(extensions, "extension") {
+        if !is_vulkan_supported_extension(ext) {
+            continue;
+        }
+        for req in children_tagged(ext, "require") {
+            for cmd in children_tagged(req, "command") {
+                let name = cmd.attribute("name").unwrap();
+                cmds[name].vulkan_supported.set(true);
+            }
+        }
+    }
+    let mut entry_fns = vec![];
+    let mut device_fns = vec![];
+    let mut instance_fns = vec![];
+    for cmd in cmds.values() {
+        if !cmd.vulkan_supported.get() {
+            continue;
+        }
+        match &cmd.dispatch {
+            DispatchType::Entry => entry_fns.push(cmd),
+            DispatchType::Instance => instance_fns.push(cmd),
+            DispatchType::Device => device_fns.push(cmd),
+        }
+    }
+    if !entry_fns.is_empty() {
+        gen_vk_dispatch_table(out, "EntryDispatchCombined", None, entry_fns, tymap)?;
+    }
+    if !instance_fns.is_empty() {
+        gen_vk_dispatch_table(out, "InstanceDispatchCombined", None, instance_fns, tymap)?;
+    }
+    if !device_fns.is_empty() {
+        gen_vk_dispatch_table(out, "DeviceDispatchCombined", None, device_fns, tymap)?;
+    }
+    Ok(())
+}
+
 //--------------------------------------------------------------------------------------------------
 // Helpers
 //--------------------------------------------------------------------------------------------------
@@ -1032,8 +1085,12 @@ fn gen_ext_dispatch_tables(out: &mut Writer, registry: Node, cmds: &CommandMap, 
 /// Checks if a node has an `api` attribute that contains `vulkan`, or no `api` at all.
 ///
 /// Returns false if the `api` doesn't contain `vulkan`.
-fn api_check(node: Node) -> bool {
+fn is_vulkan_api(node: Node) -> bool {
     node.attribute("api").map(|s| s.split(',').any(|s| s == "vulkan")).unwrap_or(true)
+}
+
+fn is_vulkan_supported_extension(extnode: Node) -> bool {
+    extnode.attribute("supported").map(|s| s.split(',').any(|s| s == "vulkan")).unwrap_or(false)
 }
 
 /// Returns the command type based on its first parameter.
@@ -1063,6 +1120,15 @@ fn maybe_write_deprecated_attr(out: &mut Writer, deprecated: Option<&str>, alias
     Ok(())
 }
 
+/// Context in which a type is used, which affects how it is translated to Rust.
+#[derive(Copy, Clone, Eq, PartialEq, Default)]
+enum TypeContext {
+    #[default]
+    Field,
+    Return,
+    Param,
+}
+
 /// Info about a C declarator.
 #[derive(Clone, Default)]
 struct CDecl {
@@ -1080,8 +1146,8 @@ struct CDecl {
 }
 
 impl CDecl {
-    fn rust_type(&self, return_type: bool) -> String {
-        let mut ty = c_type_to_rust(&self.inner_ty, return_type).to_string();
+    fn rust_type(&self, ctx: TypeContext) -> String {
+        let mut ty = c_type_to_rust(&self.inner_ty, ctx).to_string();
         if self.inner_ptr {
             if self.inner_const {
                 ty = format!("*const {ty}");
@@ -1097,10 +1163,27 @@ impl CDecl {
             }
         }
         if let Some(ref array_len) = self.array_len_inner {
-            ty = format!("[{ty}; {} as usize]", array_len);
+            if ctx == TypeContext::Param {
+                // in C, arrays are always passed by pointer, even those with known sizes
+                if self.inner_const {
+                    ty = format!("*const {ty}");
+                } else {
+                    ty = format!("*mut {ty}");
+                }
+            } else {
+                ty = format!("[{ty}; {} as usize]", array_len);
+            }
         }
         if let Some(ref array_len) = self.array_len_outer {
-            ty = format!("[{ty}; {} as usize]", array_len);
+            if ctx == TypeContext::Param {
+                if self.outer_const {
+                    ty = format!("*const {ty}");
+                } else {
+                    ty = format!("*mut {ty}");
+                }
+            } else {
+                ty = format!("[{ty}; {} as usize]", array_len);
+            }
         }
         ty
     }
@@ -1164,7 +1247,7 @@ fn parse_c_declarator<'a>(member: &'a str) -> io::Result<CDecl> {
 }
 
 /// Crude parser for C-style constants in vk.xml.
-fn c_constant_to_rust(mut value: &str) -> String {
+fn c_constant_to_rust(value: &str) -> String {
     match value {
         "(~0U)" => "u32::MAX".to_string(),
         "(~1U)" => "u32::MAX - 1".to_string(), // VK_QUEUE_FAMILY_EXTERNAL
@@ -1194,7 +1277,7 @@ fn c_constant_to_rust(mut value: &str) -> String {
 }
 
 /// Converts a C platform type to its rust equivalent
-fn c_type_to_rust(ty: &str, return_type: bool) -> &str {
+fn c_type_to_rust(ty: &str, ctx: TypeContext) -> &str {
     match ty {
         "uint8_t" => "u8",
         "uint16_t" => "u16",
@@ -1209,8 +1292,8 @@ fn c_type_to_rust(ty: &str, return_type: bool) -> &str {
         "size_t" => "usize",
         "intptr_t" => "isize",
         "uintptr_t" => "usize",
-        "void" if return_type => "()",
-        "void" if !return_type => "c_void",
+        "void" if ctx == TypeContext::Return => "()",
+        "void" if ctx != TypeContext::Return => "c_void",
         "char" => "c_char",
         "int" => "c_int",
         other => other,
@@ -1231,10 +1314,6 @@ fn ext_enum_value(extnum: i64, offset: i64) -> i64 {
     let base = 1_000_000_000;
     let range = 1_000;
     base + (extnum - 1) * range + offset
-}
-
-fn is_vulkan_supported_extension(extnode: Node) -> bool {
-    extnode.attribute("supported").map(|s| s.split(',').any(|s| s == "vulkan")).unwrap_or(false)
 }
 
 struct IndentedWriter<'a> {
@@ -1285,10 +1364,6 @@ where
     'a: 'tag,
 {
     node.children().filter(move |n| n.tag_name().name() == tag)
-}
-
-fn child_by_name_attribute<'a, 'input>(node: Node<'a, 'input>, name: &str) -> Option<Node<'a, 'input>> {
-    node.children().find(|n| n.attribute("name") == Some(name))
 }
 
 fn node_text(node: &Node) -> String {

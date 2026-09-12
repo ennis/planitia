@@ -1,4 +1,4 @@
-use crate::Device;
+use crate::{vkcall, Device};
 use crate::device::{RESOURCE_DESCRIPTOR_HEAP_SIZE, SAMPLER_DESCRIPTOR_HEAP_SIZE};
 use gpu_allocator::MemoryLocation;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme, Allocator};
@@ -143,7 +143,7 @@ fn allocate_descriptor_heap_memory(
             ..
         };
         vkcallnc!(device_fns.CreateBuffer(device, &create_info, ptr::null(), @out let buffer));
-        device_fns.BindBufferMemory(device, buffer, unsafe { mem::transmute(alloc.memory()) }, alloc.offset()).check();
+        vkcall!(device_fns.BindBufferMemory(device, buffer, unsafe { mem::transmute(alloc.memory()) }, alloc.offset()));
         let device_addr = device_fns.GetBufferDeviceAddress(device, &VkBufferDeviceAddressInfo { buffer, .. });
         let ptr = alloc.mapped_ptr().expect("failed to map descriptor heap memory").as_ptr();
         let start_offset;

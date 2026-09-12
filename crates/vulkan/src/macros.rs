@@ -53,7 +53,7 @@ pub(crate) use non_dispatchable_handle;
 
 
 macro_rules! dispatch_table {
-    ($name:ident; $([$inherits_m:ident:$inherits_ty:ty])? $($cmd:ident,$pfn:ty,$procname:literal;)*) => {
+    ($name:ident; $([$inherits_m:ident:$inherits_ty:ty])? $($cmd:ident ($($argname:ident: $args:ty),*) -> $rty:ty,$pfn:ty,$procname:literal;)*) => {
         #[derive(Copy, Clone)]
         #[repr(C)]
         pub struct $name {
@@ -62,9 +62,12 @@ macro_rules! dispatch_table {
         }
         impl $name {
             pub unsafe fn load_with(mut load_fn: impl FnMut(&CStr) -> PFN_vkVoidFunction) -> Self {
+                $(unsafe extern "system" fn $cmd($(_ : $args),*) -> $rty {
+                    $crate::proc_not_found($procname);
+                })*
                 Self {
                     $($inherits_m: unsafe { <$inherits_ty>::load_with(&mut load_fn) },)?
-                    $($cmd: unsafe { ::core::mem::transmute(load_fn($procname).unwrap_or_else(|| $crate::proc_not_found($procname))) },)*
+                    $($cmd: unsafe { if let Some(f) = load_fn($procname) { ::core::mem::transmute(f) } else { $cmd } },)*
                 }
             }
         }

@@ -1,8 +1,7 @@
 use crate::helper::HasPrivateData;
 use crate::Device;
-use ash::vk;
 use std::slice;
-use ash::VkHandle;
+use vulkan::*;
 
 pub struct BufferData {
     pub  name: String,

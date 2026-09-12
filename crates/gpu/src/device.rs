@@ -252,9 +252,9 @@ pub(super) fn get_preferred_swap_extent(
 unsafe fn select_physical_device(instance: &Instance) -> PhysicalDeviceAndProperties {
     let physical_devices = {
         let mut count = 0;
-        instance.fns.EnumeratePhysicalDevices(instance.instance, &mut count, ptr::null_mut()).check();
+        vkcall!(instance.fns.EnumeratePhysicalDevices(instance.instance, &mut count, ptr::null_mut()));
         let mut devices = Vec::with_capacity(count as usize);
-        instance.fns.EnumeratePhysicalDevices(instance.instance, &mut count, devices.as_mut_ptr()).check();
+        vkcall!(instance.fns.EnumeratePhysicalDevices(instance.instance, &mut count, devices.as_mut_ptr()));
         devices.set_len(count as usize);
         devices
     };

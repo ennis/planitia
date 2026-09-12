@@ -1,10 +1,10 @@
 //! Helper utilities.
 use crate::dispatch::DeviceDispatch;
-use vulkan::*;
-use std::ffi::{c_void, CStr};
+use std::ffi::{CStr, c_void};
 use std::ops::Deref;
-use std::{mem, ptr};
 use std::ptr::NonNull;
+use std::{mem, ptr};
+use vulkan::*;
 
 // Implementation detail of shader_module
 #[doc(hidden)]
@@ -25,6 +25,74 @@ macro_rules! include_bytes_as_u32 {
     };
 }
 pub(crate) use include_bytes_as_u32;
+
+/// Convenience macro to call vulkan functions that return arrays via a count/output pointer pair.
+macro_rules! vkarraycall {
+    ($p:ident$(.$ps:ident)* ($($args:expr,)* @count let $count:ident, @out let $array:ident)) => {
+        vkarraycall!(let _ = $p$(.$ps)* ($($args,)* @count let $count, @out let $array));
+    };
+    (let $result:pat = $p:ident$(.$ps:ident)* ($($args:expr,)* @count let $count:ident, @out let $array:ident)) => {
+        let mut $count = 0;
+        let mut $array = vec![];
+        let __result = $p$(.$ps)*($($args,)* &mut $count, ptr::null_mut());
+        if __result.0 < 0 {
+            $crate::panic_vulkan_api_call_failed(__result);
+        }
+        $array.reserve($count as usize);
+        let __result = $p$(.$ps)*($($args,)* &mut $count, $array.as_mut_ptr());
+        if __result.0 < 0 {
+            $crate::panic_vulkan_api_call_failed(__result);
+        }
+        let $result = __result;
+        unsafe { $array.set_len($count as usize); }
+    };
+}
+
+/// Same as [`vkarraycall`] but without result checks.
+macro_rules! vkarraycallnc {
+    ($p:ident$(.$ps:ident)* ($($args:expr,)* @count let $count:ident, @out let $array:ident)) => {
+        let mut $count = 0;
+        let mut $array = vec![];
+        $p$(.$ps)*($($args,)* &mut $count, ptr::null_mut());
+        $array.reserve($count as usize);
+        $p$(.$ps)*($($args,)* &mut $count, $array.as_mut_ptr());
+        unsafe { $array.set_len($count as usize); }
+    };
+}
+
+/// Convenience macro to call vulkan functions that return results via output pointer parameters.
+macro_rules! vkcallnc {
+    ($p:ident$(.$ps:ident)* ($($args:expr,)* $(@out let $out:ident),*)) => {
+        $(let mut $out = ::core::mem::MaybeUninit::uninit();)*
+        let _ = $p$(.$ps)*($($args,)* $($out.as_mut_ptr()),*);
+        $(let $out = unsafe { $out.assume_init() };)*
+    };
+}
+
+/// Same as [`vkcallnc`] but panics on an unsuccessful result, and puts the VkResult in a variable.
+macro_rules! vkcall {
+    ($p:ident$(.$ps:ident)* ($($args:expr,)* $(@out let $out:ident),*)) => {
+        $(let mut $out = ::core::mem::MaybeUninit::uninit();)*
+        let __result = $p$(.$ps)*($($args,)*, $($out.as_mut_ptr()),*);
+        if __result.0 < 0 {
+            $crate::panic_vulkan_api_call_failed(__result);
+        }
+        $(let $out = unsafe { $out.assume_init() };)*
+    };
+    (let $result:pat = $p:ident$(.$ps:ident)* ($($args:expr,)* $(@out let $out:ident),*)) => {
+        $(let mut $out = ::core::mem::MaybeUninit::uninit();)*
+        let __result = $p$(.$ps)*($($args,)* $($out.as_mut_ptr()),*);
+        if __result.0 < 0 {
+            $crate::panic_vulkan_api_call_failed(__result);
+        }
+        let $result = __result;
+        $(let $out = unsafe { $out.assume_init() };)*
+    };
+}
+pub(crate) use vkarraycall;
+pub(crate) use vkarraycallnc;
+pub(crate) use vkcall;
+pub(crate) use vkcallnc;
 
 #[derive(Copy, Clone, Default)]
 pub struct Image {
@@ -96,37 +164,27 @@ impl DeviceHelper {
         queue_family_index: u32,
     ) -> DeviceHelper {
         let device = dispatch.device;
-        let command_pool = dispatch
-            .CreateCommandPool(device,
-                &VkCommandPoolCreateInfo {
-                    flags: VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-                    queueFamilyIndex: queue_family_index,
-                    ..
-                },
-                None,
-            )
-            .expect("create_command_pool failed");
-        let queue = dispatch.GetDeviceQueue(device, queue_family_index, 0);
+        let command_pool_create_info = VkCommandPoolCreateInfo {
+            flags: VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+            queueFamilyIndex: queue_family_index,
+            ..
+        };
+        vkcall!(dispatch.CreateCommandPool(device, &command_pool_create_info, ptr::null(), @out let command_pool));
+        vkcallnc!(dispatch.GetDeviceQueue(device, queue_family_index, 0, @out let queue));
         dispatch.set_device_loader_data(queue);
-        let private_data_slot = dispatch
-            .CreatePrivateDataSlot(device, &VkPrivateDataSlotCreateInfo::default(), ptr::null())
-            .expect("create_private_data_slot failed");
+        vkcall!(dispatch.CreatePrivateDataSlot(device, &VkPrivateDataSlotCreateInfo { .. }, ptr::null(), @out let private_data_slot));
         DeviceHelper { dispatch, mem_props, command_pool, queue, private_data_slot }
     }
 
     pub unsafe fn set_private_data<H: HasPrivateData>(&self, handle: H, data: H::PrivateData) -> *mut H::PrivateData {
         let data_ptr = Box::into_raw(Box::new(data)) as *mut c_void as u64;
-        self.dispatch.SetPrivateData(self.device, handle, self.private_data_slot, data_ptr).unwrap();
+        self.dispatch.SetPrivateData(self.device, H::TYPE, handle.as_raw(), self.private_data_slot, data_ptr).check();
         data_ptr as *mut H::PrivateData
     }
 
     pub unsafe fn get_private_data<H: HasPrivateData>(&self, handle: H) -> Option<NonNull<H::PrivateData>> {
-        let data_ptr = self.dispatch.GetPrivateData(self.device, handle, self.private_data_slot);
-        if data_ptr == 0 {
-            None
-        } else {
-            Some(NonNull::new_unchecked(data_ptr as *mut H::PrivateData))
-        }
+        vkcallnc!(self.dispatch.GetPrivateData(self.device, H::TYPE, handle.as_raw(), self.private_data_slot, @out let data_ptr));
+        if data_ptr == 0 { None } else { Some(NonNull::new_unchecked(data_ptr as *mut H::PrivateData)) }
     }
 
     pub unsafe fn get_private_data_ref<'a, H: HasPrivateData>(&self, handle: H) -> Option<&'a H::PrivateData> {
@@ -138,7 +196,7 @@ impl DeviceHelper {
     }
 
     pub unsafe fn take_private_data<H: HasPrivateData>(&self, handle: H) -> Option<Box<H::PrivateData>> {
-        let data_ptr = self.dispatch.GetPrivateData(self.device, handle, self.private_data_slot);
+        vkcallnc!(self.dispatch.GetPrivateData(self.device, H::TYPE, handle.as_raw(), self.private_data_slot, @out let data_ptr));
         if data_ptr == 0 {
             None
         } else {
@@ -164,9 +222,7 @@ impl DeviceHelper {
             ..Default::default()
         };
         let mut buffers = Vec::with_capacity(count);
-            self
-            .AllocateCommandBuffers(self.device, &allocate_info, buffers.as_mut_ptr())
-            .check();
+        self.AllocateCommandBuffers(self.device, &allocate_info, buffers.as_mut_ptr()).check();
         buffers.set_len(count);
         for b in buffers.iter() {
             self.set_device_loader_data(*b);
@@ -175,17 +231,17 @@ impl DeviceHelper {
     }
 
     pub unsafe fn wait_for_fence_and_reset(&self, fence: VkFence) {
-        self.WaitForFences(&[fence], true, u64::MAX).unwrap();
-        self.ResetFences(&[fence]).unwrap();
+        self.WaitForFences(self.device, 1, &fence, VK_TRUE, u64::MAX).check();
+        self.ResetFences(self.device, 1, &fence).check();
     }
 
     pub unsafe fn reset_and_begin_command_buffer(&self, cmdbuf: VkCommandBuffer) {
-        self.ResetCommandBuffer(cmdbuf, VkCommandBufferResetFlags::empty()).unwrap();
+        self.ResetCommandBuffer(cmdbuf, 0).check();
         self.BeginCommandBuffer(
             cmdbuf,
             &VkCommandBufferBeginInfo { flags: VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, ..Default::default() },
         )
-        .unwrap();
+        .check();
     }
 
     pub unsafe fn cmd_push_descriptors_helper(
@@ -198,10 +254,8 @@ impl DeviceHelper {
             image: VkDescriptorImageInfo,
             buffer: VkDescriptorBufferInfo,
         }
-
         let mut descriptor_infos = Vec::with_capacity(descriptors.len());
         let mut write_descriptors = Vec::with_capacity(descriptors.len());
-
         for descriptor in descriptors {
             match descriptor {
                 Descriptor::Texture { binding, image_view, image_layout } => {
@@ -238,8 +292,7 @@ impl DeviceHelper {
                 }
             }
         }
-
-        (self.khr_push_descriptors.CmdPushDescriptorSetKHR)(
+        self.CmdPushDescriptorSetKHR(
             cmdbuf,
             // We don't have compute shaders for the moment
             VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -251,30 +304,25 @@ impl DeviceHelper {
         );
     }
 
-    pub(crate) unsafe fn cmd_set_viewport_helper(&self, cmdbuf: VkCommandBuffer, x: i32, y: i32, w: i32, h: i32) {
-        self.cmd_set_viewport(
+    pub unsafe fn cmd_set_viewport_helper(&self, cmdbuf: VkCommandBuffer, x: i32, y: i32, w: i32, h: i32) {
+        self.CmdSetViewport(
             cmdbuf,
             0,
-            &[VkViewport {
-                x: x as f32,
-                y: y as f32,
-                width: w as f32,
-                height: h as f32,
-                minDepth: 0.0,
-                maxDepth: 1.0,
-            }],
+            1,
+            &VkViewport { x: x as f32, y: y as f32, width: w as f32, height: h as f32, minDepth: 0.0, maxDepth: 1.0 },
         );
     }
 
-    pub(crate) unsafe fn cmd_set_scissor_helper(&self, cmdbuf: VkCommandBuffer, x: i32, y: i32, w: i32, h: i32) {
-        self.cmd_set_scissor(
+    pub unsafe fn cmd_set_scissor_helper(&self, cmdbuf: VkCommandBuffer, x: i32, y: i32, w: i32, h: i32) {
+        self.CmdSetScissor(
             cmdbuf,
             0,
-            &[VkRect2D { offset: VkOffset2D { x, y }, extent: VkExtent2D { width: w as u32, height: h as u32 } }],
+            1,
+            &VkRect2D { offset: VkOffset2D { x, y }, extent: VkExtent2D { width: w as u32, height: h as u32 } },
         );
     }
 
-    pub(crate) unsafe fn layout_barrier(
+    pub unsafe fn layout_barrier(
         &self,
         cmdbuf: VkCommandBuffer,
         transitions: &[(VkImage, VkImageLayout, VkImageLayout)],
@@ -301,22 +349,21 @@ impl DeviceHelper {
                 ..
             })
             .collect::<Vec<_>>();
-
-        self.cmd_pipeline_barrier(
+        self.CmdPipelineBarrier(
             cmdbuf,
             VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
             VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
             0,
-            &[],
-            &[],
-            &barriers,
+            0,
+            ptr::null(),
+            0,
+            ptr::null(),
+            barriers.len() as u32,
+            barriers.as_ptr(),
         );
     }
 
-    pub(crate) unsafe fn create_graphics_pipeline_helper(
-        &self,
-        create_info: &GraphicsPipelineHelperCreateInfo,
-    ) -> Pipeline {
+    pub unsafe fn create_graphics_pipeline_helper(&self, create_info: &GraphicsPipelineHelperCreateInfo) -> Pipeline {
         let shader_module = self
             .create_shader_module(
                 &VkShaderModuleCreateInfo {
@@ -327,13 +374,11 @@ impl DeviceHelper {
                 None,
             )
             .expect("failed to create shader module");
-
         let push_constant_range = VkPushConstantRange {
             stageFlags: VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
             offset: 0,
             size: create_info.push_constants_size as u32,
         };
-
         let descriptor_set_layout = self
             .create_descriptor_set_layout(
                 &VkDescriptorSetLayoutCreateInfo {
@@ -345,7 +390,6 @@ impl DeviceHelper {
                 None,
             )
             .unwrap();
-
         let pipeline_layout = self
             .create_pipeline_layout(
                 &VkPipelineLayoutCreateInfo {
@@ -372,7 +416,6 @@ impl DeviceHelper {
                 ..Default::default()
             },
         ];
-
         let vertex_binding = VkVertexInputBindingDescription {
             binding: 0,
             stride: create_info.vertex_stride as u32,
@@ -385,13 +428,9 @@ impl DeviceHelper {
             pVertexAttributeDescriptions: create_info.vertex_attributes.as_ptr(),
             ..
         };
-        let input_assembly_state = VkPipelineInputAssemblyStateCreateInfo {
-            topology: VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-            ..
-        };
-        let viewport_state =
-            VkPipelineViewportStateCreateInfo { viewportCount: 1, scissorCount: 1, .. };
-
+        let input_assembly_state =
+            VkPipelineInputAssemblyStateCreateInfo { topology: VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, .. };
+        let viewport_state = VkPipelineViewportStateCreateInfo { viewportCount: 1, scissorCount: 1, .. };
         let rasterization_state = VkPipelineRasterizationStateCreateInfo {
             polygonMode: VK_POLYGON_MODE_FILL,
             cullMode: VK_CULL_MODE_NONE,
@@ -399,12 +438,8 @@ impl DeviceHelper {
             lineWidth: 1.0,
             ..Default::default()
         };
-
-        let multisample_state = VkPipelineMultisampleStateCreateInfo {
-            rasterizationSamples: VK_SAMPLE_COUNT_TYPE_1_BIT,
-            ..Default::default()
-        };
-
+        let multisample_state =
+            VkPipelineMultisampleStateCreateInfo { rasterizationSamples: VK_SAMPLE_COUNT_1_BIT, ..Default::default() };
         // Standard "source-over" alpha compositing for the overlay.
         let blend_attachment = VkPipelineColorBlendAttachmentState {
             blendEnable: VK_TRUE,
@@ -432,7 +467,6 @@ impl DeviceHelper {
             pColorAttachmentFormats: &create_info.color_attachment_format,
             ..Default::default()
         };
-
         let pipeline_create_info = VkGraphicsPipelineCreateInfo {
             pNext: &mut rendering_info as *const _ as *const c_void,
             pStages: shader_stages.as_ptr(),
@@ -448,14 +482,9 @@ impl DeviceHelper {
             renderPass: VkRenderPass::null(),
             ..
         };
-
-        let pipeline = self
-            .create_graphics_pipelines(VkPipelineCache::null(), std::slice::from_ref(&pipeline_create_info), None)
-            .expect("failed to create graphics pipeline")[0];
-
+        vkcall!(self.CreateGraphicsPipelines(self.device, VkPipelineCache::null(), 1, &pipeline_create_info, ptr::null(), @out let pipeline));
         // The shader module is no longer needed once the pipeline is built.
         self.destroy_shader_module(shader_module, None);
-
         Pipeline { pipeline, pipeline_layout, descriptor_set_layout }
     }
 
@@ -468,22 +497,15 @@ impl DeviceHelper {
     ) -> Pipeline {
         let shader_module = self
             .create_shader_module(
-                &VkShaderModuleCreateInfo {
-                    flags: 0,
-                    codeSize: spirv.len() * 4,
-                    pCode: spirv.as_ptr(),
-                    ..
-                },
+                &VkShaderModuleCreateInfo { flags: 0, codeSize: spirv.len() * 4, pCode: spirv.as_ptr(), .. },
                 None,
             )
             .expect("failed to create shader module");
-
         let push_constant_range = VkPushConstantRange {
             stageFlags: VK_SHADER_STAGE_COMPUTE_BIT,
             offset: 0,
             size: push_constants_size as u32,
         };
-
         let descriptor_set_layout = self
             .create_descriptor_set_layout(
                 &VkDescriptorSetLayoutCreateInfo {
@@ -495,7 +517,6 @@ impl DeviceHelper {
                 None,
             )
             .unwrap();
-
         let pipeline_layout = self
             .create_pipeline_layout(
                 &VkPipelineLayoutCreateInfo {
@@ -508,7 +529,6 @@ impl DeviceHelper {
                 None,
             )
             .unwrap();
-
         let compute_pipeline_create_info = VkComputePipelineCreateInfo {
             stage: VkPipelineShaderStageCreateInfo {
                 stage: VK_SHADER_STAGE_COMPUTE_BIT,
@@ -519,28 +539,27 @@ impl DeviceHelper {
             layout: pipeline_layout,
             ..
         };
-
-        let mut pipeline = mem::zeroed();
-        self.CreateComputePipelines(
-                self.device,
-                VkPipelineCache::null(),
-                1,
-                &compute_pipeline_create_info,
-                ptr::null_mut(),
-                &mut pipeline
-            );
+        vkcall!(self.CreateComputePipelines(
+            self.device,
+            VkPipelineCache::null(),
+            1,
+            &compute_pipeline_create_info,
+            ptr::null_mut(),
+            @out let pipeline
+        ));
         self.DestroyShaderModule(self.device, shader_module, ptr::null());
         Pipeline { pipeline_layout, descriptor_set_layout, pipeline }
     }
 
-    pub(crate) unsafe fn create_color_image_helper(
+    pub unsafe fn create_color_image_helper(
         &self,
         format: VkFormat,
         width: u32,
         height: u32,
         usage: VkImageUsageFlags,
     ) -> Image {
-        let d = &self.dispatch.device;
+        let vk = &self.dispatch;
+        let device = self.device;
         let create_info = VkImageCreateInfo {
             imageType: VK_IMAGE_TYPE_2D,
             format,
@@ -554,57 +573,54 @@ impl DeviceHelper {
             initialLayout: VK_IMAGE_LAYOUT_UNDEFINED,
             ..
         };
-        let image = d.create_image(&create_info, None).unwrap();
-        let img_req = d.get_image_memory_requirements(image);
-        let img_mem_type = self.find_memory_type(img_req.memory_type_bits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        let image_memory = d
-            .allocate_memory(
-                &VkMemoryAllocateInfo {
-                    allocationSize: img_req.size,
-                    memoryTypeIndex: img_mem_type,
-                    ..
+
+        vkcall!(vk.CreateImage(device, &create_info, ptr::null(), @out let image));
+        vkcallnc!(vk.GetImageMemoryRequirements(device, image, @out let img_req));
+        let img_mem_type = self.find_memory_type(img_req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        vkcall!(vk.AllocateMemory(
+            device,
+            &VkMemoryAllocateInfo {
+                allocationSize: img_req.size,
+                memoryTypeIndex: img_mem_type,
+                ..Default::default()
+            },
+            ptr::null(),
+            @out let image_memory
+        ));
+        vk.BindImageMemory(device, image, image_memory, 0).check();
+        vkcall!(vk.CreateImageView(
+            device,
+            &VkImageViewCreateInfo {
+                image,
+                viewType: VK_IMAGE_VIEW_TYPE_2D,
+                format: create_info.format,
+                subresourceRange: VkImageSubresourceRange {
+                    aspectMask: VK_IMAGE_ASPECT_COLOR_BIT,
+                    baseMipLevel: 0,
+                    levelCount: 1,
+                    baseArrayLayer: 0,
+                    layerCount: 1,
                 },
-                None,
-            )
-            .unwrap();
-        d.bind_image_memory(image, image_memory, 0).unwrap();
-        let image_view = d
-            .create_image_view(
-                &VkImageViewCreateInfo {
-                    image,
-                    viewType: VK_IMAGE_VIEW_TYPE_2D,
-                    format: create_info.format,
-                    subresourceRange: VkImageSubresourceRange {
-                        aspectMask: VK_IMAGE_ASPECT_COLOR_BIT,
-                        baseMipLevel: 0,
-                        levelCount: 1,
-                        baseArrayLayer: 0,
-                        layerCount: 1,
-                    },
-                    ..
-                },
-                None,
-            )
-            .unwrap();
+                ..Default::default()
+            },
+            ptr::null(),
+            @out let image_view
+        ));
         Image { image, image_view, memory: image_memory }
     }
 
-    pub(crate) unsafe fn destroy_image_helper(&self, image: Image) {
+    pub unsafe fn destroy_image_helper(&self, image: Image) {
         self.DestroyImageView(self.device, image.image_view, ptr::null());
         self.DestroyImage(self.device, image.image, ptr::null());
         self.FreeMemory(self.device, image.memory, ptr::null());
     }
 
-    pub(crate) unsafe fn create_buffer_from_data<T: Copy + 'static>(
-        &self,
-        usage: VkBufferUsageFlags,
-        data: &[T],
-    ) -> Buffer {
+    pub unsafe fn create_buffer_from_data<T: Copy + 'static>(&self, usage: VkBufferUsageFlags, data: &[T]) -> Buffer {
         let data_bytes = std::slice::from_raw_parts(data.as_ptr() as *const u8, data.len() * std::mem::size_of::<T>());
         self.create_buffer_helper(usage, data_bytes.len(), Some(data_bytes))
     }
 
-    pub(crate) unsafe fn create_buffer_helper(
+    pub unsafe fn create_buffer_helper(
         &self,
         usage: VkBufferUsageFlags,
         byte_size: usize,
@@ -619,49 +635,50 @@ impl DeviceHelper {
             ..
         };
         let required_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-        let buffer = self.create_buffer(&create_info, None).unwrap();
-        let buf_req = self.get_buffer_memory_requirements(buffer);
-        let buf_mem_type = self.find_memory_type(buf_req.memory_type_bits, required_flags);
-        let allocate_flags = VkMemoryAllocateFlagsInfo {
-            flags: VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT,
-            ..
-        };
-        let buffer_memory = self
-            .allocate_memory(
-                &VkMemoryAllocateInfo {
-                    pNext: &allocate_flags as *const _ as *const c_void,
-                    allocationSize: buf_req.size,
-                    memoryTypeIndex: buf_mem_type,
-                    ..
-                },
-                None,
-            )
-            .unwrap();
+        vkcall!(self.CreateBuffer(self.device, &create_info, ptr::null(), @out let buffer));
+        //let buffer = self.create_buffer(&create_info, None).unwrap();
+        vkcallnc!(self.GetBufferMemoryRequirements(self.device, buffer, @out let buf_req));
+        //let buf_req = self.get_buffer_memory_requirements(buffer);
+        let buf_mem_type = self.find_memory_type(buf_req.memoryTypeBits, required_flags);
+        let allocate_flags = VkMemoryAllocateFlagsInfo { flags: VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT, .. };
+        vkcall!(self.AllocateMemory(
+            self.device,
+            &VkMemoryAllocateInfo {
+                pNext: &allocate_flags as *const _ as *const c_void,
+                allocationSize: buf_req.size,
+                memoryTypeIndex: buf_mem_type,
+                ..
+            },
+            ptr::null(),
+            @out let buffer_memory
+        ));
         self.BindBufferMemory(self.device, buffer, buffer_memory, 0).check();
-        let ptr = self.MapMemory(self.device, buffer_memory, 0, buf_req.size, 0).unwrap();
+        vkcall!(self.MapMemory(self.device, buffer_memory, 0, buf_req.size, 0, @out let ptr));
         if let Some(initial_data) = initial_data {
             ptr::copy_nonoverlapping(initial_data.as_ptr(), ptr.cast::<u8>(), initial_data.len());
         }
-
-        let device_address =
-            self.get_buffer_device_address(&VkBufferDeviceAddressInfo { buffer, ..Default::default() });
+        let device_address = self.GetBufferDeviceAddress(self.device, &VkBufferDeviceAddressInfo { buffer, .. });
         Buffer { buffer, memory: buffer_memory, ptr, size: byte_size, device_address }
     }
 
-    pub(crate) unsafe fn destroy_buffer_helper(&self, buffer: Buffer) {
-        self.destroy_buffer(buffer.buffer, None);
-        self.free_memory(buffer.memory, None);
+    pub unsafe fn destroy_buffer_helper(&self, buffer: Buffer) {
+        self.DestroyBuffer(self.device, buffer.buffer, ptr::null());
+        self.FreeMemory(self.device, buffer.memory, ptr::null());
     }
 
-    pub(crate) unsafe fn submit_oneshot(&self, record_fn: impl FnOnce(&Self, VkCommandBuffer)) {
+    pub unsafe fn submit_oneshot(&self, record_fn: impl FnOnce(&Self, VkCommandBuffer)) {
         let mut cmdbuf = VkCommandBuffer::null();
-        self
-            .AllocateCommandBuffers(self.device, &VkCommandBufferAllocateInfo {
+        self.AllocateCommandBuffers(
+            self.device,
+            &VkCommandBufferAllocateInfo {
                 commandPool: self.command_pool,
                 level: VK_COMMAND_BUFFER_LEVEL_PRIMARY,
                 commandBufferCount: 1,
                 ..
-            }, &mut cmdbuf).check();
+            },
+            &mut cmdbuf,
+        )
+        .check();
         self.set_device_loader_data(cmdbuf);
         self.BeginCommandBuffer(
             cmdbuf,
@@ -738,20 +755,15 @@ impl DeviceHelper {
         );
     }
 
-    pub(crate) unsafe fn create_color_image_from_data(&self,
-                                               format: VkFormat,
-                                               width: u32,
-                                               height: u32,
-                                               usage: VkImageUsageFlags,
-                                                      data: &[u8]) -> Image
-    {
-
-        let image = self.create_color_image_helper(
-            format,
-            width,
-            height,
-            usage,
-        );
+    pub(crate) unsafe fn create_color_image_from_data(
+        &self,
+        format: VkFormat,
+        width: u32,
+        height: u32,
+        usage: VkImageUsageFlags,
+        data: &[u8],
+    ) -> Image {
+        let image = self.create_color_image_helper(format, width, height, usage);
 
         // Staging buffer: host-visible, coherent.
         let staging_buf = self.create_buffer_from_data(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, data);

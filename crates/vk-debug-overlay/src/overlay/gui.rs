@@ -465,14 +465,11 @@ fn pointer_param_child_rows_ui(
     let pointee_type = &walk.ctx.m[pointee_type_id];
     let pointee_size = type_byte_size(walk.ctx.m, pointee_type).unwrap_or(0);
     let byte_size = count * pointee_size;
-
     let load_chain = walk.data.load_chain.with_deref(walk.offset);
     let data = walk.ctx.dbg.capture_load_chain(walk.ctx.eid, &load_chain, byte_size);
-
     let child_data = ParamDataCtx { load_chain, byte_size, data };
     let mut child_walk =
         ParamWalk { ctx: walk.ctx, data: &child_data, offset: 0, path: format!("{}.$", walk.path), ty: pointee_type };
-
     if size_hint.is_none() {
         // no size hint, this is a pointer to a single element, show it inline
         param_child_rows_ui(&mut child_walk, ui, st, None);
@@ -574,13 +571,11 @@ fn begin_set_size_hint(walk: &mut ParamWalk, ui: &Ui, st: &mut GuiState) {
 
 fn finish_set_size_hint(walk: &mut ParamWalk, ui: &Ui, st: &mut GuiState) {
     st.mode = GuiMode::Normal;
-
     let TypeInfo::Scalar(len_ty @ ScalarType::U16 | len_ty @ ScalarType::U32 | len_ty @ ScalarType::U64) = walk.ty
     else {
         st.status = format!("Invalid size type {}, expected u16, u32 or u64", pretty_print_type(walk.ctx.m, walk.ty));
         return;
     };
-
     // should be in the same command and module
     let Some(array_var) = st.array_size_hint_source.take() else {
         return;
@@ -589,7 +584,6 @@ fn finish_set_size_hint(walk: &mut ParamWalk, ui: &Ui, st: &mut GuiState) {
         st.status = "Size hint should be in the same shader stage".to_string();
         return;
     }
-
     st.status = format!("Added size hint for {} -> {}", array_var.path, walk.path);
     st.size_hints.push(ArraySizeHint { size_hint_var: walk.var_info(), array_var_path: array_var.path })
 }
@@ -717,10 +711,10 @@ fn command_params_ui(ctx: &mut CommandContext, ui: &Ui, st: &mut GuiState) {
                     shader_stage_row_ui(ctx, ui, st, VK_SHADER_STAGE_VERTEX_BIT, vertex);
                 }
                 if let Some(ref mesh) = pipeline.mesh {
-                    shader_stage_row_ui(ctx, ui, st, VK_SHADER_STAGE_MESH_EXT_BIT, mesh);
+                    shader_stage_row_ui(ctx, ui, st, VK_SHADER_STAGE_MESH_BIT_EXT, mesh);
                 }
                 if let Some(ref task) = pipeline.task {
-                    shader_stage_row_ui(ctx, ui, st, VK_SHADER_STAGE_TASK_EXT_BIT, task);
+                    shader_stage_row_ui(ctx, ui, st, VK_SHADER_STAGE_TASK_BIT_EXT, task);
                 }
                 if let Some(ref fragment) = pipeline.fragment {
                     shader_stage_row_ui(ctx, ui, st, VK_SHADER_STAGE_FRAGMENT_BIT, fragment);

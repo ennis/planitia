@@ -1,5 +1,5 @@
 use crate::Device;
-use ash::vk;
+use vulkan::*;
 
 #[derive(Copy, Clone, Debug)]
 pub struct AddressRange {
