@@ -18,24 +18,21 @@ impl Device {
     ) -> VkResult {
         let handle = (*p_name_info).objectHandle;
         let name = CStr::from_ptr((*p_name_info).pObjectName).to_string_lossy().into_owned();
-
-        //eprintln!("setDebugUtilsObjectName {} {}", handle, name);
-
         match (*p_name_info).objectType {
             VK_OBJECT_TYPE_COMMAND_BUFFER => {
                 let cmd_buf = VkCommandBuffer(handle as *mut _);
                 self.get_private_data_mut(cmd_buf).unwrap().name = name;
             }
             VK_OBJECT_TYPE_PIPELINE => {
-                let pipeline = VkPipeline::from_raw(handle);
+                let pipeline = VkPipeline(handle);
                 self.get_private_data_mut(pipeline).unwrap().name = name;
             }
             VK_OBJECT_TYPE_BUFFER => {
-                let buffer = VkBuffer::from_raw(handle);
+                let buffer = VkBuffer(handle);
                 self.get_private_data_mut(buffer).unwrap().name = name;
             }
             VK_OBJECT_TYPE_IMAGE => {
-                let image = VkImage::from_raw(handle);
+                let image = VkImage(handle);
                 self.get_private_data_mut(image).unwrap().name = name;
             }
             VK_OBJECT_TYPE_QUEUE => {
@@ -43,7 +40,6 @@ impl Device {
             }
             _ => {}
         }
-
-        (self.ext_debug_utils.set_debug_utils_object_name_ext)(device, p_name_info)
+        self.SetDebugUtilsObjectNameEXT(device, p_name_info)
     }
 }

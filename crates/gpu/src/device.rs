@@ -8,7 +8,7 @@ use crate::{
     BufferAddressRange, BufferUsage, ComputePipeline, ComputePipelineCreateInfo, Error, FrameIndex, GraphicsPipeline,
     GraphicsPipelineCreateInfo, Instance, PreRasterizationShaders, Ptr, SUBGROUP_SIZE, SamplerParams,
     SamplerParamsHashable, ShaderReflection, VulkanObject, get_vulkan_entry, is_depth_and_stencil_format, signal,
-    vkarraycall, vkarraycallnc, vkcallnc, vkcheck, vkcall,
+    vkarraycall, vkarraycallnc, vkcallnc, vkcall,
 };
 use ash::vk::Handle;
 use gpu::device::descriptor_heap::SamplerDescriptorHandle;
@@ -1279,7 +1279,7 @@ impl Device {
 pub fn wait_idle() {
     let device = Device::instance();
     unsafe {
-        vkcheck!(device.fns.DeviceWaitIdle(device.vkd));
+        vkcall!(device.fns.DeviceWaitIdle(device.vkd));
     }
 }
 
@@ -1293,7 +1293,7 @@ pub fn wait_for_frame(frame_index: FrameIndex, timeout: Option<Duration>) {
             pValues: &frame_index,
             ..
         };
-        vkcheck!(device.fns.WaitSemaphores(
+        vkcall!(device.fns.WaitSemaphores(
             device.vkd,
             &wait_info,
             timeout.map(|d| d.as_nanos() as u64).unwrap_or(u64::MAX)
@@ -1355,7 +1355,7 @@ pub unsafe fn set_debug_name_raw<H: VulkanHandle>(handle: H, name: impl AsRef<st
         ..
     };
     unsafe {
-        vkcheck!(device.ext.debug_utils.SetDebugUtilsObjectNameEXT(device.vkd, &info));
+        vkcall!(device.ext.debug_utils.SetDebugUtilsObjectNameEXT(device.vkd, &info));
     }
 }
 
@@ -1447,7 +1447,7 @@ pub fn get_calibrated_timestamp_pair() -> (u64, u64) {
 
     let mut _max_deviation = 0;
     unsafe {
-        vkcheck!(device.ext.calibrated_timestamps.GetCalibratedTimestampsKHR(
+        vkcall!(device.ext.calibrated_timestamps.GetCalibratedTimestampsKHR(
             device.vkd,
             TIMESTAMP_INFOS.len() as u32,
             TIMESTAMP_INFOS.as_ptr(),

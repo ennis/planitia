@@ -1,5 +1,6 @@
 #![allow(non_snake_case)]
 #![allow(unsafe_op_in_unsafe_fn, reason = "too verbose")]
+#![feature(default_field_values)]
 extern crate core;
 
 mod bump;
@@ -19,7 +20,7 @@ use crate::bump::BumpAllocator;
 use crate::debugger::{Debugger, DebuggerResources};
 use crate::dispatch::{DeviceDispatch, DeviceDispatchableHandle, DispatchKey, InstanceDispatch};
 use crate::event::EventTimeline;
-use crate::helper::{DeviceHelper, Pipeline, vkcall, vkcallnc};
+use crate::helper::{DeviceHelper, Pipeline};
 use crate::init::{layer_vkCreateDevice, layer_vkCreateInstance, layer_vkDestroyDevice, layer_vkDestroyInstance};
 use crate::overlay::gui::GuiState;
 use crate::overlay::input::InputState;
@@ -294,7 +295,7 @@ macro_rules! device_hooks {
 
         unsafe fn get_device_proc_addr_hook(
             p_name: *const c_char,
-        ) -> Option<vk::PFN_vkVoidFunction> {
+        ) -> Option<PFN_vkVoidFunction> {
             let name = unsafe { CStr::from_ptr(p_name) };
             let pfn = match name.to_bytes() {
                 // Those functions are implemented manually
@@ -376,11 +377,5 @@ macro_rules! vkcheck {
         if result.0 >= 0 { result } else { $crate::panic_vulkan_api_call_failed(result) }
     }};
 }
-
 pub(crate) use vkcheck;
 
-#[cold]
-#[track_caller]
-fn panic_vulkan_api_call_failed(result: VkResult) -> ! {
-    panic!("Vulkan API call failed: {:?}", result);
-}

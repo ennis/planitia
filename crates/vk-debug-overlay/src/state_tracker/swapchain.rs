@@ -1,5 +1,4 @@
 //! Swapchain interception
-use crate::helper::vkcall;
 use crate::overlay::renderer::render_overlay;
 use crate::surface::get_hwnd_for_surface;
 use crate::{Device, SwapchainInfo};
@@ -22,17 +21,17 @@ impl Device {
         if !create_info.oldSwapchain.is_null() {
             if let Some(index) = inner.swapchains.iter().position(|sc| sc.swapchain == create_info.oldSwapchain) {
                 let sc = inner.swapchains.remove(index);
-                for view in sc.image_views {
-                    self.destroy_image_view(view, None);
-                }
                 // FIXME: we have no way to know whether the semaphore are still being waited on.
                 //        Technically waitForIdle isn't sufficient as it doesn't sync with presentation.
                 //        So it's basically impossible to do this correctly.
                 //        See https://stackoverflow.com/questions/75437792/how-to-synchronize-vulkan-swapchain-presentation-with-sempahore-destruction
                 //        As a best effort, wait for device idle first.
-                self.device_wait_idle().unwrap();
+                vkcall!(self.DeviceWaitIdle(self.device));
+                for view in sc.image_views {
+                    self.DestroyImageView(self.device, view, ptr::null());
+                }
                 for sem in sc.render_to_present {
-                    self.destroy_semaphore(sem, None);
+                    self.DestroySemaphore(self.device, sem, ptr::null());
                 }
             }
         }
@@ -55,7 +54,8 @@ impl Device {
         let image_views = images
             .iter()
             .map(|&image| {
-                self.create_image_view(
+                vkcall!(self.CreateImageView(
+                    device,
                     &VkImageViewCreateInfo {
                         image,
                         viewType: VK_IMAGE_VIEW_TYPE_2D,
@@ -69,14 +69,15 @@ impl Device {
                         },
                         ..
                     },
-                    None,
-                )
-                .expect("create_image_view failed")
+                    ptr::null(),
+                    @out let view
+                ));
+                view
             })
             .collect::<Vec<_>>();
         let render_to_present_semaphores = (0..images.len())
             .map(|_| {
-                vkcall!(self.CreateSemaphore(&VkSemaphoreCreateInfo { .. }, ptr::null(), @out let semaphore));
+                vkcall!(self.CreateSemaphore(device, &VkSemaphoreCreateInfo { .. }, ptr::null(), @out let semaphore));
                 semaphore
             })
             .collect();
@@ -105,10 +106,10 @@ impl Device {
         if let Some(index) = inner.swapchains.iter().position(|sc| sc.swapchain == swapchain) {
             let sc = inner.swapchains.remove(index);
             for view in sc.image_views {
-                self.destroy_image_view(view, None);
+                self.DestroyImageView(self.device, view, ptr::null());
             }
             for sem in sc.render_to_present {
-                self.destroy_semaphore(sem, None);
+                self.DestroySemaphore(self.device, sem, ptr::null());
             }
         }
         self.DestroySwapchainKHR(device, swapchain, p_allocator);
@@ -117,7 +118,7 @@ impl Device {
     pub unsafe fn hook_queue_present_khr(&self, queue: VkQueue, p_present_info: *const VkPresentInfoKHR) -> VkResult {
         // wait for our debugger probes to finish executing
         // and for the rest as well, incidentally...
-        self.device_wait_idle().unwrap();
+        vkcall!(self.DeviceWaitIdle(self.device));
         let present_info = *p_present_info;
         let wait_semaphores =
             slice::from_raw_parts(present_info.pWaitSemaphores, present_info.waitSemaphoreCount as usize);

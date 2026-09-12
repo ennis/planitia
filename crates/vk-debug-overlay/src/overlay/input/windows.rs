@@ -1,6 +1,6 @@
 use crate::Device;
 use crate::surface::get_hwnd_for_surface;
-use ash::vk;
+use vulkan::*;
 use std::time::{Duration, Instant};
 use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::Graphics::Gdi::ScreenToClient;

@@ -5,7 +5,6 @@ use crate::spirv::{Module, ScalarType, StructType, TypeId, TypeInfo, pretty_prin
 use crate::state_tracker::command::Command;
 use crate::state_tracker::pipeline::ShaderStageInfo;
 use crate::{Device, ModuleId, ModuleMap, SubmissionState};
-use vulkan::*;
 use color_print::cwrite;
 use imgui::Condition::Always;
 use imgui::{StyleVar, TreeNodeFlags, Ui};
@@ -15,6 +14,7 @@ use std::cell::RefCell;
 use std::fmt::Write;
 use std::hash::{Hash, Hasher};
 use std::mem;
+use vulkan::*;
 
 thread_local! {
     pub static IMGUI: RefCell<imgui::Context> = RefCell::new(imgui::Context::create());
@@ -231,7 +231,7 @@ fn raw_watches_window(ctx: &RootContext, ui: &Ui, st: &mut GuiState) {
         .opened(&mut st.show_raw_watches)
         .build(|| {
             if let Some(_t) = ui.begin_table_with_flags("watch_table", 6, TABLE_FLAGS) {
-                ui.table_setup_column("ID");
+                //ui.table_setup_column("ID");
                 ui.table_setup_column("Command");
                 ui.table_setup_column("Type");
 
@@ -241,29 +241,28 @@ fn raw_watches_window(ctx: &RootContext, ui: &Ui, st: &mut GuiState) {
 
                 ui.table_headers_row();
 
-                for (id, watch) in ctx.dbg.watches.iter() {
-                    ui.table_next_column();
-                    ui.text(format!("{}", id.data().as_ffi() & 0xFFFF_FFFF));
-                    ui.table_next_column();
-                    ui.text(format!("{}", watch.eid));
-                    match watch.capture {
-                        CaptureKind::Buffer(ref cap) => {
-                            ui.table_next_column();
-                            ui.text("BUFFER");
-                            ui.table_next_column();
-                            ui.text(format!("{}", cap.size));
-                            ui.table_next_column();
-                            ui.text(format!("{:?}", cap.load_chain));
-                            ui.table_next_row();
-                        }
-                        CaptureKind::Image(ref cap) => {
-                            let image_info = unsafe { ctx.d.get_private_data_ref(cap.image).unwrap() };
-                            ui.table_next_column();
-                            ui.text("IMAGE");
-                            ui.table_next_column(); // skip size
-                            ui.table_next_column(); // skip load chain
-                            ui.text(format!("{:?} (VkImage {:016x})", image_info.name, cap.image.as_raw()));
-                        }
+                for watch in ctx.dbg.commands.iter() {
+                    for (_, load_chain) in watch.access_chains.iter() {
+                        ui.table_next_column();
+                        ui.text(format!("{}", watch.eid));
+                        ui.table_next_column();
+                        ui.text("BUFFER");
+                        ui.table_next_column();
+                        ui.text(format!("{}", load_chain.size));
+                        ui.table_next_column();
+                        ui.text(format!("{:?}", load_chain.load_chain));
+                        ui.table_next_row();
+                    }
+                    for (_, cap) in watch.image_capture.iter() {
+                        ui.table_next_column();
+                        ui.text(format!("{}", watch.eid));
+                        ui.table_next_column();
+                        ui.text("IMAGE");
+                        ui.table_next_column(); // skip size
+                        ui.table_next_column(); // skip load chain
+                        let image_info = unsafe { ctx.d.get_private_data_ref(cap.image).unwrap() };
+                        ui.text(format!("{:?} (VkImage {:016x})", image_info.name, cap.image.as_raw()));
+                        ui.table_next_row();
                     }
                 }
             }

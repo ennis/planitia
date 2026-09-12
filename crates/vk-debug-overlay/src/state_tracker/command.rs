@@ -122,15 +122,15 @@ impl Device {
         p_allocate_info: *const VkCommandBufferAllocateInfo,
         p_command_buffers: *mut VkCommandBuffer,
     ) -> VkResult {
-        let result = (self.fp_v1_0().allocate_command_buffers)(device, p_allocate_info, p_command_buffers);
-        if result != VK_SUCCESS {
+        let result = self.AllocateCommandBuffers(device, p_allocate_info, p_command_buffers);
+        if result < 0 {
             return result;
         }
         let command_buffers = slice::from_raw_parts(p_command_buffers, (*p_allocate_info).commandBufferCount as usize);
         for cmd_buf in command_buffers {
             self.set_private_data(*cmd_buf, CommandBufferData::new());
         }
-        VK_SUCCESS
+        result
     }
 
     pub unsafe fn hook_free_command_buffers(

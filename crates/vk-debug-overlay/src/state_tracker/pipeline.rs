@@ -87,7 +87,7 @@ impl Device {
         p_allocator: *const VkAllocationCallbacks,
         p_pipelines: *mut VkPipeline,
     ) -> VkResult {
-        let r = self.CreateGraphicsPipelines(
+        let result = self.CreateGraphicsPipelines(
             device,
             pipeline_cache,
             create_info_count,
@@ -95,8 +95,8 @@ impl Device {
             p_allocator,
             p_pipelines,
         );
-        if r.0 != VK_SUCCESS {
-            return r;
+        if result < 0 {
+            return result;
         }
         let create_infos = from_raw_parts(p_create_infos, create_info_count as usize);
         let pipelines = from_raw_parts(p_pipelines, create_info_count as usize);
@@ -105,7 +105,7 @@ impl Device {
             let data = self.create_graphics_pipeline_data(create_info);
             self.set_private_data(pipelines[i], data);
         }
-        VkResult(VK_SUCCESS)
+        result
     }
 
     pub unsafe fn hook_create_compute_pipelines(
@@ -117,7 +117,7 @@ impl Device {
         p_allocator: *const VkAllocationCallbacks,
         p_pipelines: *mut VkPipeline,
     ) -> VkResult {
-        let r = self.CreateComputePipelines(
+        let result = self.CreateComputePipelines(
             device,
             pipeline_cache,
             create_info_count,
@@ -125,8 +125,8 @@ impl Device {
             p_allocator,
             p_pipelines,
         );
-        if r.0 != VK_SUCCESS {
-            return r;
+        if result < 0 {
+            return result;
         }
         let create_infos = from_raw_parts(p_create_infos, create_info_count as usize);
         let pipelines = from_raw_parts(p_pipelines, create_info_count as usize);
@@ -135,7 +135,7 @@ impl Device {
             let data = self.create_compute_pipeline_data(create_info);
             self.set_private_data(pipelines[i], data);
         }
-        VkResult(VK_SUCCESS)
+        result
     }
 
     pub unsafe fn hook_destroy_pipeline(

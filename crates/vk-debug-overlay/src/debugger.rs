@@ -169,7 +169,7 @@ impl Debugger {
         for cmd in self.commands.iter_mut() {
             if cmd.eid == eid {
                 cmd.stale = false;
-                Self::do_capture_command(d, cmd, cb_state);
+                //Self::do_capture_command(d, cmd, cb_state);
             }
         }
     }
@@ -261,14 +261,14 @@ impl Debugger {
         //eprintln!("   count={}", count);
         //eprintln!("   device offsets={:?}", &params.offset[..]);
         let n_workgroups = cap.size.div_ceil(COPY_1D_WORKGROUP_SIZE as usize) as u32;
-        d.cmd_bind_pipeline(cmd_buf, VK_PIPELINE_BIND_POINT_COMPUTE, d.debugger_resources.copy_indirect_1d.pipeline);
+        d.CmdBindPipeline(cmd_buf, VK_PIPELINE_BIND_POINT_COMPUTE, d.debugger_resources.copy_indirect_1d.pipeline);
         d.push_constants_helper(
             cmd_buf,
             d.debugger_resources.copy_indirect_1d.pipeline_layout,
             VK_SHADER_STAGE_COMPUTE_BIT,
             &params,
         );
-        d.cmd_dispatch(cmd_buf, n_workgroups, 1, 1);
+        d.CmdDispatch(cmd_buf, n_workgroups, 1, 1);
     }
 
 

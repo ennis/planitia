@@ -11,7 +11,7 @@ impl Device {
         p_view: *mut VkImageView,
     ) -> VkResult {
         let result = self.CreateImageView(device, p_create_info, p_allocator, p_view);
-        if result.0 == VK_SUCCESS {
+        if result == VK_SUCCESS {
             let view = *p_view;
             self.set_private_data(view, ImageViewInfo { format: (*p_create_info).format });
         }
@@ -39,20 +39,21 @@ impl Device {
         let mut create_info_copy = *p_create_info;
         create_info_copy.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         let result = self.CreateImage(device, &create_info_copy, p_allocator, p_image);
-        if result.0 == VK_SUCCESS {
-            let image = *p_image;
-            let image_info = ImageInfo {
-                name: format!("Image_{:016x}", image.as_raw()),
-                format: create_info_copy.format,
-                usage: (*p_create_info).usage,
-                ty_: create_info_copy.imageType,
-                size: create_info_copy.extent,
-                mip_count: create_info_copy.mipLevels,
-                layer_count: create_info_copy.arrayLayers,
-                samples: create_info_copy.samples,
-            };
-            self.set_private_data(image, image_info);
+        if result < 0 {
+            return result;
         }
+        let image = *p_image;
+        let image_info = ImageInfo {
+            name: format!("Image_{:016x}", image.as_raw()),
+            format: create_info_copy.format,
+            usage: (*p_create_info).usage,
+            ty_: create_info_copy.imageType,
+            size: create_info_copy.extent,
+            mip_count: create_info_copy.mipLevels,
+            layer_count: create_info_copy.arrayLayers,
+            samples: create_info_copy.samples,
+        };
+        self.set_private_data(image, image_info);
         result
     }
 

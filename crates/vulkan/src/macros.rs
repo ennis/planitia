@@ -80,3 +80,78 @@ macro_rules! dispatch_table {
     };
 }
 pub(crate) use dispatch_table;
+
+
+/// Convenience macro to call vulkan functions that return arrays via a count/output pointer pair.
+#[macro_export]
+macro_rules! vkarraycall {
+    ($p:ident$(.$ps:ident)* ($($args:expr,)* @count let $count:ident, @out let $array:ident)) => {
+        vkarraycall!(let _ = $p$(.$ps)* ($($args,)* @count let $count, @out let $array));
+    };
+    (let $result:pat = $p:ident$(.$ps:ident)* ($($args:expr,)* @count let $count:ident, @out let $array:ident)) => {
+        let mut $count = 0;
+        let mut $array = vec![];
+        let __result = $p$(.$ps)*($($args,)* &mut $count, ::core::ptr::null_mut());
+        if __result < 0 {
+            $crate::panic_vulkan_api_call_failed(__result);
+        }
+        $array.reserve($count as usize);
+        let __result = $p$(.$ps)*($($args,)* &mut $count, $array.as_mut_ptr());
+        if __result < 0 {
+            $crate::panic_vulkan_api_call_failed(__result);
+        }
+        let $result = __result;
+        unsafe { $array.set_len($count as usize); }
+    };
+}
+
+/// Same as [`vkarraycall`] but without result checks.
+#[macro_export]
+macro_rules! vkarraycallnc {
+    ($p:ident$(.$ps:ident)* ($($args:expr,)* @count let $count:ident, @out let $array:ident)) => {
+        let mut $count = 0;
+        let mut $array = vec![];
+        $p$(.$ps)*($($args,)* &mut $count, ::core::ptr::null_mut());
+        $array.reserve($count as usize);
+        $p$(.$ps)*($($args,)* &mut $count, $array.as_mut_ptr());
+        unsafe { $array.set_len($count as usize); }
+    };
+}
+
+/// Convenience macro to call vulkan functions that return results via output pointer parameters.
+#[macro_export]
+macro_rules! vkcallnc {
+    ($p:ident$(.$ps:ident)* ($($args:expr,)* $(@out let $out:ident),*)) => {
+        $(let mut $out = ::core::mem::MaybeUninit::uninit();)*
+        let _ = $p$(.$ps)*($($args,)* $($out.as_mut_ptr()),*);
+        $(let $out = unsafe { $out.assume_init() };)*
+    };
+}
+
+/// Same as [`vkcallnc`] but panics on an unsuccessful result, and puts the VkResult in a variable.
+#[macro_export]
+macro_rules! vkcall {
+     ($p:ident$(.$ps:ident)* ($($args:expr),*)) => {
+        let __result = $p$(.$ps)*($($args),*);
+        if __result < 0 {
+            $crate::panic_vulkan_api_call_failed(__result);
+        }
+    };
+    ($p:ident$(.$ps:ident)* ($($args:expr,)* $(@out let $out:ident),*)) => {
+        $(let mut $out = ::core::mem::MaybeUninit::uninit();)*
+        let __result = $p$(.$ps)*($($args,)* $($out.as_mut_ptr()),*);
+        if __result < 0 {
+            $crate::panic_vulkan_api_call_failed(__result);
+        }
+        $(let $out = unsafe { $out.assume_init() };)*
+    };
+    (let $result:pat = $p:ident$(.$ps:ident)* ($($args:expr,)* $(@out let $out:ident),*)) => {
+        $(let mut $out = ::core::mem::MaybeUninit::uninit();)*
+        let __result = $p$(.$ps)*($($args,)* $($out.as_mut_ptr()),*);
+        if __result < 0 {
+            $crate::panic_vulkan_api_call_failed(__result);
+        }
+        let $result = __result;
+        $(let $out = unsafe { $out.assume_init() };)*
+    };
+}

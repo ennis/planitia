@@ -53,11 +53,7 @@ impl Device {
     pub unsafe fn register_buffer_address_range(&self, buffer: VkBuffer) {
         // SAFETY: safe because buffer is an externally-synchronized parameter
         let buf_data = self.get_private_data_mut(buffer).unwrap();
-
-        // Get buffer device address and register range
-        buf_data.device_address =
-            self.get_buffer_device_address(&VkBufferDeviceAddressInfo { buffer, ..Default::default() });
-
+        buf_data.device_address = self.GetBufferDeviceAddress(self.device, &VkBufferDeviceAddressInfo { buffer, .. });
         if buf_data.device_address != 0 {
             self.addrmap.lock().insert_buffer(buffer, buf_data.device_address, buf_data.size);
         }

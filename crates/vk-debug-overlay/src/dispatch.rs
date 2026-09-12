@@ -88,7 +88,7 @@ impl DeviceDispatch {
             device,
             d,
             next_get_device_proc_addr,
-            set_device_loader_data: set_device_loader_data.unwrap(),
+            set_device_loader_data,
             //khr_swapchain,
             //ext_debug_utils,
             //khr_dynamic_rendering,
@@ -99,7 +99,7 @@ impl DeviceDispatch {
 }
 
 type NonNullPFN_vkSetDeviceLoaderData =
-    unsafe extern "C" fn(device: VkDevice, object: *mut ::std::os::raw::c_void) -> VkResult;
+    unsafe extern "system" fn(device: VkDevice, object: *mut ::std::os::raw::c_void) -> VkResult;
 
 //--------------------------------------------------------------------------------------------------
 

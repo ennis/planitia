@@ -2,17 +2,17 @@ use std::env;
 use vulkan::*;
 
 /// Returns a matching structure in a pNext chain.
-pub unsafe fn find_next<N>(prev: &impl VkTaggedStructure) -> Option<*const N>
+pub unsafe fn find_next<N>(prev: &impl TaggedStructure) -> Option<*const N>
 where
-    N: VkTaggedStructure,
+    N: TaggedStructure,
 {
     let base_in_struct = prev as *const _ as *const VkBaseInStructure;
     let mut p_next = (*base_in_struct).pNext;
     while let Some(base) = p_next.as_ref() {
-        if base.s_type == N::STRUCTURE_TYPE {
+        if base.sType == N::S_TYPE {
             return Some(p_next.cast::<N>());
         }
-        p_next = base.p_next;
+        p_next = base.pNext;
     }
     None
 }

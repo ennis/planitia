@@ -1,4 +1,4 @@
-use crate::{BufferRange, BufferUsage, Device, Ptr, ResourceAllocation, VulkanObject, vkcallnc, vkcheck, vkcall};
+use crate::{BufferRange, BufferUsage, Device, Ptr, ResourceAllocation, VulkanObject, vkcallnc, vkcall};
 use ash::vk::Handle;
 use gpu_allocator::MemoryLocation;
 use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
@@ -384,7 +384,7 @@ impl Device {
                 linear: true,
                 allocation_scheme: AllocationScheme::GpuAllocatorManaged,
             });
-            vkcheck!(self.fns.BindBufferMemory(
+            vkcall!(self.fns.BindBufferMemory(
                 self.vkd,
                 handle,
                 VkDeviceMemory(allocation.memory().as_raw()),

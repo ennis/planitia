@@ -1,10 +1,10 @@
 use crate::helper::{include_bytes_as_u32, Buffer, Descriptor, GraphicsPipelineHelperCreateInfo, Image};
-use crate::{DeviceHelper, Device, Pipeline, FRAMES_IN_FLIGHT};
-use ash::vk;
+use crate::overlay::gui::with_imgui_context;
+use crate::{Device, DeviceHelper, FRAMES_IN_FLIGHT, Pipeline};
 use parking_lot::Mutex;
 use std::cell::RefCell;
 use std::{array, ptr};
-use crate::overlay::gui::with_imgui_context;
+use vulkan::*;
 
 #[derive(Default)]
 pub struct FrameData {
@@ -27,14 +27,9 @@ impl FrameResources {
         let command_buffers = dh.allocate_command_buffers_helper(FRAMES_IN_FLIGHT);
         let mut frame_data = array::from_fn(|_| FrameData::default());
         for i in 0..FRAMES_IN_FLIGHT {
-            let fence = dh
-                .create_fence(
-                    &VkFenceCreateInfo { flags: VK_FENCE_CREATE_FLAGS_SIGNALED, ..Default::default() },
-                    None,
-                )
-                .unwrap();
+            vkcall!(dh.CreateFence(dh.device, &VkFenceCreateInfo { flags: VK_FENCE_CREATE_SIGNALED_BIT, .. }, ptr::null(), @out let fence));
             let vertex_buffer = dh.create_buffer_helper(
-                VK_BUFFER_USAGE_FLAGS_VERTEX_BUFFER | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 MAX_VERTICES * size_of::<Vertex>(),
                 None,
             );
@@ -158,15 +153,16 @@ impl OverlayResources {
         });
 
         let font_sampler = unsafe {
-            dh.create_sampler(
+            vkcall!(dh.CreateSampler(
+                dh.device,
                 &VkSamplerCreateInfo {
-                    mag_filter: VK_FILTER_NEAREST,
-                    min_filter: VK_FILTER_NEAREST,
-                    ..Default::default()
+                    magFilter: VK_FILTER_NEAREST,
+                    minFilter: VK_FILTER_NEAREST,
+                    ..
                 },
-                None,
-            )
-            .unwrap()
+                ptr::null(),
+                @out let sampler));
+            sampler
         };
 
         let pipeline = unsafe {
@@ -197,24 +193,24 @@ impl OverlayResources {
                 bindings: &[
                     VkDescriptorSetLayoutBinding {
                         binding: 0,
-                        descriptor_type: VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                        descriptor_count: 1,
-                        stage_flags: VK_SHADER_STAGE_FRAGMENT_BIT,
-                        ..Default::default()
+                        descriptorType: VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                        descriptorCount: 1,
+                        stageFlags: VK_SHADER_STAGE_FRAGMENT_BIT,
+                        ..
                     },
                     VkDescriptorSetLayoutBinding {
                         binding: 1,
-                        descriptor_type: VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                        descriptor_count: 1,
-                        stage_flags: VK_SHADER_STAGE_FRAGMENT_BIT,
-                        ..Default::default()
+                        descriptorType: VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                        descriptorCount: 1,
+                        stageFlags: VK_SHADER_STAGE_FRAGMENT_BIT,
+                        ..
                     },
-                    VkImageAspectFlags {
+                    VkDescriptorSetLayoutBinding {
                         binding: 2,
-                        descriptor_type: VK_DESCRIPTOR_TYPE_SAMPLER,
-                        descriptor_count: 1,
-                        stage_flags: VK_SHADER_STAGE_FRAGMENT_BIT,
-                        ..Default::default()
+                        descriptorType: VK_DESCRIPTOR_TYPE_SAMPLER,
+                        descriptorCount: 1,
+                        stageFlags: VK_SHADER_STAGE_FRAGMENT_BIT,
+                        ..
                     },
                 ],
                 vertex_stride: size_of::<Vertex>(),
@@ -254,11 +250,11 @@ impl OverlayResources {
         let mut index_offset = 0;
 
         unsafe {
-            dd.cmd_bind_pipeline(fd.cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline.pipeline);
+            dd.CmdBindPipeline(fd.cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline.pipeline);
             dd.cmd_set_viewport_helper(fd.cmd_buf, 0, 0, rd.width, rd.height);
             dd.cmd_set_scissor_helper(fd.cmd_buf, 0, 0, rd.width, rd.height);
-            dd.cmd_bind_vertex_buffers(fd.cmd_buf, 0, &[fd.vtx_buf.buffer], &[0]);
-            dd.cmd_bind_index_buffer(fd.cmd_buf, fd.idx_buf.buffer, 0, VK_INDEX_TYPE_UINT16);
+            dd.CmdBindVertexBuffers(fd.cmd_buf, 0, 1, &fd.vtx_buf.buffer, &0);
+            dd.CmdBindIndexBuffer(fd.cmd_buf, fd.idx_buf.buffer, 0, VK_INDEX_TYPE_UINT16);
             dd.cmd_push_descriptors_helper(
                 fd.cmd_buf,
                 self.pipeline.pipeline_layout,
@@ -341,7 +337,7 @@ impl OverlayResources {
                                     },
                                 );
 
-                                dd.cmd_draw_indexed(
+                                dd.CmdDrawIndexed(
                                     fd.cmd_buf,
                                     count as u32,
                                     1,
@@ -421,29 +417,30 @@ pub(crate) unsafe fn render_overlay(
         ],
     );
 
-    dd.cmd_copy_image(
+    dd.CmdCopyImage(
         fd.cmd_buf,
         image,
         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
         image_copy.image,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        &[VkImageCopy {
-            src_subresource: VkImageSubresourceLayers {
-                aspect_mask: VK_IMAGE_ASPECT_COLOR_BIT,
-                mip_level: 0,
-                base_array_layer: 0,
-                layer_count: 1,
+        1,
+        &VkImageCopy {
+            srcSubresource: VkImageSubresourceLayers {
+                aspectMask: VK_IMAGE_ASPECT_COLOR_BIT,
+                mipLevel: 0,
+                baseArrayLayer: 0,
+                layerCount: 1,
             },
-            src_offset: VkOffset3D { x: 0, y: 0, z: 0 },
-            dst_subresource: VkImageSubresourceLayers {
-                aspect_mask: VK_IMAGE_ASPECT_COLOR_BIT,
-                mip_level: 0,
-                base_array_layer: 0,
-                layer_count: 1,
+            srcOffset: VkOffset3D { x: 0, y: 0, z: 0 },
+            dstSubresource: VkImageSubresourceLayers {
+                aspectMask: VK_IMAGE_ASPECT_COLOR_BIT,
+                mipLevel: 0,
+                baseArrayLayer: 0,
+                layerCount: 1,
             },
-            dst_offset: VkOffset3D { x: 0, y: 0, z: 0 },
+            dstOffset: VkOffset3D { x: 0, y: 0, z: 0 },
             extent: VkExtent3D { width: sc.extent.width, height: sc.extent.height, depth: 1 },
-        }],
+        },
     );
 
     dd.layout_barrier(
@@ -455,22 +452,22 @@ pub(crate) unsafe fn render_overlay(
     );
 
     let attachments = [VkRenderingAttachmentInfo {
-        image_view,
-        image_layout: VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        load_op: VkAttachmentLoadOp::LOAD,
-        store_op: VkAttachmentStoreOp::STORE,
-        ..Default::default()
+        imageView: image_view,
+        imageLayout: VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        loadOp: VK_ATTACHMENT_LOAD_OP_LOAD,
+        storeOp: VK_ATTACHMENT_STORE_OP_STORE,
+        ..
     }];
-    dd.cmd_begin_rendering(
+    dd.CmdBeginRendering(
         fd.cmd_buf,
         &VkRenderingInfo {
             flags: Default::default(),
-            render_area: VkRect2D { offset: VkOffset2D { x: 0, y: 0 }, extent: sc.extent },
-            layer_count: 1,
-            view_mask: 0,
-            color_attachment_count: 1,
-            p_color_attachments: attachments.as_ptr(),
-            ..Default::default()
+            renderArea: VkRect2D { offset: VkOffset2D { x: 0, y: 0 }, extent: sc.extent },
+            layerCount: 1,
+            viewMask: 0,
+            colorAttachmentCount: 1,
+            pColorAttachments: attachments.as_ptr(),
+            ..
         },
     );
 
@@ -483,19 +480,19 @@ pub(crate) unsafe fn render_overlay(
 
     dd.render_gui(&rd, fd);
 
-    dd.cmd_end_rendering(fd.cmd_buf);
+    dd.CmdEndRendering(fd.cmd_buf);
     // transition back to PRESENT
     dd.layout_barrier(
         fd.cmd_buf,
         &[(image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)],
     );
 
-    dd.end_command_buffer(fd.cmd_buf).unwrap();
+    vkcall!(dd.EndCommandBuffer(fd.cmd_buf));
 
     // Submit the command buffer, with a fence, waiting on the semaphores provided by the application.
     let render_to_present = sc.render_to_present[image_index as usize];
-    dd.queue_submit_helper(queue, fd.cmd_buf, wait_semaphores, &[render_to_present], fd.fence).unwrap();
-    dd.queue_present_helper(queue, swapchain, image_index, render_to_present).unwrap();
+    dd.queue_submit_helper(queue, fd.cmd_buf, wait_semaphores, &[render_to_present], fd.fence);
+    dd.queue_present_helper(queue, swapchain, image_index, render_to_present);
 
     fr.frame_index = (frame_index + 1) % FRAMES_IN_FLIGHT;
 

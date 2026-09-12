@@ -26,11 +26,9 @@ use crate::dispatch::InstanceDispatch;
 use crate::{DEVICE_STATE, Device, DeviceDispatchableHandle, INSTANCE_MAP, PHY_TO_INSTANCE};
 use vulkan::layer::*;
 use vulkan::*;
-//use ash::vk;
-//use ash::vk::{PFN_vkCreateDevice, PFN_vkCreateInstance, PFN_vkDestroyDevice, PFN_vkDestroyInstance};
-use crate::helper::vkarraycall;
 use std::mem;
 use std::ptr::NonNull;
+use ash_layer;
 
 const _: PFN_vkCreateInstance = layer_vkCreateInstance;
 const _: PFN_vkDestroyInstance = layer_vkDestroyInstance;
@@ -77,7 +75,7 @@ pub(crate) unsafe extern "system" fn layer_vkCreateInstance(
     let create_info = *p_create_info;
     let chain_info = match get_instance_chain_info(&create_info, VK_LAYER_LINK_INFO) {
         Some(mut p) => p.as_mut(),
-        None => return VkResult(VK_ERROR_INITIALIZATION_FAILED),
+        None => return VK_ERROR_INITIALIZATION_FAILED,
     };
     // Consume the head of the layer-info linked list.
     let layer_info = *chain_info.u.pLayerInfo;
@@ -87,7 +85,7 @@ pub(crate) unsafe extern "system" fn layer_vkCreateInstance(
     // Call down the chain.
     let create_instance: PFN_vkCreateInstance = mem::transmute(gipa(VkInstance::null(), c"vkCreateInstance".as_ptr()));
     let res = create_instance(p_create_info, p_allocator, p_instance);
-    if res.0 != VK_SUCCESS {
+    if res < 0 {
         return res;
     }
     let instance = *p_instance;
@@ -100,7 +98,7 @@ pub(crate) unsafe extern "system" fn layer_vkCreateInstance(
         PHY_TO_INSTANCE.insert(pd, instance);
     }
     INSTANCE_MAP.insert(instance, dispatch);
-    VkResult(VK_SUCCESS)
+    res
 }
 
 #[unsafe(no_mangle)]
@@ -133,7 +131,7 @@ pub(crate) unsafe extern "system" fn layer_vkCreateDevice(
     let instance_dispatch = INSTANCE_MAP.get(&instance).expect("unknown instance");
     let chain_info = match get_device_chain_info(&*p_create_info, VK_LAYER_LINK_INFO) {
         Some(mut p) => p.as_mut(),
-        None => return VkResult(VK_ERROR_INITIALIZATION_FAILED),
+        None => return VK_ERROR_INITIALIZATION_FAILED,
     };
     let layer_info = *chain_info.u.pLayerInfo;
     chain_info.u.pLayerInfo = layer_info.pNext;
@@ -143,12 +141,12 @@ pub(crate) unsafe extern "system" fn layer_vkCreateDevice(
 
     let set_device_loader_data = match get_device_chain_info(&*p_create_info, VK_LOADER_DATA_CALLBACK) {
         Some(mut p) => p.as_mut().u.pfnSetDeviceLoaderData.unwrap(),
-        None => return VkResult(VK_ERROR_INITIALIZATION_FAILED),
+        None => return VK_ERROR_INITIALIZATION_FAILED,
     };
 
     // Create the device.
     let res = instance_dispatch.CreateDevice(physical_device, p_create_info, p_allocator, p_device);
-    if res != VkResult(VK_SUCCESS) {
+    if res < 0 {
         return res;
     }
 
@@ -164,7 +162,7 @@ pub(crate) unsafe extern "system" fn layer_vkCreateDevice(
     );
     DEVICE_STATE.insert(device.key(), device_state);
     //eprintln!("[planitia-layer] vkCreateDevice {:?}", device);
-    VkResult(VK_SUCCESS)
+    res
 }
 
 #[unsafe(no_mangle)]
@@ -174,6 +172,6 @@ pub(crate) unsafe extern "system" fn layer_vkDestroyDevice(
 ) {
     if let Some((_, device_state)) = DEVICE_STATE.remove(&device.key()) {
         //eprintln!("[planitia-layer] vkDestroyDevice {:?}", device);
-        (device_state.fp_v1_0().destroy_device)(device, p_allocator);
+        device_state.DestroyDevice(device, p_allocator);
     }
 }

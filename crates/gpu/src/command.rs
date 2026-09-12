@@ -9,7 +9,6 @@ use arrayvec::ArrayVec;
 use ash::prelude::VkResult;
 use ash::vk::{DeviceAddress, Handle};
 use bitflags::bitflags;
-use gpu::vkcheck;
 use gpu_types::{
     ClearColorValue, Data, ImageAspect, ImageDataLayout, ImageSubresourceLayers, ImageUsage, Offset3D, Rect3D, Size3D,
 };
@@ -479,7 +478,7 @@ fn sync(waits: &[SyncWait], signals: &[SyncSignal]) {
     };
     unsafe {
         //trace!("GPU: QueueSubmit (synchronization)");
-        vkcheck!(device.fns.QueueSubmit(submission_state.queue, 1, &submit_info, VkFence::null()));
+        vkcall!(device.fns.QueueSubmit(submission_state.queue, 1, &submit_info, VkFence::null()));
     }
 }
 
@@ -557,7 +556,7 @@ pub fn submit(mut cmd: CommandBuffer) {
         // SAFETY: apart from Vulkan handles being valid, Vulkan specifies that access to the
         //         queue object should be externally synchronized, which is realized here by the
         //         lock on submission_state.
-        vkcheck!(device.fns.QueueSubmit(submission_state.queue, 1, &submit_info, VkFence::null()));
+        vkcall!(device.fns.QueueSubmit(submission_state.queue, 1, &submit_info, VkFence::null()));
         submission_state.active_submissions.push_back(ActiveSubmission { frame_index: frame_index_submitted });
     };
     cmd.submitted = true;

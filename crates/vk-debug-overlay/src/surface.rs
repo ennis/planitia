@@ -26,7 +26,7 @@ pub unsafe extern "system" fn layer_vkCreateWin32SurfaceKHR(
     let hwnd = HWND((*p_create_info).hwnd as *mut c_void);
     let surface_info = SurfaceInfo { hwnd };
 
-    let result = (dispatch.khr_win32_surface.CreateWin32SurfaceKHR)(instance, p_create_info, p_allocator, p_surface);
+    let result = (dispatch.CreateWin32SurfaceKHR)(instance, p_create_info, p_allocator, p_surface);
     if result == VK_SUCCESS {
         eprintln!("Registering HWND({}) for VkSurfaceKHR({:?})", hwnd.0 as usize, *p_surface);
         SURFACES.insert(*p_surface, surface_info);
