@@ -354,7 +354,7 @@ impl<'a> RenderEncoder<'a> {
         unsafe {
             let device = Device::instance();
             self.parent.set_push_data(self.parent.cmdbuf, root_params.into());
-            device.ext.mesh_shader.CmdDrawMeshTasksEXT(self.parent.cmdbuf, group_count_x, group_count_y, group_count_z);
+            device.fns.CmdDrawMeshTasksEXT(self.parent.cmdbuf, group_count_x, group_count_y, group_count_z);
         }
     }
 

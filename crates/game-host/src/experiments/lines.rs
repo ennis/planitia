@@ -1,5 +1,5 @@
 use crate::{SceneInfo, SceneInfoUniforms};
-use gamelib::{static_assets, tweak};
+use gamelib::static_assets;
 use gpu::PrimitiveTopology::TriangleStrip;
 use gpu::{BufferCreateInfo, DrawIndirectCommand, MemoryLocation, Ptr};
 
@@ -68,11 +68,7 @@ pub fn draw_lines<'a>(
     }
 
     encoder.bind_graphics_pipeline(&pipeline);
-    encoder.set_depth_bias(Some(gpu::DepthBias {
-        constant_factor: tweak!(line_depth_bias_constant: f32 = 1.0),
-        slope_factor: tweak!(line_depth_bias_slope: f32 = 1.0),
-        clamp: 0.0,
-    }));
+    encoder.set_depth_bias(Some(gpu::DepthBias { constant_factor: 1.0, slope_factor: 1.0, clamp: 0.0 }));
     encoder.draw_indirect(
         TriangleStrip,
         None,

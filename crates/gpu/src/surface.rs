@@ -8,13 +8,6 @@ mod platform {
     use vulkan::*;
 
     pub fn create_vulkan_surface(handle: RawWindowHandle) -> VkSurfaceKHR {
-        static KHR_WIN32_SURFACE: LazyLock<khr_win32_surface::InstanceDispatch> = LazyLock::new(|| unsafe {
-            khr_win32_surface::InstanceDispatch::load_with(|name| {
-                let instance = Instance::get().instance;
-                get_vulkan_entry().GetInstanceProcAddr(instance, name.as_ptr())
-            })
-        });
-
         let win32_handle = match handle {
             RawWindowHandle::Win32(h) => h,
             _ => panic!("incompatible window handle"),
@@ -26,8 +19,8 @@ mod platform {
             ..
         };
         unsafe {
-            let vk_instance = Instance::get().instance;
-            vkcall!(KHR_WIN32_SURFACE.CreateWin32SurfaceKHR(vk_instance, &create_info, ptr::null(), @out let surface));
+            let instance = Instance::get();
+            vkcall!(instance.fns.CreateWin32SurfaceKHR(instance.instance, &create_info, ptr::null(), @out let surface));
             surface
         }
     }

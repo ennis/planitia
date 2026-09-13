@@ -8,7 +8,6 @@ use log::info;
 use std::ptr;
 use std::time::Duration;
 use vulkan::*;
-use vulkan_headers::vulkan::vulkan::VkResourceDescriptorInfoEXT;
 
 #[derive(Debug)]
 pub struct SwapchainImage {
@@ -78,7 +77,7 @@ impl Device {
             vkcall!(self.fns.CreateSemaphore(self.vkd, &create_info, ptr::null(), @out let ready));
             ready
         };
-        vkcall!(self.ext.swapchain.AcquireNextImageKHR(self.vkd, swap_chain.handle, timeout.as_nanos() as u64, ready, VkFence::null(), @out let index));
+        vkcall!(self.fns.AcquireNextImageKHR(self.vkd, swap_chain.handle, timeout.as_nanos() as u64, ready, VkFence::null(), @out let index));
 
         // wait (GPU side) for the image to be ready
         crate::wait(ready, 0);
@@ -119,8 +118,8 @@ impl Device {
     pub unsafe fn resize_swapchain(&self, swapchain: &mut SwapChain, width: u32, height: u32) {
         let instance = crate::Instance::get();
         let phy = self.thread_safe.physical_device;
-        vkcall!(instance.khr_surface.GetPhysicalDeviceSurfaceCapabilitiesKHR(phy, swapchain.surface, @out let capabilities));
-        vkarraycall!(instance.khr_surface.GetPhysicalDeviceSurfacePresentModesKHR(phy, swapchain.surface, @count let count, @out let present_modes));
+        vkcall!(instance.fns.GetPhysicalDeviceSurfaceCapabilitiesKHR(phy, swapchain.surface, @out let capabilities));
+        vkarraycall!(instance.fns.GetPhysicalDeviceSurfacePresentModesKHR(phy, swapchain.surface, @count let count, @out let present_modes));
         let present_mode = get_preferred_present_mode(&present_modes);
         let image_extent = get_preferred_swap_extent((width, height), &capabilities);
         let image_count =
@@ -152,11 +151,11 @@ impl Device {
             oldSwapchain: swapchain.handle,
             ..
         };
-        vkcall!(self.ext.swapchain.CreateSwapchainKHR(self.vkd, &create_info, ptr::null(), @out let new_handle));
+        vkcall!(self.fns.CreateSwapchainKHR(self.vkd, &create_info, ptr::null(), @out let new_handle));
         // destroy the old swapchain if it exists
         if swapchain.handle != VkSwapchainKHR::null() {
             // FIXME the images may be in use, we should wait for the device to be idle
-            self.ext.swapchain.DestroySwapchainKHR(self.vkd, swapchain.handle, ptr::null());
+            self.fns.DestroySwapchainKHR(self.vkd, swapchain.handle, ptr::null());
         }
         swapchain.handle = new_handle;
         swapchain.width = width;
@@ -167,7 +166,7 @@ impl Device {
         }
         swapchain.images = Vec::with_capacity(image_count as usize);
 
-        vkarraycall!(self.ext.swapchain.GetSwapchainImagesKHR(self.vkd, swapchain.handle, @count let count, @out let images));
+        vkarraycall!(self.fns.GetSwapchainImagesKHR(self.vkd, swapchain.handle, @count let count, @out let images));
         for image in images {
             let render_finished = self.get_or_create_semaphore();
             swapchain.images.push(SwapchainImage {

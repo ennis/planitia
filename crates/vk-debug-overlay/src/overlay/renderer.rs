@@ -2,7 +2,6 @@ use crate::helper::{include_bytes_as_u32, Buffer, Descriptor, GraphicsPipelineHe
 use crate::overlay::gui::with_imgui_context;
 use crate::{Device, DeviceHelper, FRAMES_IN_FLIGHT, Pipeline};
 use parking_lot::Mutex;
-use std::cell::RefCell;
 use std::{array, ptr};
 use vulkan::*;
 

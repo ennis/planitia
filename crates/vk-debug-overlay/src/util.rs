@@ -1,10 +1,11 @@
 use std::env;
 use vulkan::*;
+use vulkan::vk_util::VkTaggedStructure;
 
 /// Returns a matching structure in a pNext chain.
-pub unsafe fn find_next<N>(prev: &impl TaggedStructure) -> Option<*const N>
+pub unsafe fn find_next<N>(prev: &impl VkTaggedStructure) -> Option<*const N>
 where
-    N: TaggedStructure,
+    N: VkTaggedStructure,
 {
     let base_in_struct = prev as *const _ as *const VkBaseInStructure;
     let mut p_next = (*base_in_struct).pNext;

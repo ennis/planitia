@@ -2,8 +2,8 @@
 use crate::dispatch::DeviceDispatch;
 use std::ffi::{CStr, c_void};
 use std::ops::Deref;
+use std::ptr;
 use std::ptr::NonNull;
-use std::{mem, ptr};
 use vulkan::*;
 
 // Implementation detail of shader_module
@@ -20,7 +20,10 @@ macro_rules! include_bytes_as_u32 {
             const B: &[u8] = &AlignedAs { bytes: *include_bytes!($path) }.bytes;
             // SAFETY: B is statically borrowed, 4-aligned, and the length is within
             // the static slice (truncated to a multiple of four).
-            unsafe { core::slice::from_raw_parts(B.as_ptr() as *const u32, B.len() / size_of::<u32>()) }
+            #[allow(unused_unsafe)]
+            unsafe {
+                core::slice::from_raw_parts(B.as_ptr() as *const u32, B.len() / size_of::<u32>())
+            }
         }
     };
 }
@@ -76,6 +79,7 @@ pub trait HasPrivateData: VulkanHandle + Copy {
 pub struct DeviceHelper {
     pub dispatch: DeviceDispatch,
     pub mem_props: VkPhysicalDeviceMemoryProperties,
+    pub descriptor_heap_properties: VkPhysicalDeviceDescriptorHeapPropertiesEXT,
     pub command_pool: VkCommandPool,
     pub queue: VkQueue,
     pub private_data_slot: VkPrivateDataSlot,
@@ -93,6 +97,7 @@ impl DeviceHelper {
     pub unsafe fn new(
         dispatch: DeviceDispatch,
         mem_props: VkPhysicalDeviceMemoryProperties,
+        descriptor_heap_properties: VkPhysicalDeviceDescriptorHeapPropertiesEXT,
         queue_family_index: u32,
     ) -> DeviceHelper {
         let device = dispatch.device;
@@ -105,7 +110,25 @@ impl DeviceHelper {
         vkcallnc!(dispatch.GetDeviceQueue(device, queue_family_index, 0, @out let queue));
         dispatch.set_device_loader_data(queue);
         vkcall!(dispatch.CreatePrivateDataSlot(device, &VkPrivateDataSlotCreateInfo { .. }, ptr::null(), @out let private_data_slot));
-        DeviceHelper { dispatch, mem_props, command_pool, queue, private_data_slot }
+        DeviceHelper { dispatch, mem_props, descriptor_heap_properties, command_pool, queue, private_data_slot }
+    }
+
+    pub fn descriptor_blob_size(&self, ty: VkDescriptorType) -> usize {
+        match ty {
+            VK_DESCRIPTOR_TYPE_SAMPLER => self.descriptor_heap_properties.samplerDescriptorSize as usize,
+            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER
+            | VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE
+            | VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
+            | VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER
+            | VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER => self.descriptor_heap_properties.imageDescriptorSize as usize,
+            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
+            | VK_DESCRIPTOR_TYPE_STORAGE_BUFFER
+            | VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC
+            | VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC => {
+                self.descriptor_heap_properties.bufferDescriptorSize as usize
+            }
+            _ => panic!("unsupported descriptor type: {}", ty),
+        }
     }
 
     pub unsafe fn set_private_data<H: HasPrivateData>(&self, handle: H, data: H::PrivateData) -> *mut H::PrivateData {

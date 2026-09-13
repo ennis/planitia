@@ -344,7 +344,7 @@ pub(crate) fn compile_slang_module<'a>(
         // infer push constants size and workgroup size from entry points
         let mut push_constants_size = 0;
         let mut workgroup_size = [1u32; 3];
-        let mut stage_flags = VkShaderStageFlags::default();
+        //let mut stage_flags = VkShaderStageFlags::default();
         //let mut all_params = vec![];
 
         // Collect parameter reflection information:
@@ -354,7 +354,7 @@ pub(crate) fn compile_slang_module<'a>(
             let ep = &entry_points[*stage];
             push_constants_size = push_constants_size.max(ep.push_constants_size);
             workgroup_size = ep.workgroup_size;
-            stage_flags |= ep.stage;
+            //stage_flags |= ep.stage;
         }
 
         pipelines.push(Pipeline {

@@ -16,8 +16,7 @@ static INSTANCE_EXTENSIONS: [&CStr; 4] =
 
 pub struct Instance {
     pub instance: VkInstance,
-    pub fns: Vulkan_1_3_InstanceDispatch,
-    pub khr_surface: khr_surface::InstanceDispatch,
+    pub fns: InstanceDispatchCombined,
 }
 
 impl Instance {
@@ -28,9 +27,8 @@ impl Instance {
     }
 }
 
-pub fn get_vulkan_entry() -> &'static Vulkan_1_1_EntryDispatch {
-    static VULKAN_ENTRY: LazyLock<Vulkan_1_1_EntryDispatch> =
-        LazyLock::new(|| Vulkan_1_1_EntryDispatch::load().unwrap());
+pub fn get_vulkan_entry() -> &'static EntryDispatchCombined {
+    static VULKAN_ENTRY: LazyLock<EntryDispatchCombined> = LazyLock::new(|| EntryDispatchCombined::load().unwrap());
     &VULKAN_ENTRY
 }
 
@@ -57,9 +55,7 @@ fn create_vulkan_instance() -> Instance {
             ..
         };
         vkcall!(entry.CreateInstance(&instance_create_info, ptr::null(), @out let instance));
-        let fns = Vulkan_1_3_InstanceDispatch::load_with(|name| entry.GetInstanceProcAddr(instance, name.as_ptr()));
-        let khr_surface =
-            khr_surface::InstanceDispatch::load_with(|name| entry.GetInstanceProcAddr(instance, name.as_ptr()));
-        Instance { instance, fns, khr_surface }
+        let fns = InstanceDispatchCombined::load_with(|name| entry.GetInstanceProcAddr(instance, name.as_ptr()));
+        Instance { instance, fns }
     }
 }

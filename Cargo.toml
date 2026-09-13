@@ -20,7 +20,8 @@ members = [
     "crates/vk-debug-overlay",
     "planitia-workspace-hack",
     "crates/sgpu",
-    "crates/vulkan-generator", "crates/vulkan"]
+    "crates/vulkan-generator",
+    "crates/vulkan"]
 resolver = "1"
 
 [workspace.dependencies]
@@ -39,6 +40,8 @@ terrain-file = { path = "crates/terrain-file" }
 geom = { path = "crates/geom" }
 hgeo = { path = "crates/hgeo" }
 vulkan = { path = "crates/vulkan" }
+experiment = { path = "crates/experiment" }
+image = { version = "0.25.9", features = ["png"], default-features = false }
 
 [profile.release]
 debug = true

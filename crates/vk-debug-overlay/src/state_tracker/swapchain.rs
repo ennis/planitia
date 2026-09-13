@@ -1,6 +1,5 @@
 //! Swapchain interception
 use crate::overlay::renderer::render_overlay;
-use crate::surface::get_hwnd_for_surface;
 use crate::{Device, SwapchainInfo};
 use std::{ptr, slice};
 use vulkan::*;

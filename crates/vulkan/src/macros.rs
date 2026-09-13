@@ -53,30 +53,22 @@ pub(crate) use non_dispatchable_handle;
 
 
 macro_rules! dispatch_table {
-    ($name:ident; $([$inherits_m:ident:$inherits_ty:ty])? $($cmd:ident ($($argname:ident: $args:ty),*) -> $rty:ty,$pfn:ty,$procname:literal;)*) => {
+    ($name:ident; $($cmd:ident ($($argname:ident: $args:ty),*) -> $rty:ty,$pfn:ty,$procname:literal;)*) => {
         #[derive(Copy, Clone)]
         #[repr(C)]
         pub struct $name {
-            $(pub $inherits_m : $inherits_ty,)?
             $(pub $cmd: $pfn,)*
         }
         impl $name {
             pub unsafe fn load_with(mut load_fn: impl FnMut(&CStr) -> PFN_vkVoidFunction) -> Self {
                 $(unsafe extern "system" fn $cmd($(_ : $args),*) -> $rty {
-                    $crate::proc_not_found($procname);
+                    $crate::vk_util::proc_not_found($procname);
                 })*
                 Self {
-                    $($inherits_m: unsafe { <$inherits_ty>::load_with(&mut load_fn) },)?
                     $($cmd: unsafe { if let Some(f) = load_fn($procname) { ::core::mem::transmute(f) } else { $cmd } },)*
                 }
             }
         }
-        $(impl ::core::ops::Deref for $name {
-            type Target = $inherits_ty;
-            fn deref(&self) -> &Self::Target {
-                &self.$inherits_m
-            }
-        })?
     };
 }
 pub(crate) use dispatch_table;
@@ -93,12 +85,12 @@ macro_rules! vkarraycall {
         let mut $array = vec![];
         let __result = $p$(.$ps)*($($args,)* &mut $count, ::core::ptr::null_mut());
         if __result < 0 {
-            $crate::panic_vulkan_api_call_failed(__result);
+            $crate::vk_util::panic_vulkan_api_call_failed(__result);
         }
         $array.reserve($count as usize);
         let __result = $p$(.$ps)*($($args,)* &mut $count, $array.as_mut_ptr());
         if __result < 0 {
-            $crate::panic_vulkan_api_call_failed(__result);
+            $crate::vk_util::panic_vulkan_api_call_failed(__result);
         }
         let $result = __result;
         unsafe { $array.set_len($count as usize); }
@@ -134,14 +126,14 @@ macro_rules! vkcall {
      ($p:ident$(.$ps:ident)* ($($args:expr),*)) => {
         let __result = $p$(.$ps)*($($args),*);
         if __result < 0 {
-            $crate::panic_vulkan_api_call_failed(__result);
+            $crate::vk_util::panic_vulkan_api_call_failed(__result);
         }
     };
     ($p:ident$(.$ps:ident)* ($($args:expr,)* $(@out let $out:ident),*)) => {
         $(let mut $out = ::core::mem::MaybeUninit::uninit();)*
         let __result = $p$(.$ps)*($($args,)* $($out.as_mut_ptr()),*);
         if __result < 0 {
-            $crate::panic_vulkan_api_call_failed(__result);
+            $crate::vk_util::panic_vulkan_api_call_failed(__result);
         }
         $(let $out = unsafe { $out.assume_init() };)*
     };
@@ -149,7 +141,7 @@ macro_rules! vkcall {
         $(let mut $out = ::core::mem::MaybeUninit::uninit();)*
         let __result = $p$(.$ps)*($($args,)* $($out.as_mut_ptr()),*);
         if __result < 0 {
-            $crate::panic_vulkan_api_call_failed(__result);
+            $crate::vk_util::panic_vulkan_api_call_failed(__result);
         }
         let $result = __result;
         $(let $out = unsafe { $out.assume_init() };)*

@@ -1,7 +1,6 @@
 use crate::error::{ExcResult, OptionExt, ResultExt};
 use crate::platform::RenderTargetImage;
 use crate::{AppHandler, InputEvent, UserEvent, WindowHandle, watch_file};
-use egui::Context;
 use libloading::Library;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -299,8 +298,6 @@ pub enum PluginEvent<'a> {
     CloseRequested(WindowHandle),
     /// `AppHandler::exiting`
     Exiting,
-    /// `AppHandler::imgui`
-    Imgui(&'a egui::Context),
 }
 
 impl AppHandler for PluginHost {
@@ -342,10 +339,6 @@ impl AppHandler for PluginHost {
 
     fn close_requested(&mut self, window: WindowHandle) {
         self.send_event(PluginEvent::CloseRequested(window));
-    }
-
-    fn imgui(&mut self, ctx: &egui::Context) {
-        self.send_event(PluginEvent::Imgui(ctx));
     }
 
     fn exiting(&mut self) {
@@ -392,10 +385,6 @@ pub fn dispatch_plugin_event<T: AppHandler + Serialize + DeserializeOwned>(
         }
         PluginEvent::CloseRequested(window) => {
             handler.close_requested(window);
-            PluginResult::WaitVSync
-        }
-        PluginEvent::Imgui(ctx) => {
-            handler.imgui(ctx);
             PluginResult::WaitVSync
         }
         PluginEvent::Exiting => {

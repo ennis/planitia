@@ -7,7 +7,6 @@ mod bump;
 mod debugger;
 mod dispatch;
 mod event;
-mod format;
 mod helper;
 mod init;
 mod overlay;
@@ -26,7 +25,6 @@ use crate::overlay::gui::GuiState;
 use crate::overlay::input::InputState;
 use crate::overlay::renderer::OverlayResources;
 use crate::spirv::Module;
-use crate::state_tracker::command::Command;
 use crate::state_tracker::memory::AddressMap;
 use crate::surface::layer_vkCreateWin32SurfaceKHR;
 use bumpalo::Bump;
@@ -35,6 +33,7 @@ use core::mem;
 use dashmap::DashMap;
 use parking_lot::Mutex;
 use slotmap::{SlotMap, new_key_type};
+use std::ffi::c_void;
 use std::ops::Deref;
 use std::slice;
 use std::sync::LazyLock;
@@ -54,7 +53,6 @@ pub struct Device {
     pub helper: DeviceHelper,                   // device dispatch tables + vulkan helpers
     pub tracked_objects: Mutex<TrackedObjects>, // various tracked objects
     pub addrmap: Mutex<AddressMap>,             // Map from device addresses to buffers
-    pub submissions: Mutex<SubmissionState>,
     pub event_timeline: Mutex<EventTimeline>, // Used to generate event IDs (EIDs) that are coherent between frames.
     pub gui: Mutex<GuiState>,                 // GUI state
     pub overlay: OverlayResources,            // Overlay-related state and resources
@@ -81,15 +79,21 @@ impl Device {
         create_info: &VkDeviceCreateInfo,
         physical_device: VkPhysicalDevice,
         next_get_device_proc_addr: PFN_vkGetDeviceProcAddr,
-        set_device_loader_data: layer::PFN_vkSetDeviceLoaderData,
+        set_device_loader_data: vk_layer::PFN_vkSetDeviceLoaderData,
     ) -> Device {
         let dispatch = DeviceDispatch::new(device, next_get_device_proc_addr, set_device_loader_data).unwrap();
         let first_queue_family = {
             let qcis = slice::from_raw_parts(create_info.pQueueCreateInfos, create_info.queueCreateInfoCount as usize);
             qcis.first().map_or(0, |q| q.queueFamilyIndex)
         };
-        vkcallnc!(instance_dispatch.d.GetPhysicalDeviceMemoryProperties(physical_device, @out let mem_props));
-        let helper = DeviceHelper::new(dispatch, mem_props, first_queue_family);
+        vkcallnc!(instance_dispatch.fns.GetPhysicalDeviceMemoryProperties(physical_device, @out let mem_props));
+        let mut descriptor_heap_properties: VkPhysicalDeviceDescriptorHeapPropertiesEXT = unsafe { mem::zeroed() };
+        descriptor_heap_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_HEAP_PROPERTIES_EXT;
+        let mut physical_device_properties: VkPhysicalDeviceProperties2 = unsafe { mem::zeroed() };
+        physical_device_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        physical_device_properties.pNext = &mut descriptor_heap_properties as *mut _ as *mut c_void;
+        instance_dispatch.fns.GetPhysicalDeviceProperties2(physical_device, &mut physical_device_properties);
+        let helper = DeviceHelper::new(dispatch, mem_props, descriptor_heap_properties, first_queue_family);
         let tracked_resources = TrackedObjects { pipelines: Vec::new(), swapchains: Vec::new() };
         let overlay_resources = OverlayResources::new(&helper);
         let debugger_resources = DebuggerResources::new(&helper);
@@ -99,7 +103,7 @@ impl Device {
             helper,
             tracked_objects: Mutex::new(tracked_resources),
             addrmap: Mutex::new(AddressMap::new()),
-            submissions: Mutex::new(SubmissionState::new()),
+            //submissions: Mutex::new(SubmissionState::new()),
             debugger_resources,
             debugger: Mutex::new(debugger),
             modules: Mutex::new(SlotMap::with_key()),
@@ -113,9 +117,9 @@ impl Device {
     }
 
     unsafe fn end_frame(&self) {
-        let mut sbs = self.submissions.lock();
-        sbs.subs.clear();
-        sbs.submission_count = 0;
+        //let mut sbs = self.submissions.lock();
+        //sbs.subs.clear();
+        //sbs.submission_count = 0;
         let mut bump = self.bump.lock();
         bump.reset();
         let mut dbg = self.debugger.lock();
@@ -144,26 +148,6 @@ struct SwapchainInfo {
     images: Vec<VkImage>,
     image_views: Vec<VkImageView>,
     render_to_present: Vec<VkSemaphore>,
-}
-
-/// Represents a submitted command buffer.
-///
-/// There's one per VkCommandBuffer, not vkQueueSubmit.
-pub struct Submission {
-    cmd_buf: VkCommandBuffer,
-    commands: Vec<Command>,
-}
-
-pub struct SubmissionState {
-    // Submitted command buffers, in order of submission
-    subs: Vec<Submission>,
-    submission_count: usize,
-}
-
-impl SubmissionState {
-    fn new() -> SubmissionState {
-        SubmissionState { subs: vec![], submission_count: 0 }
-    }
 }
 
 pub struct TrackedObjects {
@@ -260,11 +244,11 @@ pub(crate) unsafe extern "system" fn layer_vk_layerGetPhysicalDeviceProcAddr(
     };
     mem::transmute(pfn)
 }
-const _: layer::PFN_GetPhysicalDeviceProcAddr = layer_vk_layerGetPhysicalDeviceProcAddr;
+const _: vk_layer::PFN_GetPhysicalDeviceProcAddr = layer_vk_layerGetPhysicalDeviceProcAddr;
 
 #[unsafe(no_mangle)]
 unsafe extern "system" fn vkNegotiateLoaderLayerInterfaceVersion(
-    p_version_struct: *mut layer::VkNegotiateLayerInterface,
+    p_version_struct: *mut vk_layer::VkNegotiateLayerInterface,
 ) -> VkResult {
     (*p_version_struct).loaderLayerInterfaceVersion = 2;
     (*p_version_struct).pfnGetInstanceProcAddr = layer_vkGetInstanceProcAddr;
@@ -272,7 +256,7 @@ unsafe extern "system" fn vkNegotiateLoaderLayerInterfaceVersion(
     (*p_version_struct).pfnGetPhysicalDeviceProcAddr = layer_vk_layerGetPhysicalDeviceProcAddr;
     VK_SUCCESS
 }
-const _: layer::PFN_vkNegotiateLoaderLayerInterfaceVersion = vkNegotiateLoaderLayerInterfaceVersion;
+const _: vk_layer::PFN_vkNegotiateLoaderLayerInterfaceVersion = vkNegotiateLoaderLayerInterfaceVersion;
 
 // ---------------------------------------------------------------------------
 // Device hook table
@@ -366,16 +350,3 @@ device_hooks! {
     [b"vkBindImageMemory"; PFN_vkBindImageMemory] fn layer_vkBindImageMemory(device: VkDevice, image: VkImage, memory: VkDeviceMemory, memoryOffset: VkDeviceSize) -> VkResult = hook_bind_image_memory;
     [b"vkBindImageMemory2"; PFN_vkBindImageMemory2] fn layer_vkBindImageMemory2(device: VkDevice, bind_info_count: u32, p_bind_infos: *const VkBindImageMemoryInfo) -> VkResult = hook_bind_image_memory_2;
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-macro_rules! vkcheck {
-    ($command:expr) => {{
-        let result = $command;
-        if result.0 >= 0 { result } else { $crate::panic_vulkan_api_call_failed(result) }
-    }};
-}
-pub(crate) use vkcheck;
-

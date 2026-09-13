@@ -44,6 +44,7 @@ impl fmt::Debug for CmdIdx {
     }
 }
 
+/// Information about a command recorded in a command buffer (vkCmdSomething).
 pub struct Command {
     // Event ID (should be relatively stable across frames).
     pub eid: EId,
@@ -52,6 +53,11 @@ pub struct Command {
     pub cmd_buf: VkCommandBuffer,
     pub key: CmdKey,
     pub push: Vec<u8>,
+    // Current descriptor heap ranges
+    // NOTE: we don't care about the contents of the range, as they are driver-specific and not
+    //       interpretable by tools. We use those ranges as keys
+    pub resource_heap: VkDeviceAddressRangeEXT,
+    pub sampler_heap: VkDeviceAddressRangeEXT,
 }
 
 pub struct CommandBufferData {
@@ -68,6 +74,8 @@ pub struct CommandBufferData {
     pub depth_format: VkFormat,
     // Debug region markers
     pub regions: Vec<CString>,
+    pub resource_heap: VkDeviceAddressRangeEXT,
+    pub sampler_heap: VkDeviceAddressRangeEXT,
 }
 
 impl CommandBufferData {
@@ -82,6 +90,8 @@ impl CommandBufferData {
             color_formats: vec![],
             depth_format: Default::default(),
             regions: vec![],
+            resource_heap: VkDeviceAddressRangeKHR {..},
+            sampler_heap: VkDeviceAddressRangeKHR {..},
         }
     }
 
@@ -198,6 +208,8 @@ impl Device {
         commandBuffer: VkCommandBuffer,
         pBindInfo: *const VkBindHeapInfoEXT,
     ) {
+        let d = self.get_private_data_mut(commandBuffer).unwrap();
+        d.resource_heap = (*pBindInfo).heapRange;
         self.CmdBindResourceHeapEXT(commandBuffer, pBindInfo);
     }
 
@@ -206,6 +218,8 @@ impl Device {
         commandBuffer: VkCommandBuffer,
         pBindInfo: *const VkBindHeapInfoEXT,
     ) {
+        let d = self.get_private_data_mut(commandBuffer).unwrap();
+        d.sampler_heap = (*pBindInfo).heapRange;
         self.CmdBindSamplerHeapEXT(commandBuffer, pBindInfo);
     }
 
@@ -216,7 +230,11 @@ impl Device {
         pResources: *const VkResourceDescriptorInfoEXT,
         pDescriptors: *const VkHostAddressRangeEXT,
     ) -> VkResult {
-        self.WriteResourceDescriptorsEXT(device, resourceCount, pResources, pDescriptors)
+        let result = self.WriteResourceDescriptorsEXT(device, resourceCount, pResources, pDescriptors);
+        if result >= 0 {
+            self.debugger.lock().write_resource_descriptors(self, resourceCount, pResources, pDescriptors);
+        }
+        result
     }
 
     pub unsafe fn hook_write_sampler_descriptors_ext(
@@ -226,7 +244,11 @@ impl Device {
         pSamplers: *const VkSamplerCreateInfo,
         pDescriptors: *const VkHostAddressRangeEXT,
     ) -> VkResult {
-        self.WriteSamplerDescriptorsEXT(device, samplerCount, pSamplers, pDescriptors)
+        let result = self.WriteSamplerDescriptorsEXT(device, samplerCount, pSamplers, pDescriptors);
+        if result >= 0 {
+            self.debugger.lock().write_sampler_descriptors(self, samplerCount, pSamplers, pDescriptors);
+        }
+        result
     }
 
     unsafe fn wrap_command<R>(&self, cmd_buf: VkCommandBuffer, kind: CmdKind, f: impl FnOnce(&Self) -> R) -> R {
@@ -243,7 +265,8 @@ impl Device {
             cmd_buf,
             key: cmd_key,
             push: d.push.clone(),
-            //readback: None,
+            resource_heap: d.resource_heap,
+            sampler_heap: d.sampler_heap,
         });
         r
     }

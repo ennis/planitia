@@ -36,7 +36,7 @@ unsafe fn import_external_memory(
 ) -> VkDeviceMemory {
     // TODO proper error handling
     let mut win32_handle_properties = VkMemoryWin32HandlePropertiesKHR { .. };
-    vkcall!(device.platform_extensions.khr_external_memory_win32.GetMemoryWin32HandlePropertiesKHR(
+    vkcall!(device.fns.GetMemoryWin32HandlePropertiesKHR(
         device.vkd,
         handle_type,
         handle,
@@ -244,7 +244,7 @@ impl Device {
         let get_win32_handle_info =
             VkMemoryGetWin32HandleInfoKHR { memory: device_memory, handleType: handle_type, .. };
         // TODO proper error handling
-        vkcall!(self.platform_extensions.khr_external_memory_win32.GetMemoryWin32HandleKHR(self.vkd, &get_win32_handle_info, @out let win32_handle));
+        vkcall!(self.fns.GetMemoryWin32HandleKHR(self.vkd, &get_win32_handle_info, @out let win32_handle));
         //let win32_handle = self
         //    .platform_extensions
         //    .khr_external_memory_win32
@@ -294,7 +294,7 @@ impl Device {
             VkSemaphoreCreateInfo { pNext: &export_semaphore_create_info as *const _ as *const c_void, .. };
         vkcall!(self.fns.CreateSemaphore(self.vkd, &semaphore_create_info, ptr::null(), @out let semaphore));
         let get_win32_handle_info = VkSemaphoreGetWin32HandleInfoKHR { semaphore, handleType: handle_type, .. };
-        vkcall!(self.platform_extensions.khr_external_semaphore_win32.GetSemaphoreWin32HandleKHR(self.vkd, &get_win32_handle_info, @out let handle));
+        vkcall!(self.fns.GetSemaphoreWin32HandleKHR(self.vkd, &get_win32_handle_info, @out let handle));
         (semaphore, handle)
     }
 
@@ -326,30 +326,9 @@ impl Device {
             ..
         };
         vkcall!(
-            self.platform_extensions
-                .khr_external_semaphore_win32
-                .ImportSemaphoreWin32HandleKHR(self.vkd, &import_semaphore_win32_handle_info)
+            self.fns.ImportSemaphoreWin32HandleKHR(self.vkd, &import_semaphore_win32_handle_info)
         );
         semaphore
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/// Windows-specific vulkan extensions
-pub struct PlatformExtensions {
-    pub khr_external_memory_win32: khr_external_memory_win32::DeviceDispatch,
-    pub khr_external_semaphore_win32: khr_external_semaphore_win32::DeviceDispatch,
-}
-
-impl PlatformExtensions {
-    pub(crate) unsafe fn load(instance_fns: &Vulkan_1_3_InstanceDispatch, device: VkDevice) -> PlatformExtensions {
-        let khr_external_memory_win32 = khr_external_memory_win32::DeviceDispatch::load_with(|proc| unsafe {
-            instance_fns.GetDeviceProcAddr(device, proc.as_ptr())
-        });
-        let khr_external_semaphore_win32 = khr_external_semaphore_win32::DeviceDispatch::load_with(|proc| unsafe {
-            instance_fns.GetDeviceProcAddr(device, proc.as_ptr())
-        });
-        PlatformExtensions { khr_external_memory_win32, khr_external_semaphore_win32 }
-    }
-}

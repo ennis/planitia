@@ -28,22 +28,13 @@
 // IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{PFN_vkVoidFunction, Vulkan_1_0_EntryDispatch, Vulkan_1_1_EntryDispatch};
+use crate::{EntryDispatchCombined, PFN_vkVoidFunction};
 use libloading::Library;
 use std::error::Error;
 use std::{fmt, mem};
 
-impl Vulkan_1_0_EntryDispatch {
-    pub fn load() -> Result<Vulkan_1_0_EntryDispatch, LoadError> {
-        let lib = load_vulkan_lib()?;
-        let dispatch = unsafe { Self::load_with(|proc| get_proc_addr(&lib, proc)) };
-        mem::forget(lib);
-        Ok(dispatch)
-    }
-}
-
-impl Vulkan_1_1_EntryDispatch {
-    pub fn load() -> Result<Vulkan_1_1_EntryDispatch, LoadError> {
+impl EntryDispatchCombined {
+    pub fn load() -> Result<EntryDispatchCombined, LoadError> {
         let lib = load_vulkan_lib()?;
         let dispatch = unsafe { Self::load_with(|proc| get_proc_addr(&lib, proc)) };
         mem::forget(lib);
@@ -55,7 +46,7 @@ unsafe fn get_proc_addr(lib: &Library, name: &std::ffi::CStr) -> PFN_vkVoidFunct
     unsafe {
         match lib.get::<PFN_vkVoidFunction>(name.to_bytes_with_nul()) {
             Ok(symbol) => *symbol,
-            Err(_) => panic!("vulkan entry point not found: {}", name.to_string_lossy()),
+            Err(_) => None,
         }
     }
 }

@@ -4,9 +4,9 @@ use std::path::Path;
 use std::range::Range;
 use image::ImageReader;
 
-mod column;
+mod stack;
 
-pub use column::{TerrSlice, downsample_columns};
+pub use stack::{TerrSlice, downsample_columns};
 
 pub const TERRAIN_FEATURE_COUNT: usize = 8;
 pub type PackedTerrVec = [u8;TERRAIN_FEATURE_COUNT];
@@ -125,7 +125,7 @@ pub struct TerrainTile {
 }
 
 
-fn write_std_terrain_column(height: u16, out: &mut Vec<TerrSlice>) -> Range<u32> {
+fn write_std_terrain_stack(height: u16, out: &mut Vec<TerrSlice>) -> Range<u32> {
     let column = &[
         TerrSlice { low: 0, high: height.saturating_sub(10), value: TerrVec { a: Vec4::new(0.5, 0.5, 0.5, 1.0), b: Vec4::ZERO }.pack() },
         TerrSlice { low: height.saturating_sub(10), high: height.saturating_sub(1), value: TerrVec { a: Vec4::new(0.3, 0.2, 0.1, 1.0), b: Vec4::ZERO }.pack() },
@@ -191,7 +191,7 @@ pub fn load_terrain_from_heightmap<P: AsRef<Path>>(heightmap_image_file: P) -> a
                         min_height = min_height.min(height_sample);
                         max_height = max_height.max(height_sample);
 
-                        let slice_range = write_std_terrain_column(height_u16, &mut slices);
+                        let slice_range = write_std_terrain_stack(height_u16, &mut slices);
                         tile.slices[(ly * T + lx) as usize] = slice_range;
                     }
                 }

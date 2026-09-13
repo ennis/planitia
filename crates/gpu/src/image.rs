@@ -1,13 +1,14 @@
 use crate::device::get_vk_sample_count;
-use crate::{aspects_for_format, upload_image_data, vkcall, BufferUntyped, ColorAttachment, CommandBuffer, DepthStencilAttachment, Device, Format, ResourceAllocation, Size3D, StorageImageHandle, TextureHandle, VulkanObject, vkcallnc};
-use ash::vk;
+use crate::{
+    BufferUntyped, ColorAttachment, CommandBuffer, DepthStencilAttachment, Device, Format, ResourceAllocation, Size3D,
+    StorageImageHandle, TextureHandle, VulkanObject, aspects_for_format, upload_image_data, vkcall, vkcallnc,
+};
 use ash::vk::Handle;
 use gpu::ImageCopyView;
 use gpu_allocator::MemoryLocation;
 use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
 use gpu_types::{ImageAspect, ImageType, ImageUsage, Offset3D};
 use slotmap::Key;
-use std::mem::MaybeUninit;
 use std::{mem, ptr};
 use vulkan::*;
 
@@ -405,7 +406,12 @@ impl Device {
                 linear: true,
                 allocation_scheme: AllocationScheme::GpuAllocatorManaged,
             });
-            vkcall!(self.fns.BindImageMemory(self.vkd, handle, VkDeviceMemory(allocation.memory().as_raw()), allocation.offset()));
+            vkcall!(self.fns.BindImageMemory(
+                self.vkd,
+                handle,
+                VkDeviceMemory(allocation.memory().as_raw()),
+                allocation.offset()
+            ));
             let descriptors = self.register_image_descriptors(handle, &create_info);
             let attachment_view = self.create_attachment_image_view(handle, image_info.format);
             self.transition_image_to_general(handle, aspects_for_format(image_info.format));

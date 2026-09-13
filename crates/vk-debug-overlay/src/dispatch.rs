@@ -5,9 +5,9 @@ use vulkan::*;
 
 pub struct InstanceDispatch {
     pub instance: VkInstance,
-    pub d: InstanceDispatchCombined,
+    pub fns: InstanceDispatchCombined,
     pub next_get_instance_proc_addr: PFN_vkGetInstanceProcAddr,
-    pub next_get_physical_device_proc_addr: layer::PFN_GetPhysicalDeviceProcAddr,
+    pub next_get_physical_device_proc_addr: vk_layer::PFN_GetPhysicalDeviceProcAddr,
     //pub ext_descriptor_heap: ext_descriptor_heap::InstanceDispatch,
     //pub khr_win32_surface: khr_win32_surface::InstanceDispatch,
 }
@@ -16,14 +16,14 @@ impl Deref for InstanceDispatch {
     type Target = InstanceDispatchCombined;
 
     fn deref(&self) -> &Self::Target {
-        &self.d
+        &self.fns
     }
 }
 
 impl InstanceDispatch {
     pub unsafe fn new(
         next_get_instance_proc_addr: PFN_vkGetInstanceProcAddr,
-        next_get_physical_device_proc_addr: layer::PFN_GetPhysicalDeviceProcAddr,
+        next_get_physical_device_proc_addr: vk_layer::PFN_GetPhysicalDeviceProcAddr,
         instance: VkInstance,
     ) -> Self {
         let load_fn = |name: &CStr| next_get_instance_proc_addr(instance, name.as_ptr());
@@ -34,7 +34,7 @@ impl InstanceDispatch {
 
         InstanceDispatch {
             instance,
-            d: instance_dispatch,
+            fns: instance_dispatch,
             next_get_instance_proc_addr,
             next_get_physical_device_proc_addr,
             //ext_descriptor_heap,
@@ -73,7 +73,7 @@ impl DeviceDispatch {
     pub unsafe fn new(
         device: VkDevice,
         next_get_device_proc_addr: PFN_vkGetDeviceProcAddr,
-        set_device_loader_data: layer::PFN_vkSetDeviceLoaderData,
+        set_device_loader_data: vk_layer::PFN_vkSetDeviceLoaderData,
     ) -> Result<DeviceDispatch, VkResult> {
         // Load device function pointers.
         let load_fn = |func: &CStr| mem::transmute(next_get_device_proc_addr(device, func.as_ptr()));

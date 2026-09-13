@@ -9,18 +9,17 @@ extern crate log;
 use color::{Srgba8, srgba8};
 use gamelib::asset::{AssetCache, Handle};
 use gamelib::camera_control::{CameraControl, CameraControlInput};
-use gamelib::egui::{Color32, Scene};
 use gamelib::input::{InputEvent, PointerButton};
 use gamelib::paint::{DrawGlyphRunOptions, PaintScene, Painter, TextFormat, TextLayout};
 use gamelib::platform::RenderTargetImage;
 use gamelib::render::pipeline_cache::get_graphics_pipeline;
-use gamelib::{App, AppHandler, PluginHost, UserEvent, WindowCreateInfo, WindowHandle, egui};
+use gamelib::{App, AppHandler, PluginHost, UserEvent, WindowCreateInfo, WindowHandle};
 use std::ops::Deref;
 use std::path::Path;
 //use egui_demo_lib::{View, WidgetGallery};
 use gpu::PrimitiveTopology::TriangleList;
-use gpu::{Image, Ptr, PushDataSource, root_params};
 use gpu::vulkan::*;
+use gpu::{Image, Ptr, PushDataSource, root_params};
 use log::debug;
 use math::{Camera, Mat4, Vec2, Vec3, rect_xywh, vec2};
 use ron::ser::PrettyConfig;
@@ -109,19 +108,19 @@ struct Game {
     width: u32,
     height: u32,
     cfg: Config,
-    color: Color32,
-    bg_top_color: Color32,
-    bg_bottom_color: Color32,
+    //color: Color32,
+    //bg_top_color: Color32,
+    //bg_bottom_color: Color32,
     camera_control: CameraControl,
     depth_stencil_buffer: gpu::Image,
     grid_shader: Handle<gpu::GraphicsPipeline>,
     background_shader: Handle<gpu::GraphicsPipeline>,
     frame_count: u32,
     start_time: std::time::Instant,
-    coat_experiment: experiments::coat::CoatExperiment,
-    outline_experiment: experiments::outlines::OutlineExperiment,
-    automaton_experiment: experiments::automaton::AutomatonExperiment,
-    svg_experiment: experiments::svg::SvgExperiment,
+    //coat_experiment: experiments::coat::CoatExperiment,
+    //outline_experiment: experiments::outlines::OutlineExperiment,
+    //automaton_experiment: experiments::automaton::AutomatonExperiment,
+    //svg_experiment: experiments::svg::SvgExperiment,
     plugin: PluginHost,
 }
 
@@ -139,9 +138,9 @@ impl Default for Game {
     fn default() -> Self {
         Self {
             //demo: WidgetGallery::default(),
-            color: Default::default(),
-            bg_top_color: Color32::from_rgb(100, 149, 238),
-            bg_bottom_color: Color32::from_rgb(25, 25, 112),
+            //color: Default::default(),
+            //bg_top_color: Color32::from_rgb(100, 149, 238),
+            //bg_bottom_color: Color32::from_rgb(25, 25, 112),
             depth_stencil_buffer: create_depth_buffer(WIDTH, HEIGHT),
             camera_control: CameraControl::default(),
             grid_shader: get_graphics_pipeline("/shaders/grid.sharc"),
@@ -150,11 +149,11 @@ impl Default for Game {
             width: WIDTH,
             height: HEIGHT,
             start_time: std::time::Instant::now(),
-            coat_experiment: experiments::coat::CoatExperiment::new(),
-            outline_experiment: experiments::outlines::OutlineExperiment::new(),
-            automaton_experiment: experiments::automaton::AutomatonExperiment::new(),
-            svg_experiment: experiments::svg::SvgExperiment::new(),
-            plugin: PluginHost::new("hot_reload_test.dll"),
+            //coat_experiment: experiments::coat::CoatExperiment::new(),
+            //outline_experiment: experiments::outlines::OutlineExperiment::new(),
+            //automaton_experiment: experiments::automaton::AutomatonExperiment::new(),
+            //svg_experiment: experiments::svg::SvgExperiment::new(),
+            plugin: PluginHost::new("experiment.dll"),
             cfg: Config::load(),
         }
     }
@@ -171,8 +170,8 @@ impl Game {
             }),
             |encoder| {
                 // Draw background
-                let bottom_color = Srgba8::from(self.bg_bottom_color.to_srgba_unmultiplied());
-                let top_color = Srgba8::from(self.bg_top_color.to_srgba_unmultiplied());
+                //let bottom_color = Srgba8::from(self.bg_bottom_color.to_srgba_unmultiplied());
+                //let top_color = Srgba8::from(self.bg_top_color.to_srgba_unmultiplied());
                 if self.cfg.show_background {
                     if let Ok(background_shader) = self.background_shader.read() {
                         encoder.bind_graphics_pipeline(&*background_shader);
@@ -183,8 +182,8 @@ impl Game {
                             0..1,
                             root_params! {
                                 scene_uniforms: Ptr<SceneInfoUniforms> = scene_info.gpu,
-                                bottom_color: Srgba8 = bottom_color,
-                                top_color: Srgba8 = top_color
+                                bottom_color: Srgba8 = Srgba8::new(0x19, 0x19, 0x70, 0xFF),
+                                top_color: Srgba8 = Srgba8::new(0x64, 0x7A, 0xEE, 0xFF)
                             },
                         );
                     }
@@ -227,10 +226,6 @@ impl Game {
             Srgba8::WHITE,
         );
         scene.render(target);
-        if self.cfg.show_painting_demo {
-            self.svg_experiment.render(target);
-            experiments::painting_test(target, Srgba8::from(self.color.to_srgba_unmultiplied()));
-        }
     }
 }
 
@@ -271,8 +266,6 @@ impl AppHandler for Game {
             self.plugin.reload();
         }
 
-        self.svg_experiment.input(&input_event);
-
         self.plugin.input(window, input_event);
 
         // --- CAMERA ---
@@ -282,7 +275,7 @@ impl AppHandler for Game {
 
         // --- experiments ---
         //self.coat_experiment.input(&input_event);
-        self.outline_experiment.input(&input_event);
+        //self.outline_experiment.input(&input_event);
         //self.automaton_experiment.input(&input_event);
     }
 
@@ -299,7 +292,7 @@ impl AppHandler for Game {
         // TODO painter.resize() method
         self.camera_control.resize(width, height);
         self.depth_stencil_buffer = create_depth_buffer(width, height);
-        self.outline_experiment.resize(width, height);
+        //self.outline_experiment.resize(width, height);
         //self.automaton_experiment.resize(width, height);
         self.plugin.resized(window, width, height);
     }
@@ -312,33 +305,26 @@ impl AppHandler for Game {
         //       to block the GUI and rendering.
         #[cfg(feature = "hot_reload")]
         AssetCache::instance().do_reload();
-
         //let mut cmd = gpu::CommandBuffer::new();
         let time = self.start_time.elapsed().as_secs_f32();
         let frame = self.frame_count;
         self.frame_count += 1;
-
         // Render 3D scene
         let scene_info = SceneInfo::new(&self.camera_control.camera(), time, frame);
         self.render_scene(target.image, &scene_info);
-
         //self.coat_experiment.render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
         //let _ = self.outline_experiment.render(&target.image, &self.depth_stencil_buffer, &scene_info);
         //let _ = self.automaton_experiment.render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
-
         self.plugin.render(window, target);
-
         // Render 2D overlays
         self.render_overlay(&target.image);
-
         // Render GUI
-        if self.cfg.show_imgui {
-            let _span = gamelib::span!("render_imgui");
-            gpu::with_cmdbuf(|mut cmd| {
-                gamelib::render_imgui(&mut cmd, &target.image);
-            });
-        }
-
+        //if self.cfg.show_imgui {
+        //let _span = gamelib::span!("render_imgui");
+        //gpu::with_cmdbuf(|mut cmd| {
+        //    gamelib::render_imgui(&mut cmd, &target.image);
+        //});
+        //}
 
         gpu::flush();
     }
@@ -352,43 +338,43 @@ impl AppHandler for Game {
         gamelib::quit();
     }
 
-    fn imgui(&mut self, ctx: &egui::Context) {
-        egui::Window::new("imgui").show(ctx, |ui| {
-            egui::Grid::new("params").num_columns(2).spacing([40.0, 4.0]).striped(true).show(ui, |ui| {
-                ui.label("Show grid");
-                ui.checkbox(&mut self.cfg.show_grid, "");
-                ui.end_row();
-
-                ui.label("Show background");
-                ui.checkbox(&mut self.cfg.show_background, "");
-                ui.end_row();
-
-                ui.label("Show painting demo");
-                ui.checkbox(&mut self.cfg.show_painting_demo, "");
-                ui.end_row();
-
-                ui.label("Show imgui");
-                ui.checkbox(&mut self.cfg.show_imgui, "");
-                ui.end_row();
-
-                ui.label("Painting demo color");
-                ui.color_edit_button_srgba(&mut self.color);
-                ui.end_row();
-
-                ui.label("BG top color");
-                ui.color_edit_button_srgba(&mut self.bg_top_color);
-                ui.end_row();
-
-                ui.label("BG bottom color");
-                ui.color_edit_button_srgba(&mut self.bg_bottom_color);
-                ui.end_row();
-            });
-        });
-
-        //self.automaton_experiment.ui(ctx);
-        self.outline_experiment.gui(ctx);
-        self.plugin.imgui(ctx);
-    }
+    //fn imgui(&mut self, ctx: &egui::Context) {
+    //    egui::Window::new("imgui").show(ctx, |ui| {
+    //        egui::Grid::new("params").num_columns(2).spacing([40.0, 4.0]).striped(true).show(ui, |ui| {
+    //            ui.label("Show grid");
+    //            ui.checkbox(&mut self.cfg.show_grid, "");
+    //            ui.end_row();
+    //
+    //            ui.label("Show background");
+    //            ui.checkbox(&mut self.cfg.show_background, "");
+    //            ui.end_row();
+    //
+    //            ui.label("Show painting demo");
+    //            ui.checkbox(&mut self.cfg.show_painting_demo, "");
+    //            ui.end_row();
+    //
+    //            ui.label("Show imgui");
+    //            ui.checkbox(&mut self.cfg.show_imgui, "");
+    //            ui.end_row();
+    //
+    //            ui.label("Painting demo color");
+    //            ui.color_edit_button_srgba(&mut self.color);
+    //            ui.end_row();
+    //
+    //            ui.label("BG top color");
+    //            ui.color_edit_button_srgba(&mut self.bg_top_color);
+    //            ui.end_row();
+    //
+    //            ui.label("BG bottom color");
+    //            ui.color_edit_button_srgba(&mut self.bg_bottom_color);
+    //            ui.end_row();
+    //        });
+    //    });
+    //
+    //    //self.automaton_experiment.ui(ctx);
+    //    self.outline_experiment.gui(ctx);
+    //    self.plugin.imgui(ctx);
+    //}
 
     fn exiting(&mut self) {
         self.cfg.save();

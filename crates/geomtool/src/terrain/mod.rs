@@ -41,7 +41,7 @@ fn generate_terrain_meshes_inner(heightmap_file: &Path, terrain_cfg: &TerrainCon
         }
     };
 
-    let mut progress_cb = |triangle_count, error| {
+    let mut progress_cb = |triangle_count, _error| {
         //bar.println(format!("Current error: {error}"));
         bar.set_position(triangle_count as u64);
     };

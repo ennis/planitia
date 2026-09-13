@@ -10,7 +10,6 @@ crate-type = ["dylib"]
 [dependencies]
 ash = "0.38"
 gpu-allocator = "0.28"
-vulkan-headers = "0.2.4" # until ash updates to support vk1.4
 bitflags = "2"
 raw-window-handle = "0.6.0"
 slotmap = "1"
@@ -38,7 +37,7 @@ features = [
 
 [dev-dependencies]
 winit = "0.30"
-image = "0.25.6"
+image = { workspace = true }
 
 [features]
 default = ["color"]

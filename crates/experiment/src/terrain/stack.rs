@@ -125,7 +125,7 @@ pub fn downsample_columns<'a>(
 #[cfg(test)]
 mod tests {
     use crate::terrain::PackedTerrVec;
-    use crate::terrain::column::{TerrSlice, downsample_columns};
+    use crate::terrain::stack::{TerrSlice, downsample_columns};
     use bumpalo::Bump;
 
     const STONE: PackedTerrVec = [255, 0, 0, 0, 0, 0, 0, 0];

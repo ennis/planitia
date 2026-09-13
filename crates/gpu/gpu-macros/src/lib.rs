@@ -6,7 +6,6 @@ extern crate syn;
 
 use proc_macro2::{Span, TokenStream};
 use quote::{ToTokens, TokenStreamExt};
-use syn::spanned::Spanned;
 
 mod vertex;
 mod shader_module;

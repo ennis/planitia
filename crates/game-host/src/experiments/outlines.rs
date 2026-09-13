@@ -8,8 +8,9 @@ use gamelib::error::ExcResult;
 use gamelib::input::InputEvent;
 use gamelib::render::RenderTarget;
 use gamelib::render::pipeline_cache::{get_compute_pipeline, get_graphics_pipeline};
-use gamelib::{egui, static_assets, tweak};
+use gamelib::static_assets;
 use gpu::PrimitiveTopology::TriangleList;
+use gpu::vulkan::*;
 use gpu::{
     BARRIER_INDIRECT, BARRIER_STORAGE, BARRIER_TEXTURE, BarrierFlags, Buffer, BufferCreateInfo, DrawIndirectCommand,
     Image, MemoryLocation, Ptr, PushDataSource, Size3D,
@@ -23,7 +24,6 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 use std::path::Path;
 use std::{fmt, ptr};
-use gpu::vulkan::*;
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -343,7 +343,7 @@ impl OutlineExperiment {
         // nothing
     }
 
-    pub(crate) fn gui(&mut self, ctx: &egui::Context) {}
+    //pub(crate) fn gui(&mut self, ctx: &egui::Context) {}
 
     pub(crate) fn render(
         &mut self,
@@ -364,7 +364,7 @@ impl OutlineExperiment {
         self.shading_texture.setup(width, height);
 
         // handle view lock
-        self.lock_view = tweak!(lock_view = false);
+        self.lock_view = false;
         if !self.lock_view {
             self.locked_eye = scene_info.eye;
         }
@@ -384,11 +384,11 @@ impl OutlineExperiment {
             expanded_contour_indices: self.expanded_contour_indices.ptr(),
             expanded_contours_draw_command: self.expanded_contours_draw_command.ptr(),
 
-            main_light_direction: tweak!(main_light_direction = Vec3::new(0.5, -1.0, 0.5).normalize()),
-            silhouette_color: tweak!(silhouette_color = Srgba8::new(255, 255, 255, 255)),
-            line_width: tweak!(line_width = 1.0),
-            filter_width: tweak!(filter_width = 0.7),
-            isophote_offset: tweak!(isophote_offset = 0.0),
+            main_light_direction: Vec3::new(0.5, -1.0, 0.5).normalize(),
+            silhouette_color: Srgba8::new(255, 255, 255, 255),
+            line_width: 1.0,
+            filter_width: 0.7,
+            isophote_offset: 0.0,
 
             depth_texture: depth_target.texture_handle(),
             angle_texture: self.angle_texture.texture_handle(),

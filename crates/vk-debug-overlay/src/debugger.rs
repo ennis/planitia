@@ -1,118 +1,135 @@
 use crate::Device;
 use crate::event::EId;
-use crate::format::format_info;
 use crate::helper::{Buffer, DeviceHelper, Image, Pipeline, include_bytes_as_u32};
 use crate::state_tracker::command::Command;
 use crate::state_tracker::image::ImageInfo;
-use vulkan::*;
 use core::fmt;
 use rustc_hash::FxHasher;
 use slotmap::{SlotMap, new_key_type};
+use std::collections::{BTreeMap, HashMap};
 use std::hash::{Hash, Hasher};
-use std::ptr;
+use std::{mem, ptr, slice};
+use vulkan::*;
 
-/// Represents a sequence of pointer indirections from push data at offset 0, (e.g. `base->field->field2 ...`).
-#[derive(Clone, Hash, Eq, PartialEq)]
-pub struct LoadChain {
-    // Chain of offsets for each pointer indirection.
-    //
-    // This establishes a series of addresses (denoted `address[i]`), defined by the following
-    // recurrence relation:
-    //
-    // - `address[0] = <base> + offsets[0]`
-    // - `base[N] = *address[N-1]`
-    // - `address[N] = base[N] + offsets[N]`
-    pub offsets: Vec<usize>,
-}
-
-impl LoadChain {
-    pub fn new() -> LoadChain {
-        LoadChain { offsets: vec![0] }
-    }
-
-    /// Pushes a new indirection on the load chain.
-    ///
-    /// Concretely, if this load chain represents some address `ADDR`,
-    /// then after this function it will point to the address at `*(ADDR + offset)`
-    pub fn deref_at(&mut self, offset: usize) {
-        let len = self.offsets.len() - 1;
-        self.offsets[len] = offset;
-        self.offsets.push(0);
-    }
-
-    pub fn with_deref(&self, offset: usize) -> LoadChain {
-        let mut c = self.clone();
-        c.deref_at(offset);
-        c
-    }
-}
-
-impl Default for LoadChain {
-    fn default() -> Self {
-        LoadChain::new()
-    }
-}
-
-impl fmt::Debug for LoadChain {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[base")?;
-        for (i, offset) in self.offsets.iter().enumerate() {
-            if i > 0 {
-                write!(f, ".0x{:x}", offset)?;
-            } else {
-                write!(f, "+0x{:x}", offset)?;
-            }
-        }
-        write!(f, "]")?;
-        Ok(())
-    }
-}
-
-//--------------------------------------------------------------------------------------------------
-
-pub struct DebuggerResources {
-    copy_indirect_1d: Pipeline,
-}
-
-impl DebuggerResources {
-    pub unsafe fn new(device_helper: &DeviceHelper) -> DebuggerResources {
-        let copy_indirect_1d = device_helper.create_compute_pipeline_helper(
-            COPY_1D_SHADER,
-            c"copy_indirect_1d",
-            &[],
-            size_of::<CopyIndirect1DParams>(),
-        );
-        DebuggerResources { copy_indirect_1d }
-    }
-}
-
-static COPY_1D_SHADER: &[u32] = include_bytes_as_u32!("copy.spv");
-const MAX_INDIRECTIONS: usize = 8;
-const COPY_1D_WORKGROUP_SIZE: u32 = 32;
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, Default)]
-struct CopyIndirect1DParams {
-    base: VkDeviceAddress,
-    dst: VkDeviceAddress,
-    byte_size: u32,
-    count: u32,
-    offset: [u32; MAX_INDIRECTIONS],
-}
-
-//--------------------------------------------------------------------------------------------------
+// on NV:
+// - bufferDescriptorSize=16
+// - imageDescriptorSize=32
+// - samplerDescriptorSize=32
+// So set the max size to 64 to have some margin
+pub const DESCRIPTOR_BLOB_MAX_SIZE: usize = 64;
+pub type DescriptorBlob = [u8; DESCRIPTOR_BLOB_MAX_SIZE];
 
 /// Manages the capture of data (buffer data & images) between commands.
 pub struct Debugger {
     pub commands: Vec<CommandWatch>,
+    /// Submissions on the current frame. Reset on [`end_frame`](Debugger::end_frame).
+    pub subs: Vec<QueueSubmit>,
+    //pub descriptor_heaps: DescriptorHeap,
+    /// Map from device opaque descriptor blob to the VkResourceDescriptorInfo
+    pub resource_descriptors: HashMap<DescriptorBlob, ResourceDescriptorInfo>,
+    pub sampler_descriptors: HashMap<DescriptorBlob, VkSamplerCreateInfo>,
+}
+
+pub enum ResourceDescriptorInfo {
+    Image {
+        view: VkImageViewCreateInfo,
+        layout: VkImageLayout,
+    },
+    TexelBuffer(VkTexelBufferDescriptorInfoEXT),
+    AddressRange(VkDeviceAddressRangeEXT),
+    TensorARM(VkTensorViewCreateInfoARM),
+}
+
+unsafe fn create_queue_submit(d: &Device, index: usize, queue: VkQueue, cmd_bufs: &[VkCommandBuffer]) -> QueueSubmit {
+    let mut commands = vec![];
+    // concatenate all commands from all command buffers
+    for cmdbuf in cmd_bufs {
+        let private_data = d.get_private_data_mut(*cmdbuf).unwrap();
+        commands.extend(mem::take(&mut private_data.commands));
+    }
+    for (i,cmd) in commands.iter_mut().enumerate() {
+        cmd.idx.sub = index as u32;
+        cmd.idx.cmd = i as u32;
+    }
+    QueueSubmit { cmd_bufs: cmd_bufs.to_vec(), commands }
 }
 
 impl Debugger {
     pub fn new() -> Debugger {
-        Debugger { commands: Vec::new() }
+        Debugger {
+            commands: Vec::new(),
+            subs: vec![],
+            resource_descriptors: HashMap::new(),
+            sampler_descriptors: HashMap::new(),
+        }
+    }
+
+    pub unsafe fn queue_submit(&mut self, d: &Device, _queue: VkQueue, cmd_bufs: &[VkCommandBuffer]) {
+        let index = self.subs.len();
+        let submit = create_queue_submit(d, index, _queue, cmd_bufs);
+        self.subs.push(submit);
+    }
+
+    pub unsafe fn write_resource_descriptors(
+        &mut self,
+        d: &Device,
+        count: u32,
+        resources: *const VkResourceDescriptorInfoEXT,
+        descriptors: *const VkHostAddressRangeEXT,
+    ) {
+        let resources = slice::from_raw_parts(resources, count as usize);
+        let descriptors = slice::from_raw_parts(descriptors, count as usize);
+        for (resource, descriptor) in resources.iter().zip(descriptors.iter()) {
+            let size = d.descriptor_blob_size(resource.r#type);
+            let mut blob = [0u8; DESCRIPTOR_BLOB_MAX_SIZE];
+            ptr::copy_nonoverlapping(descriptor.address as *const u8, blob.as_mut_ptr(), size);
+            let resource = match resource.r#type {
+                VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE | VK_DESCRIPTOR_TYPE_STORAGE_IMAGE => {
+                    ResourceDescriptorInfo::Image {
+                        view: *(*resource.data.pImage).pView,
+                        layout: (*resource.data.pImage).layout,
+                    }
+                }
+                VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER | VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER => {
+                    ResourceDescriptorInfo::TexelBuffer(*resource.data.pTexelBuffer)
+                }
+                VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER | VK_DESCRIPTOR_TYPE_STORAGE_BUFFER => {
+                    ResourceDescriptorInfo::AddressRange(*resource.data.pAddressRange)
+                }
+                VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR => {
+                    ResourceDescriptorInfo::AddressRange(*resource.data.pAddressRange)
+                }
+                VK_DESCRIPTOR_TYPE_TENSOR_ARM => {
+                    ResourceDescriptorInfo::TensorARM(*resource.data.pTensorARM)
+                }
+                _ => {
+                    eprintln!("write_resource_descriptors: unsupported resource type {}", resource.r#type);
+                    continue;
+                }
+            };
+            self.resource_descriptors.insert(blob, resource);
+        }
+    }
+
+    pub unsafe fn write_sampler_descriptors(
+        &mut self,
+        d: &Device,
+        count: u32,
+        samplers: *const VkSamplerCreateInfo,
+        descriptors: *const VkHostAddressRangeEXT,
+    ) {
+        let samplers = slice::from_raw_parts(samplers, count as usize);
+        let descriptors = slice::from_raw_parts(descriptors, count as usize);
+        for (sampler, descriptor) in samplers.iter().zip(descriptors.iter()) {
+            let size = d.descriptor_blob_size(VK_DESCRIPTOR_TYPE_SAMPLER);
+            let mut blob = [0u8; DESCRIPTOR_BLOB_MAX_SIZE];
+            ptr::copy_nonoverlapping(descriptor.address as *const u8, blob.as_mut_ptr(), size);
+            self.sampler_descriptors.insert(blob, *sampler);
+        }
     }
 
     pub fn end_frame(&mut self, d: &Device) {
+        self.subs.clear();
         // Iterate over all commands, and clean up any abandoned captures
         // (those which were not requested during the last frame).
         // At the same time, reset the `abandoned` flags to true for the coming frame.
@@ -206,10 +223,19 @@ impl Debugger {
         }
     }
 
-    unsafe fn do_capture(d: &Device, watch: &mut CommandWatch, cmd_buf: VkCommandBuffer, push_data: &[u8] /*, resource_heap: VkHostAddressRangeConstEXT, sampler_heap: VkHostAddressRangeConstEXT*/) {
+    unsafe fn do_capture(
+        d: &Device,
+        watch: &mut CommandWatch,
+        cmd_buf: VkCommandBuffer,
+        push_data: &[u8], /*, resource_heap: VkHostAddressRangeConstEXT, sampler_heap: VkHostAddressRangeConstEXT*/
+    ) {
         for lc in watch.access_chains.values_mut() {
             Self::do_capture_command_data(d, cmd_buf, push_data, lc);
         }
+        // TODO: capturing resource heaps
+        //       - the state of resource heaps should be captured after each call to vkQueueSubmit
+        //       - each Submission holds a copy of the heaps
+        //       -
         // TODO: images
     }
 
@@ -271,7 +297,6 @@ impl Debugger {
         d.CmdDispatch(cmd_buf, n_workgroups, 1, 1);
     }
 
-
     // Finds an existing watch by key.
     fn get_or_insert_watch(&mut self, eid: EId) -> &mut CommandWatch {
         // let mut h = FxHasher::default();
@@ -279,7 +304,7 @@ impl Debugger {
         // let hash = h.finish();
         for watch in self.commands.iter_mut() {
             if watch.eid == eid {
-                return watch
+                return watch;
             }
         }
         self.commands.push(CommandWatch {
@@ -294,15 +319,20 @@ impl Debugger {
     }
 
     // Adds a debugger watch on command push data.
-    fn add_load_chain_capture(&mut self, eid: EId, load_chain: &LoadChain, byte_size: usize) -> Option<&LoadChainCapture> {
+    fn add_load_chain_capture(
+        &mut self,
+        eid: EId,
+        load_chain: &LoadChain,
+        byte_size: usize,
+    ) -> Option<&LoadChainCapture> {
         let mut watch = self.get_or_insert_watch(eid);
         if watch.stale {
             return None;
         }
-        for lc  in watch.access_chains.values_mut() {
+        for lc in watch.access_chains.values_mut() {
             if lc.load_chain == *load_chain && lc.size == byte_size {
                 lc.abandoned = false;
-                return Some(lc)
+                return Some(lc);
             }
         }
         let id = watch.access_chains.insert(LoadChainCapture {
@@ -318,7 +348,9 @@ impl Debugger {
     }
 
     pub fn capture_load_chain(&mut self, eid: EId, load_chain: &LoadChain, byte_size: usize) -> Option<Vec<u8>> {
-        if let Some(lc) = self.add_load_chain_capture(eid, load_chain, byte_size) && let Some(ref result_buffer) = lc.result {
+        if let Some(lc) = self.add_load_chain_capture(eid, load_chain, byte_size)
+            && let Some(ref result_buffer) = lc.result
+        {
             let result_slice = unsafe { std::slice::from_raw_parts(result_buffer.ptr as *const u8, lc.size) };
             Some(result_slice.to_vec())
         } else {
@@ -339,6 +371,33 @@ impl Debugger {
         let CaptureKind::Image(ref capture) = watch.capture else { unreachable!() };
         if let Some(ref result) = capture.result { Some(result.clone()) } else { None }
     }*/
+}
+
+/// Per-frame debugger state.
+struct Frame {}
+
+/// Represents a call to vkQueueSubmit.
+pub struct QueueSubmit {
+    pub cmd_bufs: Vec<VkCommandBuffer>,
+    pub commands: Vec<Command>,
+}
+
+#[derive(Copy, Clone, Hash, Eq, PartialEq)]
+pub struct DeviceAddressRange {
+    address: VkDeviceAddress,
+    size: VkDeviceSize,
+}
+
+#[derive(Copy, Clone, Hash, Eq, PartialEq)]
+enum DescriptorHeapType {
+    Resource,
+    Sampler,
+}
+
+pub struct DescriptorHeap {
+    ty: DescriptorHeapType,
+    host_range: VkHostAddressRangeEXT,
+    dev_range: VkDeviceAddressRangeEXT,
 }
 
 /// Command buffer state.
@@ -362,17 +421,17 @@ pub struct CommandWatch {
 
 /// Debugger watch: a query that should run before/after a specified command.
 pub struct LoadChainCapture {
-    pub(crate) hash: u64,       // Unique hash
+    pub(crate) hash: u64,              // Unique hash
     pub(crate) load_chain: LoadChain,  // Load chain to the data being inspected
     pub(crate) size: usize,            // Size in bytes to load from the chain
     pub(crate) result: Option<Buffer>, // Result buffer for holding the result of the query
-    pub(crate) transient: bool, // Whether this watch is temporary (removed if not read in the last frame)
-    pub(crate) abandoned: bool, //
-    pub(crate) stale: bool,     // If true, no data was captured for this watch in the last frame
+    pub(crate) transient: bool,        // Whether this watch is temporary (removed if not read in the last frame)
+    pub(crate) abandoned: bool,        //
+    pub(crate) stale: bool,            // If true, no data was captured for this watch in the last frame
 }
 
 pub struct ImageCapture {
-    pub(crate) hash: u64,       // Unique hash
+    pub(crate) hash: u64, // Unique hash
     pub(crate) image: VkImage,
     pub(crate) result: Option<CapturedImage>,
     pub(crate) transient: bool, // Whether this watch is temporary (removed if not read in the last frame)
@@ -407,8 +466,69 @@ impl Device {
     }
 }
 
+//--------------------------------------------------------------------------------------------------
+
+/// Represents a sequence of pointer indirections from push data at offset 0, (e.g. `base->field->field2 ...`).
+#[derive(Clone, Hash, Eq, PartialEq)]
+pub struct LoadChain {
+    // Chain of offsets for each pointer indirection.
+    //
+    // This establishes a series of addresses (denoted `address[i]`), defined by the following
+    // recurrence relation:
+    //
+    // - `address[0] = <base> + offsets[0]`
+    // - `base[N] = *address[N-1]`
+    // - `address[N] = base[N] + offsets[N]`
+    pub offsets: Vec<usize>,
+}
+
+impl LoadChain {
+    pub fn new() -> LoadChain {
+        LoadChain { offsets: vec![0] }
+    }
+
+    /// Pushes a new indirection on the load chain.
+    ///
+    /// Concretely, if this load chain represents some address `ADDR`,
+    /// then after this function it will point to the address at `*(ADDR + offset)`
+    pub fn deref_at(&mut self, offset: usize) {
+        let len = self.offsets.len() - 1;
+        self.offsets[len] = offset;
+        self.offsets.push(0);
+    }
+
+    pub fn with_deref(&self, offset: usize) -> LoadChain {
+        let mut c = self.clone();
+        c.deref_at(offset);
+        c
+    }
+}
+
+impl Default for LoadChain {
+    fn default() -> Self {
+        LoadChain::new()
+    }
+}
+
+impl fmt::Debug for LoadChain {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[base")?;
+        for (i, offset) in self.offsets.iter().enumerate() {
+            if i > 0 {
+                write!(f, ".0x{:x}", offset)?;
+            } else {
+                write!(f, "+0x{:x}", offset)?;
+            }
+        }
+        write!(f, "]")?;
+        Ok(())
+    }
+}
+//--------------------------------------------------------------------------------------------------
+// helpers
+
 fn image_buffer_size(image_info: &ImageInfo) -> usize {
-    let format_info = format_info(image_info.format).unwrap();
+    let format_info = vk_format_info::get_format_info(image_info.format);
     let pixel_size = image_info.size.width as usize
         * image_info.size.height as usize
         * image_info.size.depth as usize
@@ -418,10 +538,39 @@ fn image_buffer_size(image_info: &ImageInfo) -> usize {
 
 fn get_or_init_buffer<'a>(d: &DeviceHelper, buffer: &'a mut Option<Buffer>, size: usize) -> &'a Buffer {
     buffer.get_or_insert_with(|| unsafe {
-        d.create_buffer_helper(
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            size,
-            None,
-        )
+        d.create_buffer_helper(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, size, None)
     })
+}
+
+//--------------------------------------------------------------------------------------------------
+
+pub struct DebuggerResources {
+    copy_indirect_1d: Pipeline,
+}
+
+impl DebuggerResources {
+    pub unsafe fn new(device_helper: &DeviceHelper) -> DebuggerResources {
+        let copy_indirect_1d = device_helper.create_compute_pipeline_helper(
+            COPY_1D_SHADER,
+            c"copy_indirect_1d",
+            &[],
+            size_of::<CopyIndirect1DParams>(),
+        );
+        DebuggerResources { copy_indirect_1d }
+    }
+}
+
+static COPY_1D_SHADER: &[u32] = include_bytes_as_u32!("copy.spv");
+const MAX_INDIRECTIONS: usize = 8;
+const COPY_1D_WORKGROUP_SIZE: u32 = 32;
+
+/// Push constants passed to copy_indirect_1d
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Default)]
+struct CopyIndirect1DParams {
+    base: VkDeviceAddress,
+    dst: VkDeviceAddress,
+    byte_size: u32,
+    count: u32,
+    offset: [u32; MAX_INDIRECTIONS],
 }

@@ -142,29 +142,29 @@ impl AppHandler for ExperimentApp {
         );
         scene.render(image);
 
-        {
-            let _span = gpu_span!("render background");
-            gpu::render(&[gpu::ColorAttachment { image, clear: None }], None, |encoder| {
-                encoder.bind_graphics_pipeline(&background::background);
-                encoder.draw_screen_quad(root_params! {
-                    scene: Ptr<SceneInfo> = scene_info_gpu,
-                    bottom_color: u32 = 0xFF000000,
-                    top_color: u32 = 0xFF0000FF
-                });
-
-                encoder.bind_graphics_pipeline(&grid::grid);
-                encoder.draw(
-                    TriangleList,
-                    None,
-                    0..6,
-                    0..1,
-                    root_params! {
-                        scene_uniforms: Ptr<SceneInfo> = scene_info_gpu,
-                        grid_scale: f32 = 100.0
-                    },
-                );
-            });
-        }
+        //{
+        //    let _span = gpu_span!("render background");
+        //    gpu::render(&[gpu::ColorAttachment { image, clear: None }], None, |encoder| {
+        //        encoder.bind_graphics_pipeline(&background::background);
+        //        encoder.draw_screen_quad(root_params! {
+        //            scene: Ptr<SceneInfo> = scene_info_gpu,
+        //            bottom_color: u32 = 0xFF000000,
+        //            top_color: u32 = 0xFF0000FF
+        //        });
+//
+        //        encoder.bind_graphics_pipeline(&grid::grid);
+        //        encoder.draw(
+        //            TriangleList,
+        //            None,
+        //            0..6,
+        //            0..1,
+        //            root_params! {
+        //                scene_uniforms: Ptr<SceneInfo> = scene_info_gpu,
+        //                grid_scale: f32 = 100.0
+        //            },
+        //        );
+        //    });
+        //}
     }
 
     fn resized(&mut self, window: WindowHandle, width: u32, height: u32) {
@@ -175,5 +175,7 @@ impl AppHandler for ExperimentApp {
         // nothing
     }
 }
+
+
 
 register_plugin!(ExperimentApp::new);

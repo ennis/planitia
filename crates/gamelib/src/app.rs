@@ -2,14 +2,12 @@
 use crate::error::{ExcResult, ResultExt};
 use crate::event::UserEvent;
 use crate::executor::LocalExecutor;
-use crate::imgui::ImguiContext;
 use crate::input::InputEvent;
 use crate::paint::{PaintScene, Painter, TextFormat};
 use crate::platform::{LoopHandler, Platform, RenderTargetImage, WindowHandle};
 use crate::plugin_host::PluginHost;
-use crate::tweak::show_tweaks_gui;
 use crate::util::env_flag;
-use crate::{PluginEvent, imgui, span, wake_event_loop};
+use crate::{PluginEvent, span, wake_event_loop};
 use color::Srgba8;
 use color_print::cwriteln;
 use env_logger::fmt::style::AnsiColor;
@@ -19,7 +17,6 @@ use log::{debug, error, info, warn};
 use math::{IVec2, Vec2, vec2};
 use notify_debouncer_mini::notify::{RecommendedWatcher, RecursiveMode};
 use notify_debouncer_mini::{DebounceEventResult, DebouncedEvent, Debouncer, new_debouncer};
-use renderdoc::{RenderDoc, V141};
 use std::any::{Any, TypeId};
 use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::HashMap;
@@ -133,7 +130,6 @@ pub trait AppHandler {
     fn file_changed(&mut self, path: &Path) {}
 
     fn close_requested(&mut self, window: WindowHandle) {}
-    fn imgui(&mut self, ctx: &egui::Context) {}
 
     fn exiting(&mut self) {}
 }
@@ -163,12 +159,12 @@ pub fn quit() {
     });
 }
 
-/// Render ImGui components in the specified render target.
-pub fn render_imgui(command_stream: &mut gpu::CommandBuffer, image: &gpu::Image) {
-    with_app_ctx(|ctx| {
-        ctx.imgui.borrow_mut().render(command_stream, image);
-    });
-}
+// Render ImGui components in the specified render target.
+//pub fn render_imgui(command_stream: &mut gpu::CommandBuffer, image: &gpu::Image) {
+//    with_app_ctx(|ctx| {
+//        ctx.imgui.borrow_mut().render(command_stream, image);
+//    });
+//}
 
 #[derive(thiserror::Error, Debug, Copy, Clone)]
 #[error("failed to watch file")]
@@ -326,14 +322,12 @@ pub(crate) struct MainThreadContext {
     /// Lua VM instance.
     #[cfg(feature = "lua")]
     pub(crate) lua: Lua,
-    /// ImGui context.
-    pub(crate) imgui: RefCell<ImguiContext>,
     /// Executor for async tasks.
     pub(crate) executor: LocalExecutor,
-    /// RenderDoc connection.
-    rdoc: Option<RefCell<RenderDoc<V141>>>,
-    rdoc_capture_requested: Cell<bool>,
-    rdoc_launch_replay_ui: Cell<bool>,
+    // RenderDoc connection.
+    //rdoc: Option<RefCell<RenderDoc<V141>>>,
+    //rdoc_capture_requested: Cell<bool>,
+    //rdoc_launch_replay_ui: Cell<bool>,
     debug_mark_counter: Cell<usize>,
     handler: RefCell<Box<dyn AppHandler + 'static>>,
     /// File watcher.
@@ -364,14 +358,13 @@ impl MainThreadContext {
                 )
                 .expect("failed to create tracy GPU context")
         };
-        let rdoc = RenderDoc::new().ok();
-        if rdoc.is_some() {
-            info!("running with RenderDoc");
-        } else {
-            info!("not running with RenderDoc");
-        }
+        //let rdoc = RenderDoc::new().ok();
+        //if rdoc.is_some() {
+        //    info!("running with RenderDoc");
+        //} else {
+        //    info!("not running with RenderDoc");
+        //}
         let executor = LocalExecutor::new();
-        let imgui = RefCell::new(ImguiContext::new());
         // Create the file watcher.
         //
         // NOTE: `notify` spins a thread to watch for file changes, and calls the callback here.
@@ -398,12 +391,11 @@ impl MainThreadContext {
 
         Self {
             platform,
-            imgui,
             executor,
             painter: RefCell::new(Painter::new()),
-            rdoc: rdoc.map(RefCell::new),
-            rdoc_capture_requested: Cell::new(false),
-            rdoc_launch_replay_ui: Cell::new(false),
+            //rdoc: rdoc.map(RefCell::new),
+            //rdoc_capture_requested: Cell::new(false),
+            //rdoc_launch_replay_ui: Cell::new(false),
             debug_mark_counter: Cell::new(0),
             handler,
             #[cfg(feature = "lua")]
@@ -422,29 +414,28 @@ impl MainThreadContext {
         }
     }
 
-    fn start_renderdoc_capture(&self) {
-        if let Some(rdoc) = &self.rdoc {
-            info!("starting RenderDoc capture");
-            rdoc.borrow_mut().start_frame_capture(unsafe { rdoc_instance_ptr() }, std::ptr::null());
-        }
-    }
+    //fn start_renderdoc_capture(&self) {
+    //    if let Some(rdoc) = &self.rdoc {
+    //        info!("starting RenderDoc capture");
+    //        rdoc.borrow_mut().start_frame_capture(unsafe { rdoc_instance_ptr() }, std::ptr::null());
+    //    }
+    //}
 
-    fn end_renderdoc_capture(&self, launch_replay_ui: bool) {
-        if let Some(rdoc) = &self.rdoc {
-            let mut rdoc = rdoc.borrow_mut();
-            if rdoc.is_frame_capturing() {
-                info!("finishing RenderDoc capture");
-                rdoc.end_frame_capture(unsafe { rdoc_instance_ptr() }, std::ptr::null());
-                if launch_replay_ui {
-                    let Some((path, _)) = rdoc.get_capture(0) else { return };
-
-                    if let Err(err) = rdoc.launch_replay_ui(true, Some(path.to_string_lossy().as_ref())) {
-                        error!("failed to launch renderdoc UI: {err}");
-                    }
-                }
-            }
-        }
-    }
+    //fn end_renderdoc_capture(&self, launch_replay_ui: bool) {
+    //    if let Some(rdoc) = &self.rdoc {
+    //        let mut rdoc = rdoc.borrow_mut();
+    //        if rdoc.is_frame_capturing() {
+    //            info!("finishing RenderDoc capture");
+    //            rdoc.end_frame_capture(unsafe { rdoc_instance_ptr() }, std::ptr::null());
+    //            if launch_replay_ui {
+    //                let Some((path, _)) = rdoc.get_capture(0) else { return };
+    //                if let Err(err) = rdoc.launch_replay_ui(true, Some(path.to_string_lossy().as_ref())) {
+    //                    error!("failed to launch renderdoc UI: {err}");
+    //                }
+    //            }
+    //        }
+    //    }
+    //}
 
     fn run_event_loop(&'static self) {
         // Run the event loop.
@@ -461,20 +452,17 @@ impl LoopHandler for &'static MainThreadContext {
 
     fn input(&mut self, window: WindowHandle, input_event: InputEvent) {
         let _span = span!("input");
-        if self.imgui.borrow_mut().handle_input(&input_event) {
-            // If the event was processed by egui, don't pass it to the application
-            return;
-        }
-
-        if input_event.is_shortcut("F9") {
-            self.rdoc_capture_requested.set(true);
-        }
-
-        if input_event.is_shortcut("Shift+F9") {
-            self.rdoc_capture_requested.set(true);
-            self.rdoc_launch_replay_ui.set(true);
-        }
-
+        //if self.imgui.borrow_mut().handle_input(&input_event) {
+        //    // If the event was processed by egui, don't pass it to the application
+        //    return;
+        //}
+        //if input_event.is_shortcut("F9") {
+        //    self.rdoc_capture_requested.set(true);
+        //}
+        //if input_event.is_shortcut("Shift+F9") {
+        //    self.rdoc_capture_requested.set(true);
+        //    self.rdoc_launch_replay_ui.set(true);
+        //}
         if input_event.is_shortcut("F4") {
             let count = self.debug_mark_counter.get();
             self.debug_mark_counter.set(count + 1);
@@ -500,18 +488,19 @@ impl LoopHandler for &'static MainThreadContext {
         self.handler.borrow_mut().vsync();
 
         // update imgui
-        {
-            let _span = span!("imgui");
-            let _gpu_span = crate::gpu_span!("imgui");
-            let mut cmd = gpu::CommandBuffer::new();
-            self.imgui.borrow_mut().run(&mut cmd, |imgui_ctx| {
-                egui::Window::new("Tweaks").show(imgui_ctx, |ui| {
-                    show_tweaks_gui(ui);
-                });
-                self.handler.borrow_mut().imgui(imgui_ctx);
-            });
-            gpu::submit(cmd);
-        }
+        //{
+            //let _span = span!("imgui");
+            //let _gpu_span = crate::gpu_span!("imgui");
+            //let cmd = gpu::CommandBuffer::new();
+            //self.imgui.borrow_mut().run(&mut cmd, |imgui_ctx| {
+            //    egui::Window::new("Tweaks").show(imgui_ctx, |ui| {
+            //        show_tweaks_gui(ui);
+            //    });
+            //    self.handler.borrow_mut().imgui(imgui_ctx);
+            //});
+            //gpu::submit(cmd);
+        //}
+
         // Frame-in-flight sync
         // /!\ This is important: the whole application relies on the implicit CPU/GPU
         //     synchronization on frame (N-MAX_FRAMES_IN_FLIGHT) to correctly implement
@@ -522,38 +511,37 @@ impl LoopHandler for &'static MainThreadContext {
         self.tracy_timestamps.borrow_mut().next_frame(gpu::get_frame_index());
 
         // start frame capture if requested and RenderDoc is available
-        if self.rdoc_capture_requested.get() {
-            self.start_renderdoc_capture();
-        }
+        //if self.rdoc_capture_requested.get() {
+        //    self.start_renderdoc_capture();
+        //}
 
         // render the frame (the application is expected to render the GUI as part of its rendering)
-        {
-            self.platform.render_all(&mut |window, render_target| {
-                let _span = span!("render_window");
-                let _gpu_span = crate::gpu_span!("render_window");
-                self.handler.borrow_mut().render(window, render_target);
-                // render text overlay
-                {
-                    let _span = span!("text_overlay");
-                    let _gpu_span = crate::gpu_span!("text_overlay");
-                    let text = self.text_overlay.take();
-                    let mut scene = PaintScene::new(Srgba8::TRANSPARENT);
-                    let pos = vec2(10.0, 10.0);
-                    let shadow_pos = pos + vec2(1.0, 1.0);
-                    // Draw shadow
-                    let format = TextFormat { size: 20.0, ..Default::default() };
-                    scene.draw_text(shadow_pos, &text, &format, Srgba8::BLACK);
-                    scene.draw_text(pos, &text, &format, Srgba8::WHITE);
-                    scene.render(render_target.image);
-                }
-            });
-        }
+        self.platform.render_all(&mut |window, render_target| {
+            let _span = span!("render_window");
+            let _gpu_span = crate::gpu_span!("render_window");
+            self.handler.borrow_mut().render(window, render_target);
+            // render text overlay
+            {
+                let _span = span!("text_overlay");
+                let _gpu_span = crate::gpu_span!("text_overlay");
+                let text = self.text_overlay.take();
+                let mut scene = PaintScene::new(Srgba8::TRANSPARENT);
+                let pos = vec2(10.0, 10.0);
+                let shadow_pos = pos + vec2(1.0, 1.0);
+                // Draw shadow
+                let format = TextFormat { size: 20.0, ..Default::default() };
+                scene.draw_text(shadow_pos, &text, &format, Srgba8::BLACK);
+                scene.draw_text(pos, &text, &format, Srgba8::WHITE);
+                scene.render(render_target.image);
+            }
+        });
+
 
         // end frame capture
-        if self.rdoc_capture_requested.get() {
-            self.rdoc_capture_requested.set(false);
-            self.end_renderdoc_capture(self.rdoc_launch_replay_ui.replace(false));
-        }
+        //if self.rdoc_capture_requested.get() {
+        //    self.rdoc_capture_requested.set(false);
+        //    self.end_renderdoc_capture(self.rdoc_launch_replay_ui.replace(false));
+        //}
 
         // mark the end of the frame for tracy
         tracy_client::frame_mark();
@@ -582,7 +570,7 @@ impl LoopHandler for &'static MainThreadContext {
 
     fn exiting(&mut self) {
         let _span = span!("exiting");
-        self.imgui.borrow_mut().save_state();
+        //self.imgui.borrow_mut().save_state();
         self.handler.borrow_mut().exiting();
     }
 }

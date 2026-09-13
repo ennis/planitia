@@ -3,7 +3,6 @@ use crate::spirv::{
     ConstantId, ConstantInfo, EntryPointInfo, Module, ParseError, PointerType, ScalarType, StructField, StructType,
     TypeId, TypeInfo, VariableId, VariableInfo,
 };
-use num_traits::FromPrimitive;
 use spirv as spv;
 use std::collections::HashMap;
 use std::{array, slice};
@@ -136,11 +135,11 @@ fn create_shader_reflection_inner(spv: &[u32]) -> Result<Module, ParseError> {
             (MemberName, &[ty, member, ref name @ ..]) => {
                 member_names.insert((ty, member), parse_string(name)?.0);
             }
-            (String, &[ref operands @ ..]) => {}
-            (Line, &[ref operands @ ..]) => {}
-            (Extension, &[ref operands @ ..]) => {}
-            (ExecutionMode, &[ref operands @ ..]) => {}
-            (Capability, &[ref operands @ ..]) => {}
+            (String, &[ref _operands @ ..]) => {}
+            (Line, &[ref _operands @ ..]) => {}
+            (Extension, &[ref _operands @ ..]) => {}
+            (ExecutionMode, &[ref _operands @ ..]) => {}
+            (Capability, &[ref _operands @ ..]) => {}
             (Decorate, &[target, decoration, ref operands @ ..]) => {
                 let Some(decoration) = spv::Decoration::from_u32(decoration) else {
                     eprintln!("unknown decoration {decoration}");
@@ -157,8 +156,8 @@ fn create_shader_reflection_inner(spv: &[u32]) -> Result<Module, ParseError> {
                 let decoration = Decoration { id: decoration, operands };
                 mdeco.entry((struct_ty, member)).or_default().push(decoration);
             }
-            (DecorateString, &[ref operands @ ..]) => {}
-            (MemberDecorateString, &[ref operands @ ..]) => {}
+            (DecorateString, &[ref _operands @ ..]) => {}
+            (MemberDecorateString, &[ref _operands @ ..]) => {}
             //(DecorateId, &[target, decoration, ref operands @ ..]) => {
             //    let decoration = spv::Decoration::from_u32(decoration).ok_or(ParseError)?;
             //    let deco = Decoration { id: decoration, operands };
@@ -227,14 +226,14 @@ fn create_shader_reflection_inner(spv: &[u32]) -> Result<Module, ParseError> {
             }
             (
                 TypeImage,
-                &[result_id, sampled_type, dim, depth, arrayed, ms, sampled, format, ref access_qualifier @ ..],
+                &[result_id, _sampled_type, _dim, _depth, _arrayed, _ms, _sampled, _format, ref _access_qualifier @ ..],
             ) => {
                 module.insert_type(result_id, TypeInfo::Image);
             }
             (TypeSampler, &[result_id]) => {
                 module.insert_type(result_id, TypeInfo::Sampler);
             }
-            (TypeSampledImage, &[result_id, ref rest @ ..]) => {
+            (TypeSampledImage, &[result_id, ref _rest @ ..]) => {
                 module.insert_type(result_id, TypeInfo::SampledImage);
             }
             (TypeArray, &[result_id, elem_type, length]) => {
@@ -262,7 +261,7 @@ fn create_shader_reflection_inner(spv: &[u32]) -> Result<Module, ParseError> {
                 let name = names.get(&result_id).copied().unwrap_or_default().to_string();
                 module.insert_type(result_id, TypeInfo::Struct(StructType { name, fields }));
             }
-            (TypeOpaque, &[ref operands @ ..]) => {
+            (TypeOpaque, &[ref _operands @ ..]) => {
                 // TODO
             }
             (TypePointer, &[result_id, storage_class, pointee_ty]) => {
@@ -283,24 +282,24 @@ fn create_shader_reflection_inner(spv: &[u32]) -> Result<Module, ParseError> {
                 };
                 module.insert_type(result_id, TypeInfo::Pointer(PointerType { storage_class: sc, pointee: None }));
             }
-            (TypeFunction, &[ref operands @ ..]) => {}
-            (ConstantTrue, &[ref operands @ ..]) => {}
-            (ConstantFalse, &[ref operands @ ..]) => {}
+            (TypeFunction, &[ref _operands @ ..]) => {}
+            (ConstantTrue, &[ref _operands @ ..]) => {}
+            (ConstantFalse, &[ref _operands @ ..]) => {}
             (Constant, &[result_type, result_id, ref value @ ..]) => {
                 let ty = module[TypeId(result_type)].as_scalar().unwrap();
                 let value_bytes = unsafe { slice::from_raw_parts(value.as_ptr() as *const u8, value.len() * 4) };
                 let value_bytes = array::from_fn(|i| value_bytes.get(i).cloned().unwrap_or(0));
                 module.insert_constant(result_id, ConstantInfo { ty, value_bytes: Some(value_bytes) });
             }
-            (ConstantComposite, &[ref operands @ ..]) => {}
-            (ConstantSampler, &[ref operands @ ..]) => {}
-            (ConstantNull, &[ref operands @ ..]) => {}
-            (SpecConstantTrue, &[ref operands @ ..]) => {}
-            (SpecConstantFalse, &[ref operands @ ..]) => {}
-            (SpecConstant, &[ref operands @ ..]) => {}
-            (SpecConstantComposite, &[ref operands @ ..]) => {}
-            (SpecConstantOp, &[ref operands @ ..]) => {}
-            (Variable, &[result_type, result_id, storage_class, ref initializer @ ..]) => {
+            (ConstantComposite, &[ref _operands @ ..]) => {}
+            (ConstantSampler, &[ref _operands @ ..]) => {}
+            (ConstantNull, &[ref _operands @ ..]) => {}
+            (SpecConstantTrue, &[ref _operands @ ..]) => {}
+            (SpecConstantFalse, &[ref _operands @ ..]) => {}
+            (SpecConstant, &[ref _operands @ ..]) => {}
+            (SpecConstantComposite, &[ref _operands @ ..]) => {}
+            (SpecConstantOp, &[ref _operands @ ..]) => {}
+            (Variable, &[result_type, result_id, storage_class, ref _initializer @ ..]) => {
                 let storage_class = spv::StorageClass::from_u32(storage_class).unwrap();
                 let name = names.get(&result_id).copied().unwrap_or_default().to_string();
                 module.insert_variable(
@@ -308,7 +307,7 @@ fn create_shader_reflection_inner(spv: &[u32]) -> Result<Module, ParseError> {
                     VariableInfo { name, sc: storage_class, ty: TypeId(result_type), uniform: false },
                 );
             }
-            (UntypedVariableKHR, &[result_type, result_id, storage_class, ref operands @ ..]) => {
+            (UntypedVariableKHR, &[result_type, result_id, storage_class, ref _operands @ ..]) => {
                 let storage_class = spv::StorageClass::from_u32(storage_class).unwrap();
                 let name = names.get(&result_id).copied().unwrap_or_default().to_string();
                 module.insert_variable(
@@ -316,7 +315,7 @@ fn create_shader_reflection_inner(spv: &[u32]) -> Result<Module, ParseError> {
                     VariableInfo { name, sc: storage_class, ty: TypeId(result_type), uniform: false },
                 );
             }
-            (SizeOf, &[ref operands @ ..]) => {}
+            (SizeOf, &[ref _operands @ ..]) => {}
             (_, _) => {}
         }
     }

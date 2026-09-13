@@ -24,11 +24,10 @@
 
 use crate::dispatch::InstanceDispatch;
 use crate::{DEVICE_STATE, Device, DeviceDispatchableHandle, INSTANCE_MAP, PHY_TO_INSTANCE};
-use vulkan::layer::*;
+use vulkan::vk_layer::*;
 use vulkan::*;
 use std::mem;
 use std::ptr::NonNull;
-use ash_layer;
 
 const _: PFN_vkCreateInstance = layer_vkCreateInstance;
 const _: PFN_vkDestroyInstance = layer_vkDestroyInstance;
@@ -107,12 +106,12 @@ pub(crate) unsafe extern "system" fn layer_vkDestroyInstance(
     p_allocator: *const VkAllocationCallbacks,
 ) {
     if let Some((_, layer_instance)) = INSTANCE_MAP.remove(&instance) {
-        vkarraycall!(layer_instance.d.EnumeratePhysicalDevices(instance, @count let count, @out let phy_devices));
+        vkarraycall!(layer_instance.fns.EnumeratePhysicalDevices(instance, @count let count, @out let phy_devices));
         for pd in phy_devices {
             PHY_TO_INSTANCE.remove(&pd);
         }
         eprintln!("[planitia-layer] vkDestroyInstance {:?}", instance);
-        layer_instance.d.DestroyInstance(instance, p_allocator);
+        layer_instance.fns.DestroyInstance(instance, p_allocator);
     }
 }
 

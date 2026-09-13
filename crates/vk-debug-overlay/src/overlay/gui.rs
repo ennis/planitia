@@ -1,14 +1,13 @@
-use crate::debugger::{Debugger, LoadChain};
+use crate::debugger::{Debugger, LoadChain, ResourceDescriptorInfo};
 use crate::event::EId;
 use crate::overlay::renderer::{FrameData, RenderData};
 use crate::spirv::{Module, ScalarType, StructType, TypeId, TypeInfo, pretty_print_type, type_byte_size};
 use crate::state_tracker::command::Command;
 use crate::state_tracker::pipeline::ShaderStageInfo;
-use crate::{Device, ModuleId, ModuleMap, SubmissionState};
+use crate::{Device, ModuleId, ModuleMap};
 use color_print::cwrite;
 use imgui::Condition::Always;
 use imgui::{StyleVar, TreeNodeFlags, Ui};
-use slotmap::Key;
 use spirv::StorageClass;
 use std::cell::RefCell;
 use std::fmt::Write;
@@ -49,6 +48,7 @@ pub struct GuiState {
     show_size_hints: bool,
     show_commands: bool,
     show_memory_map: bool,
+    show_descriptor_blobs: bool,
 
     fuse_single_field_structs: bool,
     interpret_vec2u_as_descriptor_handle: bool,
@@ -73,6 +73,7 @@ impl GuiState {
             show_size_hints: false,
             show_commands: true,
             show_memory_map: false,
+            show_descriptor_blobs: false,
             fuse_single_field_structs: true,
             interpret_vec2u_as_descriptor_handle: false,
             pinned_watches: vec![],
@@ -117,7 +118,6 @@ struct VarInfo {
 struct RootContext<'a> {
     d: &'a Device,
     rd: &'a RenderData,
-    sbs: &'a mut SubmissionState,
     dbg: &'a mut Debugger,
     modules: &'a mut ModuleMap,
 }
@@ -270,7 +270,7 @@ fn raw_watches_window(ctx: &RootContext, ui: &Ui, st: &mut GuiState) {
 }
 
 fn memory_map_window(ctx: &RootContext, ui: &Ui, st: &mut GuiState) {
-    let mut mmap = ctx.d.addrmap.lock();
+    let mmap = ctx.d.addrmap.lock();
 
     ui.window("Memory Map").size([400.0, 300.0], imgui::Condition::FirstUseEver).opened(&mut st.show_memory_map).build(
         || {
@@ -298,16 +298,104 @@ fn memory_map_window(ctx: &RootContext, ui: &Ui, st: &mut GuiState) {
     );
 }
 
-fn size_hints_window(ctx: &RootContext, ui: &Ui, st: &mut GuiState) {
+fn format_descriptor_blob(blob: &[u8]) -> String {
+    let mut blobstr = String::new();
+    for b in blob {
+        write!(&mut blobstr, "{:02x}", b).unwrap();
+    }
+    blobstr
+}
+
+fn descriptor_blob_window(ctx: &RootContext, ui: &Ui, st: &mut GuiState) {
+    ui.window("Descriptor Blobs")
+        .size([400.0, 300.0], imgui::Condition::FirstUseEver)
+        .opened(&mut st.show_descriptor_blobs)
+        .build(|| {
+            if let Some(_tab) = ui.tab_bar("descriptor_blobs_tab_bar") {
+                if let Some(_t) = ui.begin_table_with_flags("descriptor_blobs", 2, TABLE_FLAGS) {
+                    ui.table_setup_column("Blob");
+                    ui.table_setup_column("Info");
+                    ui.table_headers_row();
+                    for (blob, rinfo) in ctx.dbg.resource_descriptors.iter() {
+                        let blobstr = format_descriptor_blob(blob);
+                        ui.table_next_column();
+                        let id = ui.tree_node_config(blobstr).leaf(false).push();
+                        ui.table_next_column();
+                        match rinfo {
+                            ResourceDescriptorInfo::Image { view, layout } => {
+                                let format_name = vk_format_info::get_format_info(view.format);
+                                ui.text(format!(
+                                    "Image View: {:?} format {} layout {}",
+                                    view.image, format_name.name, layout
+                                ));
+                            }
+                            ResourceDescriptorInfo::TexelBuffer(_) => {
+                                ui.text("TexelBuffer");
+                            }
+                            ResourceDescriptorInfo::AddressRange(_) => {
+                                ui.text("AddressRange");
+                            }
+                            ResourceDescriptorInfo::TensorARM(_) => {
+                                ui.text("TensorARM");
+                            }
+                        }
+                        if id.is_some() {
+                            ui.table_next_column();
+                            ui.text("TODO");
+                            ui.table_next_column();
+                        }
+                    }
+                    for (blob, info) in ctx.dbg.sampler_descriptors.iter() {
+                        let blobstr = format_descriptor_blob(blob);
+                        ui.table_next_column();
+                        let id = ui.tree_node_config(blobstr).leaf(false).push();
+                        ui.table_next_column();
+                        ui.text(format!("Sampler"));
+                        if id.is_some() {
+                            ui.table_next_column();
+                            ui.text("minFilter");
+                            ui.table_next_column();
+                            ui.text(format!("{:?}", info.minFilter));
+
+                            ui.table_next_column();
+                            ui.text("magFilter");
+                            ui.table_next_column();
+                            ui.text(format!("{:?}", info.magFilter));
+
+                            ui.table_next_column();
+                            ui.text("mipmapMode");
+                            ui.table_next_column();
+                            ui.text(format!("{:?}", info.mipmapMode));
+
+                            ui.table_next_column();
+                            ui.text("addressModeU");
+                            ui.table_next_column();
+                            ui.text(format!("{:?}", info.addressModeU));
+
+                            ui.table_next_column();
+                            ui.text("addressModeV");
+                            ui.table_next_column();
+                            ui.text(format!("{:?}", info.addressModeV));
+
+                            ui.table_next_column();
+                            ui.text("addressModeW");
+                            ui.table_next_column();
+                            ui.text(format!("{:?}", info.addressModeW));
+                        }
+                    }
+                }
+            }
+        });
+}
+
+fn size_hints_window(_ctx: &RootContext, ui: &Ui, st: &mut GuiState) {
     ui.window("Size Hints").size([400.0, 300.0], imgui::Condition::FirstUseEver).opened(&mut st.show_size_hints).build(
         || {
             if let Some(_t) = ui.begin_table_with_flags("size_hints", 3, TABLE_FLAGS) {
                 ui.table_setup_column("Array Expr");
                 ui.table_setup_column("Size Hint");
                 ui.table_setup_column("Load Chain");
-
                 ui.table_headers_row();
-
                 for sh in st.size_hints.iter() {
                     ui.table_next_column();
                     ui.text(format!("{}", sh.array_var_path));
@@ -562,7 +650,7 @@ fn param_child_rows_ui(walk: &mut ParamWalk, ui: &Ui, st: &mut GuiState, size_hi
     }
 }
 
-fn begin_set_size_hint(walk: &mut ParamWalk, ui: &Ui, st: &mut GuiState) {
+fn begin_set_size_hint(walk: &mut ParamWalk, _ui: &Ui, st: &mut GuiState) {
     st.array_size_hint_source = Some(walk.var_info());
     st.status = format!("Click on a variable to select a size hint for {}", walk.path);
     st.mode = GuiMode::PickSizeHint;
@@ -613,7 +701,7 @@ fn param_ui(walk: &mut ParamWalk, ui: &Ui, st: &mut GuiState, name: &str) {
 
     let has_child_rows = type_has_child_rows(st, walk.ty);
     ui.table_next_column();
-    let _id = ui.tree_node_config(name).flags(TreeNodeFlags::DEFAULT_OPEN).leaf(!has_child_rows).push();
+    let id = ui.tree_node_config(name).flags(TreeNodeFlags::DEFAULT_OPEN).leaf(!has_child_rows).push();
     if let Some(_token) = ui.begin_popup_context_item() {
         if ui.menu_item("Pin watch") {
             add_pinned_watch(walk, ui, st);
@@ -644,7 +732,7 @@ fn param_ui(walk: &mut ParamWalk, ui: &Ui, st: &mut GuiState, name: &str) {
     ui.table_next_column();
     param_value_summary_ui(walk, ui, st);
 
-    if _id.is_some() && has_child_rows {
+    if id.is_some() && has_child_rows {
         param_child_rows_ui(walk, ui, st, size_hint);
     }
 }
@@ -744,6 +832,9 @@ fn main_menu(ui: &Ui, st: &mut GuiState) {
             if ui.menu_item_config("Memory Map").selected(st.show_memory_map).build() {
                 st.show_memory_map = !st.show_memory_map;
             }
+            if ui.menu_item_config("Descriptor Blobs").selected(st.show_descriptor_blobs).build() {
+                st.show_descriptor_blobs = !st.show_descriptor_blobs;
+            }
         });
         ui.menu("Options", || {
             if ui.menu_item_config("Fuse single-field structs").selected(st.fuse_single_field_structs).build() {
@@ -765,9 +856,11 @@ fn command_browser_window(ctx: &mut RootContext, ui: &Ui, st: &mut GuiState) {
     ui.window("Commands").bg_alpha(0.5).opened(&mut opened).build(|| {
         ui.text("Debug layer active");
         ui.text(format!("dear imgui version: {}", imgui::dear_imgui_version()));
-        ui.text(format!("Total submissions: {}", ctx.sbs.submission_count));
+        ui.text(format!("vkQueueSubmit count: {}", ctx.dbg.subs.len()));
 
-        for (i_sub, sub) in ctx.sbs.subs.iter().enumerate() {
+        // move out to avoid borrowing woes
+        let subs = mem::take(&mut ctx.dbg.subs);
+        for (i_sub, sub) in subs.iter().enumerate() {
             let _guard = ui.push_id_usize(i_sub);
             for (i_cmd, cmd) in sub.commands.iter().enumerate() {
                 if ui.collapsing_header(
@@ -779,6 +872,7 @@ fn command_browser_window(ctx: &mut RootContext, ui: &Ui, st: &mut GuiState) {
                 }
             }
         }
+        ctx.dbg.subs = subs;
     });
     st.show_commands = opened;
 }
@@ -805,11 +899,10 @@ fn status_bar_ui(ctx: &mut RootContext, ui: &Ui, st: &mut GuiState) {
 
 impl Device {
     fn main_gui(&self, rd: &RenderData, ui: &Ui, st: &mut GuiState) {
-        let mut sbs = self.submissions.lock();
         let mut dbg = self.debugger.lock();
         let mut modules = self.modules.lock();
 
-        let mut root_ctx = RootContext { d: self, rd, dbg: &mut dbg, sbs: &mut sbs, modules: &mut modules };
+        let mut root_ctx = RootContext { d: self, rd, dbg: &mut dbg, modules: &mut modules };
 
         ui.dockspace_over_main_viewport();
         main_menu(ui, st);
@@ -824,6 +917,9 @@ impl Device {
         }
         if st.show_memory_map {
             memory_map_window(&mut root_ctx, ui, st);
+        }
+        if st.show_descriptor_blobs {
+            descriptor_blob_window(&mut root_ctx, ui, st);
         }
         pinned_watch_windows(&mut root_ctx, ui, st);
         status_bar_ui(&mut root_ctx, ui, st);

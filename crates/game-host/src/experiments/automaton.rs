@@ -1,14 +1,13 @@
 use crate::{SceneInfo, SceneInfoUniforms};
 use gamelib::asset::{AssetError, AssetNotLoadedError};
-use gamelib::egui::DragValue;
+use gamelib::error::ExcResult;
 use gamelib::input::InputEvent;
 use gamelib::render::RenderTarget;
-use gamelib::{egui, static_assets, tweak};
-use gpu::{Buffer, BufferCreateInfo, Image, ImageUsage, BarrierFlags, PrimitiveTopology, BARRIER_STORAGE};
+use gamelib::static_assets;
+use gpu::vulkan::*;
+use gpu::{BARRIER_STORAGE, BarrierFlags, Buffer, BufferCreateInfo, Image, ImageUsage, PrimitiveTopology};
 use math::{IVec2, Vec3};
 use std::path::Path;
-use gamelib::error::ExcResult;
-use gpu::vulkan::*;
 
 static_assets! {
     static BASE_RENDER: gpu::GraphicsPipeline = "/shaders/game_shaders.sharc#automaton_base_render";
@@ -162,26 +161,26 @@ impl AutomatonExperiment {
         }
     }
 
-    pub(crate) fn ui(&mut self, ctx: &egui::Context) {
-        egui::Window::new("Automaton Experiment").show(ctx, |ui| {
-            ui.label("Debug mode:");
-            ui.vertical(|ui| {
-                ui.selectable_value(&mut self.debug_mode, DebugMode::None, "None");
-                ui.selectable_value(&mut self.debug_mode, DebugMode::Shading, "Shading");
-                ui.selectable_value(&mut self.debug_mode, DebugMode::Normals, "Normals");
-                ui.selectable_value(&mut self.debug_mode, DebugMode::Depth, "Depth");
-                ui.selectable_value(&mut self.debug_mode, DebugMode::Aux, "Aux");
-                ui.selectable_value(&mut self.debug_mode, DebugMode::ContoursMaxCurv, "Contours (max curvature)");
-                ui.selectable_value(&mut self.debug_mode, DebugMode::ContoursAngle, "Contours (angle)");
-                ui.selectable_value(&mut self.debug_mode, DebugMode::SimTrails, "Simulation trails");
-            });
-            if ui.button("Reset simulation").clicked() {
-                self.sim_step = 0;
-            }
-            //ui.add(Slider::new(&mut self.sim_step, 0..=self.max_sim_steps).text("Sim step").step_by(1.0));
-            ui.add(DragValue::new(&mut self.max_sim_steps).range(0..=1000).prefix("Max sim steps: ").speed(1.0));
-        });
-    }
+    //pub(crate) fn ui(&mut self, ctx: &egui::Context) {
+    //    egui::Window::new("Automaton Experiment").show(ctx, |ui| {
+    //        ui.label("Debug mode:");
+    //        ui.vertical(|ui| {
+    //            ui.selectable_value(&mut self.debug_mode, DebugMode::None, "None");
+    //            ui.selectable_value(&mut self.debug_mode, DebugMode::Shading, "Shading");
+    //            ui.selectable_value(&mut self.debug_mode, DebugMode::Normals, "Normals");
+    //            ui.selectable_value(&mut self.debug_mode, DebugMode::Depth, "Depth");
+    //            ui.selectable_value(&mut self.debug_mode, DebugMode::Aux, "Aux");
+    //            ui.selectable_value(&mut self.debug_mode, DebugMode::ContoursMaxCurv, "Contours (max curvature)");
+    //            ui.selectable_value(&mut self.debug_mode, DebugMode::ContoursAngle, "Contours (angle)");
+    //            ui.selectable_value(&mut self.debug_mode, DebugMode::SimTrails, "Simulation trails");
+    //        });
+    //        if ui.button("Reset simulation").clicked() {
+    //            self.sim_step = 0;
+    //        }
+    //        //ui.add(Slider::new(&mut self.sim_step, 0..=self.max_sim_steps).text("Sim step").step_by(1.0));
+    //        ui.add(DragValue::new(&mut self.max_sim_steps).range(0..=1000).prefix("Max sim steps: ").speed(1.0));
+    //    });
+    //}
 
     pub(crate) fn load_geometry(&mut self, path: &Path) {
         let geo = hgeo::Geo::load(path).unwrap();
@@ -256,7 +255,7 @@ impl AutomatonExperiment {
             trails_1: self.trails_1.storage_handle(),
             emitters: self.emitters.ptr(),
             emitter_count: self.emitters.len() as u32,
-            light_direction: tweak!(light_direction: Vec3 = Vec3::new(0.0, 0.0, -1.0)),
+            light_direction: Vec3::new(0.0, 0.0, -1.0),
             sim_step: self.sim_step,
             debug_mode: self.debug_mode,
         });

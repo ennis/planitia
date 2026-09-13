@@ -1,11 +1,11 @@
-use crate::{vkcall, Device};
 use crate::device::{RESOURCE_DESCRIPTOR_HEAP_SIZE, SAMPLER_DESCRIPTOR_HEAP_SIZE};
+use crate::{Device, vkcall};
+use gpu::vkcallnc;
 use gpu_allocator::MemoryLocation;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme, Allocator};
 use std::ffi::c_void;
 use std::sync::Mutex;
 use std::{mem, ptr};
-use gpu::vkcallnc;
 use vulkan::*;
 
 /// Simple free list to allocate indices.
@@ -106,7 +106,7 @@ enum DescriptorHeapType {
 fn allocate_descriptor_heap_memory(
     allocator: &mut Allocator,
     device: VkDevice,
-    device_fns: &Vulkan_1_4_DeviceDispatch,
+    device_fns: &DeviceDispatchCombined,
     heap_type: DescriptorHeapType,
     byte_size: usize,
     descriptor_heap_properties: &VkPhysicalDeviceDescriptorHeapPropertiesEXT,
@@ -129,7 +129,11 @@ fn allocate_descriptor_heap_memory(
         let alloc = {
             let alloc_desc = AllocationCreateDesc {
                 name: "descriptor heap".into(),
-                requirements: mem::transmute(VkMemoryRequirements { size: byte_size as u64, alignment, memoryTypeBits: u32::MAX }),
+                requirements: mem::transmute(VkMemoryRequirements {
+                    size: byte_size as u64,
+                    alignment,
+                    memoryTypeBits: u32::MAX,
+                }),
                 location: MemoryLocation::CpuToGpu,
                 linear: true,
                 allocation_scheme: AllocationScheme::GpuAllocatorManaged,
@@ -197,7 +201,7 @@ impl DescriptorHeaps {
     pub(super) fn new(
         allocator: &mut Allocator,
         device: VkDevice,
-        device_fns: &Vulkan_1_4_DeviceDispatch,
+        device_fns: &DeviceDispatchCombined,
         descriptor_heap_properties: &VkPhysicalDeviceDescriptorHeapPropertiesEXT,
     ) -> DescriptorHeaps {
         // allocate descriptor heap memory
@@ -276,12 +280,12 @@ impl Device {
             // Write the descriptor
             // SAFETY: access to the descriptor set is externally synchronized via `self.write_lock`
             let _lock = self.descriptor_heaps.write_lock.lock().unwrap();
-            self.ext.descriptor_heap.WriteSamplerDescriptorsEXT(
+            vkcall!(self.fns.WriteSamplerDescriptorsEXT(
                 self.vkd,
                 1,
                 info,
                 &self.descriptor_heaps.sampler.address_range_by_index(index, 1),
-            );
+            ));
         }
         index
     }
@@ -292,21 +296,19 @@ impl Device {
             // Write the descriptor
             // SAFETY: access to the descriptor set is externally synchronized via `self.write_lock`
             let _lock = self.descriptor_heaps.write_lock.lock().unwrap();
-            self.ext.descriptor_heap.WriteResourceDescriptorsEXT(
+            vkcall!(self.fns.WriteResourceDescriptorsEXT(
                 self.vkd,
                 1,
                 info,
                 &self.descriptor_heaps.resource.address_range_by_index(index, 1),
-            );
+            ));
         }
         index
     }
-}
 
-impl Device {
     pub(crate) fn bind_descriptor_heaps(&self, cmdbuf: VkCommandBuffer) {
         unsafe {
-            self.ext.descriptor_heap.CmdBindResourceHeapEXT(
+            self.fns.CmdBindResourceHeapEXT(
                 cmdbuf,
                 &VkBindHeapInfoEXT {
                     heapRange: VkDeviceAddressRangeEXT {
@@ -318,7 +320,7 @@ impl Device {
                     ..
                 },
             );
-            self.ext.descriptor_heap.CmdBindSamplerHeapEXT(
+            self.fns.CmdBindSamplerHeapEXT(
                 cmdbuf,
                 &VkBindHeapInfoEXT {
                     heapRange: VkDeviceAddressRangeEXT {

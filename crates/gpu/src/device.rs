@@ -3,12 +3,11 @@
 mod descriptor_heap;
 
 use crate::device::descriptor_heap::DescriptorHeaps;
-use crate::platform::PlatformExtensions;
 use crate::{
     BufferAddressRange, BufferUsage, ComputePipeline, ComputePipelineCreateInfo, Error, FrameIndex, GraphicsPipeline,
     GraphicsPipelineCreateInfo, Instance, PreRasterizationShaders, Ptr, SUBGROUP_SIZE, SamplerParams,
     SamplerParamsHashable, ShaderReflection, VulkanObject, get_vulkan_entry, is_depth_and_stencil_format, signal,
-    vkarraycall, vkarraycallnc, vkcallnc, vkcall,
+    vkarraycall, vkarraycallnc, vkcall, vkcallnc,
 };
 use ash::vk::Handle;
 use gpu::device::descriptor_heap::SamplerDescriptorHandle;
@@ -30,6 +29,32 @@ use vulkan::*;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+pub struct Device {
+    /// Underlying vulkan device
+    pub vkd: VkDevice,
+    pub fns: DeviceDispatchCombined,
+    pub(crate) allocator: Mutex<gpu_allocator::vulkan::Allocator>,
+    /// Queue family index of the main queue.
+    pub(crate) queue_family: u32,
+    pub(crate) thread_safe: DeviceThreadSafeState,
+    pub(crate) submission_state: Mutex<DeviceSubmissionState>,
+    pub(crate) descriptor_heaps: DescriptorHeaps,
+    /// semaphores ready for reuse.
+    pub(crate) semaphores: Mutex<Vec<VkSemaphore>>,
+    /// The index of the frame being recorded, or, equivalently, the next frame index to be signalled.
+    pub(crate) frame_index: AtomicU64,
+    /// Destructors (or other function calls) that are delayed until associated command buffers
+    /// have completed execution.
+    deletion_queue: Mutex<Vec<DeleteQueueEntry>>,
+    pub(crate) sampler_cache: Mutex<HashMap<SamplerParamsHashable, SamplerDescriptorHandle>>,
+}
+
+impl fmt::Debug for Device {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("DeviceInner").finish_non_exhaustive()
+    }
+}
+
 // Sizes of the global descriptor heaps (in number of descriptors).
 const RESOURCE_DESCRIPTOR_HEAP_SIZE: usize = 1024 * 1024;
 const SAMPLER_DESCRIPTOR_HEAP_SIZE: usize = 64 * 1024;
@@ -43,18 +68,18 @@ new_key_type! {
     pub struct SamplerDescriptorIndex;
 }
 
-/// Device extensions.
-pub(crate) struct DeviceExtensions {
-    pub(crate) swapchain: khr_swapchain::DeviceDispatch,
-    //pub(crate) ext_shader_object: ash::ext::,
-    pub(crate) push_descriptor: khr_push_descriptor::DeviceDispatch,
-    pub(crate) calibrated_timestamps: khr_calibrated_timestamps::DeviceDispatch,
-    pub(crate) mesh_shader: ext_mesh_shader::DeviceDispatch,
-    pub(crate) _ext_extended_dynamic_state3: ext_extended_dynamic_state3::DeviceDispatch,
-    pub(crate) debug_utils: ext_debug_utils::DeviceDispatch,
-    pub(crate) descriptor_heap_instance: ext_descriptor_heap::InstanceDispatch,
-    pub(crate) descriptor_heap: ext_descriptor_heap::DeviceDispatch,
-}
+///// Device extensions.
+//pub(crate) struct DeviceExtensions {
+//    pub(crate) swapchain: khr_swapchain::DeviceDispatch,
+//    //pub(crate) ext_shader_object: ash::ext::,
+//    pub(crate) push_descriptor: khr_push_descriptor::DeviceDispatch,
+//    pub(crate) calibrated_timestamps: khr_calibrated_timestamps::DeviceDispatch,
+//    pub(crate) mesh_shader: ext_mesh_shader::DeviceDispatch,
+//    pub(crate) _ext_extended_dynamic_state3: ext_extended_dynamic_state3::DeviceDispatch,
+//    pub(crate) debug_utils: ext_debug_utils::DeviceDispatch,
+//    pub(crate) descriptor_heap_instance: ext_descriptor_heap::InstanceDispatch,
+//    pub(crate) descriptor_heap: ext_descriptor_heap::DeviceDispatch,
+//}
 
 /// Device state that is unconditionally safe to access from multiple threads, even though
 /// the fields themselves may not be Send or Sync.
@@ -81,38 +106,6 @@ pub(crate) struct DeviceSubmissionState {
     pub(crate) active_submissions: VecDeque<ActiveSubmission>,
 }
 
-pub struct Device {
-    /// Underlying vulkan device
-    pub vkd: VkDevice,
-    pub fns: Vulkan_1_4_DeviceDispatch,
-    /// Common device extensions.
-    pub(crate) ext: DeviceExtensions,
-    /// Platform-specific extension functions
-    pub(crate) platform_extensions: PlatformExtensions,
-    pub(crate) allocator: Mutex<gpu_allocator::vulkan::Allocator>,
-    /// Queue family index of the main queue.
-    pub(crate) queue_family: u32,
-    pub(crate) thread_safe: DeviceThreadSafeState,
-    pub(crate) submission_state: Mutex<DeviceSubmissionState>,
-    // WIP
-    pub(crate) descriptor_heaps: DescriptorHeaps,
-    // --- descriptor heap ---
-    /// semaphores ready for reuse.
-    pub(crate) semaphores: Mutex<Vec<VkSemaphore>>,
-    /// The index of the frame being recorded, or, equivalently, the next frame index to be signalled.
-    pub(crate) frame_index: AtomicU64,
-    /// Destructors (or other function calls) that are delayed until associated command buffers
-    /// have completed execution.
-    deletion_queue: Mutex<Vec<DeleteQueueEntry>>,
-    pub(crate) sampler_cache: Mutex<HashMap<SamplerParamsHashable, SamplerDescriptorHandle>>,
-}
-
-impl fmt::Debug for Device {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("DeviceInner").finish_non_exhaustive()
-    }
-}
-
 /// Data and resources associated to a submission that was submitted to the GPU.
 pub(crate) struct ActiveSubmission {
     //pub(crate) create_ticket: u64,
@@ -131,7 +124,7 @@ struct DeleteQueueEntry {
 /// Errors during device creation.
 #[derive(thiserror::Error, Debug)]
 pub enum DeviceCreateError {
-    #[error("")]
+    #[error("{0}")]
     Vulkan(VkResult),
 }
 
@@ -280,47 +273,6 @@ unsafe fn select_physical_device(instance: &Instance) -> PhysicalDeviceAndProper
     }
 }
 
-/*
-// TODO nuke this
-unsafe fn find_queue_family(
-    instance: &Instance,
-    phy: VkPhysicalDevice,
-    queue_families: &[VkQueueFamilyProperties],
-    flags: VkQueueFlags,
-    present_surface: Option<VkSurfaceKHR>,
-) -> u32 {
-    let mut best_queue_family: Option<u32> = None;
-    let mut best_flags = 0u32;
-    let mut index = 0u32;
-    for queue_family in queue_families {
-        if queue_family.queueFlags & flags != 0 {
-            // matches the intended usage
-            // if present_surface != nullptr, check that it also supports presentation
-            // to the given surface
-            if let Some(surface) = present_surface {
-                if instance.khr_surface.GetPhysicalDeviceSurfaceSupportKHR(phy, index, surface).unwrap() == VK_FALSE {
-                    // does not support presentation, skip it
-                    continue;
-                }
-            }
-            if let Some(ref mut i) = best_queue_family {
-                // there was already a queue for the specified usage,
-                // change it only if it is more specialized.
-                // to determine if it is more specialized, count number of bits (XXX sketchy?)
-                if queue_family.queueFlags.count_ones() < best_flags.count_ones() {
-                    *i = index;
-                    best_flags = queue_family.queueFlags;
-                }
-            } else {
-                best_queue_family = Some(index);
-                best_flags = queue_family.queueFlags;
-            }
-        }
-        index += 1;
-    }
-    best_queue_family.expect("could not find a compatible queue")
-}*/
-
 #[cfg(windows)]
 const DEVICE_EXTENSION_COUNT: usize = 14;
 
@@ -415,9 +367,8 @@ impl Device {
     ) -> Result<Device, DeviceCreateError> {
         let entry = get_vulkan_entry();
         let instance = Instance::get();
-        let dd = Vulkan_1_4_DeviceDispatch::load_with(|proc| instance.fns.GetDeviceProcAddr(device, proc.as_ptr()));
+        let dd = DeviceDispatchCombined::load_with(|proc| instance.fns.GetDeviceProcAddr(device, proc.as_ptr()));
         vkcallnc!(dd.GetDeviceQueue(device, graphics_queue_family_index, 0, @out let queue));
-
         let timeline = {
             let timeline_create_info =
                 VkSemaphoreTypeCreateInfo { semaphoreType: VK_SEMAPHORE_TYPE_TIMELINE, initialValue: 0, .. };
@@ -451,22 +402,8 @@ impl Device {
         physical_device_id_properties.pNext = &mut descriptor_heap_properties as *mut _ as *mut c_void;
         physical_device_properties.pNext = &mut physical_device_id_properties as *mut _ as *mut c_void;
         instance.fns.GetPhysicalDeviceProperties2(physical_device, &mut physical_device_properties);
-        // Extensions
-        let load_fn = |proc: &CStr| instance.fns.GetDeviceProcAddr(device, proc.as_ptr());
-        let khr_swapchain = khr_swapchain::DeviceDispatch::load_with(load_fn);
-        let khr_push_descriptor = khr_push_descriptor::DeviceDispatch::load_with(load_fn);
-        let khr_calibrated_timestamps = khr_calibrated_timestamps::DeviceDispatch::load_with(load_fn);
-        let ext_extended_dynamic_state3 = ext_extended_dynamic_state3::DeviceDispatch::load_with(load_fn);
-        let ext_mesh_shader = ext_mesh_shader::DeviceDispatch::load_with(load_fn);
-        let ext_debug_utils = ext_debug_utils::DeviceDispatch::load_with(load_fn);
-        let platform_extensions = PlatformExtensions::load(&instance.fns, device);
-        let descriptor_heap_device = ext_descriptor_heap::DeviceDispatch::load_with(load_fn);
-        let descriptor_heap_instance = ext_descriptor_heap::InstanceDispatch::load_with(|proc: &CStr| {
-            entry.GetInstanceProcAddr(instance.instance, proc.as_ptr())
-        });
         let descriptor_heaps = DescriptorHeaps::new(&mut allocator, device, &dd, &descriptor_heap_properties);
         vkcallnc!(instance.fns.GetPhysicalDeviceMemoryProperties(physical_device, @out let memory_properties));
-
         // ------ info dump ------
         let device_name = CStr::from_ptr(physical_device_properties.properties.deviceName.as_ptr()).to_string_lossy();
         info!("gpu: using device {device_name}",);
@@ -493,17 +430,6 @@ impl Device {
         Ok(Device {
             fns: dd,
             vkd: device,
-            ext: DeviceExtensions {
-                swapchain: khr_swapchain,
-                push_descriptor: khr_push_descriptor,
-                calibrated_timestamps: khr_calibrated_timestamps,
-                mesh_shader: ext_mesh_shader,
-                _ext_extended_dynamic_state3: ext_extended_dynamic_state3,
-                debug_utils: ext_debug_utils,
-                descriptor_heap: descriptor_heap_device,
-                descriptor_heap_instance,
-            },
-            platform_extensions,
             thread_safe: DeviceThreadSafeState {
                 physical_device_memory_properties: memory_properties,
                 physical_device_id_properties,
@@ -531,7 +457,7 @@ impl Device {
     /// Returns the list of supported swapchain formats for the given surface.
     pub unsafe fn get_surface_formats(&self, surface: VkSurfaceKHR) -> Vec<VkSurfaceFormatKHR> {
         let instance = Instance::get();
-        vkarraycall!(instance.khr_surface.GetPhysicalDeviceSurfaceFormatsKHR(self.thread_safe.physical_device, surface, @count let count, @out let surface_formats));
+        vkarraycall!(instance.fns.GetPhysicalDeviceSurfaceFormatsKHR(self.thread_safe.physical_device, surface, @count let count, @out let surface_formats));
         surface_formats
         /*let mut count = 0;
         instance
@@ -576,7 +502,7 @@ impl Device {
             as u32;
         // check that it supports presentation, to silence validation warnings
         if let Some(surface) = present_surface {
-            vkcall!(instance.khr_surface.GetPhysicalDeviceSurfaceSupportKHR(phy.physical_device, qf, surface, @out let supported));
+            vkcall!(instance.fns.GetPhysicalDeviceSurfaceSupportKHR(phy.physical_device, qf, surface, @out let supported));
             assert!(supported == VK_TRUE, "selected graphics+compute queue does not support presentation");
         }
         let queue_priorities = [1.0f32];
@@ -951,16 +877,6 @@ impl Device {
             vkcall!(self.fns.CreateComputePipelines(self.vkd, VkPipelineCache::null(), 1, &cpci, ptr::null(), @out let pipeline));
             Ok(ComputePipeline { pipeline, reflection: create_info.shader.refl_params })
         }
-        //let mut pipeline = VkPipeline::null();
-        //vkcheck!(self.fns.CreateComputePipelines(
-        //    self.vkd,
-        //    VkPipelineCache::null(),
-        //    1,
-        //    &cpci,
-        //    ptr::null(),
-        //    &mut pipeline
-        //));
-        //pipeline
     }
 
     /// Creates a graphics pipeline.
@@ -1260,18 +1176,6 @@ impl Device {
             vkcall!(self.fns.CreateGraphicsPipelines(self.vkd, VkPipelineCache::null(), 1, &pipeline_create_info, ptr::null(), @out let pipeline));
             Ok(GraphicsPipeline { pipeline, stage_reflection })
         }
-        //let pipeline = unsafe {
-        //    let mut pipeline = VkPipeline::null();
-        //    vkcheck!(self.fns.CreateGraphicsPipelines(
-        //        self.vkd,
-        //        VkPipelineCache::null(),
-        //        1,
-        //        &pipeline_create_info,
-        //        ptr::null(),
-        //        &mut pipeline,
-        //    ));
-        //    pipeline
-        //};
     }
 }
 
@@ -1355,7 +1259,7 @@ pub unsafe fn set_debug_name_raw<H: VulkanHandle>(handle: H, name: impl AsRef<st
         ..
     };
     unsafe {
-        vkcall!(device.ext.debug_utils.SetDebugUtilsObjectNameEXT(device.vkd, &info));
+        vkcall!(device.fns.SetDebugUtilsObjectNameEXT(device.vkd, &info));
     }
 }
 
@@ -1447,7 +1351,7 @@ pub fn get_calibrated_timestamp_pair() -> (u64, u64) {
 
     let mut _max_deviation = 0;
     unsafe {
-        vkcall!(device.ext.calibrated_timestamps.GetCalibratedTimestampsKHR(
+        vkcall!(device.fns.GetCalibratedTimestampsKHR(
             device.vkd,
             TIMESTAMP_INFOS.len() as u32,
             TIMESTAMP_INFOS.as_ptr(),

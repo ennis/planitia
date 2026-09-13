@@ -8,6 +8,7 @@ use slang::reflection::{TypeLayout, VariableLayout};
 use slang::{ParameterCategory, ScalarType, TypeKind};
 use std::collections::HashMap;
 
+/*
 /// Represents a constant value.
 #[repr(C)]
 #[derive(Clone)]
@@ -22,13 +23,7 @@ pub enum Value {
     F32 { count: u8, values: [f32; 4] },
     /// String
     String { value: String },
-}
-
-#[derive(Clone)]
-pub struct UserAttribute {
-    pub name: String,
-    pub value: Value,
-}
+}*/
 
 /*
 /// Describes how a shader parameter is accessed.

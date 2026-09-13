@@ -427,7 +427,7 @@ trait TomlExt {
     /// Returns `Err(Error::InvalidType)` if the field is present but not a string.
     fn get_optional_str(&self, field: &'static str) -> Result<Option<&str>, ManifestError>;
 
-    /// Retrieves an optional string field from a TOML value as an owned string.
+    /*/// Retrieves an optional string field from a TOML value as an owned string.
     ///
     /// Returns `Ok(None)` if the field is not present.
     /// Returns `Err(Error::InvalidType)` if the field is present but not a string.
@@ -436,7 +436,7 @@ trait TomlExt {
             Some(s) => Ok(Some(s.to_string())),
             None => Ok(None),
         }
-    }
+    }*/
 
     /// Retrieves an optional field that is either a string or an array of strings from a TOML value.
     ///
@@ -467,8 +467,9 @@ trait TomlExt {
     /// Returns `Err(Error::InvalidType)` if the field is present but neither a table nor an array.
     fn get_optional_table_or_array(&self, field: &'static str) -> Result<Option<&TomlValue>, ManifestError>;
 
-    /// Retrieves a field array value.
-    fn get_array(&self, field: &'static str) -> Result<&Vec<TomlValue>, ManifestError>;
+    /*/// Retrieves a field array value.
+        fn get_array(&self, field: &'static str) -> Result<&Vec<TomlValue>, ManifestError>;
+    */
 
     /// Retrieves an optional enum value.
     fn get_optional_enum<T: Copy>(
@@ -521,16 +522,13 @@ static BLEND_FACTORS: &[(&str, VkBlendFactor)] = &[
     ("one_minus_src_alpha", VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA),
 ];
 
-static BLEND_OPS: &[(&str, VkBlendOp)] = &[
-    ("add", VK_BLEND_OP_ADD),
-    ("subtract", VK_BLEND_OP_SUBTRACT),
-    ("reverse_subtract", VK_BLEND_OP_REVERSE_SUBTRACT),
-];
+static BLEND_OPS: &[(&str, VkBlendOp)] =
+    &[("add", VK_BLEND_OP_ADD), ("subtract", VK_BLEND_OP_SUBTRACT), ("reverse_subtract", VK_BLEND_OP_REVERSE_SUBTRACT)];
 
 impl TomlExt for toml::Value {
-    fn get_array(&self, field: &'static str) -> Result<&Vec<TomlValue>, ManifestError> {
+    /*fn get_array(&self, field: &'static str) -> Result<&Vec<TomlValue>, ManifestError> {
         self.as_array().ok_or(InvalidType(field, "array"))
-    }
+    }*/
 
     fn get_optional_str(&self, field: &'static str) -> Result<Option<&str>, ManifestError> {
         match self.get(field) {

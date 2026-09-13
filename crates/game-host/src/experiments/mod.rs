@@ -4,7 +4,7 @@ mod dcel;
 pub mod lines;
 pub mod outlines;
 mod ss_contours;
-pub mod svg;
+//pub mod svg;
 mod sweep;
 mod winged_edge_mesh;
 

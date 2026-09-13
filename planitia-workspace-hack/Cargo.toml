@@ -16,64 +16,51 @@ publish = false
 ### BEGIN HAKARI SECTION
 [dependencies]
 anstream = { version = "1" }
-base64 = { version = "0.22" }
 bitflags = { version = "2", default-features = false, features = ["serde"] }
-bytemuck = { version = "1", default-features = false, features = ["aarch64_simd", "extern_crate_alloc", "wasm_simd"] }
 chrono = { version = "0.4", features = ["serde"] }
-either = { version = "1", features = ["use_std"] }
-flate2 = { version = "1" }
-float-cmp = { version = "0.9", features = ["std"] }
+either = { version = "1" }
 glam = { version = "0.30", features = ["serde"] }
 libc = { version = "0.2" }
 lock_api = { version = "0.4", features = ["arc_lock"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
 memchr = { version = "2" }
-miniz_oxide = { version = "0.8", features = ["simd"] }
-num-traits = { version = "0.2", features = ["i128"] }
+num-traits = { version = "0.2" }
 parking_lot = { version = "0.12", features = ["arc_lock"] }
 proc-macro2 = { version = "1", features = ["span-locations"] }
-profiling = { version = "1" }
 quote = { version = "1" }
 raw-window-handle = { version = "0.6", default-features = false, features = ["std"] }
-regex = { version = "1", default-features = false, features = ["perf", "std", "unicode-perl"] }
-regex-automata = { version = "0.4", default-features = false, features = ["dfa-onepass", "hybrid", "meta", "nfa-backtrack", "perf-inline", "perf-literal", "std", "unicode-perl", "unicode-word-boundary"] }
-regex-syntax = { version = "0.8", default-features = false, features = ["std", "unicode-perl"] }
+regex = { version = "1" }
+regex-automata = { version = "0.4", default-features = false, features = ["dfa-onepass", "hybrid", "meta", "nfa-backtrack", "perf-inline", "perf-literal", "std", "unicode"] }
+regex-syntax = { version = "0.8" }
 serde = { version = "1", features = ["alloc", "derive", "rc"] }
 serde_core = { version = "1", default-features = false, features = ["alloc", "rc", "result", "std"] }
-simd-adler32 = { version = "0.3" }
-smallvec = { version = "1", default-features = false, features = ["const_new"] }
-syn = { version = "2", features = ["extra-traits", "full", "visit-mut"] }
-zerocopy = { version = "0.8", default-features = false, features = ["derive", "simd"] }
+syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "full", "visit-mut"] }
+tracy-client = { version = "0.18" }
+tracy-client-sys = { version = "0.28", default-features = false, features = ["broadcast", "callstack-inlines", "code-transfer", "context-switch-tracing", "crash-handler", "enable", "sampling", "system-tracing"] }
 
 [build-dependencies]
 anstream = { version = "1" }
-base64 = { version = "0.22" }
 bitflags = { version = "2", default-features = false, features = ["serde"] }
-bytemuck = { version = "1", default-features = false, features = ["aarch64_simd", "extern_crate_alloc", "wasm_simd"] }
 chrono = { version = "0.4", features = ["serde"] }
-either = { version = "1", features = ["use_std"] }
-flate2 = { version = "1" }
-float-cmp = { version = "0.9", features = ["std"] }
+either = { version = "1" }
 glam = { version = "0.30", features = ["serde"] }
 libc = { version = "0.2" }
 lock_api = { version = "0.4", features = ["arc_lock"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
 memchr = { version = "2" }
-miniz_oxide = { version = "0.8", features = ["simd"] }
-num-traits = { version = "0.2", features = ["i128"] }
+num-traits = { version = "0.2" }
 parking_lot = { version = "0.12", features = ["arc_lock"] }
 proc-macro2 = { version = "1", features = ["span-locations"] }
-profiling = { version = "1" }
 quote = { version = "1" }
 raw-window-handle = { version = "0.6", default-features = false, features = ["std"] }
-regex = { version = "1", default-features = false, features = ["perf", "std", "unicode-perl"] }
-regex-automata = { version = "0.4", default-features = false, features = ["dfa-onepass", "hybrid", "meta", "nfa-backtrack", "perf-inline", "perf-literal", "std", "unicode-perl", "unicode-word-boundary"] }
-regex-syntax = { version = "0.8", default-features = false, features = ["std", "unicode-perl"] }
+regex = { version = "1" }
+regex-automata = { version = "0.4", default-features = false, features = ["dfa-onepass", "hybrid", "meta", "nfa-backtrack", "perf-inline", "perf-literal", "std", "unicode"] }
+regex-syntax = { version = "0.8" }
 serde = { version = "1", features = ["alloc", "derive", "rc"] }
 serde_core = { version = "1", default-features = false, features = ["alloc", "rc", "result", "std"] }
-simd-adler32 = { version = "0.3" }
-smallvec = { version = "1", default-features = false, features = ["const_new"] }
-syn = { version = "2", features = ["extra-traits", "full", "visit-mut"] }
-zerocopy = { version = "0.8", default-features = false, features = ["derive", "simd"] }
+syn-7b89eefb6aaa9bf3 = { package = "syn", version = "3", features = ["full"] }
+syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "full", "visit-mut"] }
+tracy-client = { version = "0.18" }
+tracy-client-sys = { version = "0.28", default-features = false, features = ["broadcast", "callstack-inlines", "code-transfer", "context-switch-tracing", "crash-handler", "enable", "sampling", "system-tracing"] }
 
 ### END HAKARI SECTION

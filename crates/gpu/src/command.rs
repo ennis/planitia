@@ -221,7 +221,7 @@ impl CommandBuffer {
             };
             let push_data_info =
                 VkPushDataInfoEXT { offset: 0, data: VkHostAddressRangeConstEXT { address, size }, .. };
-            device.ext.descriptor_heap.CmdPushDataEXT(cmdbuf, &push_data_info);
+            device.fns.CmdPushDataEXT(cmdbuf, &push_data_info);
         }
     }
 
@@ -320,7 +320,7 @@ impl CommandBuffer {
         let device = Device::instance();
         unsafe {
             let label = CString::new(label).unwrap();
-            device.ext.debug_utils.CmdBeginDebugUtilsLabelEXT(
+            device.fns.CmdBeginDebugUtilsLabelEXT(
                 self.cmdbuf,
                 &VkDebugUtilsLabelEXT { pLabelName: label.as_ptr(), color: [0.0, 0.0, 0.0, 0.0], .. },
             );
@@ -331,7 +331,7 @@ impl CommandBuffer {
     pub fn pop_debug_group(&mut self) {
         // TODO check that push/pop calls are balanced
         unsafe {
-            Device::instance().ext.debug_utils.CmdEndDebugUtilsLabelEXT(self.cmdbuf);
+            Device::instance().fns.CmdEndDebugUtilsLabelEXT(self.cmdbuf);
         }
     }
 
@@ -606,7 +606,7 @@ pub fn present(swap_chain: &mut SwapChain, index: usize) {
             pResults: ptr::null_mut(),
             ..
         };
-        vkcall!(device.ext.swapchain.QueuePresentKHR(submission_state.queue, &present_info));
+        vkcall!(device.fns.QueuePresentKHR(submission_state.queue, &present_info));
     }
 }
 
