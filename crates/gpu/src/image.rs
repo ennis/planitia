@@ -218,11 +218,13 @@ impl Image {
 
     /// Returns the bindless texture handle of this image view.
     pub fn texture_handle(&self) -> TextureHandle {
+        assert!(self.descriptors.texture != u32::MAX, "image does not have a texture descriptor");
         TextureHandle::new(self.descriptors.texture)
     }
 
     /// Returns the bindless storage image handle of this image view.
     pub fn storage_handle(&self) -> StorageImageHandle {
+        assert!(self.descriptors.image != u32::MAX, "image does not have a storage image descriptor");
         StorageImageHandle::new(self.descriptors.image)
     }
 
@@ -378,6 +380,7 @@ impl Device {
 
     /// Creates a new image resource.
     pub(crate) fn create_image(&self, image_info: &ImageCreateInfo) -> Image {
+        const DEFAULT_USAGES: VkImageUsageFlags = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         unsafe {
             let create_info = VkImageCreateInfo {
                 imageType: image_info.type_.into(),
@@ -387,7 +390,7 @@ impl Device {
                 arrayLayers: image_info.array_layers,
                 samples: get_vk_sample_count(image_info.samples),
                 tiling: VK_IMAGE_TILING_OPTIMAL, // LINEAR tiling not used enough to be exposed
-                usage: image_info.usage.into(),
+                usage: image_info.usage.to_vk_image_usage_flags() | DEFAULT_USAGES,
                 sharingMode: VK_SHARING_MODE_EXCLUSIVE,
                 queueFamilyIndexCount: 0,
                 pQueueFamilyIndices: ptr::null(),

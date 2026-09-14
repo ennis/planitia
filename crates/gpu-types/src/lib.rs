@@ -452,6 +452,7 @@ bitflags! {
     #[repr(transparent)]
     #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
     pub struct ImageUsage: u32 {
+        // TODO: retire TRANSFER_SRC and DST and add them by default
         const TRANSFER_SRC = 0b1;
         const TRANSFER_DST = 0b10;
         const SAMPLED = 0b100;

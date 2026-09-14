@@ -1,4 +1,4 @@
-use crate::{BufferRange, BufferUsage, Device, Ptr, ResourceAllocation, VulkanObject, vkcallnc, vkcall};
+use crate::{BufferRange, BufferUsage, Device, Ptr, ResourceAllocation, VulkanObject, vkcall, vkcallnc};
 use ash::vk::Handle;
 use gpu_allocator::MemoryLocation;
 use gpu_allocator::vulkan::{AllocationCreateDesc, AllocationScheme};
@@ -31,7 +31,30 @@ pub struct Buffer<T: ?Sized> {
     _marker: PhantomData<T>,
 }
 
+impl<T: ?Sized> Default for Buffer<T> {
+    fn default() -> Self {
+        Buffer::null()
+    }
+}
+
 impl<T: ?Sized> Buffer<T> {
+    pub const fn null() -> Buffer<T> {
+        // dummy struct to get a dangling NonNull with correct alignment
+        #[repr(align(64))]
+        struct Align64;
+        let mapped_ptr = NonNull::<Align64>::dangling().cast::<c_void>();
+        Buffer {
+            allocation: ResourceAllocation::None,
+            handle: VkBuffer::null(),
+            memory_location: MemoryLocation::CpuToGpu,
+            device_address: 0,
+            size: 0,
+            usage: BufferUsage::empty(),
+            mapped_ptr: Some(mapped_ptr),
+            _marker: PhantomData,
+        }
+    }
+
     pub unsafe fn from_layout(layout: Layout) -> Buffer<T> {
         // TODO ensure alignment
         let buffer = Device::instance().create_buffer(
@@ -123,6 +146,11 @@ impl<T: Copy> Buffer<T> {
             BufferCreateInfo { len: new_len, usage: self.usage, memory_location: self.memory_location },
         );
         unsafe { *self = buffer.cast() }
+    }
+
+    /// Creates a GPU buffer with uninitialized contents.
+    pub fn uninit(len: usize) -> Buffer<T> {
+        Buffer::new(BufferCreateInfo { len, usage: BufferUsage::default(), memory_location: MemoryLocation::CpuToGpu })
     }
 
     /// Creates a CpuToGpu buffer and copies data into it.

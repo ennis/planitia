@@ -334,20 +334,24 @@ pub(crate) struct MainThreadContext {
     watch: RefCell<Debouncer<RecommendedWatcher>>,
     /// Text overlay.
     text_overlay: RefCell<String>,
-    // Registered global resources, ordered by type.
-    //global_resources: RefCell<HashMap<TypeId, Box<dyn Any>>>,
+    #[cfg(feature = "tracy")]
     timestamp_query_counter: Cell<u16>,
+    #[cfg(feature = "tracy")]
     tracy_timestamps: RefCell<TracyTimestamps>,
 }
+
 
 impl MainThreadContext {
     /// Creates a new application instance and initializes the global systems.
     fn new(handler: RefCell<Box<dyn AppHandler + 'static>>, options: &AppOptions) -> Self {
+
         let platform = Platform::new(options); // also initializes the GPU device
-        let tracy_client = tracy_client::Client::running().unwrap();
-        tracy_client.set_thread_name("main thread");
-        info!("running with Tracy profiler enabled");
+
+        #[cfg(feature = "tracy")]
         let tracy_gpu_context = {
+            let tracy_client = tracy_client::Client::running().unwrap();
+            tracy_client.set_thread_name("main thread");
+            info!("running with Tracy profiler enabled");
             let (device_timestamp, _system_timestamp) = gpu::get_calibrated_timestamp_pair();
             tracy_client
                 .new_gpu_context(
@@ -402,7 +406,9 @@ impl MainThreadContext {
             lua: Lua::new(),
             watch,
             text_overlay: RefCell::new(String::new()),
+            #[cfg(feature = "tracy")]
             timestamp_query_counter: Cell::new(0),
+            #[cfg(feature = "tracy")]
             tracy_timestamps: RefCell::new(TracyTimestamps::new(tracy_gpu_context)),
         }
     }
@@ -544,6 +550,7 @@ impl LoopHandler for &'static MainThreadContext {
         //}
 
         // mark the end of the frame for tracy
+        #[cfg(feature = "tracy")]
         tracy_client::frame_mark();
 
         // cleanup expired GPU resources
@@ -604,106 +611,115 @@ pub(crate) fn get_context() -> &'static MainThreadContext {
 //--------------------------------------------------------------------------------------------------
 // Tracy GPU spans
 
-struct TimestampPool {
-    pool: gpu::QueryPool,
-    base: u16,
-    count: u16,
-}
+#[cfg(feature = "tracy")]
+pub mod tracy {
+    use crate::app::with_app_ctx;
 
-struct TracyTimestamps {
-    gpu_context: tracy_client::GpuContext,
-    per_frame: [TimestampPool; MAX_FRAMES_IN_FLIGHT],
-    results: Vec<u64>,
-    frame_index: usize,
-    query_counter: u16,
-}
-
-impl TracyTimestamps {
-    fn new(gpu_context: tracy_client::GpuContext) -> TracyTimestamps {
-        const MAX_TRACY_GPU_TIMESTAMPS_PER_FRAME: usize = 4096;
-        TracyTimestamps {
-            gpu_context,
-            per_frame: array::from_fn(|_| TimestampPool {
-                pool: gpu::QueryPool::new(VK_QUERY_TYPE_TIMESTAMP, MAX_TRACY_GPU_TIMESTAMPS_PER_FRAME),
-                base: 0,
-                count: 0,
-            }),
-            results: vec![0; MAX_TRACY_GPU_TIMESTAMPS_PER_FRAME],
-            frame_index: 0,
-            query_counter: 0,
-        }
+    struct TimestampPool {
+        pool: gpu::QueryPool,
+        base: u16,
+        count: u16,
     }
 
-    fn next_frame(&mut self, frame_index: gpu::FrameIndex) {
-        self.frame_index = frame_index as usize % MAX_FRAMES_IN_FLIGHT;
-        let frame = &mut self.per_frame[self.frame_index];
-        if frame.count != 0 {
-            // send query results to tracy
-            frame.pool.wait_for_results(0, &mut self.results[0..frame.count as usize]);
-            for i in 0..frame.count {
-                self.gpu_context.upload_gpu_timestamp(frame.base + i, self.results[i as usize] as i64);
+    struct Timestamps {
+        gpu_context: tracy_client::GpuContext,
+        per_frame: [TimestampPool; MAX_FRAMES_IN_FLIGHT],
+        results: Vec<u64>,
+        frame_index: usize,
+        query_counter: u16,
+    }
+
+    impl Timestamps {
+        fn new(gpu_context: tracy_client::GpuContext) -> Timestamps {
+            const MAX_TRACY_GPU_TIMESTAMPS_PER_FRAME: usize = 4096;
+            Timestamps {
+                gpu_context,
+                per_frame: array::from_fn(|_| TimestampPool {
+                    pool: gpu::QueryPool::new(VK_QUERY_TYPE_TIMESTAMP, MAX_TRACY_GPU_TIMESTAMPS_PER_FRAME),
+                    base: 0,
+                    count: 0,
+                }),
+                results: vec![0; MAX_TRACY_GPU_TIMESTAMPS_PER_FRAME],
+                frame_index: 0,
+                query_counter: 0,
             }
         }
-        frame.pool.reset();
-        frame.base = self.query_counter;
-        frame.count = 0;
-    }
 
-    fn write_timestamp(&mut self) -> u16 {
-        let fr = &mut self.per_frame[self.frame_index];
-        let query_id = self.query_counter;
-        gpu::write_timestamp(&fr.pool, (query_id - fr.base) as u32);
-        self.query_counter = self.query_counter.wrapping_add(1);
-        fr.count += 1;
-        query_id
-    }
+        fn next_frame(&mut self, frame_index: gpu::FrameIndex) {
+            self.frame_index = frame_index as usize % MAX_FRAMES_IN_FLIGHT;
+            let frame = &mut self.per_frame[self.frame_index];
+            if frame.count != 0 {
+                // send query results to tracy
+                frame.pool.wait_for_results(0, &mut self.results[0..frame.count as usize]);
+                for i in 0..frame.count {
+                    self.gpu_context.upload_gpu_timestamp(frame.base + i, self.results[i as usize] as i64);
+                }
+            }
+            frame.pool.reset();
+            frame.base = self.query_counter;
+            frame.count = 0;
+        }
 
-    fn begin_span(&mut self, location: &'static SpanLocation) {
-        #[cfg(feature = "tracy")]
-        {
+        fn write_timestamp(&mut self) -> u16 {
+            let fr = &mut self.per_frame[self.frame_index];
+            let query_id = self.query_counter;
+            gpu::write_timestamp(&fr.pool, (query_id - fr.base) as u32);
+            self.query_counter = self.query_counter.wrapping_add(1);
+            fr.count += 1;
+            query_id
+        }
+
+        fn begin_span(&mut self, location: &'static SpanLocation) {
             let query_id = self.write_timestamp();
             self.gpu_context.begin_span(location, query_id);
         }
-    }
 
-    fn end_span(&mut self) {
-        #[cfg(feature = "tracy")]
-        {
+        fn end_span(&mut self) {
             let query_id = self.write_timestamp();
             self.gpu_context.end_span(query_id);
         }
     }
-}
-pub struct TracyGpuSpanGuard;
+    pub struct TracyGpuSpanGuard;
 
-impl Drop for TracyGpuSpanGuard {
-    fn drop(&mut self) {
-        tracy_end_gpu_span();
+    impl Drop for TracyGpuSpanGuard {
+        fn drop(&mut self) {
+            tracy_end_gpu_span();
+        }
+    }
+
+    #[doc(hidden)]
+    #[inline(never)]
+    pub fn tracy_begin_gpu_span(location: &'static tracy_client::SpanLocation) {
+        with_app_ctx(|app| {
+            app.tracy_timestamps.borrow_mut().begin_span(location);
+        })
+    }
+
+    #[doc(hidden)]
+    #[inline(never)]
+    pub fn tracy_end_gpu_span() {
+        with_app_ctx(|app| {
+            app.tracy_timestamps.borrow_mut().end_span();
+        })
     }
 }
 
-#[doc(hidden)]
-#[inline(never)]
-pub fn tracy_begin_gpu_span(location: &'static tracy_client::SpanLocation) {
-    with_app_ctx(|app| {
-        app.tracy_timestamps.borrow_mut().begin_span(location);
-    })
-}
 
-#[doc(hidden)]
-#[inline(never)]
-pub fn tracy_end_gpu_span() {
-    with_app_ctx(|app| {
-        app.tracy_timestamps.borrow_mut().end_span();
-    })
-}
-
+#[cfg(feature = "tracy")]
 #[macro_export]
 macro_rules! gpu_span {
     ($name:expr) => {{
         let location = $crate::tracy_client::span_location!($name);
-        $crate::tracy_begin_gpu_span(location);
-        $crate::TracyGpuSpanGuard
+        $crate::app::tracy::tracy_begin_gpu_span(location);
+        $crate::app::tracy::TracyGpuSpanGuard
+    }};
+}
+
+#[cfg(not(feature = "tracy"))]
+#[macro_export]
+macro_rules! gpu_span {
+    ($name:expr) => {{
+        // no-op
     }};
 }
 

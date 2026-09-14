@@ -12,25 +12,21 @@ extern crate log;
 pub mod app;
 pub mod asset;
 pub mod camera_control;
-mod component;
 pub mod error;
 mod event;
 pub mod executor;
-//pub mod imgui;
 pub mod input;
 pub mod paint;
 pub mod platform;
 mod plugin_host;
 pub mod render;
 mod timer;
-//mod tweak;
 pub mod util;
 mod window;
 mod world;
 
 pub use app::{
-    App, AppHandler, FileDialogOptions, TracyGpuSpanGuard, pick_file, print_message, quit, show_file_dialog,
-    tracy_begin_gpu_span, tracy_end_gpu_span, unwatch_file, watch_file,
+    App, AppHandler, FileDialogOptions, pick_file, print_message, quit, show_file_dialog, unwatch_file, watch_file,
 };
 pub use event::UserEvent;
 pub use input::InputEvent;

@@ -184,6 +184,7 @@ impl PluginHost {
                     let mut plugin =
                         PluginHost { path, library, canonical_path, ctx: Default::default(), last_reload_time };
                     plugin.init();
+                    plugin.send_event(PluginEvent::Loaded);
                     plugin
                 }
                 _ => {
@@ -219,6 +220,10 @@ impl PluginHost {
     }
 
     fn shutdown(&mut self) {
+        // The plugin might have pending deletion callbacks in gpu, so wait for GPU idle to force
+        // the list of deferred deletions to be processed, and thus ensure that we don't hold
+        // pointers to unloaded functions or closures.
+        gpu::wait_idle();
         if let Some(ref library) = self.library {
             unsafe {
                 (library.shutdown)(&mut self.ctx);
@@ -259,6 +264,7 @@ impl PluginHost {
             // Library is not loaded yet. Try to load it.
             self.library = PluginLibrary::load_or_log_error(&self.path);
             self.canonical_path = fs::canonicalize(&self.path).unwrap();
+            self.send_event(PluginEvent::Loaded);
         }
 
         self.last_reload_time = reload_start_time;

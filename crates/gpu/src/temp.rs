@@ -66,7 +66,7 @@ impl ThreadLocalAllocator {
             self.retired.push_back((frame_index, buf));
         }
         let last_completed_frame = crate::get_last_completed_frame_index();
-        let mut free_buf = None;
+        let mut free_buf : Option<BufferUntyped> = None;
         // Free all chunks older than the last completed frame, save for one, which we'll reuse.
         while let Some((retired_frame, _)) = self.retired.front() {
             if *retired_frame <= last_completed_frame {

@@ -12,6 +12,7 @@ proc-macro2 = "1"
 #planitia-workspace-hack = { version = "0.1", path = "../../../planitia-workspace-hack" }
 shadertool = { workspace = true }
 gpu-types = { workspace = true }
+planitia-workspace-hack = { version = "0.1", path = "../../../planitia-workspace-hack" }
 
 [lib]
 proc-macro = true

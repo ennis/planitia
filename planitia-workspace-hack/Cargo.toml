@@ -35,7 +35,6 @@ regex-syntax = { version = "0.8" }
 serde = { version = "1", features = ["alloc", "derive", "rc"] }
 serde_core = { version = "1", default-features = false, features = ["alloc", "rc", "result", "std"] }
 syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "full", "visit-mut"] }
-tracy-client = { version = "0.18" }
 tracy-client-sys = { version = "0.28", default-features = false, features = ["broadcast", "callstack-inlines", "code-transfer", "context-switch-tracing", "crash-handler", "enable", "sampling", "system-tracing"] }
 
 [build-dependencies]
@@ -60,7 +59,6 @@ serde = { version = "1", features = ["alloc", "derive", "rc"] }
 serde_core = { version = "1", default-features = false, features = ["alloc", "rc", "result", "std"] }
 syn-7b89eefb6aaa9bf3 = { package = "syn", version = "3", features = ["full"] }
 syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "full", "visit-mut"] }
-tracy-client = { version = "0.18" }
 tracy-client-sys = { version = "0.28", default-features = false, features = ["broadcast", "callstack-inlines", "code-transfer", "context-switch-tracing", "crash-handler", "enable", "sampling", "system-tracing"] }
 
 ### END HAKARI SECTION

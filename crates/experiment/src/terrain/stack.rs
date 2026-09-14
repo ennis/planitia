@@ -1,4 +1,4 @@
-use crate::terrain::{PackedTerrVec, TerrVec};
+use crate::terrain::{MatVecU8, MatVec};
 use bumpalo::Bump;
 
 /*
@@ -10,8 +10,8 @@ impl<'a> TerrColumn<'a> {
     }
 }*/
 
-/// Samples the column at the given height, returning the packed feature vector.
-pub fn sample_column(column: &[TerrSlice], height: u16) -> PackedTerrVec {
+/// Samples the material stack at the given height, returning the packed feature vector.
+pub fn sample_stack(column: &[MatLayer], height: u16) -> MatVecU8 {
     for slice in column {
         if height >= slice.low && height < slice.high {
             return slice.value;
@@ -20,23 +20,24 @@ pub fn sample_column(column: &[TerrSlice], height: u16) -> PackedTerrVec {
     panic!("height out of bounds");
 }
 
+/// Layer in a material stack.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct TerrSlice {
+pub struct MatLayer {
     /// Lower height bound.
     pub low: u16,
     /// Upper height bound.
     pub high: u16,
     /// Packed feature vector.
-    pub value: PackedTerrVec,
+    pub value: MatVecU8,
 }
 
-impl TerrSlice {
+impl MatLayer {
     pub const fn height(&self) -> u16 {
         self.high - self.low
     }
 
-    pub fn merged(&self, other: &TerrSlice) -> TerrSlice {
+    pub fn merged(&self, other: &MatLayer) -> MatLayer {
         assert!(self.high == other.low || self.low == other.high, "slices must be adjacent to merge");
 
         let self_height = self.height() as f32;
@@ -45,31 +46,31 @@ impl TerrSlice {
         let high = self.high.max(other.high);
         let low = self.low.min(other.low);
 
-        let v1 = TerrVec::unpack(self.value);
-        let v2 = TerrVec::unpack(other.value);
+        let v1 = MatVec::unpack(self.value);
+        let v2 = MatVec::unpack(other.value);
 
         let avg = (self_height * v1 + other_height * v2) / (self_height + other_height);
         let value = avg.pack();
-        TerrSlice { low, high, value }
+        MatLayer { low, high, value }
     }
 }
 
-impl Default for TerrSlice {
+impl Default for MatLayer {
     fn default() -> Self {
-        TerrSlice { low: 0, high: u16::MAX, value: PackedTerrVec::default() }
+        MatLayer { low: 0, high: u16::MAX, value: MatVecU8::default() }
     }
 }
 
-pub fn downsample_columns<'a>(
+pub fn downsample_material_stacks<'a>(
     arena: &'a Bump,
-    columns: &[&[TerrSlice]],
+    stacks: &[&[MatLayer]],
     merge_height_threshold: u16,
-) -> &'a [TerrSlice] {
-    assert!(columns.len() == 4, "expected 4 columns for downsampling");
+) -> &'a [MatLayer] {
+    assert!(stacks.len() == 4, "expected 4 columns for downsampling");
 
     // collect all bounds
     let mut bounds = vec![];
-    for col in columns {
+    for col in stacks {
         for slice in *col {
             bounds.push(slice.low);
             bounds.push(slice.high);
@@ -83,14 +84,14 @@ pub fn downsample_columns<'a>(
     assert!(bounds.first() == Some(&0));
     assert!(bounds.last() == Some(&u16::MAX));
 
-    let mut fused = vec![TerrSlice::default(); bounds.len() - 1];
+    let mut fused = vec![MatLayer::default(); bounds.len() - 1];
 
     for (i, b) in bounds[1..].iter().enumerate() {
         let b = *b - 1;
-        let v1 = TerrVec::unpack(sample_column(columns[0], b));
-        let v2 = TerrVec::unpack(sample_column(columns[1], b));
-        let v3 = TerrVec::unpack(sample_column(columns[2], b));
-        let v4 = TerrVec::unpack(sample_column(columns[3], b));
+        let v1 = MatVec::unpack(sample_stack(stacks[0], b));
+        let v2 = MatVec::unpack(sample_stack(stacks[1], b));
+        let v3 = MatVec::unpack(sample_stack(stacks[2], b));
+        let v4 = MatVec::unpack(sample_stack(stacks[3], b));
         fused[i].low = bounds[i];
         fused[i].high = bounds[i + 1];
         fused[i].value = ((v1 + v2 + v3 + v4) * 0.25).pack();
@@ -124,17 +125,17 @@ pub fn downsample_columns<'a>(
 
 #[cfg(test)]
 mod tests {
-    use crate::terrain::PackedTerrVec;
-    use crate::terrain::stack::{TerrSlice, downsample_columns};
+    use crate::terrain::MatVecU8;
+    use crate::terrain::stack::{MatLayer, downsample_material_stacks};
     use bumpalo::Bump;
 
-    const STONE: PackedTerrVec = [255, 0, 0, 0, 0, 0, 0, 0];
-    const DIRT: PackedTerrVec = [0, 255, 0, 0, 0, 0, 0, 0];
-    const GRASS: PackedTerrVec = [0, 0, 255, 0, 0, 0, 0, 0];
-    const AIR: PackedTerrVec = [0, 0, 0, 0, 255, 0, 0, 0];
+    const STONE: MatVecU8 = [255, 0, 0, 0, 0, 0, 0, 0];
+    const DIRT: MatVecU8 = [0, 255, 0, 0, 0, 0, 0, 0];
+    const GRASS: MatVecU8 = [0, 0, 255, 0, 0, 0, 0, 0];
+    const AIR: MatVecU8 = [0, 0, 0, 0, 255, 0, 0, 0];
 
-    const fn ts(low: u16, high: u16, value: PackedTerrVec) -> TerrSlice {
-        TerrSlice { low, high, value }
+    const fn ts(low: u16, high: u16, value: MatVecU8) -> MatLayer {
+        MatLayer { low, high, value }
     }
 
     #[test]
@@ -147,7 +148,7 @@ mod tests {
         //    TerrColumn::new(const { &[ts(0, 5, STONE), ts(5, 10, DIRT), ts(10, 15, DIRT), ts(15, 20, GRASS), ts(20, 25, GRASS), ts(25, 30, AIR), ts(30, u16::MAX, AIR)] });
 
         let arena = Bump::new();
-        let avg = downsample_columns(&arena, &[c1, c2, c3, c4], 4);
+        let avg = downsample_material_stacks(&arena, &[c1, c2, c3, c4], 4);
         dbg!(avg.len());
         dbg!(avg);
         //assert_eq!(avg, expected_avg);

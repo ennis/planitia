@@ -30,7 +30,6 @@ ab_glyph = "0.2.31"
 anyhow = "1.0.100"
 tempfile = "3.27.0"
 hgeo = { workspace = true }
-
 notify-debouncer-mini = "0.7.0"
 libloading = "0.9.0"
 ron = "0.12.0"
@@ -81,6 +80,7 @@ windows = { version = "0.62.2", features = [
 shadertool = { workspace = true }
 
 [features]
+default = []
 hot_reload = ["dep:shadertool"]
 lua = ["dep:mlua"]
 tracy = ["tracy-client/default"]

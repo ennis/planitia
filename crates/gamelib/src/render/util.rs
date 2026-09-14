@@ -1,4 +1,5 @@
 use gpu::{ColorAttachment, DepthStencilAttachment, Image, ImageCreateInfo, ImageUsage, Size3D};
+use gpu::vulkan::VK_FORMAT_R8G8B8A8_UNORM;
 
 /// Helper type to manage a 2D render target.
 ///
@@ -11,9 +12,15 @@ pub struct RenderTarget {
     format: gpu::Format,
 }
 
+impl Default for RenderTarget {
+    fn default() -> Self {
+        RenderTarget { inner: None, usage: ImageUsage::empty(), format: VK_FORMAT_R8G8B8A8_UNORM }
+    }
+}
+
 impl RenderTarget {
     /// Creates a new render target with no allocated image.
-    pub fn new(format: gpu::Format, usage: ImageUsage) -> Self {
+    pub const fn new(format: gpu::Format, usage: ImageUsage) -> Self {
         RenderTarget { inner: None, usage, format }
     }
 
@@ -27,12 +34,9 @@ impl RenderTarget {
             }
             return;
         }
-
         let _ = self.inner.take();
-
         // allocate a new image with the specified dimensions and format
         let image = Image::new(ImageCreateInfo { width, height, format: self.format, usage: self.usage, .. });
-
         self.inner = Some(RenderTargetInner { image, width, height });
     }
 

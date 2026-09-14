@@ -745,8 +745,13 @@ impl Device {
 
         // /!\ we are now in frame N+1 /!\
         // Reclaim resources of completed frames.
-        let last_completed_frame_index = self.get_last_completed_frame_index();
+        self.cleanup();
+        frame_index
+    }
 
+    /// Reclaims resources associated to completed frames, and runs deferred destructors.
+    fn cleanup(&self) {
+        let last_completed_frame_index = self.get_last_completed_frame_index();
         // process all completed submissions
         let mut ss = self.submission_state.lock().unwrap();
         loop {
@@ -758,7 +763,6 @@ impl Device {
             };
             let _sub = ss.active_submissions.pop_front().unwrap();
         }
-
         let mut deletion_queue = self.deletion_queue.lock().unwrap();
         // *** This invokes all delayed destructors for resources which are no longer in use by the GPU.
         deletion_queue.retain_mut(|DeleteQueueEntry { frame_index, deleter }| {
@@ -769,7 +773,6 @@ impl Device {
             deleter(self);
             false
         });
-        frame_index
     }
 
     /// Creates a new, or returns an existing, binary semaphore that is in the unsignaled state,
@@ -1179,12 +1182,13 @@ impl Device {
     }
 }
 
-/// Waits for the GPU to complete all submitted work.
+/// Waits for the GPU to complete all submitted work. Also runs all deferred destructors.
 pub fn wait_idle() {
     let device = Device::instance();
     unsafe {
         vkcall!(device.fns.DeviceWaitIdle(device.vkd));
     }
+    device.cleanup();
 }
 
 /// Waits for the specified frame.
@@ -1237,6 +1241,14 @@ pub fn wait_for_previous_frame(nth_prev: usize, timeout: Option<Duration>) {
 pub unsafe fn end_frame() -> FrameIndex {
     Device::instance().end_frame()
 }
+
+// Releases resources associated to completed frames, and runs deferred destructors.
+//
+// Normally you wouldn't need to call it manually as it is already called by [`end_frame`](crate::end_frame),
+// but this may be useful to purge the list of deferred destructors after a [`wait_idle`](crate::wait_idle).
+//pub fn cleanup() {
+//    Device::instance().cleanup();
+//}
 
 /// Assigns a debug name to an object represented by its raw vulkan handle
 ///

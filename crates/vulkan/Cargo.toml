@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 libloading = "0.9.0"
+planitia-workspace-hack = { version = "0.1", path = "../../planitia-workspace-hack" }
 
 [features]
 debug = []

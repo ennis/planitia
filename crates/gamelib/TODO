@@ -1,4 +1,15 @@
  
+
+High priority:
+    □ vk-layer: capture mouse & keyboard
+    □ vk-layer: key to show/hide UI
+    □ vk-layer: shader replacement
+    □ vk-layer: fix issue with size hints (massive slowdown)
+    □ gamelib: fix crash on hot-reload
+    □ gamelib: properly release plugin resources when unloading (check)
+
+
+
 Short-term:
  ☐ Editor: load-save
  ☐ Editor: document edits and undo/redo

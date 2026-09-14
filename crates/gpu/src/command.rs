@@ -248,6 +248,7 @@ impl CommandBuffer {
             srcAccessMask: VK_ACCESS_2_MEMORY_WRITE_BIT,
             dstAccessMask: flags.bits()
                 | VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT
+                | VK_ACCESS_2_TRANSFER_READ_BIT
                 | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
             srcStageMask: VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
             dstStageMask: VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
@@ -727,6 +728,7 @@ pub fn create_image_with_data(create_info: &ImageCreateInfo, aspect: ImageAspect
     with_cmdbuf(|cb| cb.create_image_with_data(create_info, aspect, data))
 }
 
+/// Blits the top-level mipmap of the source image to the destination image.
 #[inline(never)]
 pub fn blit_full_image_top_mip_level(src: &Image, dst: &Image) {
     with_cmdbuf(|cb| {

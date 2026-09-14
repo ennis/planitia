@@ -72,7 +72,7 @@ impl CameraControl {
             zoom: 1.0,
             screen_size: dvec2(screen_width as f64, screen_height as f64),
             cursor_pos: None,
-            frame: CameraFrame { eye: dvec3(0.0, 0.0, 10.0), up: dvec3(0.0, 1.0, 0.0), center: dvec3(0.0, 0.0, 0.0) },
+            frame: CameraFrame { eye: dvec3(0.0, 10.0, 10.0), up: dvec3(0.0, 1.0, 0.0), center: dvec3(0.0, 0.0, 0.0) },
             input_mode: Mode::None,
             last_cam: Cell::new(None),
         }
