@@ -220,15 +220,20 @@ impl PluginHost {
     }
 
     fn shutdown(&mut self) {
-        // The plugin might have pending deletion callbacks in gpu, so wait for GPU idle to force
-        // the list of deferred deletions to be processed, and thus ensure that we don't hold
-        // pointers to unloaded functions or closures.
-        gpu::wait_idle();
         if let Some(ref library) = self.library {
             unsafe {
                 (library.shutdown)(&mut self.ctx);
             }
         }
+        // The plugin might have pending deletion callbacks in gpu, so wait for GPU idle to force
+        // the list of deferred deletions to be processed, and thus ensure that we don't hold
+        // pointers to unloaded functions or closures.
+        // `end_frame` is necessary to flush pending buffers and signal the timeline
+        // semaphore.
+        unsafe {
+            gpu::end_frame();
+        }
+        gpu::wait_idle();
         self.library = None;
     }
 
@@ -423,7 +428,8 @@ macro_rules! register_plugin {
             #[unsafe(no_mangle)]
             pub extern "C" fn plugin_init(ctx: &mut $crate::PluginCtx) {
                 let mut handler = $init_fn();
-                let _ = ctx.set_user_ptr(Some(::std::ptr::NonNull::new(Box::into_raw(Box::new(handler)) as *mut ()).unwrap()));
+                let _ = ctx
+                    .set_user_ptr(Some(::std::ptr::NonNull::new(Box::into_raw(Box::new(handler)) as *mut ()).unwrap()));
             }
 
             #[unsafe(no_mangle)]

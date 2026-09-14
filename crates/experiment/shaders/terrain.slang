@@ -91,7 +91,7 @@ float raycast(float3 origin, float3 world_dir, out float3 hit) {
             hit = pos;
             return t;
         }
-        t += 1.0;
+        t += 0.53;
     }
     return -1.0;
 }
@@ -123,7 +123,7 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID) {
         params.output[dispatchThreadID.xy] = float4(1.0, 1.0, 0.0, 1.0);
     } else {
         float shade = depth / 10.0;
-        params.output[dispatchThreadID.xy] = float4(hit.yyy/10.0, 1.0);
+        params.output[dispatchThreadID.xy] = float4(shade.xxx/10.0, 1.0);
     }
 }
 
