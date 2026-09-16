@@ -5,8 +5,9 @@ High priority:
     □ vk-layer: key to show/hide UI
     □ vk-layer: shader replacement
     □ vk-layer: fix issue with size hints (massive slowdown)
-    □ gamelib: fix crash on hot-reload
-    □ gamelib: properly release plugin resources when unloading (check)
+    □ gamelib: ensure that 
+    ✓ gamelib: fix crash on hot-reload @done (26-09-16 22:25)
+    ✓ gamelib: properly release plugin resources when unloading (check) @done (26-09-16 22:25)
 
 
 

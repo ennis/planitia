@@ -35,15 +35,15 @@ enum Mode {
 #[derive(Clone, Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct CameraControl {
-    fov_y_radians: f64,
-    z_near: f64,
-    z_far: f64,
-    zoom: f32,
-    screen_size: DVec2,
-    cursor_pos: Option<DVec2>,
-    frame: CameraFrame,
-    input_mode: Mode,
-    last_cam: Cell<Option<Camera>>,
+    pub fov_y_radians: f64,
+    pub z_near: f64,
+    pub z_far: f64,
+    pub zoom: f32,
+    pub screen_size: DVec2,
+    pub cursor_pos: Option<DVec2>,
+    pub frame: CameraFrame,
+    pub input_mode: Mode,
+    pub last_cam: Cell<Option<Camera>>,
 }
 
 #[derive(Copy, Clone, Debug)]

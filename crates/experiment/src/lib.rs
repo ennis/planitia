@@ -61,6 +61,11 @@ impl AppHandler for ExperimentApp {
                 self.geometry_file = geometry_file;
             }
         }
+        if input_event.is_shortcut("Home") {
+            let size = self.camera_control.screen_size;
+            eprintln!("Reset camera");
+            self.camera_control = CameraControl::new(size.x as u32, size.y as u32);
+        }
     }
 
     fn started(&mut self) {}
@@ -104,15 +109,17 @@ impl AppHandler for ExperimentApp {
         format_message!("FRAME : {}\n", self.frames_rendered);
         let time_since_reload = Local::now().signed_duration_since(self.load_time);
         format_message!(
-            "Last reload  : {} ({}m {}s ago)",
+            "Last reload  : {} ({}m {}s ago)\n",
             self.load_time.format("%Y-%m-%d %H:%M:%S"),
             time_since_reload.num_minutes(),
             time_since_reload.num_seconds() % 60
         );
+        format_message!("EYE : {:.2},{:.2},{:.2}", camera.eye().x, camera.eye().y, camera.eye().z);
         self.terrain.render(&camera, image.image);
     }
 
     fn resized(&mut self, window: WindowHandle, width: u32, height: u32) {
+        self.camera_control.resize(width, height);
         // nothing
     }
 

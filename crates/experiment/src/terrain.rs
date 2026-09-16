@@ -209,8 +209,8 @@ pub fn load_terrain_from_heightmap<P: AsRef<Path>>(
         for tx in 0..tile_x_count {
             let tile_index = (ty * tile_x_count + tx) as usize;
             let mut tile = Tile::default();
-            let mut min_height = f32::MAX;
-            let mut max_height = f32::MIN;
+            let mut min_height = u16::MAX;
+            let mut max_height = u16::MIN;
             tile.base_layer = layers.len() as u32;
             for ly in 0..T {
                 for lx in 0..T {
@@ -219,17 +219,17 @@ pub fn load_terrain_from_heightmap<P: AsRef<Path>>(
                     if gx < width && gy < height {
                         let height_sample = heightmap.get_pixel(gx, gy)[0];
                         let height_u16 = (height_sample * u16::MAX as f32) as u16;
-                        min_height = min_height.min(height_sample);
-                        max_height = max_height.max(height_sample);
                         let r = write_std_terrain_stack(height_u16, &mut layers);
+                        min_height = layers[r.start as usize].low.min(min_height);
+                        max_height = height_u16.max(max_height);
                         let offset = (r.start - tile.base_layer) as u16;
                         let count = (r.end - r.start) as u16;
                         tile.stacks[(ly * T + lx) as usize] = MatStack::new(offset, count);
                     }
                 }
             }
-            tile.min_height = (min_height * u16::MAX as f32) as u16;
-            tile.max_height = (max_height * u16::MAX as f32) as u16;
+            tile.min_height = min_height;
+            tile.max_height = max_height;
             unsafe {
                 tiles_ptr.add(tile_index).write(tile);
             }

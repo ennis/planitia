@@ -59,6 +59,10 @@ static const uint RENDER_TILE_SIZE = 16;
 [vk::push_constant]
 TerrainParams* params;
 
+float unpack_height(uint16_t h) {
+    return float(h) / 65535.0 * 8.0;
+}
+
 void get_tile_and_local_idx(float2 world_pos, out uint2 tile_idx, out uint2 local_idx) {
     float4 bounds = params.terrain.world_bounds * 0.1;
     float2 world_pos_clamped = clamp(world_pos, bounds.xy, bounds.zw);
@@ -74,25 +78,81 @@ float sample_height(float2 world_pos) {
     uint2 tile_idx;
     uint2 local_idx;
     get_tile_and_local_idx(world_pos, tile_idx, local_idx);
-    LOD lod_0 = params.terrain.lods[0];
-    Tile *tile = &params.terrain.tiles[lod_0.base_tile + tile_idx.y * lod_0.dim.x + tile_idx.x];
-    MatStack stack = tile.stacks[local_idx.y * TILE_SIZE + local_idx.x];
-    MatLayer top_layer = params.terrain.layers[tile.base_layer + stack.layer_offset + stack.layer_count - 2];
-    return float(top_layer.high) / 65535.0 * 4.0;
+    return fetch_height_at(0, tile_idx, local_idx);
 }
 
-float raycast(float3 origin, float3 world_dir, out float3 hit) {
+float fetch_height_at(uint lod, uint2 tile_idx, uint2 local_idx) {
+    LOD lod_desc = params.terrain.lods[lod];
+    Tile *tile = &params.terrain.tiles[lod_desc.base_tile + tile_idx.y * lod_desc.dim.x + tile_idx.x];
+    MatStack stack = tile.stacks[local_idx.y * TILE_SIZE + local_idx.x];
+    MatLayer top_layer = params.terrain.layers[tile.base_layer + stack.layer_offset + stack.layer_count - 2];
+    return unpack_height(top_layer.high);
+}
+
+Tile* tile_ptr(uint lod, uint2 tile_idx) {
+    return &params.terrain.tiles[params.terrain.lods[lod].base_tile + tile_idx.y * params.terrain.lods[lod].dim.x + tile_idx.x];
+}
+
+float raycast(float3 origin, float3 world_dir, out float3 hit, inout float4 color) {
+    float4 bounds = params.terrain.world_bounds * 0.1;
     float3 dir = normalize(world_dir);
+    float3 pos = origin;
+    float4 dbgcolor = float4(0,0,0,1);
     float t = 0.0;
     for (int i = 0; i < 1000; i += 1) {
-        float3 pos = origin + dir * t;
-        float height = sample_height(pos.xz);
-        if (pos.y < height) {
+        //float3 pos = origin + dir * t;
+        if (any(pos.xz > bounds.zw) || any(pos.xz < bounds.xy)) {
+            color = dbgcolor;
+            return -1.0;
+        }
+        uint2 tile_idx;
+        uint2 local_idx;
+        get_tile_and_local_idx(pos.xz, tile_idx, local_idx);
+        // get y extents of ray in current tile @ LOD 0
+        float2 lod_size = params.terrain.lods[0].dim;
+        float2 tile_min = float2(tile_idx) / lod_size * (bounds.zw - bounds.xy) + bounds.xy;
+        float2 tile_max = float2(tile_idx + 1) / lod_size * (bounds.zw - bounds.xy) + bounds.xy;
+        Tile* tile = tile_ptr(0, tile_idx);
+        float2 tile_y_extents = float2(unpack_height(tile->min_height), unpack_height(tile->max_height));
+        // 2D ray-box intersection in xz
+        float t0x = (tile_min.x - pos.x) / dir.x;
+        float t0z = (tile_min.y - pos.z) / dir.z;
+        float t1x = (tile_max.x - pos.x) / dir.x;
+        float t1z = (tile_max.y - pos.z) / dir.z;
+        float t_min = max(min(t0x, t1x), min(t0z, t1z));
+        float t_max = min(max(t0x, t1x), max(t0z, t1z));
+        if (t_min > t_max) {
             hit = pos;
+            color = float4(1,0,0,1);
+            return -1.0;
+        }
+        float y0 = pos.y + t_min * dir.y;
+        float y1 = pos.y + t_max * dir.y;
+        if (y0 > y1) {
+            float tmp = y0;
+            y0 = y1;
+            y1 = tmp;
+        }
+        // ray does not intersect the tile bbox, skip the whole tile
+        if (y0 > tile_y_extents.y || y1 < tile_y_extents.x) {
+            pos = pos + (t_max + 0.02) * dir;
+            dbgcolor = dbgcolor + float4(0.02,0,0,0);
+            continue;
+            //color = float4(0,1,0,1);
+            //hit = pos;
+            //return t;
+        }
+        float height = fetch_height_at(0, tile_idx, local_idx);
+        if (pos.y < height) {
+            //pos.y = tile_y_extents.x;
+            hit = pos;
+            color = dbgcolor;
             return t;
         }
-        t += 0.53;
+        pos += dir * 0.02;
     }
+    //color = float4(1,0,1,0);
+    color = dbgcolor;
     return -1.0;
 }
 
@@ -118,12 +178,15 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID) {
     //params.output[dispatchThreadID.xy] = float4(float3(sample_height(float2(dispatchThreadID.xy))/ 65535.0), 1.0);
 
     float3 hit;
-    float depth = raycast(params.eye_pos, world_pos.xyz - params.eye_pos, hit);
+    float4 color;
+    float depth = raycast(params.eye_pos, world_pos.xyz - params.eye_pos, hit, color);
     if (depth < 0) {
-        params.output[dispatchThreadID.xy] = float4(1.0, 1.0, 0.0, 1.0);
+        params.output[dispatchThreadID.xy] = float4(1.0, 1.0, 1.0, 1.0) * color;
     } else {
-        float shade = depth / 10.0;
-        params.output[dispatchThreadID.xy] = float4(shade.xxx/10.0, 1.0);
+        //float shade = distance(hit, params.eye_pos) / 100.0;
+        float shade = hit.y/5.0;
+        //params.output[dispatchThreadID.xy] = float4(shade.xxx, 1.0);
+        params.output[dispatchThreadID.xy] = float4(shade.xxx, 1.0);
     }
 }
 
