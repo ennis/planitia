@@ -66,7 +66,7 @@ impl ThreadLocalAllocator {
             self.retired.push_back((frame_index, buf));
         }
         let last_completed_frame = crate::get_last_completed_frame_index();
-        let mut free_buf : Option<BufferUntyped> = None;
+        let mut free_buf: Option<BufferUntyped> = None;
         // Free all chunks older than the last completed frame, save for one, which we'll reuse.
         while let Some((retired_frame, _)) = self.retired.front() {
             if *retired_frame <= last_completed_frame {
@@ -155,7 +155,7 @@ pub fn alloc_temp<T: Data>(data: &T) -> Ptr<T> {
     unsafe {
         ptr::copy_nonoverlapping(data as *const T, host_addr as *mut T, 1);
     }
-    Ptr { raw: dev_addr, _phantom: PhantomData }
+    Ptr::new(dev_addr)
 }
 
 /// Uploads a slice of data to a temporary GPU buffer.
@@ -171,5 +171,5 @@ pub fn alloc_temp_slice<T: Data>(data: &[T]) -> Ptr<T> {
     unsafe {
         ptr::copy_nonoverlapping(data.as_ptr(), host_addr as *mut T, data.len());
     }
-    Ptr { raw: dev_addr, _phantom: PhantomData }
+    Ptr::new(dev_addr)
 }

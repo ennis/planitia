@@ -1,29 +1,28 @@
 #![feature(default_field_values)]
-mod build;
 mod archive_writer;
+mod build;
 mod dump2;
 mod header;
 mod manifest;
 mod reflection;
 
-use anyhow::anyhow;
+use crate::archive_writer::build_and_write_archive;
+use crate::build::{compile_slang_module, create_slang_session};
+use anyhow::{Context, anyhow};
 use color_print::{ceprintln, cprintln};
+use gpu_types::reflection as refl;
+use gpu_types::vulkan::*;
 use log::warn;
 use scoped_tls::scoped_thread_local;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use std::{fs, io};
-use std::collections::HashMap;
 use thiserror::Error;
-use gpu_types::reflection as refl;
-use gpu_types::vulkan::*;
-use crate::archive_writer::build_and_write_archive;
-use crate::build::{compile_slang_module, create_slang_session};
 
 pub use dump2::dump_archive_file;
-pub use manifest::*;
 pub use gpu_types;
-
+pub use manifest::*;
 
 /// Arena allocator to allocate compilation results.
 pub type Arena = bumpalo::Bump;
@@ -65,22 +64,29 @@ impl From<io::Error> for Error {
     }
 }
 
-impl Error {
-    pub fn print_cargo_error(&self) {
-        let fmt = format!("{:#}", self);
-        for line in fmt.lines() {
-            println!("cargo::error={line}");
-        }
+pub fn print_cargo_error(err: &impl std::fmt::Display) {
+    let fmt = format!("{:#}", err);
+    for line in fmt.lines() {
+        println!("cargo::error={line}");
     }
 }
+
 
 //--------------------------------------------------------------------------------------------------
 
 pub type EntryPointIndex = usize;
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum PipelineType {
+    Primitive { vertex: EntryPointIndex, fragment: EntryPointIndex },
+    Mesh { task: Option<EntryPointIndex>, mesh: EntryPointIndex, fragment: EntryPointIndex },
+    Compute { compute: EntryPointIndex },
+}
+
 /// Represents a shader pipeline.
 pub struct Pipeline {
     pub name: String,
+    pub type_: PipelineType,
     /// Indices in [`Module::entry_points`].
     pub stages: Vec<EntryPointIndex>,
     pub graphics_state: GraphicsState,
@@ -91,7 +97,7 @@ pub struct Pipeline {
 #[derive(Clone, Debug)]
 pub struct ModuleDependency {
     pub path: PathBuf,
-    pub mtime: u64
+    pub mtime: u64,
 }
 
 /// A compiled Slang shader module with all its entry points.
@@ -109,6 +115,8 @@ pub struct Module<'a> {
     pub pipelines: Vec<Pipeline>,
     /// List of all slang module dependencies (including transitive dependencies).
     pub dependencies: Vec<ModuleDependency>,
+    pub manifest_path: PathBuf,
+    pub manifest_mtime: u64,
     pub refl_struct_types: HashMap<&'a str, &'a refl::StructType<'a>>,
     pub refl_global_params: Vec<&'a refl::AccessChain<'a>>,
 }
@@ -130,9 +138,9 @@ pub struct EntryPoint<'a> {
 
 #[derive(Debug, Clone)]
 pub struct BuildOptions {
-    /// Emit cargo dependency information.
+    /// Emit cargo dependency information to stdout.
     pub emit_cargo_deps: bool,
-    /// Emit shader debug information.
+    /// Emit shader debug information in the generated binary blobs.
     pub emit_debug_information: bool,
     /// Dumps SPIR-V binaries to disk.
     pub emit_spirv_binaries: bool,
@@ -216,7 +224,7 @@ fn load_manifest_for_source(shader_file_path: &Path, shader_source: &str) -> Res
 ///
 /// # Arguments
 /// * `shader_files` - path to the shader files. Glob patterns are supported, e.g. `shaders/**/*.slang`.
-pub fn build<'a, I>(glob_patterns: I, options: &BuildOptions, log_options: &LogOptions) -> Result<(), Error>
+pub fn build<'a, I>(glob_patterns: I, options: &BuildOptions, log_options: &LogOptions) -> anyhow::Result<()>
 where
     I: IntoIterator<Item = &'a str>,
 {
@@ -224,7 +232,7 @@ where
     LOG_OPTIONS.set(log_options, || build_inner(&glob_patterns, options))
 }
 
-fn build_inner(glob_patterns: &[&str], options: &BuildOptions) -> Result<(), Error> {
+fn build_inner(glob_patterns: &[&str], options: &BuildOptions) -> anyhow::Result<()> {
     // resolve glob patterns
     let mut files = Vec::new();
     for pattern in glob_patterns {
@@ -302,10 +310,11 @@ fn get_file_mtime(path: &Path) -> anyhow::Result<(PathBuf, u64)> {
 
 //--------------------------------------------------------------------------------------------------
 
-pub fn compile<'a, P: AsRef<Path>>(file: P, arena: &'a Arena, options: &BuildOptions) -> Result<Module<'a>, Error> {
+pub fn compile<'a, P: AsRef<Path>>(file: P, arena: &'a Arena, options: &BuildOptions) -> anyhow::Result<Module<'a>> {
     let file = file.as_ref();
     let source = fs::read_to_string(&file)?;
     let manifest = load_manifest_for_source(&file, &source)?;
     let compiler_session = create_slang_session(&options.include_paths, &manifest, options)?;
     compile_slang_module(arena, &compiler_session, file, &source, &manifest, options)
+        .with_context(|| format!("failed to compile shader file: {}", file.display()))
 }

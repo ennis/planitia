@@ -62,7 +62,7 @@ impl LinSrgba {
 }
 
 /// A color in gamma-encoded sRGB space with a straight alpha channel, stored as four `u8` bytes (8 bits per channel, 32 bits per pixel).
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
 #[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 #[repr(C)]
 pub struct Srgba8 {
@@ -116,6 +116,7 @@ impl Srgba8 {
         ]
     }
 
+    /// Converts the components to floating-point values, normalized in `[0.0, 1.0]`.
     pub fn to_float_array(self) -> [f32; 4] {
         [self.r as f32 / 255.0, self.g as f32 / 255.0, self.b as f32 / 255.0, self.a as f32 / 255.0]
     }

@@ -5,7 +5,7 @@ authors = ["Alexandre Bléron <alex.bleron@gmail.com>"]
 edition = "2024"
 
 [lib]
-crate-type = ["dylib"]
+#crate-type = ["dylib"]
 
 [dependencies]
 ash = "0.38"
@@ -42,3 +42,4 @@ image = { workspace = true }
 [features]
 default = ["color"]
 graal-windows = ["winapi"]
+serde = ["gpu-types/serde"]

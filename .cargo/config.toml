@@ -10,9 +10,9 @@ inherits = "release"
 debug = true
 
 [target.'cfg(any(unix, windows))']
-rustflags = ["-Cprefer-dynamic=yes"]
+#rustflags = ["-Cprefer-dynamic=yes"]
 
 [target.x86_64-pc-windows-msvc]
-rustflags = ["-Zshare-generics=off"]
+#rustflags = ["-Zshare-generics=off"]
 #linker = "rust-lld.exe"
 

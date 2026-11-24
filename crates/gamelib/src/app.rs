@@ -2,6 +2,7 @@
 use crate::error::{ExcResult, ResultExt};
 use crate::event::UserEvent;
 use crate::executor::LocalExecutor;
+use crate::imgui::{ImGuiResources, with_imgui_context};
 use crate::input::InputEvent;
 use crate::paint::{PaintScene, Painter, TextFormat};
 use crate::platform::{LoopHandler, Platform, RenderTargetImage, WindowHandle};
@@ -12,6 +13,7 @@ use color::Srgba8;
 use color_print::cwriteln;
 use env_logger::fmt::style::AnsiColor;
 use futures::future::AbortHandle;
+use gpu::vulkan::*;
 use keyboard_types::{Key, KeyState, Modifiers, NamedKey};
 use log::{debug, error, info, warn};
 use math::{IVec2, Vec2, vec2};
@@ -25,10 +27,10 @@ use std::marker::PhantomData;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, OnceLock};
+use std::time::Instant;
 use std::{array, mem, ptr};
 use threadbound::ThreadBound;
 use tracy_client::SpanLocation;
-use gpu::vulkan::*;
 
 /// Maximum number of GPU frames in flight.
 ///
@@ -87,6 +89,17 @@ impl<H: AppHandler + Default + 'static> App<H> {
         ctx.run_event_loop(); // This doesn't return until the application exits.
         ctx.platform.teardown();
     }
+
+    /// Invokes a callback on the main loop.
+    pub fn run_later(&'static self, callback: impl FnOnce(&mut H) + 'static + Send) {
+        wake_event_loop(move || {
+            with_app_ctx(|ctx| {
+                let mut handler = ctx.handler.borrow_mut();
+                let handler = (&mut **handler as &mut dyn Any).downcast_mut::<H>().expect("wrong app handler type");
+                callback(handler);
+            });
+        });
+    }
 }
 
 /// Application initialization options.
@@ -97,7 +110,7 @@ pub struct AppOptions {
 
 /// Application event handler.
 #[allow(unused_variables)]
-pub trait AppHandler {
+pub trait AppHandler: Any {
     /// Called when the event loop starts running.
     fn started(&mut self) {}
 
@@ -117,7 +130,11 @@ pub trait AppHandler {
     fn resized(&mut self, window: WindowHandle, width: u32, height: u32);
 
     /// Called when the vsync signal is received.
-    fn vsync(&mut self);
+    fn vsync(&mut self) {}
+
+    #[cfg(feature = "imgui")]
+    /// Called to render ImGui UI.
+    fn imgui(&mut self, ui: &mut imgui::Ui) {}
 
     /// Renders the current frame.
     ///
@@ -232,6 +249,13 @@ pub fn pick_file(file_type_description: &str, extensions: &[&str]) -> Option<std
     dialog.pick_file()
 }
 
+/// Shows a file save dialog.
+pub fn save_file(file_type_description: &str, extensions: &[&str]) -> Option<std::path::PathBuf> {
+    let mut dialog = rfd::FileDialog::new();
+    dialog = dialog.add_filter(file_type_description, extensions);
+    dialog.save_file()
+}
+
 /// Prints a message on screen.
 pub fn print_message(message: impl AsRef<str>) {
     with_app_ctx(|ctx| {
@@ -334,19 +358,23 @@ pub(crate) struct MainThreadContext {
     watch: RefCell<Debouncer<RecommendedWatcher>>,
     /// Text overlay.
     text_overlay: RefCell<String>,
+    #[cfg(feature = "imgui")]
+    imgui_resources: ImGuiResources,
+    last_vsync: Cell<Option<Instant>>,
     #[cfg(feature = "tracy")]
     timestamp_query_counter: Cell<u16>,
     #[cfg(feature = "tracy")]
     tracy_timestamps: RefCell<TracyTimestamps>,
 }
 
-
 impl MainThreadContext {
     /// Creates a new application instance and initializes the global systems.
     fn new(handler: RefCell<Box<dyn AppHandler + 'static>>, options: &AppOptions) -> Self {
+        // Platform initialization
+        // Also initializes the GPU device
+        let platform = Platform::new(options);
 
-        let platform = Platform::new(options); // also initializes the GPU device
-
+        // Initialize tracy gpu context.
         #[cfg(feature = "tracy")]
         let tracy_gpu_context = {
             let tracy_client = tracy_client::Client::running().unwrap();
@@ -362,6 +390,7 @@ impl MainThreadContext {
                 )
                 .expect("failed to create tracy GPU context")
         };
+
         //let rdoc = RenderDoc::new().ok();
         //if rdoc.is_some() {
         //    info!("running with RenderDoc");
@@ -405,11 +434,14 @@ impl MainThreadContext {
             #[cfg(feature = "lua")]
             lua: Lua::new(),
             watch,
+            #[cfg(feature = "imgui")]
+            imgui_resources: ImGuiResources::new(),
             text_overlay: RefCell::new(String::new()),
             #[cfg(feature = "tracy")]
             timestamp_query_counter: Cell::new(0),
             #[cfg(feature = "tracy")]
             tracy_timestamps: RefCell::new(TracyTimestamps::new(tracy_gpu_context)),
+            last_vsync: Cell::new(None),
         }
     }
 
@@ -458,34 +490,34 @@ impl LoopHandler for &'static MainThreadContext {
 
     fn input(&mut self, window: WindowHandle, input_event: InputEvent) {
         let _span = span!("input");
-        //if self.imgui.borrow_mut().handle_input(&input_event) {
-        //    // If the event was processed by egui, don't pass it to the application
-        //    return;
-        //}
-        //if input_event.is_shortcut("F9") {
-        //    self.rdoc_capture_requested.set(true);
-        //}
-        //if input_event.is_shortcut("Shift+F9") {
-        //    self.rdoc_capture_requested.set(true);
-        //    self.rdoc_launch_replay_ui.set(true);
-        //}
+        // pass event to imgui first, see if it captures the input
+        with_imgui_context(|ctx| {
+            crate::imgui::handle_input_event(ctx, &input_event);
+            let io = ctx.io();
+            if io.want_capture_keyboard || io.want_capture_mouse {
+                return;
+            }
+        });
+        // debug utility
         if input_event.is_shortcut("F4") {
             let count = self.debug_mark_counter.get();
             self.debug_mark_counter.set(count + 1);
             info!("---------------------------------- MARK {count} ----------------------------------");
         }
-
-        // Otherwise, pass the event to the inner handler
+        // pass to app handler
         self.handler.borrow_mut().input(window, &input_event);
     }
 
     fn event(&mut self, event: UserEvent) {
-        let _span = span!("event");
+        //let _span = span!("event");
         self.handler.borrow_mut().event(event);
     }
 
     fn resized(&mut self, window: WindowHandle, width: u32, height: u32) {
-        let _span = span!("resized");
+        //let _span = span!("resized");
+        with_imgui_context(|ctx| {
+            ctx.io_mut().display_size = [width as f32, height as f32];
+        });
         self.handler.borrow_mut().resized(window, width, height)
     }
 
@@ -493,19 +525,22 @@ impl LoopHandler for &'static MainThreadContext {
         let _span = span!("vsync");
         self.handler.borrow_mut().vsync();
 
+        let now = Instant::now();
+        let last_vsync = self.last_vsync.replace(Some(now));
+        let delta_time =
+            if let Some(last_vsync) = last_vsync { now.duration_since(last_vsync).as_secs_f32() } else { 0.0 };
+
         // update imgui
-        //{
-            //let _span = span!("imgui");
-            //let _gpu_span = crate::gpu_span!("imgui");
-            //let cmd = gpu::CommandBuffer::new();
-            //self.imgui.borrow_mut().run(&mut cmd, |imgui_ctx| {
-            //    egui::Window::new("Tweaks").show(imgui_ctx, |ui| {
-            //        show_tweaks_gui(ui);
-            //    });
-            //    self.handler.borrow_mut().imgui(imgui_ctx);
-            //});
-            //gpu::submit(cmd);
-        //}
+        #[cfg(feature = "imgui")]
+        {
+            with_imgui_context(|ctx| {
+                let mut io = ctx.io_mut();
+                io.config_flags |= imgui::ConfigFlags::NAV_ENABLE_KEYBOARD | imgui::ConfigFlags::DOCKING_ENABLE;
+                io.delta_time = delta_time;
+                let ui = ctx.new_frame();
+                self.handler.borrow_mut().imgui(ui);
+            });
+        }
 
         // Frame-in-flight sync
         // /!\ This is important: the whole application relies on the implicit CPU/GPU
@@ -526,22 +561,11 @@ impl LoopHandler for &'static MainThreadContext {
             let _span = span!("render_window");
             let _gpu_span = crate::gpu_span!("render_window");
             self.handler.borrow_mut().render(window, render_target);
-            // render text overlay
-            {
-                let _span = span!("text_overlay");
-                let _gpu_span = crate::gpu_span!("text_overlay");
-                let text = self.text_overlay.take();
-                let mut scene = PaintScene::new(Srgba8::TRANSPARENT);
-                let pos = vec2(10.0, 10.0);
-                let shadow_pos = pos + vec2(1.0, 1.0);
-                // Draw shadow
-                let format = TextFormat { size: 20.0, ..Default::default() };
-                scene.draw_text(shadow_pos, &text, &format, Srgba8::BLACK);
-                scene.draw_text(pos, &text, &format, Srgba8::WHITE);
-                scene.render(render_target.image);
-            }
+            // render imgui
+            with_imgui_context(|ctx| {
+                crate::imgui::render_imgui(&self.imgui_resources, ctx, render_target.image);
+            });
         });
-
 
         // end frame capture
         //if self.rdoc_capture_requested.get() {
@@ -703,7 +727,6 @@ pub mod tracy {
         })
     }
 }
-
 
 #[cfg(feature = "tracy")]
 #[macro_export]

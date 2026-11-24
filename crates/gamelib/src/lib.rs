@@ -8,6 +8,8 @@
 // without having to import them in every file.
 #[macro_use]
 extern crate log;
+#[cfg(feature = "imgui")]
+extern crate imgui as imgui_rs;
 
 pub mod app;
 pub mod asset;
@@ -25,8 +27,12 @@ pub mod util;
 mod window;
 mod world;
 
+#[cfg(feature = "imgui")]
+pub mod imgui;
+
 pub use app::{
-    App, AppHandler, FileDialogOptions, pick_file, print_message, quit, show_file_dialog, unwatch_file, watch_file,
+    App, AppHandler, FileDialogOptions, pick_file, print_message, quit, save_file, show_file_dialog, unwatch_file,
+    watch_file,
 };
 pub use event::UserEvent;
 pub use input::InputEvent;
@@ -39,7 +45,6 @@ pub use color;
 pub use gpu;
 pub use math;
 pub use tracy_client;
-//pub use tweak::*;
 
 ///////////////////////////////////////////////////////////////////
 

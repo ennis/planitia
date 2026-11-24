@@ -1,11 +1,12 @@
-use gpu::{vkcallnc, Device};
+use crate::vkcall;
+use gpu::Device;
 use std::cell::RefCell;
-use std::mem::MaybeUninit;
 use std::ptr;
 use vulkan::*;
-use crate::vkcall;
 
 /// Allocates command buffers in a `VkCommandPool` and allows re-use of freed command buffers.
+// FIXME: it's possible to spin threads that record commands and exit the thread immediately
+//        afterwards. If this is done on every frame, this will continuously leak command pool memory.
 #[derive(Debug)]
 struct ThreadLocalCommandPool {
     queue_family: u32,
@@ -13,6 +14,7 @@ struct ThreadLocalCommandPool {
     /// (frame_index, cmdbuf)
     pending: Vec<(u64, VkCommandBuffer)>,
 }
+
 
 impl ThreadLocalCommandPool {
     /// Creates a new command pool for the specified queue family.

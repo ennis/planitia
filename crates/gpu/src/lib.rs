@@ -16,8 +16,8 @@
 //!
 //! # Safety
 //!
-//! Safety is not a primary goal. Notably, memory safety on the GPU domain is not guaranteed
-//! as this would compromise the ergonomics too much.
+//! Safety is not a primary goal. Notably, memory safety in the GPU domain is not guaranteed
+//! as it would compromise the ergonomics too much.
 //!
 //! # No resource usage tracking, manual synchronization
 //!
@@ -79,10 +79,10 @@ use vulkan::VkResult;
 
 pub mod prelude {
     pub use crate::{
-        Buffer, BufferUsage, ClearColorValue, ColorBlendEquation, ColorTargetState, CommandBuffer, DepthStencilState,
+        Buffer, BufferUsage, ClearColorValue, BlendState, ColorTargetState, CommandBuffer, DepthStencilState,
         Format, FragmentState, GraphicsPipeline, GraphicsPipelineCreateInfo, Image, ImageCreateInfo, ImageType,
-        ImageUsage, MemoryLocation, Point2D, PreRasterizationShaders, RasterizationState, Rect2D, RenderEncoder,
-        SamplerParams, ShaderCode, ShaderEntryPoint, ShaderSource, Size2D, StencilState, Vertex,
+        ImageUsage, MemoryLocation, Offset2D, PreRasterizationShaders, RasterizationState, Rect2D, RenderEncoder,
+        SamplerParams, ShaderEntryPoint, Size2D, Vertex,
         VertexBufferLayoutDescription, VertexInputAttributeDescription, VertexInputState,
     };
 }
@@ -118,12 +118,11 @@ pub type FrameIndex = u64;
 #[derive(Clone)]
 pub struct GraphicsPipeline {
     pub(crate) pipeline: VkPipeline,
-    pub(crate) stage_reflection: Vec<(ShaderStage, ShaderReflection)>,
 }
 
 impl GraphicsPipeline {
     /// Creates a new graphics pipeline.
-    pub fn new(create_info: GraphicsPipelineCreateInfo) -> Result<Self, Error> {
+    pub fn from_create_info(create_info: GraphicsPipelineCreateInfo) -> Result<Self, Error> {
         Device::instance().create_graphics_pipeline(create_info)
     }
 
@@ -155,23 +154,6 @@ impl VulkanObject for GraphicsPipeline {
 #[derive(Clone)]
 pub struct ComputePipeline {
     pub(crate) pipeline: VkPipeline,
-    //pub(crate) pipeline_layout: VkPipelineLayout,
-    //_descriptor_set_layouts: Vec<DescriptorSetLayout>,
-    /// See `GraphicsPipeline::bindless` for details.
-    //pub(crate) bindless: bool,
-    pub(crate) reflection: ShaderReflection,
-}
-
-impl ComputePipeline {
-    /// Creates a new compute pipeline.
-    pub fn new(create_info: ComputePipelineCreateInfo) -> Result<Self, Error> {
-        Device::instance().create_compute_pipeline(create_info)
-    }
-
-    /// Returns the Vulkan pipeline handle.
-    pub fn pipeline(&self) -> VkPipeline {
-        self.pipeline
-    }
 }
 
 impl Drop for ComputePipeline {
@@ -338,15 +320,6 @@ impl DepthStencilAttachment<'_> {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Specifies the code of a shader.
-#[derive(Debug, Clone, Copy)]
-pub enum ShaderCode<'a> {
-    /// Compile the shader from the specified source.
-    Source(ShaderSource<'a>),
-    /// Create the shader from the specified SPIR-V binary.
-    Spirv(&'a [u32]),
-}
-
 /// Specifies the shaders of a graphics pipeline.
 #[derive(Copy, Clone, Debug)]
 pub enum PreRasterizationShaders<'a> {
@@ -375,7 +348,7 @@ pub struct GraphicsPipelineCreateInfo<'a> {
     pub vertex_input: VertexInputState<'a> = VertexInputState { .. },
     pub pre_rasterization_shaders: PreRasterizationShaders<'a>,
     pub rasterization: RasterizationState,
-    pub depth_stencil: Option<DepthStencilState> = None,
+    pub depth_stencil: DepthStencilState = DepthStencilState { .. },
     pub fragment: FragmentState<'a>,
 }
 
@@ -464,4 +437,8 @@ macro_rules! bytes_as_u32 {
             unsafe { core::slice::from_raw_parts(B.as_ptr() as *const u32, B.len() / size_of::<u32>()) }
         }
     };
+}
+
+pub(crate) unsafe fn as_u8_slice<T: Copy>(slice: &[T]) -> &[u8] {
+    std::slice::from_raw_parts(slice.as_ptr() as *const u8, slice.len() * size_of::<T>())
 }

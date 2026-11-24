@@ -116,7 +116,7 @@ impl<'a> Printer<'a> {
 
     fn print_color_target(&mut self, index: usize, target: &ColorTargetState) {
         let format = target.format;
-        if let Some(blend) = target.blend_equation {
+        if let Some(blend) = target.blend {
             let src_color = blend.src_color_blend_factor;
             let dst_color = blend.dst_color_blend_factor;
             let color_op = blend.color_blend_op;

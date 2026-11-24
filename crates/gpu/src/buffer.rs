@@ -76,7 +76,7 @@ impl<T: ?Sized> Buffer<T> {
 
     /// Returns the device address of the buffer, for use in shaders.
     pub fn ptr(&self) -> Ptr<T> {
-        Ptr { raw: self.device_address, _phantom: PhantomData }
+        Ptr::new(self.device_address)
     }
 
     /// Returns the raw device address of the buffer, for use in shaders.

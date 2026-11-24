@@ -1,7 +1,7 @@
 use crate::{Device, ModuleId};
 use crate::helper::HasPrivateData;
-use crate::spirv::{EntryPointId, EntryPointInfo, Module};
 use crate::util::find_next;
+use spirv_reflect::{EntryPointId, EntryPointInfo, Module};
 use vulkan::*;
 use std::ffi::CStr;
 use std::slice::from_raw_parts;

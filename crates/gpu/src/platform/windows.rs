@@ -7,15 +7,14 @@ use std::ffi::{OsStr, c_void};
 use std::ptr;
 use vulkan::*;
 
-fn handle_name_to_wstr(name: Option<&str>) -> (Vec<u16>, *const u16) {
+fn handle_name_to_wstr(name: Option<&str>) -> Vec<u16> {
     use std::os::windows::ffi::OsStrExt;
     if let Some(name) = name {
         let mut w_name: Vec<u16> = OsStr::new(name).encode_wide().collect();
         w_name.push(0);
-        let ptr = w_name.as_ptr();
-        (w_name, ptr)
+        w_name
     } else {
-        (Vec::new(), ptr::null())
+        Vec::new()
     }
 }
 
@@ -47,7 +46,8 @@ unsafe fn import_external_memory(
     let memory_type_index = device
         .find_compatible_memory_type(memory_type_bits, required_flags, preferred_flags)
         .expect("could not find a compatible memory type for importing external memory");
-    let (_, handle_name_wstr) = handle_name_to_wstr(handle_name);
+    let handle_name_wstr = handle_name_to_wstr(handle_name);
+    
     let mut dedicated_allocate_info: VkMemoryDedicatedAllocateInfo;
     let mut p_dedicated_allocate_info = ptr::null();
     if let Some(dedicated) = dedicated {
@@ -67,7 +67,7 @@ unsafe fn import_external_memory(
         pNext: p_dedicated_allocate_info,
         handleType: handle_type,
         handle,
-        name: handle_name_wstr,
+        name: handle_name_wstr.as_ptr(),
         ..
     };
     let memory_allocate_info = VkMemoryAllocateInfo {
@@ -194,7 +194,7 @@ impl Device {
         vkcallnc!(self.fns.GetImageMemoryRequirements(self.vkd, handle, @out let mem_req));
         //let handle = self.fns.CreateImage(self.vkd, &create_info, ptr::null()).expect("failed to create image");
         //let mem_req = self.fns.GetImageMemoryRequirements(self.vkd, handle);
-        let (_, handle_name_wstr) = handle_name_to_wstr(handle_name);
+        let handle_name_wstr = handle_name_to_wstr(handle_name);
         let (required_memory_properties, preferred_memory_properties) = match memory_location {
             MemoryLocation::Unknown => Default::default(),
             MemoryLocation::GpuOnly => (VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
@@ -221,7 +221,7 @@ impl Device {
         let win32_handle_info = VkExportMemoryWin32HandleInfoKHR {
             pAttributes: security_attributes,
             dwAccess: access_flags,
-            name: handle_name_wstr,
+            name: handle_name_wstr.as_ptr(),
             ..
         };
         let export_memory_allocate_info = VkExportMemoryAllocateInfo {
@@ -278,11 +278,11 @@ impl Device {
         access_flags: u32,
         handle_name: Option<&str>,
     ) -> (VkSemaphore, HANDLE) {
-        let (_, handle_name_wstr) = handle_name_to_wstr(handle_name);
+        let handle_name_wstr = handle_name_to_wstr(handle_name);
         let export_semaphore_win32_handle_info = VkExportSemaphoreWin32HandleInfoKHR {
             pAttributes: security_attributes,
             dwAccess: access_flags,
-            name: handle_name_wstr,
+            name: handle_name_wstr.as_ptr(),
             ..
         };
         let export_semaphore_create_info = VkExportSemaphoreCreateInfo {
@@ -305,7 +305,7 @@ impl Device {
         handle: HANDLE,
         handle_name: Option<&str>,
     ) -> VkSemaphore {
-        let (_, handle_name_wstr) = handle_name_to_wstr(handle_name);
+        let handle_name_wstr = handle_name_to_wstr(handle_name);
         let is_timeline = match handle_type {
             VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D11_FENCE_BIT => true,
             _ => panic!("unsupported external semaphore type"),
@@ -322,7 +322,7 @@ impl Device {
             flags: import_flags, // ?????
             handleType: handle_type,
             handle,
-            name: handle_name_wstr,
+            name: handle_name_wstr.as_ptr(),
             ..
         };
         vkcall!(

@@ -1,5 +1,5 @@
 //! SPIR-V parser
-use crate::spirv::{
+use crate::{
     ConstantId, ConstantInfo, EntryPointInfo, Module, ParseError, PointerType, ScalarType, StructField, StructType,
     TypeId, TypeInfo, VariableId, VariableInfo,
 };
@@ -80,7 +80,7 @@ fn find_member_decoration<'spv>(
     decorations.get(&(struct_ty, member)).and_then(|decos| decos.iter().find(|d| d.id == deco).map(|d| d.operands))
 }
 
-fn create_shader_reflection_inner(spv: &[u32]) -> Result<Module, ParseError> {
+pub(crate) fn parse_spirv(spv: &[u32]) -> Result<Module, ParseError> {
     let mut header: Header = Default::default();
     let mut strings: HashMap<u32, &str> = Default::default();
     let mut names: HashMap<u32, &str> = Default::default();
@@ -358,8 +358,3 @@ fn create_shader_reflection_inner(spv: &[u32]) -> Result<Module, ParseError> {
     Ok(module)
 }
 
-impl Module {
-    pub fn parse(spirv: &[u32]) -> Result<Module, ParseError> {
-        create_shader_reflection_inner(spirv)
-    }
-}

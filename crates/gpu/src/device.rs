@@ -13,7 +13,7 @@ use ash::vk::Handle;
 use gpu::device::descriptor_heap::SamplerDescriptorHandle;
 use gpu::flush;
 use gpu_allocator::vulkan::AllocationCreateDesc;
-use gpu_types::{SamplerHandle, ShaderStage};
+use gpu_types::{FragmentState, GraphicsState, SamplerHandle, ShaderEntryPoint, ShaderStage, StencilOpState, VertexInputState};
 use log::{debug, error, info, trace, warn};
 use slotmap::{SlotMap, new_key_type};
 use std::collections::{HashMap, VecDeque};
@@ -800,7 +800,7 @@ impl Device {
     pub(crate) fn register_sampler(&self, info: &SamplerParams) -> SamplerHandle {
         let info_hashable = SamplerParamsHashable::from(*info);
         if let Some(sampler) = self.sampler_cache.lock().unwrap().get(&info_hashable) {
-            return SamplerHandle::new(*sampler);
+            return SamplerHandle::from_usize(*sampler as usize);
         }
         let create_info = VkSamplerCreateInfo {
             flags: Default::default(),
@@ -822,7 +822,7 @@ impl Device {
         };
         let sampler = self.allocate_sampler_descriptor(&create_info);
         self.sampler_cache.lock().unwrap().insert(info_hashable, sampler);
-        SamplerHandle::new(sampler)
+        SamplerHandle::from_usize(sampler as usize)
     }
 }
 
@@ -850,13 +850,38 @@ macro_rules! make_stage {
 }
 
 impl Device {
-    /// Creates a compute pipeline.
+    pub(crate) fn create_compute_pipeline(&self, shader: ShaderEntryPoint) -> Result<ComputePipeline, Error> {
+        let req_subgroup_size = VkPipelineShaderStageRequiredSubgroupSizeCreateInfo {
+            requiredSubgroupSize: SUBGROUP_SIZE,
+            pNext: ptr::null_mut(),
+            ..
+        };
+        let _module;
+        let _entry_point_name;
+        let compute_stage =
+            make_stage!(shader, VK_SHADER_STAGE_COMPUTE_BIT, _module, req_subgroup_size, _entry_point_name);
+        let pipeline_create_flags =
+            VkPipelineCreateFlags2CreateInfoKHR { flags: VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT, .. };
+        let cpci = VkComputePipelineCreateInfo {
+            pNext: &pipeline_create_flags as *const _ as *const c_void,
+            flags: 0,
+            stage: compute_stage,
+            layout: Default::default(),
+            basePipelineIndex: 0,
+            ..
+        };
+        unsafe {
+            vkcall!(self.fns.CreateComputePipelines(self.vkd, VkPipelineCache::null(), 1, &cpci, ptr::null(), @out let pipeline));
+            Ok(ComputePipeline { pipeline })
+        }
+    }
+
+    /*/// Creates a compute pipeline.
     pub(crate) fn create_compute_pipeline(
         &self,
         create_info: ComputePipelineCreateInfo,
     ) -> Result<ComputePipeline, Error> {
-        let mut push_constants_size = create_info.push_constants_size;
-        push_constants_size = push_constants_size.max(create_info.shader.push_constants_size);
+
         let req_subgroup_size = VkPipelineShaderStageRequiredSubgroupSizeCreateInfo {
             requiredSubgroupSize: SUBGROUP_SIZE,
             pNext: ptr::null_mut(),
@@ -878,8 +903,30 @@ impl Device {
         };
         unsafe {
             vkcall!(self.fns.CreateComputePipelines(self.vkd, VkPipelineCache::null(), 1, &cpci, ptr::null(), @out let pipeline));
-            Ok(ComputePipeline { pipeline, reflection: create_info.shader.refl_params })
+            Ok(ComputePipeline { pipeline })
         }
+    }*/
+
+    pub(crate) fn create_primitive_pipeline(
+        &self,
+        vertex_shader: ShaderEntryPoint,
+        fragment_shader: ShaderEntryPoint,
+        graphics_state: &GraphicsState,
+    ) -> Result<GraphicsPipeline, Error> {
+        let create_info = GraphicsPipelineCreateInfo {
+            pre_rasterization_shaders: PreRasterizationShaders::PrimitiveShading { vertex: vertex_shader },
+            rasterization: Default::default(),
+            depth_stencil: graphics_state.depth_stencil,
+            fragment: FragmentState {
+                shader: fragment_shader,
+                multisample: Default::default(),
+                color_targets: &graphics_state.color_targets,
+                ..
+            },
+            vertex_input: VertexInputState { .. },
+            push_constants_size: 0, // unused
+        };
+        self.create_graphics_pipeline(create_info)
     }
 
     /// Creates a graphics pipeline.
@@ -887,7 +934,7 @@ impl Device {
         &self,
         create_info: GraphicsPipelineCreateInfo,
     ) -> Result<GraphicsPipeline, Error> {
-        let mut push_constants_size = create_info.push_constants_size;
+        /*let mut push_constants_size = create_info.push_constants_size;
         match create_info.pre_rasterization_shaders {
             PreRasterizationShaders::PrimitiveShading { vertex } => {
                 push_constants_size = push_constants_size.max(vertex.push_constants_size);
@@ -899,7 +946,7 @@ impl Device {
                 }
             }
         }
-        push_constants_size = push_constants_size.max(create_info.fragment.shader.push_constants_size);
+        push_constants_size = push_constants_size.max(create_info.fragment.shader.push_constants_size);*/
 
         // ------ Dynamic states ------
         // TODO: this could be a static property of the pipeline interface
@@ -967,7 +1014,7 @@ impl Device {
         let task_module;
         let mesh_module;
         let fragment_module;
-        let mut stage_reflection = vec![];
+        //let mut stage_reflection = vec![];
         match create_info.pre_rasterization_shaders {
             PreRasterizationShaders::PrimitiveShading { vertex } => {
                 stages.push(make_stage!(
@@ -977,7 +1024,7 @@ impl Device {
                     req_subgroup_size,
                     vertex_entry_point
                 ));
-                stage_reflection.push((ShaderStage::Vertex, vertex.refl_params));
+                //stage_reflection.push((ShaderStage::Vertex, vertex.refl_params));
             }
             PreRasterizationShaders::MeshShading { mesh, task } => {
                 if let Some(task) = task {
@@ -988,7 +1035,7 @@ impl Device {
                         req_subgroup_size,
                         task_entry_point
                     ));
-                    stage_reflection.push((ShaderStage::Task, task.refl_params));
+                    //stage_reflection.push((ShaderStage::Task, task.refl_params));
                 }
                 stages.push(make_stage!(
                     mesh,
@@ -997,7 +1044,7 @@ impl Device {
                     req_subgroup_size,
                     mesh_entry_point
                 ));
-                stage_reflection.push((ShaderStage::Mesh, mesh.refl_params));
+                //stage_reflection.push((ShaderStage::Mesh, mesh.refl_params));
             }
         };
         stages.push(make_stage!(
@@ -1007,14 +1054,14 @@ impl Device {
             req_subgroup_size,
             fragment_entry_point
         ));
-        stage_reflection.push((ShaderStage::Fragment, create_info.fragment.shader.refl_params));
+        //stage_reflection.push((ShaderStage::Fragment, create_info.fragment.shader.refl_params));
 
         // ------ attachments ------
         let attachment_states: Vec<_> = create_info
             .fragment
             .color_targets
             .iter()
-            .map(|target| match target.blend_equation {
+            .map(|target| match target.blend {
                 None => VkPipelineColorBlendAttachmentState {
                     blendEnable: VK_FALSE,
                     srcColorBlendFactor: 0,
@@ -1086,47 +1133,19 @@ impl Device {
             blendConstants: create_info.fragment.blend_constants,
             ..
         };
-        let depth_stencil_state = if let Some(ds) = create_info.depth_stencil {
+        let depth_stencil_state = {
+            let ds = &create_info.depth_stencil;
+            let stencil_enabled = (ds.stencil_back != StencilOpState::IGNORE || ds.stencil_back != StencilOpState::IGNORE)
+                && (ds.stencil_read_mask != 0 || ds.stencil_write_mask != 0);
             VkPipelineDepthStencilStateCreateInfo {
                 flags: Default::default(),
                 depthTestEnable: (ds.depth_compare_op != VK_COMPARE_OP_ALWAYS).into(),
                 depthWriteEnable: ds.depth_write_enable.into(),
-                // VULKAN-MIGRATION
                 depthCompareOp: ds.depth_compare_op,
-                stencilTestEnable: ds.stencil_state.is_enabled().into(),
-                front: ds.stencil_state.front.to_vk_stencil_op_state(),
-                back: ds.stencil_state.back.to_vk_stencil_op_state(),
+                stencilTestEnable: stencil_enabled.into(),
+                front: ds.stencil_front.to_vk_stencil_op_state(),
+                back: ds.stencil_back.to_vk_stencil_op_state(),
                 depthBoundsTestEnable: VK_FALSE,
-                minDepthBounds: 0.0,
-                maxDepthBounds: 0.0,
-                ..
-            }
-        } else {
-            VkPipelineDepthStencilStateCreateInfo {
-                flags: 0,
-                depthTestEnable: 0,
-                depthWriteEnable: 0,
-                depthCompareOp: 0,
-                depthBoundsTestEnable: 0,
-                stencilTestEnable: 0,
-                front: VkStencilOpState {
-                    failOp: 0,
-                    passOp: 0,
-                    depthFailOp: 0,
-                    compareOp: 0,
-                    compareMask: 0,
-                    writeMask: 0,
-                    reference: 0,
-                },
-                back: VkStencilOpState {
-                    failOp: 0,
-                    passOp: 0,
-                    depthFailOp: 0,
-                    compareOp: 0,
-                    compareMask: 0,
-                    writeMask: 0,
-                    reference: 0,
-                },
                 minDepthBounds: 0.0,
                 maxDepthBounds: 0.0,
                 ..
@@ -1134,7 +1153,7 @@ impl Device {
         };
         let color_attachment_formats =
             create_info.fragment.color_targets.iter().map(|target| target.format).collect::<Vec<_>>();
-        let depth_attachment_format = create_info.depth_stencil.map(|ds| ds.format).unwrap_or(VK_FORMAT_UNDEFINED);
+        let depth_attachment_format = create_info.depth_stencil.format;
         let stencil_attachment_format = if is_depth_and_stencil_format(depth_attachment_format) {
             depth_attachment_format
         } else {
@@ -1177,7 +1196,7 @@ impl Device {
 
         unsafe {
             vkcall!(self.fns.CreateGraphicsPipelines(self.vkd, VkPipelineCache::null(), 1, &pipeline_create_info, ptr::null(), @out let pipeline));
-            Ok(GraphicsPipeline { pipeline, stage_reflection })
+            Ok(GraphicsPipeline { pipeline })
         }
     }
 }
@@ -1375,4 +1394,18 @@ pub fn get_calibrated_timestamp_pair() -> (u64, u64) {
     let device_timestamp = timestamps[0];
     let system_timestamp = timestamps[1];
     (device_timestamp, system_timestamp)
+}
+
+#[inline(never)]
+pub fn create_primitive_pipeline(
+    vertex_shader: ShaderEntryPoint,
+    fragment_shader: ShaderEntryPoint,
+    graphics_state: &GraphicsState,
+) -> Result<GraphicsPipeline, Error> {
+    Device::instance().create_primitive_pipeline(vertex_shader, fragment_shader, graphics_state)
+}
+
+#[inline(never)]
+pub fn create_compute_pipeline(shader: ShaderEntryPoint) -> Result<ComputePipeline, Error> {
+    Device::instance().create_compute_pipeline(shader)
 }

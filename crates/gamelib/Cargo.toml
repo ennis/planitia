@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [lib]
-crate-type = ["dylib"]
+#crate-type = ["dylib"]
 
 [dependencies]
 gpu = { workspace = true }
@@ -36,6 +36,7 @@ ron = "0.12.0"
 serde = { version = "1", features = ["derive", "alloc", "rc"] }
 color-print = "0.3.7"
 scoped-tls = "1.0.1"
+imgui = { git= "https://github.com/imgui-rs/imgui-rs.git",  rev = "e06b05c0f97062af4ea7856ecc5a7216feb3ace2", features = ["tables-api", "docking"], optional = true }
 planitia-workspace-hack = { version = "0.1", path = "../../planitia-workspace-hack" }
 
 # gamelib itself, and downstream crates that link to gamelib may depend (directly or indirectly) on the same crate but
@@ -63,24 +64,20 @@ windows = { version = "0.62.2", features = [
     "Win32_Graphics_Direct3D",
     "Win32_Graphics_Direct3D12",
     "Win32_UI_Shell_Common",
-    #"Win32_Graphics_Gdi",
     "Win32_Graphics_Dxgi",
     "Win32_Graphics_Dxgi_Common",
     "System",
     "Foundation",
-    #"Graphics_DirectX",
     "Foundation_Numerics",
-    #"Win32_Graphics_Direct3D11",
-    #"Win32_Graphics_DirectWrite",
     "Win32_Security",
-    #"Win32_Graphics_Dwm",
     "Win32_Graphics_DirectComposition"] }
 
 [build-dependencies]
 shadertool = { workspace = true }
 
 [features]
-default = []
+default = ["imgui"]
 hot_reload = ["dep:shadertool"]
 lua = ["dep:mlua"]
 tracy = ["tracy-client/default"]
+imgui = ["dep:imgui"]

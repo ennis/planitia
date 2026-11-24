@@ -43,7 +43,7 @@ pub(super) enum DrawCommand {
     SetTransform(Mat3),
     Clear(Srgba8),
     BeginGroup(GroupOptions),
-    FillPath { verb_range: Range<usize>, base_vertex: usize, fill: usize },
+    FillPath { verb_range: Range<usize>, base_point: usize, fill: usize },
     EndGroup,
 }
 

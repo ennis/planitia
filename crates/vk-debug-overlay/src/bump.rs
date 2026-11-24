@@ -1,7 +1,7 @@
 //! GPU bump allocator.
-use crate::helper::{Buffer, DeviceHelper};
-use vulkan::*;
+use crate::helper::{Buffer, DeviceHelper, HOST_VISIBLE_COHERENT_BITS};
 use std::alloc::Layout;
+use vulkan::*;
 
 const ALLOC_ALIGNMENT: usize = 256;
 const TEMP_BUFFER_SIZE: usize = 128 * 1024; // Allocate 128 KB chunks
@@ -11,9 +11,9 @@ const DEDICATED_BUFFER_THRESHOLD_SIZE: usize = 4 * 1024; // Allocate dedicated b
 
 /// Usage flags of temporary buffers.
 const TEMP_BUFFER_USAGE: VkBufferUsageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT
-        | VK_BUFFER_USAGE_TRANSFER_DST_BIT
-        | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
-        | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    | VK_BUFFER_USAGE_TRANSFER_DST_BIT
+    | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+    | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -83,7 +83,14 @@ impl BumpAllocator {
 
             let chunk = free.unwrap_or_else(|| {
                 // Resort to a dedicated allocation.
-                unsafe { Chunk::new(dd.create_buffer_helper(TEMP_BUFFER_USAGE, layout.size(), None)) }
+                unsafe {
+                    Chunk::new(dd.create_buffer_helper(
+                        TEMP_BUFFER_USAGE,
+                        HOST_VISIBLE_COHERENT_BITS,
+                        layout.size(),
+                        None,
+                    ))
+                }
             });
 
             let alloc = Alloc {
@@ -103,8 +110,14 @@ impl BumpAllocator {
             if let Some(current) = self.current.take() {
                 self.retired.push(current);
             }
-            self.current =
-                unsafe { Some(Chunk::new(dd.create_buffer_helper(TEMP_BUFFER_USAGE, TEMP_BUFFER_SIZE, None))) };
+            self.current = unsafe {
+                Some(Chunk::new(dd.create_buffer_helper(
+                    TEMP_BUFFER_USAGE,
+                    HOST_VISIBLE_COHERENT_BITS,
+                    TEMP_BUFFER_SIZE,
+                    None,
+                )))
+            };
             self.offset = 0;
             debug_assert_eq!(self.offset, 0);
             aligned_offset = 0;

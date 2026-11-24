@@ -1,5 +1,4 @@
 use crate::Device;
-use crate::surface::get_hwnd_for_surface;
 use vulkan::*;
 use std::time::{Duration, Instant};
 use windows::Win32::Foundation::{HWND, POINT};
@@ -10,6 +9,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 use crate::overlay::gui::with_imgui_context;
+use crate::wrappers::get_hwnd_for_surface;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum KeyEventKind {

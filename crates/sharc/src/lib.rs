@@ -435,7 +435,7 @@ impl Deref for ShaderArchive {
 mod tests {
     use super::*;
     use std::fs;
-    use gpu_types::{ColorBlendEquation, ColorTargetState};
+    use gpu_types::{BlendState, ColorTargetState};
     use gpu_types::vk::{CullModeFlags, PolygonMode};
     use utils::archive::ArchiveWriter;
     use utils::zstring::ZString64;
@@ -448,7 +448,7 @@ mod tests {
         let color_targets = {
             let color_targets = &[writer.write(&ColorTargetState {
                 format: VK_FORMAT_R8G8B8A8_UNORM,
-                blend_equation: Some(ColorBlendEquation {
+                blend: Some(BlendState {
                     src_color_blend_factor: VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR,
                     dst_color_blend_factor: VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
                     color_blend_op: VK_BLEND_OP_ADD,

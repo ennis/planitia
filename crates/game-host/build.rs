@@ -1,8 +1,6 @@
 #![feature(default_field_values)]
 use std::path::PathBuf;
 
-static SHADERS: &[&str] = &["assets/shaders/*.slang"];
-
 /// Copy Rust stdlib DLLs from the active toolchain's `lib/rustlib/<target>/lib/` directory into
 /// the cargo output directory (i.e. next to `game.exe`) so the executable can
 /// be run without the Rust toolchain on PATH.
@@ -57,21 +55,5 @@ fn copy_rust_stdlib_dlls() {
 fn main() {
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
         copy_rust_stdlib_dlls();
-    }
-
-    // build shaders
-    if let Err(err) = shadertool::build(
-        SHADERS.iter().cloned(),
-        &shadertool::BuildOptions {
-            emit_cargo_deps: true,
-            emit_debug_information: true,
-            emit_spirv_binaries: true,
-            emit_reflection: false,
-            include_paths: vec![PathBuf::from("../gamelib/assets/gamelib/shaders")],
-            output_directory: None,
-        },
-        &shadertool::LogOptions { quiet: true, .. },
-    ) {
-        err.print_cargo_error();
     }
 }

@@ -1,4 +1,4 @@
-use crate::helper::{include_bytes_as_u32, Buffer, Descriptor, GraphicsPipelineHelperCreateInfo, Image};
+use crate::helper::{include_bytes_as_u32, Buffer, Descriptor, GraphicsPipelineHelperCreateInfo, Image, make_layout_transition_barrier, HOST_VISIBLE_COHERENT_BITS};
 use crate::overlay::gui::with_imgui_context;
 use crate::{Device, DeviceHelper, FRAMES_IN_FLIGHT, Pipeline};
 use parking_lot::Mutex;
@@ -29,11 +29,13 @@ impl FrameResources {
             vkcall!(dh.CreateFence(dh.device, &VkFenceCreateInfo { flags: VK_FENCE_CREATE_SIGNALED_BIT, .. }, ptr::null(), @out let fence));
             let vertex_buffer = dh.create_buffer_helper(
                 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                HOST_VISIBLE_COHERENT_BITS,
                 MAX_VERTICES * size_of::<Vertex>(),
                 None,
             );
             let index_buffer = dh.create_buffer_helper(
                 VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                HOST_VISIBLE_COHERENT_BITS,
                 MAX_INDICES * size_of::<u16>(),
                 None,
             );
@@ -408,14 +410,22 @@ pub(crate) unsafe fn render_overlay(
     let image_copy = fr.tmp_image.as_ref().unwrap();
 
     // The application should have transitioned the image to PRESENT before vkQueuePresent.
-    dd.layout_barrier(
+    // Transition back to TRANSFER_SRC for copy, then back to PRESENT
+    let barriers = &[make_layout_transition_barrier(image, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL),
+                     make_layout_transition_barrier(image_copy.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)];
+    // We are heavy-handed on the pipeline stages & access flags, as this is not remotely worth the trouble.
+    dd.CmdPipelineBarrier(
         fd.cmd_buf,
-        &[
-            (image, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL),
-            (image_copy.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL),
-        ],
+        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        0,
+        0,
+        ptr::null(),
+        0,
+        ptr::null(),
+        barriers.len() as u32,
+        barriers.as_ptr(),
     );
-
     dd.CmdCopyImage(
         fd.cmd_buf,
         image,
@@ -442,12 +452,21 @@ pub(crate) unsafe fn render_overlay(
         },
     );
 
-    dd.layout_barrier(
+    let barriers = &[
+        make_layout_transition_barrier(image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
+        make_layout_transition_barrier(image_copy.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL),
+    ];
+    dd.CmdPipelineBarrier(
         fd.cmd_buf,
-        &[
-            (image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL),
-            (image_copy.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL),
-        ],
+        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        0,
+        0,
+        ptr::null(),
+        0,
+        ptr::null(),
+        barriers.len() as u32,
+        barriers.as_ptr(),
     );
 
     let attachments = [VkRenderingAttachmentInfo {
@@ -470,31 +489,67 @@ pub(crate) unsafe fn render_overlay(
         },
     );
 
+    //---------------------------------------------------------------------------
+    // Render the GUI
+
     let rd = RenderData {
         width: sc.extent.width as i32,
         height: sc.extent.height as i32,
         image_copy: image_copy.image,
         image_copy_view: image_copy.image_view,
     };
-
     dd.render_gui(&rd, fd);
+
+    //---------------------------------------------------------------------------
 
     dd.CmdEndRendering(fd.cmd_buf);
     // transition back to PRESENT
-    dd.layout_barrier(
+    let barrier = make_layout_transition_barrier(
+        image,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+    );
+    dd.CmdPipelineBarrier(
         fd.cmd_buf,
-        &[(image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)],
+        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+        0,
+        0,
+        ptr::null(),
+        0,
+        ptr::null(),
+        1,
+        &barrier,
     );
 
     vkcall!(dd.EndCommandBuffer(fd.cmd_buf));
 
     // Submit the command buffer, with a fence, waiting on the semaphores provided by the application.
     let render_to_present = sc.render_to_present[image_index as usize];
-    dd.queue_submit_helper(queue, fd.cmd_buf, wait_semaphores, &[render_to_present], fd.fence);
-    dd.queue_present_helper(queue, swapchain, image_index, render_to_present);
+    let wait_dst_stage_mask = vec![VK_PIPELINE_STAGE_ALL_COMMANDS_BIT; wait_semaphores.len()];
+    let submit_info = VkSubmitInfo {
+        waitSemaphoreCount: wait_semaphores.len() as u32,
+        pWaitSemaphores: wait_semaphores.as_ptr(),
+        pWaitDstStageMask: wait_dst_stage_mask.as_ptr(),
+        commandBufferCount: 1,
+        pCommandBuffers: &fd.cmd_buf,
+        signalSemaphoreCount: 1,
+        pSignalSemaphores: &render_to_present,
+        ..
+    };
+    vkcall!(dd.QueueSubmit(queue, 1, &submit_info, fd.fence));
+    // Present
+    let present_info = VkPresentInfoKHR {
+        waitSemaphoreCount: 1,
+        pWaitSemaphores: &render_to_present,
+        swapchainCount: 1,
+        pSwapchains: &swapchain,
+        pImageIndices: &image_index,
+        ..
+    };
+    vkcall!(dd.QueuePresentKHR(queue, &present_info));
 
     fr.frame_index = (frame_index + 1) % FRAMES_IN_FLIGHT;
 
-    //eprintln!("[planitia-layer] Rendering overlay on swapchain {:?}, image index {}", swapchain, image_index);
     VK_SUCCESS
 }

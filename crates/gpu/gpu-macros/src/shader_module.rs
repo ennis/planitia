@@ -303,7 +303,6 @@ pub(crate) fn shader_module_impl(
 
     // Parse the module declaration
     let item_mod: syn::ItemMod = syn::parse(item)?;
-
     let mod_name = &item_mod.ident;
     let vis = &item_mod.vis;
     let attrs = &item_mod.attrs;
@@ -338,22 +337,17 @@ pub(crate) fn shader_module_impl(
         let spirv_bytes = unsafe { slice::from_raw_parts(module.spirv.as_ptr() as *const u8, module.spirv.len() * 4) };
         syn::LitByteStr::new(&spirv_bytes, shader_path_lit.span())
     };
-
     let bytecode = quote! {
         static __BYTECODE: &[u32] = ::gpu::bytes_as_u32!(#bytecode_str);
     };
 
-    // Write SPIR-V binary
-    //let spirv_output = shader_file
-    //    .parent()
-    //    .unwrap()
-    //    .join(format!("spirv/{}.spv", shader_file.file_stem().unwrap().to_string_lossy()))
-    //    .to_string_lossy()
-    //    .to_string();
-
-    // Include all dependencies.
+    // Include all dependencies so that the rust code is recompiled when they change.
     let dependencies = {
-        let paths = module.dependencies.iter().map(|dep| dep.path.to_string_lossy());
+        let mut paths = module.dependencies.iter().map(|dep| dep.path.to_string_lossy()).collect::<Vec<_>>();
+        let manifest_path = module.manifest_path.to_string_lossy();
+        if !manifest_path.is_empty() {
+            paths.push(manifest_path);
+        }
         quote! {
             static __DEPENDENCIES: &[&str] = &[
                 #(include_str!(#paths)),*
@@ -366,7 +360,8 @@ pub(crate) fn shader_module_impl(
     for (_i, ep) in module.entry_points.iter().enumerate() {
         let ep_name = &ep.name;
         let ep_name_ident = format_ident!("{}", ep_name);
-        let push_constants_size = ep.push_constants_size;
+
+        /*let push_constants_size = ep.push_constants_size;
         let workgroup_size = ep.workgroup_size;
 
         let stage = match ep.stage {
@@ -376,39 +371,21 @@ pub(crate) fn shader_module_impl(
             VK_SHADER_STAGE_TASK_BIT_EXT => format_ident!("Task"),
             VK_SHADER_STAGE_COMPUTE_BIT => format_ident!("Compute"),
             _ => continue,
-        };
-
-        // generate entry point parameter reflection
-        let mut param_access_chains = TokenStream::new();
-        param_access_chains.append_all(ep.refl_params.iter().map(|&s| generate_access_chain(Some(ep_name), s)));
-
-        let param_access_chain_names = {
-            let mut names = vec![];
-            for gp in module.refl_global_params.iter() {
-                names.push(mangle_access_chain_name(None, gp.name));
-            }
-            for epp in ep.refl_params.iter() {
-                names.push(mangle_access_chain_name(Some(ep_name), epp.name));
-            }
-            names
-        };
-
-        //let param_reflection = generate_entry_point_param_reflection(&module, &reflection, i);
+        };*/
 
         entry_points.push(quote! {
-            #param_access_chains
-
+            //#param_access_chains
             #[allow(non_upper_case_globals)]
             pub static #ep_name_ident: ::gpu::ShaderEntryPoint<'static> = ::gpu::ShaderEntryPoint {
-                stage: ::gpu::ShaderStage::#stage,
+                //stage: ::gpu::ShaderStage::#stage,
                 code: super::__BYTECODE,
                 entry_point: #ep_name,
-                push_constants_size: #push_constants_size,
-                source_path: Some(#shader_path),
-                workgroup_size: [#(#workgroup_size),*],
-                refl_params: &[
-                    #(&#param_access_chain_names),*
-                ]
+                //push_constants_size: #push_constants_size,
+                //source_path: Some(#shader_path),
+                //workgroup_size: [#(#workgroup_size),*],
+                //refl_params: &[
+                    // #(&#param_access_chain_names),*
+                //]
             };
         });
     }
@@ -425,7 +402,7 @@ pub(crate) fn shader_module_impl(
         let mut compute = None;
         for &ep_index in pipeline.stages.iter() {
             let entry_point = &module.entry_points[ep_index];
-            eprintln!("entry_point {} stage {:?}", entry_point.name, entry_point.stage);
+            //eprintln!("entry_point {} stage {:?}", entry_point.name, entry_point.stage);
             let ep_name_ident = format_ident!("{}", entry_point.name);
             match entry_point.stage {
                 VK_SHADER_STAGE_VERTEX_BIT => vertex = Some(ep_name_ident),
@@ -452,20 +429,18 @@ pub(crate) fn shader_module_impl(
         let pipeline_type;
         let create_fn;
 
-        let push_constants_size = pipeline.push_constants_size;
-
         let mut color_targets = vec![];
         for color_target in pipeline.graphics_state.color_targets.iter() {
             let format = vk_format_tokens(color_target.format);
-            let blend_equation = match color_target.blend_equation {
-                Some(equation) => {
-                    let src_color = vk_blend_factor_tokens(equation.src_color_blend_factor);
-                    let dst_color = vk_blend_factor_tokens(equation.dst_color_blend_factor);
-                    let color_op = vk_blend_op_tokens(equation.color_blend_op);
-                    let src_alpha = vk_blend_factor_tokens(equation.src_alpha_blend_factor);
-                    let dst_alpha = vk_blend_factor_tokens(equation.dst_alpha_blend_factor);
-                    let alpha_op = vk_blend_op_tokens(equation.alpha_blend_op);
-                    quote!(Some(gpu::ColorBlendEquation {
+            let blend_state = match color_target.blend {
+                Some(st) => {
+                    let src_color = vk_blend_factor_tokens(st.src_color_blend_factor);
+                    let dst_color = vk_blend_factor_tokens(st.dst_color_blend_factor);
+                    let color_op = vk_blend_op_tokens(st.color_blend_op);
+                    let src_alpha = vk_blend_factor_tokens(st.src_alpha_blend_factor);
+                    let dst_alpha = vk_blend_factor_tokens(st.dst_alpha_blend_factor);
+                    let alpha_op = vk_blend_op_tokens(st.alpha_blend_op);
+                    quote!(Some(gpu::BlendState {
                         src_color_blend_factor: #src_color,
                         dst_color_blend_factor: #dst_color,
                         color_blend_op: #color_op,
@@ -480,7 +455,7 @@ pub(crate) fn shader_module_impl(
             color_targets.push(quote! {
                 gpu::ColorTargetState {
                     format: #format,
-                    blend_equation: #blend_equation,
+                    blend: #blend_state,
                     ..
                 }
             })
@@ -490,14 +465,14 @@ pub(crate) fn shader_module_impl(
             let format = vk_format_tokens(depth_stencil.format);
             let depth_write_enable = depth_stencil.depth_write_enable;
             let depth_compare_op = vk_compare_op_tokens(depth_stencil.depth_compare_op);
-            quote!(Some(gpu::DepthStencilState {
+            quote!(gpu::DepthStencilState {
                 format: #format,
                 depth_write_enable: #depth_write_enable,
                 depth_compare_op: #depth_compare_op,
                 ..
-            }))
+            })
         } else {
-            quote!(None)
+            quote!(gpu::DepthStencilState { .. })
         };
 
         let polygon_mode = vk_polygon_mode_tokens(pipeline.graphics_state.rasterizer.polygon_mode);
@@ -519,21 +494,13 @@ pub(crate) fn shader_module_impl(
                 pipeline_type = PipelineType::Primitive;
                 create_fn = quote! {
                     fn create_pipeline() -> Result<gpu::GraphicsPipeline, gpu::Error>  {
-                        static CREATE_INFO : gpu::GraphicsPipelineCreateInfo = gpu::GraphicsPipelineCreateInfo {
-                            push_constants_size: #push_constants_size,
-                            pre_rasterization_shaders: gpu::PreRasterizationShaders::PrimitiveShading {
-                                vertex: self::entry_points::#vertex,
-                            },
+                        static STATE : gpu::GraphicsState = gpu::GraphicsState {
                             rasterization: #rasterization,
                             depth_stencil: #depth_stencil,
-                            fragment: gpu::FragmentState {
-                                shader: self::entry_points::#fragment,
-                                color_targets: &[#(#color_targets)*],
-                                ..
-                            },
+                            color_targets: &[#(#color_targets)*],
                             ..
                         };
-                        let pipeline = gpu::GraphicsPipeline::new(CREATE_INFO)?;
+                        let pipeline = gpu::create_primitive_pipeline(self::entry_points::#vertex, self::entry_points::#fragment, &STATE)?;
                         unsafe {
                             gpu::set_debug_name(&pipeline, #pipeline_name);
                         }
@@ -549,12 +516,7 @@ pub(crate) fn shader_module_impl(
                 pipeline_type = PipelineType::Compute;
                 create_fn = quote! {
                     fn create_pipeline() -> Result<gpu::ComputePipeline, gpu::Error>  {
-                        static CREATE_INFO : gpu::ComputePipelineCreateInfo = gpu::ComputePipelineCreateInfo {
-                            push_constants_size: #push_constants_size,
-                            shader: self::entry_points::#compute,
-                            ..
-                        };
-                        let pipeline = gpu::ComputePipeline::new(CREATE_INFO)?;
+                        let pipeline = gpu::create_compute_pipeline(self::entry_points::#compute)?;
                         unsafe {
                             gpu::set_debug_name(&pipeline, #pipeline_name);
                         }

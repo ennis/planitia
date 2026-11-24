@@ -53,7 +53,7 @@ impl<'a> SceneBuilder<'a> {
 
     fn process_command(&mut self, cmd: &DrawCommand) {
         match cmd {
-            DrawCommand::FillPath { verb_range, base_vertex, fill } => {
+            DrawCommand::FillPath { verb_range, base_point: base_vertex, fill } => {
                 self.generate_tiles(
                     &self.scene.path_verbs[verb_range.clone()],
                     &self.scene.path_points[*base_vertex..],
@@ -249,7 +249,7 @@ pub(super) fn build_gpu_scene(scene: &Scene, viewport_width: u32, viewport_heigh
 
     for cmd in scene.draw_commands.iter() {
         match cmd {
-            DrawCommand::FillPath { verb_range, base_vertex, fill } => {
+            DrawCommand::FillPath { verb_range, base_point: base_vertex, fill } => {
                 builder.generate_tiles(
                     &scene.path_verbs[verb_range.clone()],
                     &scene.path_points[*base_vertex..],

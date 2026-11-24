@@ -28,18 +28,13 @@ pub enum PipelineCreateError {
 }
 
 fn get_shader_entry_point<'a>(
-    stage: gpu::ShaderStage,
+    _stage: gpu::ShaderStage,
     spirv: &'a [u32],
     entry_point_name: &'a str,
 ) -> ShaderEntryPoint<'a> {
     ShaderEntryPoint {
-        stage,
         code: spirv,
         entry_point: entry_point_name,
-        push_constants_size: 0, // ignored by gpu anyway
-        source_path: None,
-        workgroup_size: [0, 0, 0], // ignored by gpu anyway
-        refl_params: &[],
     }
 }
 
@@ -57,7 +52,7 @@ fn create_graphics_pipeline_from_archive(
                 let c = &archive[c];
                 gpu::ColorTargetState {
                     format: c.format,
-                    blend_equation: c.blend_equation.map(|blend| gpu::ColorBlendEquation {
+                    blend: c.blend.map(|blend| gpu::BlendState {
                         src_color_blend_factor: blend.src_color_blend_factor,
                         dst_color_blend_factor: blend.dst_color_blend_factor,
                         color_blend_op: blend.color_blend_op,
@@ -120,7 +115,7 @@ fn create_graphics_pipeline_from_archive(
         vertex_input: Default::default(),
         pre_rasterization_shaders,
         rasterization: entry.rasterization,
-        depth_stencil: entry.depth_stencil,
+        depth_stencil: entry.depth_stencil.unwrap_or_default(),
         fragment: gpu::FragmentState {
             shader: fragment_shader.unwrap(),
             multisample: Default::default(),
@@ -128,7 +123,7 @@ fn create_graphics_pipeline_from_archive(
             blend_constants: [0.0, 0.0, 0.0, 0.0],
         },
     };
-    let pipeline = gpu::GraphicsPipeline::new(gpci).raise(PipelineCreateError::Other)?;
+    let pipeline = gpu::GraphicsPipeline::from_create_info(gpci).raise(PipelineCreateError::Other)?;
 
     unsafe {
         let name = format!("{}/{}", &archive[module.name], debug_name);
@@ -147,12 +142,7 @@ fn create_compute_pipeline_from_archive(
     let ep_name = entry.compute_shader.entry_point.as_str();
     let spirv = &archive[module.spirv];
     let shader = get_shader_entry_point(gpu::ShaderStage::Compute, spirv, ep_name);
-    let cpci = gpu::ComputePipelineCreateInfo {
-        //set_layouts: &[],
-        push_constants_size: entry.push_constants_size as usize,
-        shader,
-    };
-    let pipeline = gpu::ComputePipeline::new(cpci).raise(PipelineCreateError::Other)?;
+    let pipeline = gpu::create_compute_pipeline(shader).raise(PipelineCreateError::Other)?;
     unsafe {
         let name = format!("{}/{}", &archive[module.name], name);
         gpu::set_debug_name(&pipeline, name);

@@ -1,5 +1,4 @@
 use gpu::{ColorAttachment, DepthStencilAttachment, Image, ImageCreateInfo, ImageUsage, Size3D};
-use gpu::vulkan::VK_FORMAT_R8G8B8A8_UNORM;
 
 /// Helper type to manage a 2D render target.
 ///
@@ -12,11 +11,12 @@ pub struct RenderTarget {
     format: gpu::Format,
 }
 
+/*
 impl Default for RenderTarget {
     fn default() -> Self {
         RenderTarget { inner: None, usage: ImageUsage::empty(), format: VK_FORMAT_R8G8B8A8_UNORM }
     }
-}
+}*/
 
 impl RenderTarget {
     /// Creates a new render target with no allocated image.

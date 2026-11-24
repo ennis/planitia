@@ -1,43 +1,22 @@
-use crate::debugger::{Debugger, LoadChain, ResourceDescriptorInfo};
+use crate::debugger::ResourceDescriptorInfo;
+use crate::descriptor::{NVTextureImageControl, format_nv_tic};
 use crate::event::EId;
+use crate::load_chain::LoadChain;
 use crate::overlay::renderer::{FrameData, RenderData};
-use crate::spirv::{Module, ScalarType, StructType, TypeId, TypeInfo, pretty_print_type, type_byte_size};
-use crate::state_tracker::command::Command;
-use crate::state_tracker::pipeline::ShaderStageInfo;
-use crate::{Device, ModuleId, ModuleMap};
+use crate::wrappers::command::{CmdKind, Command};
+use crate::wrappers::pipeline::ShaderStageInfo;
+use crate::{DebuggerState, DescriptorState, Device, ModuleId, ModuleMap, QueueSubmit};
 use color_print::cwrite;
 use imgui::Condition::Always;
 use imgui::{StyleVar, TreeNodeFlags, Ui};
 use spirv::StorageClass;
+use spirv_reflect::{Module, ScalarType, StructType, TypeId, TypeInfo, pretty_print_type, type_byte_size};
 use std::cell::RefCell;
 use std::fmt::Write;
 use std::hash::{Hash, Hasher};
-use std::mem;
+use std::{mem, slice};
 use vulkan::*;
-
-thread_local! {
-    pub static IMGUI: RefCell<imgui::Context> = RefCell::new(imgui::Context::create());
-}
-
-pub fn with_imgui_context<R>(f: impl FnOnce(&mut imgui::Context) -> R) -> R {
-    IMGUI.with(|cell| {
-        let mut context = cell.borrow_mut();
-        f(&mut context)
-    })
-}
-
-static TABLE_FLAGS: imgui::TableFlags = imgui::TableFlags::from_bits(
-    imgui::TableFlags::BORDERS.bits() | imgui::TableFlags::ROW_BG.bits() | imgui::TableFlags::RESIZABLE.bits(),
-)
-.unwrap();
-
-static STATUS_BAR_HEIGHT: i32 = 20;
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-enum GuiMode {
-    Normal,
-    PickSizeHint,
-}
+//--------------------------------------------------------------------------------------------------
 
 pub struct GuiState {
     selected: usize,
@@ -49,12 +28,14 @@ pub struct GuiState {
     show_commands: bool,
     show_memory_map: bool,
     show_descriptor_blobs: bool,
+    show_descriptor_heaps: bool,
 
     fuse_single_field_structs: bool,
     interpret_vec2u_as_descriptor_handle: bool,
     pinned_watches: Vec<PinnedWatch>,
     status: String,
     size_hints: Vec<ArraySizeHint>,
+    descriptor_heap_windows: Vec<DescriptorHeapWindow>,
 
     mode: GuiMode,
 
@@ -74,16 +55,24 @@ impl GuiState {
             show_commands: true,
             show_memory_map: false,
             show_descriptor_blobs: false,
+            show_descriptor_heaps: false,
             fuse_single_field_structs: true,
             interpret_vec2u_as_descriptor_handle: false,
             pinned_watches: vec![],
             status: "".to_string(),
             size_hints: vec![],
+            descriptor_heap_windows: vec![],
             mode: GuiMode::Normal,
             array_size_hint_source: None,
             array_size_hint_len: None,
         }
     }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum GuiMode {
+    Normal,
+    PickSizeHint,
 }
 
 #[derive(Clone)]
@@ -98,16 +87,78 @@ struct PinnedWatch {
     var: VarInfo,
 }
 
-/// Represents a shader parameter variable, relative to a particular command.
+#[derive(Clone, Eq, PartialEq, Hash)]
+struct DescriptorHeapWindow {
+    eid: EId,
+}
+
+/// Represents a shader variable reachable via a uniform buffer, push constant block, or storage buffer.
+///
+/// This represents a shader variable of the shader resource interface (https://docs.vulkan.org/spec/latest/chapters/interfaces.html#interfaces-resources),
+/// or a variable reachable from such the shader resource interface via a pointer indirection chain.
+///
+/// # Examples
+///
+/// Given the following slang push constant block:
+///
+/// ```slang
+/// struct Particle
+/// {
+///     float3 position;
+///     float3 velocity;
+///     float  mass;
+/// };
+///
+/// struct PushConstants
+/// {
+///     Particle* particles; // pointer to another struct
+///     uint      count;
+/// };
+///
+/// [[vk::push_constant]]
+/// PushConstants pc;
+/// ```
+///
+/// The following are all `VarInfo`s reachable from the interface:
+/// - `pc`: the `PushConstant` block itself
+/// - `pc.particles`: the pointer to the `Particle` struct
+/// - `pc.count`: the `count` variable
+/// - `pc.particles[i]` for any `i`: the `Particle` struct at index `i` (reached via pointer indirection)
+/// - `pc.particles[i].position`
+/// - `pc.particles[i].velocity`
+/// - `pc.particles[i].mass`
+///
 #[derive(Clone, Eq, PartialEq, Hash)]
 struct VarInfo {
+    /// The SPIR-V shader module that this description applies to.
     mid: ModuleId,
+    /// Pointer indirection chain to the data to load.
+    ///
+    /// In order to reduce the number of unique capture requests, load chains should be as coarse as possible.
+    /// Use `offset` to specify the offset to the variable within the data loaded from `load_chain`.
+    ///
+    /// For example, to represent each field of a struct, it is better to specify a load chain
+    /// that loads the whole struct, with a different `offset` for each field.
+    /// This results in only one unique capture for the struct,
+    /// contrary to having a different load chain for each field (which would require one capture per field).
     load_chain: LoadChain,
+    /// Size of the data to load from `load_chain`.
+    /// This can be bigger than the variable itself.
     byte_size: usize,
-    path: String,
+    /// Offset to the variable within the data loaded from `load_chain`.
     offset: usize,
+    /// Human-readable path expression that points to the variable.
+    path: String,
+    /// Variable type.
     ty: TypeInfo,
 }
+
+static TABLE_FLAGS: imgui::TableFlags = imgui::TableFlags::from_bits(
+    imgui::TableFlags::BORDERS.bits() | imgui::TableFlags::ROW_BG.bits() | imgui::TableFlags::RESIZABLE.bits(),
+)
+.unwrap();
+
+static STATUS_BAR_HEIGHT: i32 = 20;
 
 // Hierarchy of contexts during GUI:
 //
@@ -118,13 +169,16 @@ struct VarInfo {
 struct RootContext<'a> {
     d: &'a Device,
     rd: &'a RenderData,
-    dbg: &'a mut Debugger,
+    dbg: &'a mut DebuggerState,
+    descriptors: &'a DescriptorState,
+    subs: &'a [QueueSubmit],
     modules: &'a mut ModuleMap,
 }
 
 struct CommandContext<'a> {
     d: &'a Device,
-    dbg: &'a mut Debugger,
+    dbg: &'a mut DebuggerState,
+    subs: &'a [QueueSubmit],
     modules: &'a mut ModuleMap,
     cmd: &'a Command,
 }
@@ -138,7 +192,8 @@ struct ParamDataCtx {
 struct ParamWalkCtx<'a> {
     d: &'a Device,
     eid: EId,
-    dbg: &'a mut Debugger,
+    dbg: &'a mut DebuggerState,
+    subs: &'a [QueueSubmit],
     m: &'a Module,
     mid: ModuleId,
 }
@@ -178,8 +233,6 @@ impl<'a, 'ctx, 'data, 'ty> ParamWalk<'a, 'ctx, 'data, 'ty> {
     }
 }
 
-//fn add_array_size_hint(walk: &mut ParamWalk,
-
 #[derive(Copy, Clone, Debug)]
 enum Value {
     U8(u8),
@@ -207,7 +260,7 @@ fn fetch_value(ctx: &mut ParamWalkCtx, var_info: &VarInfo) -> Option<Value> {
         var_info.load_chain,
         pretty_print_type(ctx.m, &var_info.ty)
     );
-    let data = ctx.dbg.capture_load_chain(ctx.eid, &var_info.load_chain, var_info.byte_size);
+    let data = ctx.dbg.capture_command_push_data(ctx.eid, var_info.load_chain.clone(), var_info.byte_size);
     if let Some(data) = data {
         let data = &data[var_info.offset..];
         match var_info.ty {
@@ -241,19 +294,19 @@ fn raw_watches_window(ctx: &RootContext, ui: &Ui, st: &mut GuiState) {
 
                 ui.table_headers_row();
 
-                for watch in ctx.dbg.commands.iter() {
-                    for (_, load_chain) in watch.access_chains.iter() {
+                for watch in ctx.dbg.watches.iter() {
+                    for (_, load_chain) in watch.captures.iter() {
                         ui.table_next_column();
                         ui.text(format!("{}", watch.eid));
                         ui.table_next_column();
                         ui.text("BUFFER");
                         ui.table_next_column();
-                        ui.text(format!("{}", load_chain.size));
+                        //ui.text(format!("{}", load_chain.size));
                         ui.table_next_column();
-                        ui.text(format!("{:?}", load_chain.load_chain));
+                        //ui.text(format!("{:?}", load_chain.load_chain));
                         ui.table_next_row();
                     }
-                    for (_, cap) in watch.image_capture.iter() {
+                   /* for (_, cap) in watch.image_capture.iter() {
                         ui.table_next_column();
                         ui.text(format!("{}", watch.eid));
                         ui.table_next_column();
@@ -263,7 +316,7 @@ fn raw_watches_window(ctx: &RootContext, ui: &Ui, st: &mut GuiState) {
                         let image_info = unsafe { ctx.d.get_private_data_ref(cap.image).unwrap() };
                         ui.text(format!("{:?} (VkImage {:016x})", image_info.name, cap.image.as_raw()));
                         ui.table_next_row();
-                    }
+                    }*/
                 }
             }
         });
@@ -271,7 +324,6 @@ fn raw_watches_window(ctx: &RootContext, ui: &Ui, st: &mut GuiState) {
 
 fn memory_map_window(ctx: &RootContext, ui: &Ui, st: &mut GuiState) {
     let mmap = ctx.d.addrmap.lock();
-
     ui.window("Memory Map").size([400.0, 300.0], imgui::Condition::FirstUseEver).opened(&mut st.show_memory_map).build(
         || {
             if let Some(_t) = ui.begin_table_with_flags("memory_map", 3, TABLE_FLAGS) {
@@ -316,10 +368,18 @@ fn descriptor_blob_window(ctx: &RootContext, ui: &Ui, st: &mut GuiState) {
                     ui.table_setup_column("Blob");
                     ui.table_setup_column("Info");
                     ui.table_headers_row();
-                    for (blob, rinfo) in ctx.dbg.resource_descriptors.iter() {
+                    for (blob, rinfo) in ctx.descriptors.resource_descriptors.iter() {
                         let blobstr = format_descriptor_blob(blob);
                         ui.table_next_column();
                         let id = ui.tree_node_config(blobstr).leaf(false).push();
+                        if ui.is_item_hovered() {
+                            ui.tooltip(|| {
+                                let tic: &NVTextureImageControl =
+                                    unsafe { &*(blob.as_ptr() as *const NVTextureImageControl) };
+                                let decoded = format_nv_tic(&tic);
+                                ui.text(decoded);
+                            });
+                        }
                         ui.table_next_column();
                         match rinfo {
                             ResourceDescriptorInfo::Image { view, layout } => {
@@ -345,7 +405,7 @@ fn descriptor_blob_window(ctx: &RootContext, ui: &Ui, st: &mut GuiState) {
                             ui.table_next_column();
                         }
                     }
-                    for (blob, info) in ctx.dbg.sampler_descriptors.iter() {
+                    for (blob, info) in ctx.descriptors.sampler_descriptors.iter() {
                         let blobstr = format_descriptor_blob(blob);
                         ui.table_next_column();
                         let id = ui.tree_node_config(blobstr).leaf(false).push();
@@ -388,6 +448,78 @@ fn descriptor_blob_window(ctx: &RootContext, ui: &Ui, st: &mut GuiState) {
         });
 }
 
+fn descriptor_heap_windows(ctx: &mut RootContext, ui: &Ui, st: &mut GuiState) {
+    for (i, window) in st.descriptor_heap_windows.iter_mut().enumerate() {
+        let mut cmd = None;
+        for sub in ctx.subs.iter() {
+            for c in sub.commands.iter() {
+                if c.eid == window.eid {
+                    cmd = Some(c);
+                    break;
+                }
+            }
+        }
+        let Some(cmd) = cmd else {
+            continue;
+        };
+
+        ui.window(format!("Descriptor Heaps {}", window.eid)).build(|| {
+            let resource_heap = ctx.dbg.capture_resource_descriptor_heap(cmd.eid);
+            let sampler_heap = ctx.dbg.capture_sampler_descriptor_heap(cmd.eid);
+
+            if let Some(tab_bar) = ui.tab_bar("descriptor_heap_tab_bar") {
+                if let Some(_tab_item) = ui.tab_item("Resource Heap") {
+                    ui.label_text("Heap Address", format!("{:016x}", cmd.resource_heap.heapRange.address));
+                    ui.label_text("Heap Size", format!("{}", cmd.resource_heap.heapRange.size));
+                    ui.label_text("Reserved Range Offset", format!("{:016x}", cmd.resource_heap.reservedRangeOffset));
+                    ui.label_text("Reserved Range Size", format!("{}", cmd.resource_heap.reservedRangeSize));
+                    let image_descriptor_size = ctx.d.descriptor_heap_properties.imageDescriptorSize as usize;
+                    let buffer_descriptor_size = ctx.d.descriptor_heap_properties.bufferDescriptorSize as usize;
+                    let common_descriptor_size = usize::max(image_descriptor_size, buffer_descriptor_size);
+                    if let Some(ref heap) = resource_heap {
+                        if let Some(_t) = ui.begin_table_with_flags("resource_heap_entries", 2, TABLE_FLAGS) {
+                            ui.table_setup_column("Image/Buffer Index");
+                            ui.table_setup_column("Blob");
+                            ui.table_headers_row();
+                            for (index, chunk) in heap.chunks(common_descriptor_size).enumerate() {
+                                let img_index = index * common_descriptor_size / image_descriptor_size;
+                                let buf_index = index * common_descriptor_size / buffer_descriptor_size;
+                                ui.table_next_column();
+                                ui.text(format!("img:{}, buf:{}", img_index, buf_index));
+                                ui.table_next_column();
+                                let blobstr = format_descriptor_blob(chunk);
+                                ui.text(format!("{}", blobstr));
+                            }
+                        }
+                    }
+                }
+                if let Some(_tab_item) = ui.tab_item("Sampler Heap") {
+                    ui.label_text("Heap Address", format!("{:016x}", cmd.sampler_heap.heapRange.address));
+                    ui.label_text("Heap Size", format!("{}", cmd.sampler_heap.heapRange.size));
+                    ui.label_text("Reserved Range Offset", format!("{:016x}", cmd.sampler_heap.reservedRangeOffset));
+                    ui.label_text("Reserved Range Size", format!("{}", cmd.sampler_heap.reservedRangeSize));
+                    let sampler_descriptor_size = ctx.d.descriptor_heap_properties.samplerDescriptorSize as usize;
+                    if let Some(ref heap) = sampler_heap {
+                        if let Some(_t) = ui.begin_table_with_flags("sampler_heap_entries", 2, TABLE_FLAGS) {
+                            ui.table_setup_column("Sampler Index");
+                            ui.table_setup_column("Blob");
+                            ui.table_headers_row();
+                            for (index, chunk) in heap.chunks(sampler_descriptor_size).enumerate() {
+                                ui.table_next_column();
+                                ui.text(format!("sampler:{}", index));
+                                ui.table_next_column();
+                                let blobstr = format_descriptor_blob(chunk);
+                                ui.text(format!("{}", blobstr));
+                            }
+                        }
+                    }
+                }
+                tab_bar.end();
+            }
+        });
+    }
+}
+
 fn size_hints_window(_ctx: &RootContext, ui: &Ui, st: &mut GuiState) {
     ui.window("Size Hints").size([400.0, 300.0], imgui::Condition::FirstUseEver).opened(&mut st.show_size_hints).build(
         || {
@@ -411,10 +543,11 @@ fn size_hints_window(_ctx: &RootContext, ui: &Ui, st: &mut GuiState) {
 
 fn pinned_watch_window(ctx: &mut RootContext, ui: &Ui, st: &mut GuiState, watch: &PinnedWatch) {
     // restore the ParamWalkContext
-    let data = ctx.dbg.capture_load_chain(watch.eid, &watch.var.load_chain, watch.var.byte_size);
+    let data = ctx.dbg.capture_command_push_data(watch.eid, watch.var.load_chain.clone(), watch.var.byte_size);
     let module = &ctx.modules[watch.var.mid];
 
-    let mut ctx = ParamWalkCtx { d: ctx.d, eid: watch.eid, dbg: ctx.dbg, m: module, mid: watch.var.mid };
+    let mut ctx =
+        ParamWalkCtx { d: ctx.d, eid: watch.eid, dbg: ctx.dbg, subs: ctx.subs, m: module, mid: watch.var.mid };
     let datactx = ParamDataCtx { load_chain: watch.var.load_chain.clone(), byte_size: watch.var.byte_size, data };
     let mut walk = ParamWalk {
         ctx: &mut ctx,
@@ -553,7 +686,7 @@ fn pointer_param_child_rows_ui(
     let pointee_size = type_byte_size(walk.ctx.m, pointee_type).unwrap_or(0);
     let byte_size = count * pointee_size;
     let load_chain = walk.data.load_chain.with_deref(walk.offset);
-    let data = walk.ctx.dbg.capture_load_chain(walk.ctx.eid, &load_chain, byte_size);
+    let data = walk.ctx.dbg.capture_command_push_data(walk.ctx.eid, load_chain.clone(), byte_size);
     let child_data = ParamDataCtx { load_chain, byte_size, data };
     let mut child_walk =
         ParamWalk { ctx: walk.ctx, data: &child_data, offset: 0, path: format!("{}.$", walk.path), ty: pointee_type };
@@ -772,7 +905,8 @@ fn shader_stage_row_ui(
             };
             let pointee = pointee.pointee.unwrap();
 
-            let mut wctx = ParamWalkCtx { d: ctx.d, eid: ctx.cmd.eid, dbg: ctx.dbg, m: module, mid: ep.module };
+            let mut wctx =
+                ParamWalkCtx { d: ctx.d, eid: ctx.cmd.eid, dbg: ctx.dbg, subs: ctx.subs, m: module, mid: ep.module };
             let data_ctx = ParamDataCtx { load_chain: Default::default(), byte_size: 0, data: None };
             let mut walk = ParamWalk {
                 ctx: &mut wctx,
@@ -787,6 +921,40 @@ fn shader_stage_row_ui(
 }
 
 fn command_params_ui(ctx: &mut CommandContext, ui: &Ui, st: &mut GuiState) {
+    if ui.button("Descriptor Heaps...") {
+        st.descriptor_heap_windows.push(DescriptorHeapWindow { eid: ctx.cmd.eid });
+    }
+
+    match ctx.cmd.kind {
+        CmdKind::Draw { first_vertex, vertex_count, first_instance, instance_count } => {
+            ui.label_text("first_vertex", format!("{}", first_vertex));
+            ui.label_text("vertex_count", format!("{}", vertex_count));
+            ui.label_text("first_instance", format!("{}", first_instance));
+            ui.label_text("instance_count", format!("{}", instance_count));
+        }
+        CmdKind::DrawIndexed { index_count, instance_count, first_index, vertex_offset, first_instance } => {
+            ui.label_text("index_count", format!("{}", index_count));
+            ui.label_text("instance_count", format!("{}", instance_count));
+            ui.label_text("first_index", format!("{}", first_index));
+            ui.label_text("vertex_offset", format!("{}", vertex_offset));
+            ui.label_text("first_instance", format!("{}", first_instance));
+        }
+        CmdKind::DrawIndirect { draw_count, stride } => {
+            ui.label_text("draw_count", format!("{}", draw_count));
+            ui.label_text("stride", format!("{}", stride));
+        }
+        CmdKind::DrawMeshTasks { group_count_x, group_count_y, group_count_z } => {
+            ui.label_text("group_count_x", format!("{}", group_count_x));
+            ui.label_text("group_count_y", format!("{}", group_count_y));
+            ui.label_text("group_count_z", format!("{}", group_count_z));
+        }
+        CmdKind::Dispatch { group_count_x, group_count_y, group_count_z } => {
+            ui.label_text("group_count_x", format!("{}", group_count_x));
+            ui.label_text("group_count_y", format!("{}", group_count_y));
+            ui.label_text("group_count_z", format!("{}", group_count_z));
+        }
+    }
+
     if let Some(_t) = ui.begin_table_with_flags("param_table", 3, TABLE_FLAGS) {
         ui.table_setup_column("Name");
         ui.table_setup_column("Type");
@@ -835,6 +1003,9 @@ fn main_menu(ui: &Ui, st: &mut GuiState) {
             if ui.menu_item_config("Descriptor Blobs").selected(st.show_descriptor_blobs).build() {
                 st.show_descriptor_blobs = !st.show_descriptor_blobs;
             }
+            if ui.menu_item_config("Descriptor Heaps").selected(st.show_descriptor_heaps).build() {
+                st.show_descriptor_heaps = !st.show_descriptor_heaps;
+            }
         });
         ui.menu("Options", || {
             if ui.menu_item_config("Fuse single-field structs").selected(st.fuse_single_field_structs).build() {
@@ -856,23 +1027,25 @@ fn command_browser_window(ctx: &mut RootContext, ui: &Ui, st: &mut GuiState) {
     ui.window("Commands").bg_alpha(0.5).opened(&mut opened).build(|| {
         ui.text("Debug layer active");
         ui.text(format!("dear imgui version: {}", imgui::dear_imgui_version()));
-        ui.text(format!("vkQueueSubmit count: {}", ctx.dbg.subs.len()));
+        ui.text(format!("vkQueueSubmit count: {}", ctx.subs.len()));
 
         // move out to avoid borrowing woes
-        let subs = mem::take(&mut ctx.dbg.subs);
-        for (i_sub, sub) in subs.iter().enumerate() {
+        for (i_sub, sub) in ctx.subs.iter().enumerate() {
             let _guard = ui.push_id_usize(i_sub);
             for (i_cmd, cmd) in sub.commands.iter().enumerate() {
                 if ui.collapsing_header(
                     format!("[{}] Submission {}, Command {}", cmd.eid, i_sub, i_cmd),
                     TreeNodeFlags::empty(),
                 ) {
-                    let mut cmd_ctx = CommandContext { d: ctx.d, dbg: ctx.dbg, modules: ctx.modules, cmd };
-                    command_params_ui(&mut cmd_ctx, ui, st);
+                    let mut cmd_ctx =
+                        CommandContext { d: ctx.d, dbg: ctx.dbg, subs: ctx.subs, modules: ctx.modules, cmd };
+                    {
+                        let _id = ui.push_id_usize(cmd.eid.0 as usize);
+                        command_params_ui(&mut cmd_ctx, ui, st);
+                    }
                 }
             }
         }
-        ctx.dbg.subs = subs;
     });
     st.show_commands = opened;
 }
@@ -898,11 +1071,27 @@ fn status_bar_ui(ctx: &mut RootContext, ui: &Ui, st: &mut GuiState) {
 }
 
 impl Device {
-    fn main_gui(&self, rd: &RenderData, ui: &Ui, st: &mut GuiState) {
-        let mut dbg = self.debugger.lock();
-        let mut modules = self.modules.lock();
+    pub unsafe fn render_gui(&self, rd: &RenderData, fd: &FrameData) {
+        let mut st = self.gui.lock();
+        with_imgui_context(|ctx| {
+            let io = ctx.io_mut();
+            io.config_flags |= imgui::ConfigFlags::NAV_ENABLE_KEYBOARD | imgui::ConfigFlags::DOCKING_ENABLE;
+            io.display_size = [rd.width as f32, rd.height as f32];
+            io.delta_time = 1.0 / 60.0;
+            let ui = ctx.frame();
+            self.main_gui(rd, ui, &mut st);
+            self.overlay.render(self, fd, rd, ctx);
+        });
+    }
 
-        let mut root_ctx = RootContext { d: self, rd, dbg: &mut dbg, modules: &mut modules };
+    fn main_gui(&self, rd: &RenderData, ui: &Ui, st: &mut GuiState) {
+        let mut modules = self.modules.lock();
+        let mut dbg = self.dbg.lock();
+        let descriptors = self.descriptor_state.lock();
+        let subs = self.submissions.lock();
+
+        let mut root_ctx =
+            RootContext { d: self, rd, dbg: &mut dbg, descriptors: &descriptors, subs: &subs, modules: &mut modules };
 
         ui.dockspace_over_main_viewport();
         main_menu(ui, st);
@@ -921,27 +1110,13 @@ impl Device {
         if st.show_descriptor_blobs {
             descriptor_blob_window(&mut root_ctx, ui, st);
         }
+        descriptor_heap_windows(&mut root_ctx, ui, st);
         pinned_watch_windows(&mut root_ctx, ui, st);
         status_bar_ui(&mut root_ctx, ui, st);
-    }
-
-    pub unsafe fn render_gui(&self, rd: &RenderData, fd: &FrameData) {
-        let mut st = self.gui.lock();
-
-        with_imgui_context(|ctx| {
-            let io = ctx.io_mut();
-            io.config_flags |= imgui::ConfigFlags::NAV_ENABLE_KEYBOARD | imgui::ConfigFlags::DOCKING_ENABLE;
-            io.display_size = [rd.width as f32, rd.height as f32];
-            io.delta_time = 1.0 / 60.0;
-            let ui = ctx.frame();
-            self.main_gui(rd, ui, &mut st);
-            self.overlay.render(self, fd, rd, ctx);
-        });
     }
 }
 
 fn hexdump(data: &[u8], columns: usize, colgroup: usize) -> String {
-    let n = data.len();
     let mut addr = 0;
     let mut str = String::new();
     for chunk in data.chunks(columns) {
@@ -1036,3 +1211,16 @@ fn format_scalar_value(scalar: ScalarType, data: &mut &[u8]) -> String {
 //        .col(0xFF_FF_FF_FF)
 //        .build();
 //}
+
+//--------------------------------------------------------------------------------------------------
+// IMGUI context
+thread_local! {
+    pub static IMGUI: RefCell<imgui::Context> = RefCell::new(imgui::Context::create());
+}
+
+pub fn with_imgui_context<R>(f: impl FnOnce(&mut imgui::Context) -> R) -> R {
+    IMGUI.with(|cell| {
+        let mut context = cell.borrow_mut();
+        f(&mut context)
+    })
+}

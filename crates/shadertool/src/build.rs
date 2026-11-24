@@ -1,8 +1,8 @@
 use crate::{
     Arena, BuildManifest, BuildOptions, EntryPoint, Error, GraphicsState, Module, ModuleDependency, Pipeline,
-    get_file_mtime, get_log_options, reflection,
+    PipelineType, get_file_mtime, get_log_options, reflection,
 };
-use anyhow::{Context, anyhow};
+use anyhow::{Context, anyhow, bail};
 use color_print::cprintln;
 use sharc::gpu_types::vulkan::*;
 use slang::DebugInfoLevel;
@@ -92,20 +92,14 @@ pub(crate) fn create_slang_session(
     for path in manifest.include_paths.iter() {
         // Include paths in the manifest are absolute or relative to the manifest path.
         let path = PathBuf::from(path);
-        let path = if path.is_absolute() {
-            path
-        } else {
-            manifest.manifest_path.parent().unwrap_or_else(|| Path::new(".")).join(path)
-        };
-        eprintln!("add include path: {}", path.display());
+        let path =
+            if path.is_absolute() { path } else { manifest.path.parent().unwrap_or_else(|| Path::new(".")).join(path) };
+        //eprintln!("add include path: {}", path.display());
         search_paths_cstr.push(CString::new(&*path.to_string_lossy()).unwrap());
     }
-
     let search_path_ptrs: Vec<_> = search_paths_cstr.iter().map(|p| p.as_ptr()).collect();
-
     let cap_descriptor_heap = global_session.find_capability("spvDescriptorHeapEXT");
     let cap_spirv_1_6 = global_session.find_capability("SPIRV_1_4");
-
     let profile = global_session.find_profile(&manifest.compiler.profile);
     let mut compiler_options = slang::CompilerOptions::default()
         .glsl_force_scalar_layout(true)
@@ -195,6 +189,8 @@ pub(crate) fn compile_slang_module<'a>(
             entry_points: vec![],
             pipelines: vec![],
             dependencies,
+            manifest_path: manifest.path.clone(),
+            manifest_mtime: manifest.mtime,
             refl_struct_types: Default::default(),
             refl_global_params: vec![],
         });
@@ -304,13 +300,8 @@ pub(crate) fn compile_slang_module<'a>(
             pipeline_name = Some(name.to_string());
         }
 
-        //if get_log_options().verbosity >= 2 {
-        //    cprintln!("entry point: {}/{}", file.display(), ep.name().unwrap());
-        //}
-
         let mut param_collector = reflection::ParamCollector::new(&mut type_collector);
         param_collector.reflect_entry_point(ep);
-
         entry_points.push(EntryPoint {
             name: ep.name().unwrap().to_string(),
             stage: slang_stage_to_stage_flags(ep.stage()),
@@ -337,41 +328,68 @@ pub(crate) fn compile_slang_module<'a>(
         // Resolve graphics state for the pipeline.
         let graphics_state = manifest.resolve_graphics_state(pipeline_name)?;
 
-        // TODO: sanity checks:
-        //       * don't mix graphics and compute stages
-        //       * have only one entry point of each type
-
         // infer push constants size and workgroup size from entry points
         let mut push_constants_size = 0;
         let mut workgroup_size = [1u32; 3];
-        //let mut stage_flags = VkShaderStageFlags::default();
+        let mut stage_flags = VkShaderStageFlags::default();
         //let mut all_params = vec![];
 
         // Collect parameter reflection information:
         // * for global variables (reflect_global_params)
         // * for parameters passed as arguments to the entry point function (reflect_entry_point)
+        let mut task = None;
+        let mut mesh = None;
+        let mut vertex = None;
+        let mut fragment = None;
+        let mut compute = None;
         for stage in stages.iter() {
             let ep = &entry_points[*stage];
             push_constants_size = push_constants_size.max(ep.push_constants_size);
             workgroup_size = ep.workgroup_size;
-            //stage_flags |= ep.stage;
+            stage_flags |= ep.stage;
+            match ep.stage {
+                VK_SHADER_STAGE_VERTEX_BIT => vertex = Some(*stage),
+                VK_SHADER_STAGE_FRAGMENT_BIT => fragment = Some(*stage),
+                VK_SHADER_STAGE_COMPUTE_BIT => compute = Some(*stage),
+                VK_SHADER_STAGE_MESH_BIT_EXT => mesh = Some(*stage),
+                VK_SHADER_STAGE_TASK_BIT_EXT => task = Some(*stage),
+                _ => {}
+            }
         }
+
+        let ts = task.is_some();
+        let ms = mesh.is_some();
+        let vs = vertex.is_some();
+        let fs = fragment.is_some();
+        let cs = compute.is_some();
+        let type_ = match (ts, ms, vs, fs, cs) {
+            (x, true, false, true, false) => {
+                PipelineType::Mesh { task, mesh: mesh.unwrap(), fragment: fragment.unwrap() }
+            }
+            (false, false, true, true, false) => {
+                PipelineType::Primitive { vertex: vertex.unwrap(), fragment: fragment.unwrap() }
+            }
+            (false, false, false, false, true) => PipelineType::Compute { compute: compute.unwrap() },
+            _ => {
+                let pipelines_str = stages.iter().map(|s| entry_points[*s].name.clone()).collect::<Vec<_>>().join(",");
+                return Err(anyhow!("invalid combination of pipeline stages: {}", pipelines_str).into());
+            }
+        };
 
         pipelines.push(Pipeline {
             name: pipeline_name.to_string(),
             stages,
             workgroup_size,
             graphics_state,
+            type_,
             push_constants_size,
         })
     }
 
     let mut param_collector = reflection::ParamCollector::new(&mut type_collector);
     param_collector.reflect_global_params(program_reflection);
-    
     let refl_global_params = param_collector.access_chains;
     let refl_struct_types = type_collector.struct_types;
-
     Ok(Module {
         _session: session.clone(),
         module,
@@ -383,6 +401,8 @@ pub(crate) fn compile_slang_module<'a>(
         spirv,
         entry_points,
         dependencies,
+        manifest_path: manifest.path.clone(),
+        manifest_mtime: manifest.mtime,
         refl_struct_types,
         refl_global_params,
     })

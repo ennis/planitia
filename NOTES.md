@@ -1014,3 +1014,117 @@ How do we map global variables in slang to PushData?
 - (maybe) get rid of return-value transforms
   - feels brittle
   - replace by a macro
+
+
+# Terrain rendering again
+
+Try: a sort of shadow map by processing the heightmap.
+Run a compute shader on a WxD map, W is screen width, D is max depth. WxD area is a xz square in clip space
+(sample with anisotropic filtering).
+Dispatch one WG per vertical line of the map, iterate over the height samples along the line, for each depth, record the 
+highest height seen so far (kinda like a shadow map).
+
+Then, render a xz mesh over the map, displaced in y by the max height at the location. 
+Issue: no normals?
+
+I don't see what are the benefits of using raycasting for rendering terrains, compared to displaced-grid methods.
+
+## What we need
+For terrains, we don't care about:
+- colors
+
+
+# Terrain rendering with marks
+
+Render terrain with paint strokes. The terrain heightmap (or mesh) is pre-processed into a point cloud representing stroke
+anchor points.
+Stroke parameters are authored in houdini:
+- length
+- width
+- orientation
+- texture (stamp index)
+- diffuse color
+- render order
+
+
+Challenges:
+* determining the orientation of strokes
+* render order: in what order are the strokes rendered
+  * strokes within the same "coat" should be rendered in author order, but between coats, they should be sorted by depth
+* culling
+* adjusting the density of strokes at grazing angles
+  * We can circumvent the problem altogether by saying that strokes are only valid for a restricted "cone" of front-facing normals. 
+    This means that one point can be the anchor of multiple strokes depending on the view point.
+
+Q: what will be our inputs?
+(HEIGHTMAP) a heightmap: the usual representation, efficient LOD algorithms, but no overhangs
+(MESH) a triangle mesh representing the terrain surface: can represent arbitrary surfaces, but less convenient LODs (although more efficient with meshlets and nanite-inspired pipelines?)
+(POINT) a point cloud
+Each point may represent a paint stroke. 
+
+
+NOTE: in some cases the terrain contour isn't visible: for example when rendering a forested hill, you don't see the silhouette of the hill at the ground level
+because it is broken by the silhouette of trees. Thus sometimes it's not necessary to render the ground if it is going to be covered by something else.
+This tends to favor a point cloud representation.
+
+NOTE: The input representation shouldn't be too separate from the way the artist paints the terrain (mask and strokes)
+
+
+
+
+
+Q: How do people paint landscape masses?
+A: 
+Almost invariably, they start with the outline. Which means that it might be good to have a "mask" of some sort.
+
+Q: How/where do they place paint strokes?
+A:
+They typically start with a uniform fill of the landscape outline with the shadow (unlit) color. Strokes are meaningless at this point (might as well be a flood fill).
+Then, they tend to place strokes that follow the slope direction. Usually textured.
+They tend to proceed in successive levels of detail. First the global shape of the mountain, then smaller ridges, and so on.
+Small terrain features may be abstracted away.
+This means that we should probably decompose terrain into different feature sizes.
+
+Typically highly textured brushes are used to give the appearance of forests. For rougher, barren terrains these tend to be untextured, short strokes that emphasize  
+lighting differences.
+
+Within one hill, they also proceed by layers. E.g. layering a textured brush, then masking out shadowed areas with another textured brush.
+
+For lighting, typically textured brushed strokes are only applied on the lit side of the terrain. Areas in shadow are not painted over and take the shadow color.
+Of course, hills are painted back-to-front.
+
+NOTE: *lighting* is everything. Strokes do not depict the roughness of terrain independently from how the terrain is lit.
+Which means that stroke anchor points should most likely depend on the lighting direction.
+
+
+Direction:
+- try rendering with point clouds as input
+  - try different point distributions: distribute along curvature, etc.
+- those points will serve as anchors so as to have temporal coherence from frame to frame
+- note that for far away terrain, the visible parts of the terrain don't change very much if you change the view direction without changing the view center
+  - the most important is to have a relatively coherent / deterministic point placement from one frame to the other when the view center doesn't change a lot
+
+- the main challenge becomes the orientation of the strokes
+  - points don't carry orientation
+
+
+# 2D rendering library
+Works with 3D coordinates.
+Mostly for UI and visualization.
+Not a replacement for imgui, but a rendering backend for imgui.
+
+UI: 2D primitives
+3D: wireframe, 3D curves, manipulators (gizmos), data visualization (for debugging)
+
+Should both be in the same library?
+No commonalities?
+- 2D vertices vs 3D vertices
+- 2D affine transforms vs 3D projection transforms 
+Text labels: we may want to render text labels in the 3D scene, occluded by 3D objects 
+  - don't really need complex shaping for this use case, though 
+
+What should the library contain?
+- UI rendering stuff: YES
+- visualization stuff: UNSURE
+  - should it be in a separate crate?
+  - 3D and UI overlay aren't usually rendered interleaved

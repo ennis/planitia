@@ -9,8 +9,10 @@ use arrayvec::ArrayVec;
 use ash::prelude::VkResult;
 use ash::vk::{DeviceAddress, Handle};
 use bitflags::bitflags;
+use gpu_allocator::MemoryLocation;
 use gpu_types::{
-    ClearColorValue, Data, ImageAspect, ImageDataLayout, ImageSubresourceLayers, ImageUsage, Offset3D, Rect3D, Size3D,
+    ClearColorValue, Data, ImageAspect, ImageDataLayout, ImageSubresourceLayers, ImageType, ImageUsage, Offset3D,
+    Rect3D, Size3D,
 };
 use log::{error, trace};
 pub use render::{DrawIndexedIndirectCommand, DrawIndirectCommand, RenderEncoder};
@@ -358,7 +360,7 @@ impl CommandBuffer {
     }
 
     /// TODO documentation
-    pub fn upload_image_data(&mut self, image: ImageCopyView, size: Size3D, data: &[u8]) {
+    pub fn upload_image_data<T: Copy>(&mut self, image: ImageCopyView, size: Size3D, data: &[T]) {
         let staging_buffer = Buffer::from_slice(data);
         self.copy_buffer_to_image(
             ImageCopyBuffer {
@@ -370,8 +372,13 @@ impl CommandBuffer {
         );
     }
 
-    /// TODO documentation
-    pub fn create_image_with_data(&mut self, create_info: &ImageCreateInfo, aspect: ImageAspect, data: &[u8]) -> Image {
+    /*/// TODO documentation
+    pub fn create_image_with_data<T: Copy>(
+        &mut self,
+        create_info: &ImageCreateInfo,
+        aspect: ImageAspect,
+        data: &[T],
+    ) -> Image {
         let mut create_info_with_transfer_dst = create_info.clone();
         create_info_with_transfer_dst.usage |= ImageUsage::TRANSFER_DST;
         let image = Device::instance().create_image(&create_info_with_transfer_dst);
@@ -381,7 +388,7 @@ impl CommandBuffer {
             data,
         );
         image
-    }
+    }*/
 
     /// TODO documentation
     pub fn blit_full_image_top_mip_level(&mut self, src: &Image, dst: &Image) {
@@ -397,11 +404,45 @@ impl CommandBuffer {
             VK_FILTER_NEAREST,
         );
     }
+
+    pub fn generate_mipmaps(&mut self, image: &Image) {
+        let count = image.mip_levels;
+        if count == 1 {
+            return;
+        }
+        let mut width = image.width();
+        let mut height = image.height();
+        for i in 1..count {
+            let next_width = width.div_ceil(2).max(1);
+            let next_height = height.div_ceil(2).max(1);
+            self.blit_image(
+                image,
+                ImageSubresourceLayers { mip_level: i - 1, .. },
+                Rect3D {
+                    min: Offset3D { x: 0, y: 0, z: 0 },
+                    max: Offset3D { x: width as i32, y: height as i32, z: 1 },
+                },
+                image,
+                ImageSubresourceLayers { mip_level: i, .. },
+                Rect3D {
+                    min: Offset3D { x: 0, y: 0, z: 0 },
+                    max: Offset3D { x: next_width as i32, y: next_height as i32, z: 1 },
+                },
+                VK_FILTER_LINEAR,
+            );
+            self.barrier(BarrierFlags::empty());
+            width = next_width;
+            height = next_height;
+        }
+    }
 }
 
 #[cold]
 fn panic_command_buffer_not_submitted() {
-    panic!("a command buffer was not submitted before being dropped");
+    // Do not panic if the thread is already panicking, to avoid masking the original panic message.
+    if !std::thread::panicking() {
+        panic!("a command buffer was not submitted before being dropped");
+    }
 }
 
 impl Drop for CommandBuffer {
@@ -717,15 +758,29 @@ pub fn update_buffer(buffer: &BufferUntyped, offset: usize, data: &[u8]) {
 }
 
 #[inline(never)]
-pub fn upload_image_data(image: ImageCopyView, size: Size3D, data: &[u8]) {
+pub fn upload_image_data<T: Copy>(image: ImageCopyView, size: Size3D, data: &[T]) {
     with_cmdbuf(|cb| {
         cb.upload_image_data(image, size, data);
     });
 }
 
-#[inline(never)]
-pub fn create_image_with_data(create_info: &ImageCreateInfo, aspect: ImageAspect, data: &[u8]) -> Image {
-    with_cmdbuf(|cb| cb.create_image_with_data(create_info, aspect, data))
+pub fn create_image_with_data<T: Copy>(create_info: &ImageCreateInfo, aspect: ImageAspect, data: &[T]) -> Image {
+    let image = Image::new(*create_info);
+    upload_image_data(
+        ImageCopyView {
+            image: &image,
+            mip_level: 0,
+            origin: Offset3D::ZERO,
+            aspect,
+        },
+        Size3D {
+            width: create_info.width,
+            height: create_info.height,
+            depth: create_info.depth,
+        },
+        data,
+    );
+    image
 }
 
 /// Blits the top-level mipmap of the source image to the destination image.
@@ -788,6 +843,44 @@ pub fn copy_image_to_buffer(source: ImageCopyView<'_>, destination: ImageCopyBuf
     with_cmdbuf(|cb| {
         cb.copy_image_to_buffer(source, destination, copy_size);
     });
+}
+
+#[inline(never)]
+pub fn create_image_with_mip_maps_u8(
+    format: VkFormat,
+    width: u32,
+    height: u32,
+    aspect: ImageAspect,
+    data: &[u8],
+) -> Image {
+    let mip_levels = gpu::mip_level_count(width, height);
+    let create_info = ImageCreateInfo {
+        memory_location: MemoryLocation::GpuOnly,
+        format,
+        width,
+        height,
+        depth: 1,
+        mip_levels,
+        array_layers: 1,
+        usage: ImageUsage::SAMPLED,
+        type_: ImageType::Image2D,
+        samples: 0,
+    };
+    let image = create_image_with_data(&create_info, aspect, data);
+    with_cmdbuf(|cb| {
+        cb.generate_mipmaps(&image);
+        image
+    })
+}
+
+pub fn create_image_with_mip_maps<T: Copy>(
+    format: VkFormat,
+    width: u32,
+    height: u32,
+    aspect: ImageAspect,
+    data: &[T],
+) -> Image {
+    create_image_with_mip_maps_u8(format, width, height, aspect, unsafe { crate::as_u8_slice(data) })
 }
 
 #[inline(never)]

@@ -109,7 +109,7 @@ impl Painter {
             sampler,
             render_target: RenderTarget::new(
                 VK_FORMAT_R8G8B8A8_UNORM,
-                ImageUsage::COLOR_ATTACHMENT | ImageUsage::TRANSFER_DST | ImageUsage::STORAGE,
+                ImageUsage::COLOR_ATTACHMENT | ImageUsage::STORAGE,
             ),
         }
     }

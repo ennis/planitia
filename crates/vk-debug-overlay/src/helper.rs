@@ -1,4 +1,5 @@
 //! Helper utilities.
+use crate::DeviceAddressRangeSet;
 use crate::dispatch::DeviceDispatch;
 use std::ffi::{CStr, c_void};
 use std::ops::Deref;
@@ -75,11 +76,10 @@ pub trait HasPrivateData: VulkanHandle + Copy {
     type PrivateData;
 }
 
-/// Device & command pool wrapper with useful utilities.
+/// Wrapper over a Vulkan device and command pool that provides debug utilities.
 pub struct DeviceHelper {
     pub dispatch: DeviceDispatch,
     pub mem_props: VkPhysicalDeviceMemoryProperties,
-    pub descriptor_heap_properties: VkPhysicalDeviceDescriptorHeapPropertiesEXT,
     pub command_pool: VkCommandPool,
     pub queue: VkQueue,
     pub private_data_slot: VkPrivateDataSlot,
@@ -87,17 +87,16 @@ pub struct DeviceHelper {
 
 impl Deref for DeviceHelper {
     type Target = DeviceDispatch;
-
     fn deref(&self) -> &Self::Target {
         &self.dispatch
     }
 }
 
 impl DeviceHelper {
+    /// Constructs a new [DeviceHelper] from the dispatch table and memory properties.
     pub unsafe fn new(
         dispatch: DeviceDispatch,
         mem_props: VkPhysicalDeviceMemoryProperties,
-        descriptor_heap_properties: VkPhysicalDeviceDescriptorHeapPropertiesEXT,
         queue_family_index: u32,
     ) -> DeviceHelper {
         let device = dispatch.device;
@@ -110,56 +109,62 @@ impl DeviceHelper {
         vkcallnc!(dispatch.GetDeviceQueue(device, queue_family_index, 0, @out let queue));
         dispatch.set_device_loader_data(queue);
         vkcall!(dispatch.CreatePrivateDataSlot(device, &VkPrivateDataSlotCreateInfo { .. }, ptr::null(), @out let private_data_slot));
-        DeviceHelper { dispatch, mem_props, descriptor_heap_properties, command_pool, queue, private_data_slot }
+        DeviceHelper { dispatch, mem_props, command_pool, queue, private_data_slot }
     }
 
-    pub fn descriptor_blob_size(&self, ty: VkDescriptorType) -> usize {
-        match ty {
-            VK_DESCRIPTOR_TYPE_SAMPLER => self.descriptor_heap_properties.samplerDescriptorSize as usize,
-            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER
-            | VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE
-            | VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
-            | VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER
-            | VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER => self.descriptor_heap_properties.imageDescriptorSize as usize,
-            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
-            | VK_DESCRIPTOR_TYPE_STORAGE_BUFFER
-            | VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC
-            | VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC => {
-                self.descriptor_heap_properties.bufferDescriptorSize as usize
-            }
-            _ => panic!("unsupported descriptor type: {}", ty),
-        }
-    }
 
+    /// Sets the private data associated with a handle.
     pub unsafe fn set_private_data<H: HasPrivateData>(&self, handle: H, data: H::PrivateData) -> *mut H::PrivateData {
         let data_ptr = Box::into_raw(Box::new(data)) as *mut c_void as u64;
         vkcall!(self.dispatch.SetPrivateData(self.device, H::TYPE, handle.as_raw(), self.private_data_slot, data_ptr));
         data_ptr as *mut H::PrivateData
     }
 
+    /// Returns a raw pointer to private data associated with a handle.
     pub unsafe fn get_private_data<H: HasPrivateData>(&self, handle: H) -> Option<NonNull<H::PrivateData>> {
         vkcallnc!(self.dispatch.GetPrivateData(self.device, H::TYPE, handle.as_raw(), self.private_data_slot, @out let data_ptr));
         if data_ptr == 0 { None } else { Some(NonNull::new_unchecked(data_ptr as *mut H::PrivateData)) }
     }
 
+    /// Returns a reference to private data associated with a handle.
+    ///
+    /// # Safety
+    ///
+    /// Same as `UnsafeCell`:
+    /// - It is undefined behavior to call this while any other mutable reference to the private data is alive
+    /// - It is undefined behavior to mutate the private data while the returned reference is alive
     pub unsafe fn get_private_data_ref<'a, H: HasPrivateData>(&self, handle: H) -> Option<&'a H::PrivateData> {
         self.get_private_data(handle).map(|p| p.as_ref())
     }
 
+    /// Returns a mutable reference to private data associated with a handle.
+    ///
+    /// # Safety
+    ///
+    /// Same as `UnsafeCell`:
+    /// - It is undefined behavior to call this while any other reference (mutable or shared) to the private data is alive
+    /// - It is undefined behavior to mutate the private data through other means while the returned reference is alive
     pub unsafe fn get_private_data_mut<'a, H: HasPrivateData>(&self, handle: H) -> Option<&'a mut H::PrivateData> {
         self.get_private_data(handle).map(|mut p| p.as_mut())
     }
 
+    /// Takes ownership of the private data out of the handle.
+    ///
+    /// # Safety
+    ///
+    /// [set_private_data](Self::set_private_data) must have previously been called on the handle.
     pub unsafe fn take_private_data<H: HasPrivateData>(&self, handle: H) -> Option<Box<H::PrivateData>> {
         vkcallnc!(self.dispatch.GetPrivateData(self.device, H::TYPE, handle.as_raw(), self.private_data_slot, @out let data_ptr));
         if data_ptr == 0 {
             None
         } else {
+            vkcall!(self.dispatch.SetPrivateData(self.device, H::TYPE, handle.as_raw(), self.private_data_slot, 0));
             let data = Box::from_raw(data_ptr as *mut H::PrivateData);
             Some(data)
         }
     }
 
+    /// Returns a memory type index compatible with the requested type filter and memory property flags.
     pub fn find_memory_type(&self, type_filter: u32, required_flags: VkMemoryPropertyFlags) -> u32 {
         (0..self.mem_props.memoryTypeCount)
             .find(|&i| {
@@ -169,6 +174,7 @@ impl DeviceHelper {
             .expect("no compatible memory type found")
     }
 
+    /// Allocates command buffers.
     pub unsafe fn allocate_command_buffers_helper(&self, count: usize) -> Vec<VkCommandBuffer> {
         let allocate_info = VkCommandBufferAllocateInfo {
             commandPool: self.command_pool,
@@ -258,6 +264,7 @@ impl DeviceHelper {
         );
     }
 
+    /// Wrapper around `vkCmdSetViewport` for viewport index 0.
     pub unsafe fn cmd_set_viewport_helper(&self, cmdbuf: VkCommandBuffer, x: i32, y: i32, w: i32, h: i32) {
         self.CmdSetViewport(
             cmdbuf,
@@ -267,6 +274,7 @@ impl DeviceHelper {
         );
     }
 
+    /// Wrapper around `vkCmdSetScissor` for scissor index 0.
     pub unsafe fn cmd_set_scissor_helper(&self, cmdbuf: VkCommandBuffer, x: i32, y: i32, w: i32, h: i32) {
         self.CmdSetScissor(
             cmdbuf,
@@ -276,47 +284,7 @@ impl DeviceHelper {
         );
     }
 
-    pub unsafe fn layout_barrier(
-        &self,
-        cmdbuf: VkCommandBuffer,
-        transitions: &[(VkImage, VkImageLayout, VkImageLayout)],
-    ) {
-        // We are heavy-handed on the pipeline stages & access flags,
-        // as this is not remotely worth the trouble.
-        let barriers = transitions
-            .iter()
-            .map(|&(image, old_layout, new_layout)| VkImageMemoryBarrier {
-                oldLayout: old_layout,
-                newLayout: new_layout,
-                srcQueueFamilyIndex: VK_QUEUE_FAMILY_IGNORED,
-                dstQueueFamilyIndex: VK_QUEUE_FAMILY_IGNORED,
-                image,
-                subresourceRange: VkImageSubresourceRange {
-                    aspectMask: VK_IMAGE_ASPECT_COLOR_BIT,
-                    baseMipLevel: 0,
-                    levelCount: VK_REMAINING_MIP_LEVELS,
-                    baseArrayLayer: 0,
-                    layerCount: VK_REMAINING_ARRAY_LAYERS,
-                },
-                srcAccessMask: VK_ACCESS_MEMORY_WRITE_BIT,
-                dstAccessMask: VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
-                ..
-            })
-            .collect::<Vec<_>>();
-        self.CmdPipelineBarrier(
-            cmdbuf,
-            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-            0,
-            0,
-            ptr::null(),
-            0,
-            ptr::null(),
-            barriers.len() as u32,
-            barriers.as_ptr(),
-        );
-    }
-
+    /// Creates a graphics pipeline.
     pub unsafe fn create_graphics_pipeline_helper(&self, create_info: &GraphicsPipelineHelperCreateInfo) -> Pipeline {
         vkcall!(self.CreateShaderModule(
             self.device,
@@ -439,6 +407,7 @@ impl DeviceHelper {
         Pipeline { pipeline, pipeline_layout, descriptor_set_layout }
     }
 
+    /// Creates a compute pipeline.
     pub(crate) unsafe fn create_compute_pipeline_helper(
         &self,
         spirv: &[u32],
@@ -502,6 +471,9 @@ impl DeviceHelper {
         Pipeline { pipeline_layout, descriptor_set_layout, pipeline }
     }
 
+    /// Creates a 2D color image.
+    ///
+    /// This also allocates backing memory for the image.
     pub unsafe fn create_color_image_helper(
         &self,
         format: VkFormat,
@@ -560,20 +532,31 @@ impl DeviceHelper {
         Image { image, image_view, memory: image_memory }
     }
 
+    /// Destroys a 2D color image and frees its backing memory.
     pub unsafe fn destroy_image_helper(&self, image: Image) {
         self.DestroyImageView(self.device, image.image_view, ptr::null());
         self.DestroyImage(self.device, image.image, ptr::null());
         self.FreeMemory(self.device, image.memory, ptr::null());
     }
 
+    /// Creates a buffer with initial data.
     pub unsafe fn create_buffer_from_data<T: Copy + 'static>(&self, usage: VkBufferUsageFlags, data: &[T]) -> Buffer {
         let data_bytes = std::slice::from_raw_parts(data.as_ptr() as *const u8, data.len() * std::mem::size_of::<T>());
-        self.create_buffer_helper(usage, data_bytes.len(), Some(data_bytes))
+        self.create_buffer_helper(
+            usage,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            data_bytes.len(),
+            Some(data_bytes),
+        )
     }
 
+    /// Creates a buffer.
+    ///
+    /// This also allocates its backing memory.
     pub unsafe fn create_buffer_helper(
         &self,
         usage: VkBufferUsageFlags,
+        required_flags: VkMemoryPropertyFlags,
         byte_size: usize,
         initial_data: Option<&[u8]>,
     ) -> Buffer {
@@ -585,11 +568,8 @@ impl DeviceHelper {
             sharingMode: VK_SHARING_MODE_EXCLUSIVE,
             ..
         };
-        let required_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
         vkcall!(self.CreateBuffer(self.device, &create_info, ptr::null(), @out let buffer));
-        //let buffer = self.create_buffer(&create_info, None).unwrap();
         vkcallnc!(self.GetBufferMemoryRequirements(self.device, buffer, @out let buf_req));
-        //let buf_req = self.get_buffer_memory_requirements(buffer);
         let buf_mem_type = self.find_memory_type(buf_req.memoryTypeBits, required_flags);
         let allocate_flags = VkMemoryAllocateFlagsInfo { flags: VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT, .. };
         vkcall!(self.AllocateMemory(
@@ -612,11 +592,13 @@ impl DeviceHelper {
         Buffer { buffer, memory: buffer_memory, ptr, size: byte_size, device_address }
     }
 
+    /// Destroys a buffers and frees its backing memory.
     pub unsafe fn destroy_buffer_helper(&self, buffer: Buffer) {
         self.DestroyBuffer(self.device, buffer.buffer, ptr::null());
         self.FreeMemory(self.device, buffer.memory, ptr::null());
     }
 
+    /// Records and submits a command buffer.
     pub unsafe fn submit_oneshot(&self, record_fn: impl FnOnce(&Self, VkCommandBuffer)) {
         vkcall!(self.AllocateCommandBuffers(
             self.device,
@@ -649,8 +631,6 @@ impl DeviceHelper {
         signal_semaphores: &[VkSemaphore],
         signal_fence: VkFence,
     ) {
-        // It's a sad thing that we have to allocate memory dynamically for something that is probably
-        // ignored by the driver, but here we are.
         let wait_dst_stage_mask = vec![VK_PIPELINE_STAGE_ALL_COMMANDS_BIT; wait_semaphores.len()];
         let submit_info = VkSubmitInfo {
             waitSemaphoreCount: wait_semaphores.len() as u32,
@@ -663,24 +643,6 @@ impl DeviceHelper {
             ..
         };
         vkcall!(self.QueueSubmit(queue, 1, &submit_info, signal_fence));
-    }
-
-    pub(crate) unsafe fn queue_present_helper(
-        &self,
-        queue: VkQueue,
-        swapchain: VkSwapchainKHR,
-        image_index: u32,
-        wait_semaphore: VkSemaphore,
-    ) {
-        let present_info = VkPresentInfoKHR {
-            waitSemaphoreCount: 1,
-            pWaitSemaphores: &wait_semaphore,
-            swapchainCount: 1,
-            pSwapchains: &swapchain,
-            pImageIndices: &image_index,
-            ..
-        };
-        vkcall!(self.QueuePresentKHR(queue, &present_info));
     }
 
     pub(crate) unsafe fn push_constants_helper<T: Copy + 'static>(
@@ -714,9 +676,21 @@ impl DeviceHelper {
         let staging_buf = self.create_buffer_from_data(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, data);
 
         self.submit_oneshot(|device, upload_cmdbuf| {
-            self.layout_barrier(
+            device.CmdPipelineBarrier(
                 upload_cmdbuf,
-                &[(image.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)],
+                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                0,
+                0,
+                ptr::null(),
+                0,
+                ptr::null(),
+                1,
+                &make_layout_transition_barrier(
+                    image.image,
+                    VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                ),
             );
             device.CmdCopyBufferToImage(
                 upload_cmdbuf,
@@ -738,9 +712,21 @@ impl DeviceHelper {
                     imageExtent: VkExtent3D { width, height, depth: 1 },
                 },
             );
-            self.layout_barrier(
+            device.CmdPipelineBarrier(
                 upload_cmdbuf,
-                &[(image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)],
+                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                0,
+                0,
+                ptr::null(),
+                0,
+                ptr::null(),
+                1,
+                &make_layout_transition_barrier(
+                    image.image,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                ),
             );
         });
 
@@ -749,10 +735,70 @@ impl DeviceHelper {
         self.destroy_buffer_helper(staging_buf);
         image
     }
+
+    //// Copies data from GPU address ranges to a CPU buffer.
+    //pub(crate) unsafe fn get_buffer_data(&self, device_address_ranges: &DeviceAddressRangeSet) -> Buffer {
+    //    const RANGE_ALIGNMENT: u64 = 4096;
+    //    let mut total_size = 0;
+    //    for r in device_address_ranges.as_ref().iter() {
+    //        total_size += (r.end() - r.start()).next_multiple_of(RANGE_ALIGNMENT);
+    //    }
+    //    let readback_buffer = self.create_buffer_helper(
+    //        VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+    //        HOST_VISIBLE_COHERENT_BITS,
+    //        total_size as usize,
+    //        None,
+    //    );
+    //
+    //    let mut copy_regions = vec![];
+    //    let mut ptr = 0;
+    //    for r in device_address_ranges.as_ref().iter() {;
+    //        copy_regions.push(VkDeviceMemoryCopyKHR{
+    //            srcRange: VkDeviceAddressRangeKHR {},
+    //            srcFlags: 0,
+    //            dstRange: VkDeviceAddressRangeKHR {},
+    //            dstFlags: 0,
+    //            ..
+    //        });
+    //        ptr += (r.end() - r.start()).next_multiple_of(RANGE_ALIGNMENT)
+    //    }
+    //
+    //    let copy_regions = device_address_ranges.
+    //}
 }
 
+pub const HOST_VISIBLE_COHERENT_BITS: VkMemoryPropertyFlags =
+    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+pub const HOST_VISIBLE_CACHED_BITS: VkMemoryPropertyFlags =
+    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+
+pub(crate) fn make_layout_transition_barrier(
+    image: VkImage,
+    old_layout: VkImageLayout,
+    new_layout: VkImageLayout,
+) -> VkImageMemoryBarrier {
+    VkImageMemoryBarrier {
+        oldLayout: old_layout,
+        newLayout: new_layout,
+        srcQueueFamilyIndex: VK_QUEUE_FAMILY_IGNORED,
+        dstQueueFamilyIndex: VK_QUEUE_FAMILY_IGNORED,
+        image,
+        subresourceRange: VkImageSubresourceRange {
+            aspectMask: VK_IMAGE_ASPECT_COLOR_BIT,
+            baseMipLevel: 0,
+            levelCount: VK_REMAINING_MIP_LEVELS,
+            baseArrayLayer: 0,
+            layerCount: VK_REMAINING_ARRAY_LAYERS,
+        },
+        srcAccessMask: VK_ACCESS_MEMORY_WRITE_BIT,
+        dstAccessMask: VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+        ..
+    }
+}
+
+/*
 fn spirv_u8_to_u32(spv: &[u8]) -> Vec<u32> {
     // It would be better if the input slice was al
     assert_eq!(spv.len() % 4, 0, "SPIR-V size must be a multiple of 4");
     spv.chunks_exact(4).map(|c| u32::from_le_bytes(c.try_into().unwrap())).collect()
-}
+}*/

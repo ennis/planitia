@@ -1,13 +1,22 @@
  
 
 High priority:
-    □ vk-layer: capture mouse & keyboard
-    □ vk-layer: key to show/hide UI
-    □ vk-layer: shader replacement
-    □ vk-layer: fix issue with size hints (massive slowdown)
-    □ gamelib: ensure that 
-    ✓ gamelib: fix crash on hot-reload @done (26-09-16 22:25)
-    ✓ gamelib: properly release plugin resources when unloading (check) @done (26-09-16 22:25)
+ □ vk-layer: capture mouse & keyboard
+ □ vk-layer: key to show/hide UI
+ □ vk-layer: shader replacement
+ □ vk-layer: fix issue with size hints (massive slowdown)
+ □ vk-layer: display draw parameters for each command
+ □ vk-layer: allow size hints that reference draw parameters
+ □ vk-layer: invest more time!
+     It was used to debug an issue, which is a good sign that this is an useful tool.
+ ✓ gamelib: fix crash on hot-reload @done (26-09-16 22:25)
+ ✓ gamelib: properly release plugin resources when unloading (check) @done (26-09-16 22:25)
+ □ terrain: staging for large buffers
+ □ terrain: flycam
+ □ gamelib: utility trait over AppHandler that manages a window with a depth buffer automatically
+ □ shadertool: phase out graphics state in manifests
+     it makes more sense to specify those in applications
+
 
 
 

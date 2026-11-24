@@ -136,53 +136,6 @@ impl<'a> TypeCollector<'a> {
 
         self.struct_types.insert(name, ty);
         refl::TypeDesc::Struct(ty)
-
-        /*let mut fields = TokenStream::new();
-        let mut offset_checks = TokenStream::new();
-        let mut fields_meta = TokenStream::new();
-
-        for (i, field) in ty_layout.fields().enumerate() {
-            let field_ident =
-                if let Some(name) = field.name() { format_ident!("{name}") } else { format_ident!("unnamed_{}", i) };
-
-            let TypeReflection { ty_ref: field_ty_ref, metadata: field_metadata } = self.reflect_type(&field.type_layout().unwrap());
-
-            fields.append_all(quote! {
-                pub #field_ident: #field_ty_ref,
-            });
-
-            let field_offset = field.offset(ParameterCategory::Uniform);
-            offset_checks.append_all(quote! {
-                const _: () = assert!(std::mem::offset_of!(#type_name, #field_ident) == #field_offset);
-            });
-
-            fields_meta.append_all(quote! {
-                StructField {
-                    name: stringify!(#field_ident),
-                    ty: #field_metadata,
-                    offset: #field_offset as u32,
-                },
-            });
-        }
-
-        let tokens = quote! {
-            #[repr(C)]
-            #[derive(Copy, Clone)]
-            pub struct #type_name {
-                #fields
-            }
-            impl #type_name {
-
-            }
-            #offset_checks
-        };
-
-        self.struct_declarations.insert(type_name.clone(), tokens);
-
-        TypeReflection {
-            ty_ref: quote! { #type_name },
-            metadata: quote! { TypeDesc::Struct(#type_name::META) },
-        }*/
     }
 
     /// Generates a TypeDesc for the given TypeLayout.
@@ -222,68 +175,6 @@ impl<'a> TypeCollector<'a> {
                 refl::TypeDesc::Scalar(refl::ScalarType::U8)
             }
         }
-        /*  let ScalarTypeInfo { metadata, .. } = ScalarTypeInfo::from(ty_layout.scalar_type().unwrap());
-                let scalar_ty = format_ident!("{}", ty_layout.name().unwrap());
-                TypeReflection {
-                    ty_ref: quote! { #scalar_ty },
-                    metadata: quote! { TypeDesc::Scalar(#metadata) },
-                }
-            }
-            TypeKind::Vector => {
-                // TODO Handle special case of texture and image descriptors.
-                //      Blocked on https://github.com/shader-slang/slang/issues/8845
-                //let name = ty_layout.name().unwrap_or("unnamed");
-
-                //let uniform_size = ty_layout.size(ParameterCategory::Uniform);
-                //let descriptor_slot_size = ty_layout.size(ParameterCategory::DescriptorTableSlot);
-
-                let ScalarTypeInfo { suffix, metadata } = ScalarTypeInfo::from(ty_layout.scalar_type().unwrap());
-                let vector_size = ty_layout.column_count().unwrap();
-                let vector_type = format_ident!("vec{vector_size}{suffix}");
-
-                TypeReflection {
-                    ty_ref: quote! { #vector_type },
-                    metadata: quote! { TypeDesc::Vector(VectorType { scalar: #metadata, len: #vector_size }) },
-                }
-            }
-            TypeKind::Matrix => {
-                let ScalarTypeInfo { suffix, metadata } = ScalarTypeInfo::from(ty_layout.scalar_type().unwrap());
-                let column_count = ty_layout.column_count().unwrap();
-                let row_count = ty_layout.row_count().unwrap();
-                let matrix_type = format_ident!("mat{column_count}x{row_count}{suffix}");
-                TypeReflection {
-                    ty_ref: quote! { #matrix_type },
-                    metadata: quote! { TypeDesc::Matrix(MatrixType { scalar: #metadata, rows: #row_count, cols: #column_count }) },
-                }
-            }
-            TypeKind::Pointer => {
-                let TypeReflection { ty_ref, metadata } = self.reflect_type(&ty_layout.element_type_layout().unwrap());
-                TypeReflection {
-                    ty_ref: quote! { ::gpu::Ptr<#ty_ref> },
-                    metadata: quote! { TypeDesc::Pointer(const { &#metadata }) },
-                }
-            }
-            TypeKind::Array => {
-                let TypeReflection { ty_ref, metadata } = self.reflect_type(&ty_layout.element_type_layout().unwrap());
-                let array_size = ty_layout.total_array_element_count();
-                TypeReflection {
-                    ty_ref: quote! { [#ty_ref; #array_size] },
-                    metadata: quote! { TypeDesc::Array { elem: const { &#metadata }, len: #array_size } },
-                }
-            }
-            TypeKind::Struct => self.reflect_struct(ty_layout),
-            _ => {
-                ceprintln!(
-                    "<y>warning</>: unknown type kind {:?} for {}",
-                    ty_layout.kind(),
-                    ty_layout.name().unwrap_or("unnamed")
-                );
-                TypeReflection {
-                    ty_ref: quote! { () },
-                    metadata: quote! { TypeDesc::Scalar(ScalarType::U8) },
-                }
-            }
-        }*/
     }
 
 }

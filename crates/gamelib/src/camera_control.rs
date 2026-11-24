@@ -7,16 +7,16 @@ use std::f64::consts::TAU;
 
 #[derive(Copy, Clone, Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
-struct CameraFrame {
-    eye: DVec3,
-    up: DVec3,
-    center: DVec3,
+pub struct CameraFrame {
+    pub eye: DVec3,
+    pub up: DVec3,
+    pub center: DVec3,
 }
 
 /// Camera movement mode.
 #[derive(Copy, Clone, Debug)]
 #[derive(serde::Serialize, serde::Deserialize)]
-enum Mode {
+pub enum Mode {
     None,
     /// Panning motion
     Pan {
@@ -67,8 +67,8 @@ impl CameraControl {
     pub fn new(screen_width: u32, screen_height: u32) -> CameraControl {
         CameraControl {
             fov_y_radians: std::f64::consts::PI / 10.0,
-            z_near: 0.1,
-            z_far: 100.0,
+            z_near: 1.0,
+            z_far: 10000.0,
             zoom: 1.0,
             screen_size: dvec2(screen_width as f64, screen_height as f64),
             cursor_pos: None,

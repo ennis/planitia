@@ -9,7 +9,10 @@ math = { workspace = true }
 color = { workspace = true, optional = true }
 vulkan = { workspace = true }
 planitia-workspace-hack = { version = "0.1", path = "../../planitia-workspace-hack" }
+serde = { version = "1.0.229", features = ["derive"], optional = true }
 
 [features]
 # Enables integration with the color crate, so that color types are recognized as valid VertexAttribute types
 color = ["dep:color"]
+# Enables serialization of data structures
+serde = ["dep:serde", "bitflags/serde"]

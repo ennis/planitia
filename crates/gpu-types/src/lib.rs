@@ -9,9 +9,7 @@ use vulkan::*;
 
 // Reexports
 //pub use ash::{self, vk};
-pub use vulkan::VkFormat as Format;
-pub use vulkan;
-
+pub use vulkan::{self, VkFormat as Format};
 
 /// Represents data that can be shared with the GPU and accessed in shaders.
 ///
@@ -19,21 +17,23 @@ pub use vulkan;
 /// satisfying this requirement.
 pub trait Data: Copy + 'static {}
 
-impl <T> Data for T where T: Copy + 'static {}
+impl<T> Data for T where T: Copy + 'static {}
 
-/// 2D point with integer coordinates.
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct Point2D {
+/// 2D integer offset.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Offset2D {
     pub x: i32,
     pub y: i32,
 }
 
-impl Point2D {
+impl Offset2D {
     pub const ZERO: Self = Self { x: 0, y: 0 };
 }
 
 /// 2D integer size.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Size2D {
     pub width: u32,
     pub height: u32,
@@ -46,31 +46,26 @@ impl Size2D {
 }
 
 /// 2D integer rectangle.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Rect2D {
-    pub min: Point2D,
-    pub max: Point2D,
+    pub offset: Offset2D,
+    pub size: Size2D,
 }
 
 impl Rect2D {
-    pub const fn width(&self) -> u32 {
-        (self.max.x - self.min.x) as u32
-    }
-    pub const fn height(&self) -> u32 {
-        (self.max.y - self.min.y) as u32
-    }
-
-    pub const fn from_origin_size(origin: Point2D, size: Size2D) -> Self {
-        Self { min: origin, max: Point2D { x: origin.x + size.width as i32, y: origin.y + size.height as i32 } }
+    pub const fn from_offset_size(offset: Offset2D, size: Size2D) -> Self {
+        Self { offset, size }
     }
 
     pub const fn from_xywh(x: i32, y: i32, width: u32, height: u32) -> Self {
-        Self { min: Point2D { x, y }, max: Point2D { x: x + width as i32, y: y + height as i32 } }
+        Self { offset: Offset2D { x, y }, size: Size2D { width, height } }
     }
 }
 
 /// 3D integer offset.
 #[derive(Copy, Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Offset3D {
     pub x: i32,
     pub y: i32,
@@ -89,6 +84,7 @@ impl Into<VkOffset3D> for Offset3D {
 
 /// 3D integer dimensions.
 #[derive(Copy, Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Size3D {
     /// Width (extent along the X axis).
     pub width: u32,
@@ -114,6 +110,7 @@ impl Into<VkExtent3D> for Size3D {
 
 /// 3D integer rectangle.
 #[derive(Copy, Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Rect3D {
     /// Minimum corner of the rectangle (inclusive).
     pub min: Offset3D,
@@ -136,7 +133,7 @@ impl Rect3D {
         Size3D { width: self.width(), height: self.height(), depth: self.depth() }
     }
 
-    pub const fn from_origin_size_2d(origin: Point2D, size: Size2D) -> Self {
+    pub const fn from_origin_size_2d(origin: Offset2D, size: Size2D) -> Self {
         Self {
             min: Offset3D { x: origin.x, y: origin.y, z: 0 },
             max: Offset3D { x: origin.x + size.width as i32, y: origin.y + size.height as i32, z: 1 },
@@ -144,7 +141,7 @@ impl Rect3D {
     }
 
     pub const fn from_size_2d(size: Size2D) -> Self {
-        Self::from_origin_size_2d(Point2D::ZERO, size)
+        Self::from_origin_size_2d(Offset2D::ZERO, size)
     }
 
     pub const fn from_xywh(x: i32, y: i32, width: u32, height: u32) -> Self {
@@ -189,7 +186,7 @@ impl From<BufferUsage> for VkBufferUsageFlags {
 /// # Examples
 ///
 /// ```
-/// use gpu::mip_level_count;
+/// use gpu_types::mip_level_count;
 /// assert_eq!(mip_level_count(512, 512), 9);
 /// assert_eq!(mip_level_count(512, 256), 9);
 /// assert_eq!(mip_level_count(511, 256), 8);
@@ -205,13 +202,8 @@ pub fn mip_level_count(width: u32, height: u32) -> u32 {
 /// Panics if the format is a block-compressed format.
 pub const fn format_pixel_byte_size(fmt: VkFormat) -> u32 {
     match fmt {
-        VK_FORMAT_R8_UNORM
-        | VK_FORMAT_R8_SNORM
-        | VK_FORMAT_R8_USCALED
-        | VK_FORMAT_R8_SSCALED
-        | VK_FORMAT_R8_UINT
-        | VK_FORMAT_R8_SINT
-        | VK_FORMAT_R8_SRGB => 1,
+        VK_FORMAT_R8_UNORM | VK_FORMAT_R8_SNORM | VK_FORMAT_R8_USCALED | VK_FORMAT_R8_SSCALED | VK_FORMAT_R8_UINT
+        | VK_FORMAT_R8_SINT | VK_FORMAT_R8_SRGB => 1,
         VK_FORMAT_R8G8_UNORM
         | VK_FORMAT_R8G8_SNORM
         | VK_FORMAT_R8G8_USCALED
@@ -245,7 +237,11 @@ pub const fn format_pixel_byte_size(fmt: VkFormat) -> u32 {
         | VK_FORMAT_B8G8R8_UINT
         | VK_FORMAT_B8G8R8_SINT
         | VK_FORMAT_B8G8R8_SRGB => 3,
-        VK_FORMAT_R32_UINT | VK_FORMAT_R32_SINT | VK_FORMAT_R32_SFLOAT | VK_FORMAT_D32_SFLOAT | VK_FORMAT_D24_UNORM_S8_UINT => 4,
+        VK_FORMAT_R32_UINT
+        | VK_FORMAT_R32_SINT
+        | VK_FORMAT_R32_SFLOAT
+        | VK_FORMAT_D32_SFLOAT
+        | VK_FORMAT_D24_UNORM_S8_UINT => 4,
         VK_FORMAT_R8G8B8A8_UNORM
         | VK_FORMAT_R8G8B8A8_SNORM
         | VK_FORMAT_R8G8B8A8_USCALED
@@ -278,6 +274,7 @@ pub const fn format_pixel_byte_size(fmt: VkFormat) -> u32 {
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum FormatNumericType {
     SInt,
     UInt,
@@ -340,6 +337,7 @@ pub fn format_numeric_type(fmt: VkFormat) -> FormatNumericType {
 
 /// Specifies the image aspect to consider in image operations.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ImageAspect {
     /// All aspects of the image (for a color format, this represents the color aspect,
     /// for a depth/stencil image this represents the depth and/or stencil aspects).
@@ -405,6 +403,7 @@ pub fn aspects_for_format(fmt: Format) -> VkImageAspectFlags {
 
 /// Dimensionality of an image.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ImageType {
     Image1D,
     Image2D,
@@ -452,9 +451,10 @@ bitflags! {
     #[repr(transparent)]
     #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
     pub struct ImageUsage: u32 {
-        // TODO: retire TRANSFER_SRC and DST and add them by default
-        const TRANSFER_SRC = 0b1;
-        const TRANSFER_DST = 0b10;
+        // NOTE: TRANSFER_SRC and TRANSFER_DST have been retired and are now set by default on all
+        //       created images.
+        // const TRANSFER_SRC = 0b1;
+        // const TRANSFER_DST = 0b10;
         const SAMPLED = 0b100;
         const STORAGE = 0b1000;
         const COLOR_ATTACHMENT = 0b1_0000;
@@ -483,6 +483,7 @@ impl From<ImageUsage> for VkImageUsageFlags {
 
 /// Describes the image subresources to include in an image operation.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ImageSubresourceLayers {
     pub aspect: ImageAspect = ImageAspect::All,
     pub mip_level: u32 = 0,
@@ -500,6 +501,7 @@ impl Default for ImageSubresourceLayers {
 ///
 /// See [VkImageViewCreateInfo](https://docs.vulkan.org/refpages/latest/refpages/source/VkImageViewCreateInfo.html)
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ImageViewInfo {
     pub view_type: VkImageViewType,
     pub format: Format,
@@ -511,6 +513,7 @@ pub struct ImageViewInfo {
 ///
 /// See [VkImageSubresourceRange](https://docs.vulkan.org/refpages/latest/refpages/source/VkImageSubresourceRange.html)
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ImageSubresourceRange {
     pub aspect_mask: VkImageAspectFlags,
     pub base_mip_level: u32,
@@ -542,6 +545,7 @@ impl ImageDataLayout {
 ///
 /// See [VkSamplerCreateInfo](https://docs.vulkan.org/refpages/latest/refpages/source/VkSamplerCreateInfo.html)
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SamplerParams {
     pub mag_filter: VkFilter = VK_FILTER_LINEAR,
     pub min_filter: VkFilter = VK_FILTER_LINEAR,
@@ -568,6 +572,7 @@ impl Default for SamplerParams {
 
 /// [`SamplerParams`] but hashable and usable as a key in a hash map.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, Ord, PartialOrd)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SamplerParamsHashable {
     pub mag_filter: VkFilter,
     pub min_filter: VkFilter,
@@ -610,6 +615,7 @@ impl From<SamplerParams> for SamplerParamsHashable {
 
 /// Represents a clear value for use in image clear operations.
 #[derive(Clone, Copy, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ClearColorValue {
     /// Floating-point clear value.
     ///
@@ -654,8 +660,10 @@ impl From<ClearColorValue> for VkClearColorValue {
 }
 
 /// Blending parameters for a color attachment.
+#[repr(C)]
 #[derive(Copy, Clone, Debug)]
-pub struct ColorBlendEquation {
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct BlendState {
     pub src_color_blend_factor: VkBlendFactor,
     pub dst_color_blend_factor: VkBlendFactor,
     pub color_blend_op: VkBlendOp,
@@ -664,13 +672,13 @@ pub struct ColorBlendEquation {
     pub alpha_blend_op: VkBlendOp,
 }
 
-impl Default for ColorBlendEquation {
+impl Default for BlendState {
     fn default() -> Self {
         Self::REPLACE
     }
 }
 
-impl ColorBlendEquation {
+impl BlendState {
     pub const REPLACE: Self = Self {
         src_color_blend_factor: VK_BLEND_FACTOR_ONE,
         dst_color_blend_factor: VK_BLEND_FACTOR_ZERO,
@@ -701,10 +709,12 @@ impl ColorBlendEquation {
 }
 
 /// Describes a color attachment format and blending parameters.
+#[repr(C)]
 #[derive(Copy, Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ColorTargetState {
     pub format: Format = VK_FORMAT_UNDEFINED,
-    pub blend_equation: Option<ColorBlendEquation> = None,
+    pub blend: Option<BlendState> = None,
     pub color_write_mask: VkColorComponentFlags = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
 }
 
@@ -714,14 +724,16 @@ impl Default for ColorTargetState {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct VertexBufferLayoutDescription {
     pub binding: u32,
     pub stride: u32,
     pub input_rate: VkVertexInputRate,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct VertexInputAttributeDescription {
     pub location: u32,
     pub binding: u32,
@@ -735,13 +747,6 @@ pub struct VertexInputState<'a> {
     pub attributes: &'a [VertexInputAttributeDescription] = &[],
 }
 
-pub trait StaticVertexInput {
-    /// Vertex buffers
-    const BUFFER_LAYOUT: &'static [VertexBufferLayoutDescription];
-
-    /// Vertex attributes.
-    const ATTRIBUTES: &'static [VertexInputAttributeDescription];
-}
 
 /// Trait implemented by types that represent vertex data in a vertex buffer.
 pub unsafe trait Vertex: Copy + 'static {
@@ -761,6 +766,7 @@ pub unsafe trait VertexIndex: Copy + 'static {
 
 /// Description of a vertex attribute within a vertex layout.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct VertexAttributeDescription {
     pub format: VkFormat,
     pub offset: u32,
@@ -873,8 +879,23 @@ macro_rules! impl_index_data {
 impl_index_data!(u16, VK_INDEX_TYPE_UINT16);
 impl_index_data!(u32, VK_INDEX_TYPE_UINT32);
 
+/// Graphics state configuration for a graphics pipeline.
+#[derive(Clone)]
+pub struct GraphicsState<'a> {
+    pub rasterization: RasterizationState = RasterizationState { .. },
+    pub depth_stencil: DepthStencilState = DepthStencilState { .. },
+    pub color_targets: &'a [ColorTargetState] = &[],
+}
+
+impl<'a> Default for GraphicsState<'a> {
+    fn default() -> Self {
+        Self { .. }
+    }
+}
+
 /// Primitive topology.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(i32)]
 pub enum PrimitiveTopology {
     TriangleList = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
@@ -894,6 +915,7 @@ impl PrimitiveTopology {
 
 /// Polygon orientation.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Face {
     /// Front face of a polygon.
     Front = 0,
@@ -902,6 +924,7 @@ pub enum Face {
 }
 
 #[derive(Copy, Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DepthBias {
     pub constant_factor: f32,
     pub clamp: f32,
@@ -910,6 +933,7 @@ pub struct DepthBias {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct RasterizationState {
     pub polygon_mode: VkPolygonMode = VK_POLYGON_MODE_FILL,
     pub cull_mode: VkCullModeFlags = VK_CULL_MODE_NONE,
@@ -918,9 +942,11 @@ pub struct RasterizationState {
     pub conservative_rasterization_mode: VkConservativeRasterizationModeEXT = VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT,
 }
 
+#[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StencilOpState {
-    pub compare: VkCompareOp,
+    pub compare_op: VkCompareOp,
     pub fail_op: VkStencilOp,
     pub depth_fail_op: VkStencilOp,
     pub pass_op: VkStencilOp,
@@ -929,7 +955,7 @@ pub struct StencilOpState {
 //  Adapted from WGPU
 impl StencilOpState {
     pub const IGNORE: Self = StencilOpState {
-        compare: VK_COMPARE_OP_ALWAYS,
+        compare_op: VK_COMPARE_OP_ALWAYS,
         fail_op: VK_STENCIL_OP_KEEP,
         depth_fail_op: VK_STENCIL_OP_KEEP,
         pass_op: VK_STENCIL_OP_KEEP,
@@ -949,7 +975,7 @@ impl StencilOpState {
             failOp: self.fail_op,
             passOp: self.pass_op,
             depthFailOp: self.depth_fail_op,
-            compareOp: self.compare,
+            compareOp: self.compare_op,
             compareMask: !0,
             writeMask: !0,
             reference: 0,
@@ -963,6 +989,7 @@ impl From<StencilOpState> for VkStencilOpState {
     }
 }
 
+/*
 #[derive(Copy, Clone, Debug)]
 pub struct StencilState {
     pub front: StencilOpState = StencilOpState::IGNORE,
@@ -984,14 +1011,11 @@ impl StencilState {
         // The rules are defined in step 7 of the "Device timeline initialization steps"
         // subsection of the "Render Pipeline Creation" section of WebGPU
         // (link to the section: https://gpuweb.github.io/gpuweb/#render-pipeline-creation)
-
         if self.write_mask == 0 {
             return true;
         }
-
         let front_ro = cull_mode == Some(Face::Front) || self.front.is_read_only();
         let back_ro = cull_mode == Some(Face::Back) || self.back.is_read_only();
-
         front_ro && back_ro
     }
 }
@@ -1000,27 +1024,33 @@ impl Default for StencilState {
     fn default() -> Self {
         Self { .. }
     }
-}
+}*/
 
 /// Describes how a graphics pipeline reads and modifies a depth-stencil attachment.
+#[repr(C)]
 #[derive(Copy, Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DepthStencilState {
     pub format: VkFormat = VK_FORMAT_UNDEFINED,
+    pub depth_test_enable: bool = false,
     pub depth_write_enable: bool = false,
     pub depth_compare_op: VkCompareOp = VK_COMPARE_OP_LESS,
-    pub stencil_state: StencilState = StencilState { .. },
+    pub stencil_front: StencilOpState = StencilOpState::IGNORE,
+    pub stencil_back: StencilOpState = StencilOpState::IGNORE,
+    pub stencil_read_mask: u32 = 0,
+    pub stencil_write_mask: u32 = 0,
 }
 
 impl Default for DepthStencilState {
     fn default() -> Self {
-        Self {
-            ..
-        }
+        Self { .. }
     }
 }
 
 /// Controls multisampling for a graphics pipeline.
+#[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MultisampleState {
     /// Number of samples per pixel.
     ///
@@ -1043,12 +1073,6 @@ pub struct FragmentState<'a> {
     pub multisample: MultisampleState = MultisampleState { .. },
     pub color_targets: &'a [ColorTargetState],
     pub blend_constants: [f32; 4] = [0.0, 0.0, 0.0, 0.0],
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum ShaderSource<'a> {
-    Content(&'a str),
-    File(&'a Path),
 }
 
 /// Specifies a pipeline stage.
@@ -1079,30 +1103,20 @@ impl ShaderStage {
     }
 }
 
-/// Describes a shader.
-///
-/// This type references the SPIR-V code of the shader, as well as the entry point function in the shader
-/// and metadata.
+/// Describes a shader entry point.
 #[derive(Debug, Clone, Copy)]
 pub struct ShaderEntryPoint<'a> {
-    /// Shader stage.
-    pub stage: ShaderStage,
     /// SPIR-V code.
     pub code: &'a [u32],
     /// Name of the entry point function in SPIR-V code.
     pub entry_point: &'a str,
-    /// Size of the push constants in bytes.
-    pub push_constants_size: usize,
-    /// Optional path to the source file of the shader.
-    ///
-    /// Used for diagnostic purposes and as a convenience for hot-reloading shaders.
-    pub source_path: Option<&'a str>,
-    /// Size of the local workgroup in each dimension, if applicable to the shader type.
-    ///
-    /// This is valid for compute, task, and mesh shaders.
-    pub workgroup_size: [u32; 3],
-    /// Parameter reflection data (optional, for debugging purposes).
-    pub refl_params: &'static [&'static reflection::AccessChain<'static>],
+}
+
+impl<'a> ShaderEntryPoint<'a> {
+    /// Creates a shader entry point descriptor, referencing the SPIR-V byte code and the entry point name.
+    pub fn new(code: &'a [u32], entry_point: &'a str) -> Self {
+        Self { code, entry_point }
+    }
 }
 
 /// Pointers in GPU device address space.
@@ -1112,7 +1126,13 @@ pub struct ShaderEntryPoint<'a> {
 #[repr(transparent)]
 pub struct Ptr<T: ?Sized + 'static> {
     pub raw: VkDeviceAddress,
-    pub _phantom: PhantomData<T>,
+    pub(crate) _phantom: PhantomData<T>,
+}
+
+impl<T: ?Sized + 'static> Ptr<T> {
+    pub fn new(raw: VkDeviceAddress) -> Self {
+        Ptr { raw, _phantom: PhantomData }
+    }
 }
 
 impl<T: ?Sized + 'static> fmt::Debug for Ptr<T> {
@@ -1141,59 +1161,95 @@ impl<T: ?Sized + 'static> Clone for Ptr<T> {
 impl<T: ?Sized + 'static> Copy for Ptr<T> {}
 
 /// Bindless handle to an image.
-#[derive(Copy, Clone, Debug)]
+// TODO remove mentions of "bindless" which is confusing. Replace with "GPU handle"?
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(C)]
 pub struct TextureHandle {
-    /// Index of the image in the image descriptor array.
-    pub index: u32,
-    /// For compatibility with slang.
+    // Index in the resource descriptor heap.
+    pub(crate) index: u32,
+    // For compatibility with slang.
     _unused: u32,
 }
 
 impl TextureHandle {
+    /// Represents an invalid texture handle.
+    ///
+    /// Using this in a shader is undefined behavior.
     pub const INVALID: Self = TextureHandle { index: u32::MAX, _unused: 0 };
 
-    pub const fn new(index: u32) -> Self {
-        TextureHandle { index, _unused: 0 }
+    /// Creates a texture handle from a usize value previously returned by [`to_usize`](Self::to_usize).
+    ///
+    /// # Note
+    ///
+    /// This is not marked `unsafe`, but passing index values not returned by `to_usize` may cause undefined behavior (in shaders).
+    pub const fn from_usize(index: usize) -> Self {
+        assert!(index <= u32::MAX as usize, "index must fit in u32");
+        TextureHandle { index: index as u32, _unused: 0 }
+    }
+
+    /// Converts the storage image handle to a usize value.
+    pub const fn to_usize(self) -> usize {
+        self.index as usize
     }
 }
 
 /// Bindless handle to a storage image.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(C)]
 pub struct StorageImageHandle {
-    /// Index of the image in the image descriptor array.
-    pub index: u32,
-    /// For compatibility with slang.
+    // Index in the resource descriptor heap.
+    pub(crate) index: u32,
+    // For compatibility with slang.
     _unused: u32,
 }
 
 impl StorageImageHandle {
+    /// Represents an invalid storage image handle.
+    ///
+    /// Using this in a shader is undefined behavior.
     pub const INVALID: Self = StorageImageHandle { index: u32::MAX, _unused: 0 };
 
-    pub const fn new(index: u32) -> Self {
-        StorageImageHandle { index, _unused: 0 }
+    /// Creates a storage image handle from a usize value previously returned by [`to_usize`](Self::to_usize).
+    ///
+    /// # Note
+    ///
+    /// This is not marked `unsafe`, but passing index values not returned by `to_usize` may cause undefined behavior (in shaders).
+    pub const fn from_usize(index: usize) -> Self {
+        assert!(index <= u32::MAX as usize, "index must fit in u32");
+        StorageImageHandle { index: index as u32, _unused: 0 }
+    }
+
+    /// Converts the storage image handle to a usize value.
+    pub const fn to_usize(self) -> usize {
+        self.index as usize
     }
 }
 
 /// Bindless handle to a sampler.
-#[derive(Default, Copy, Clone, Debug)]
+#[derive(Default, Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(C)]
 pub struct SamplerHandle {
-    /// Index of the image in the sampler descriptor array.
-    pub index: u32,
-    /// For compatibility with slang.
+    // Index in the sampler descriptor heap.
+    pub(crate) index: u32,
+    // For compatibility with slang.
     _unused: u32,
 }
 
 impl SamplerHandle {
+    /// Represents an invalid sampler.
+    ///
+    /// Using this in a shader is undefined behavior.
     pub const INVALID: Self = SamplerHandle { index: u32::MAX, _unused: 0 };
 
-    pub const fn new(index: u32) -> Self {
-        SamplerHandle { index, _unused: 0 }
+    pub const fn from_usize(index: usize) -> Self {
+        assert!(index <= u32::MAX as usize, "index must fit in u32");
+        SamplerHandle { index: index as u32, _unused: 0 }
+    }
+
+    pub const fn to_usize(self) -> usize {
+        self.index as usize
     }
 }
-
 
 /// Typedefs for compatibility with slang reflection generated by shadertool.
 #[allow(non_camel_case_types)]
@@ -1229,7 +1285,6 @@ pub mod shader_types {
     pub type mat3x3f = math::Mat3;
     pub type mat4x4f = math::Mat4;
 }
-
 
 //--------------------------------------------------------------------------------------------------
 

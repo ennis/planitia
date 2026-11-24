@@ -11,10 +11,7 @@ use std::env;
 use std::time::Duration;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::DirectComposition::{IDCompositionTarget, IDCompositionVisual2};
-use windows::Win32::Graphics::Dxgi::Common::{
-    DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_TYPELESS, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_TYPELESS,
-    DXGI_FORMAT_R8G8B8A8_UNORM,
-};
+use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_TYPELESS, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_TYPELESS, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB};
 use winit::dpi::PhysicalSize;
 use winit::event_loop::ActiveEventLoop;
 use winit::platform::windows::WindowAttributesExtWindows;
@@ -96,7 +93,7 @@ impl Window {
                     SWAP_CHAIN_FORMAT,
                     width,
                     height,
-                    gpu::ImageUsage::COLOR_ATTACHMENT | gpu::ImageUsage::TRANSFER_DST,
+                    gpu::ImageUsage::COLOR_ATTACHMENT,
                 ))
             } else {
                 let device = gpu::Device::instance();
@@ -179,7 +176,7 @@ impl Window {
                     SWAP_CHAIN_FORMAT,
                     width,
                     height,
-                    gpu::ImageUsage::COLOR_ATTACHMENT | gpu::ImageUsage::TRANSFER_DST,
+                    gpu::ImageUsage::COLOR_ATTACHMENT,
                 );
             }
             SwapChainImpl::Vulkan(ref mut swap_chain) => {

@@ -63,13 +63,8 @@ pub struct CompiledEntryPoint {
 impl CompiledEntryPoint {
     pub fn as_gpu_entry_point(&self) -> gpu::ShaderEntryPoint<'_> {
         gpu::ShaderEntryPoint {
-            stage: self.stage,
             code: &self.spirv,
             entry_point: &self.name,
-            push_constants_size: self.push_constants_size,
-            source_path: self.path.as_deref(),
-            workgroup_size: self.work_group_size,
-            refl_params: &[],
         }
     }
 }

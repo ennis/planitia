@@ -11,7 +11,7 @@ pub enum Error {
     Eof,
     #[error("I/O error")]
     Io(#[from] std::io::Error),
-    #[error("Invalid binary json magic number")]
+    #[error("invalid binary json magic number")]
     InvalidBjsonMagic,
     #[error("invalid binary length encoding")]
     InvalidLengthEncoding,

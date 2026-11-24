@@ -1,43 +1,70 @@
 use crate::{vec2, Vec2};
 use glam::{ivec2, ivec3, IVec2, IVec3, Vec3};
 
+/// 2D rectangle.
+///
+/// The rectangle is represented by its minimum and maximum coordinates.
+/// Note that nothing prevents `min <= max`. As such, the size of a rectangle may be negative.
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(C)]
 pub struct Rect {
+    /// Minimum x,y coordinates.
+    ///
+    /// Assuming an X-right, Y-down coordinate space, this is the top-left corner of the rectangle.
     pub min: Vec2,
+    /// Maximum x,y coordinates.
+    ///
+    /// Assuming an X-right, Y-down coordinate space, this is the bottom-right corner of the rectangle.
     pub max: Vec2,
 }
 
 impl Rect {
+    /// Infinitely large rectangle.
     pub const INFINITE: Self =
         Self { min: Vec2::new(f32::NEG_INFINITY, f32::NEG_INFINITY), max: Vec2::new(f32::INFINITY, f32::INFINITY) };
+
+    /// Zero-sized rectangle.
     pub const ZERO: Self = Self { min: Vec2::ZERO, max: Vec2::ZERO };
 
+    /// Constructs a rectangle from `min` and `max` points.
     pub const fn from_min_max(min: Vec2, max: Vec2) -> Self {
         Self { min, max }
     }
 
+    /// Constructs a rectangle from an origin point and a size.
     pub const fn from_origin_size(origin: Vec2, size: Vec2) -> Self {
         Self { min: origin, max: vec2(origin.x + size.x, origin.y + size.y) }
     }
 
+    /// Returns the top-left point of the rectangle.
+    ///
+    /// This assumes an X-right, Y-down coordinate space.
     pub const fn top_left(&self) -> Vec2 {
         self.min
     }
 
+    /// Returns the top-right point of the rectangle.
+    ///
+    /// This assumes an X-right, Y-down coordinate space.
     pub const fn top_right(&self) -> Vec2 {
         Vec2::new(self.max.x, self.min.y)
     }
 
+    /// Returns the bottom-left point of the rectangle.
+    ///
+    /// This assumes an X-right, Y-down coordinate space.
     pub const fn bottom_left(&self) -> Vec2 {
         Vec2::new(self.min.x, self.max.y)
     }
-
+    /// Returns the bottom-right point of the rectangle.
+    ///
+    /// This assumes an X-right, Y-down coordinate space.
     pub const fn bottom_right(&self) -> Vec2 {
         self.max
     }
 
+    /// Returns the intersection of this rectangle with another, or `None` if they do not overlap.
     pub fn intersect(&self, other: &Rect) -> Option<Rect> {
         let min = Vec2::new(self.min.x.max(other.min.x), self.min.y.max(other.min.y));
         let max = Vec2::new(self.max.x.min(other.max.x), self.max.y.min(other.max.y));
@@ -48,28 +75,40 @@ impl Rect {
         }
     }
 
+    /// Returns the union of this rectangle with another.
     pub fn union(&self, other: &Rect) -> Rect {
         let min = Vec2::new(self.min.x.min(other.min.x), self.min.y.min(other.min.y));
         let max = Vec2::new(self.max.x.max(other.max.x), self.max.y.max(other.max.y));
         Rect { min, max }
     }
 
+    /// Returns whether this rectangle has a zero or negative size.
     pub const fn is_null(&self) -> bool {
         self.min.x >= self.max.x || self.min.y >= self.max.y
     }
 
+    /// Returns the width of the rectangle.
+    ///
+    /// Returns a negative value if `min.x > max.x`.
     pub const fn width(&self) -> f32 {
         self.max.x - self.min.x
     }
 
+    /// Returns the height of the rectangle.
+    ///
+    /// Returns a negative value if `min.y > max.y`.
     pub const fn height(&self) -> f32 {
         self.max.y - self.min.y
     }
 
+    /// Returns the size of the rectangle.
+    ///
+    /// Equivalent to `vec2(self.width(), self.height())`.
     pub const fn size(&self) -> Vec2 {
         vec2(self.width(), self.height())
     }
 
+    /// Returns whether this rectangle is infinite, and covers the entire 2D plane.
     pub const fn is_infinite(&self) -> bool {
         self.min.x == f32::NEG_INFINITY
             && self.min.y == f32::NEG_INFINITY
@@ -77,6 +116,7 @@ impl Rect {
             && self.max.y == f32::INFINITY
     }
 
+    /// Returns a new rectangle translated by the given offset.
     pub const fn translate(&self, offset: Vec2) -> Self {
         Self {
             min: vec2(self.min.x + offset.x, self.min.y + offset.y),
@@ -84,6 +124,7 @@ impl Rect {
         }
     }
 
+    /// Returns a new rectangle expanded by the given offset in all directions.
     pub const fn expand(&self, amount: f32) -> Self {
         Self {
             min: vec2(self.min.x - amount, self.min.y - amount),
@@ -92,6 +133,7 @@ impl Rect {
     }
 }
 
+/// Constructs a rectangle from an origin point and a size.
 pub const fn rect_xywh(x: f32, y: f32, w: f32, h: f32) -> Rect {
     Rect { min: Vec2::new(x, y), max: Vec2::new(x + w, y + h) }
 }
@@ -111,6 +153,12 @@ impl IRect {
         Self { min, max }
     }
 
+    /// Constructs a rectangle with `min = (0,0)` and `max = size`.
+    pub const fn from_size(size: IVec2) -> Self {
+        Self { min: IVec2::ZERO, max: size }
+    }
+
+    /// Constructs a rectangle with `min = origin` and `max = origin + size`.
     pub const fn from_origin_size(origin: IVec2, size: IVec2) -> Self {
         Self { min: origin, max: IVec2::new(origin.x + size.x, origin.y + size.y) }
     }

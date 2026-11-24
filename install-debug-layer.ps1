@@ -8,7 +8,7 @@ $dllName = "VkLayer_planitia_debug_overlay.dll"
 $manifestName = "VkLayer_planitia_debug_overlay.json"
 
 # Map the cargo profile name to its output directory under `target/`.
-# The built-in "dev" profile builds into "target/debug".
+# The built-in "dev" profile uses "target/debug".
 $targetDir = if ($profile -eq "dev") { "debug" } else { $profile }
 
 Write-Host "Building $crateName (profile: $profile)..."

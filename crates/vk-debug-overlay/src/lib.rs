@@ -1,3 +1,32 @@
+//! Vulkan debug overlay layer.
+//!
+//! This layer intercepts Vulkan API calls and renders a debug overlay on top of the application.
+//! Currently displayed:
+//! - draw/compute command parameters
+//! - push data and data reachable via device addresses in push data
+
+// Contains code from ash_layer
+//
+// Copyright (c) 2022 Huang-Huang Bao
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 #![allow(non_snake_case)]
 #![allow(unsafe_op_in_unsafe_fn, reason = "too verbose")]
 #![feature(default_field_values)]
@@ -5,41 +34,51 @@ extern crate core;
 
 mod bump;
 mod debugger;
+mod descriptor;
 mod dispatch;
 mod event;
 mod helper;
-mod init;
+mod load_chain;
 mod overlay;
-mod spirv;
-mod state_tracker;
-mod surface;
 mod util;
+mod wrappers;
 
 use crate::bump::BumpAllocator;
-use crate::debugger::{Debugger, DebuggerResources};
+use crate::debugger::{CommandWatch, DebuggerState, DescriptorBlob, ResourceDescriptorInfo};
 use crate::dispatch::{DeviceDispatch, DeviceDispatchableHandle, DispatchKey, InstanceDispatch};
 use crate::event::EventTimeline;
-use crate::helper::{DeviceHelper, Pipeline};
-use crate::init::{layer_vkCreateDevice, layer_vkCreateInstance, layer_vkDestroyDevice, layer_vkDestroyInstance};
+use crate::helper::{DeviceHelper, Pipeline, include_bytes_as_u32};
 use crate::overlay::gui::GuiState;
 use crate::overlay::input::InputState;
 use crate::overlay::renderer::OverlayResources;
-use crate::spirv::Module;
-use crate::state_tracker::memory::AddressMap;
-use crate::surface::layer_vkCreateWin32SurfaceKHR;
+use crate::wrappers::command::Command;
+use crate::wrappers::memory::AddressMap;
 use bumpalo::Bump;
 use core::ffi::{CStr, c_char};
 use core::mem;
 use dashmap::DashMap;
 use parking_lot::Mutex;
+use range_set::RangeSet;
 use slotmap::{SlotMap, new_key_type};
+use spirv_reflect::Module;
+use std::collections::HashMap;
 use std::ffi::c_void;
-use std::ops::Deref;
+use std::ops::{Deref, RangeInclusive};
 use std::slice;
 use std::sync::LazyLock;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Relaxed;
 use vulkan::*;
+
+// High-level module overview:
+// - wrappers: vulkan command wrappers
+// - capture: command data capture (uniforms, resources, etc.)
+// - overlay: GUI
+//
+// Helper modules:
+// - dispatch: device/instance function pointer tables
+// - spirv_reflect (external crate): SPIR-V reflection
+
 
 /// Maximum number of frames in flight.
 ///
@@ -50,26 +89,26 @@ const FRAMES_IN_FLIGHT: usize = 3;
 ///
 /// This holds the state tracker and resources for rendering the overlay.
 pub struct Device {
-    pub helper: DeviceHelper,                   // device dispatch tables + vulkan helpers
-    pub tracked_objects: Mutex<TrackedObjects>, // various tracked objects
-    pub addrmap: Mutex<AddressMap>,             // Map from device addresses to buffers
+    pub helper: DeviceHelper,                      // device dispatch tables + vulkan helpers
+    pub tracked_objects: Mutex<TrackedObjects>,    // various tracked objects
+    pub addrmap: Mutex<AddressMap>,                // Maps device addresses to buffer objects
     pub event_timeline: Mutex<EventTimeline>, // Used to generate event IDs (EIDs) that are coherent between frames.
     pub gui: Mutex<GuiState>,                 // GUI state
     pub overlay: OverlayResources,            // Overlay-related state and resources
-    pub debugger_resources: DebuggerResources, // Immutable debugger resources
-    pub debugger: Mutex<Debugger>,            // Debugger state
     pub modules: Mutex<SlotMap<ModuleId, Module>>, // SPIR-V modules
     pub input: Mutex<InputState>,             // Tracks inputs to the main window
     pub bump: Mutex<BumpAllocator>,           // FIXME Not sure what this is for
     pub frame_index: AtomicU64,               // Frame counter
-}
+    pub dbg: Mutex<DebuggerState>,
 
-impl Deref for Device {
-    type Target = DeviceHelper;
+    pub descriptor_heap_properties: VkPhysicalDeviceDescriptorHeapPropertiesEXT,
+    pub descriptor_state: Mutex<DescriptorState>,
+    // Queue submissions for the current frame
+    pub submissions: Mutex<Vec<QueueSubmit>>,
 
-    fn deref(&self) -> &Self::Target {
-        &self.helper
-    }
+    // Pipelines
+    copy_indirect_1d: Pipeline,
+    copy_image_indirect: Pipeline,
 }
 
 impl Device {
@@ -93,19 +132,33 @@ impl Device {
         physical_device_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
         physical_device_properties.pNext = &mut descriptor_heap_properties as *mut _ as *mut c_void;
         instance_dispatch.fns.GetPhysicalDeviceProperties2(physical_device, &mut physical_device_properties);
-        let helper = DeviceHelper::new(dispatch, mem_props, descriptor_heap_properties, first_queue_family);
+        let helper = DeviceHelper::new(dispatch, mem_props, first_queue_family);
         let tracked_resources = TrackedObjects { pipelines: Vec::new(), swapchains: Vec::new() };
         let overlay_resources = OverlayResources::new(&helper);
-        let debugger_resources = DebuggerResources::new(&helper);
-        let debugger = Debugger::new();
         let event_timeline = EventTimeline::new();
+        let descriptor_state =
+            DescriptorState { resource_descriptors: HashMap::new(), sampler_descriptors: HashMap::new() };
+        let debugger_state = DebuggerState::new();
+
+        // Pipelines
+        static COPY_SHADER: &[u32] = include_bytes_as_u32!("copy.spv");
+        let copy_indirect_1d = helper.create_compute_pipeline_helper(
+            COPY_SHADER,
+            c"copy_indirect_1d",
+            &[],
+            size_of::<CopyIndirect1DParams>(),
+        );
+        let copy_image_indirect = helper.create_compute_pipeline_helper(
+            COPY_SHADER,
+            c"copy_image_indirect",
+            &[],
+            size_of::<CopyIndirect1DParams>(),
+        );
+
         Device {
             helper,
             tracked_objects: Mutex::new(tracked_resources),
             addrmap: Mutex::new(AddressMap::new()),
-            //submissions: Mutex::new(SubmissionState::new()),
-            debugger_resources,
-            debugger: Mutex::new(debugger),
             modules: Mutex::new(SlotMap::with_key()),
             input: Mutex::new(InputState::new()),
             bump: Mutex::new(BumpAllocator::new()),
@@ -113,17 +166,21 @@ impl Device {
             event_timeline: Mutex::new(event_timeline),
             overlay: overlay_resources,
             frame_index: Default::default(),
+            descriptor_heap_properties,
+            descriptor_state: Mutex::new(descriptor_state),
+            submissions: Default::default(),
+            dbg: Mutex::new(debugger_state),
+            copy_indirect_1d,
+            copy_image_indirect,
         }
     }
 
     unsafe fn end_frame(&self) {
-        //let mut sbs = self.submissions.lock();
-        //sbs.subs.clear();
-        //sbs.submission_count = 0;
         let mut bump = self.bump.lock();
         bump.reset();
-        let mut dbg = self.debugger.lock();
-        dbg.end_frame(self);
+        self.update_watches();
+        // reset the list of submissions
+        self.submissions.lock().clear();
         self.frame_index.fetch_add(1, Relaxed);
     }
 
@@ -132,14 +189,46 @@ impl Device {
     }
 }
 
+// Deref chain for device:
+// Device
+// -> DeviceHelper (command submission helper)
+// -> DeviceDispatch (layer loader helper methods)
+// -> DeviceDispatchCombined (vulkan dispatch tables)
+impl Deref for Device {
+    type Target = DeviceHelper;
+    fn deref(&self) -> &Self::Target {
+        &self.helper
+    }
+}
+
+pub struct DescriptorState {
+    // Map from device opaque descriptor blob to the VkResourceDescriptorInfo/VkSamplerCreateInfo
+    pub resource_descriptors: HashMap<DescriptorBlob, ResourceDescriptorInfo>,
+    pub sampler_descriptors: HashMap<DescriptorBlob, VkSamplerCreateInfo>,
+}
+
+/// Represents a call to vkQueueSubmit.
+pub struct QueueSubmit {
+    //pub cmd_bufs: Vec<VkCommandBuffer>,
+    pub commands: Vec<Command>,
+    // Recorded descriptor heap device address ranges.
+    //pub resource_heap_ranges: DeviceAddressRangeSet,
+    //pub sampler_heap_ranges: DeviceAddressRangeSet,
+    // Captured descriptor heap memory contents; each element corresponds to a range in the corresponding DeviceAddressRangeSet
+    //pub resource_heap_memory: Vec<Buffer>,
+    //pub sampler_heap_memory: Vec<Buffer>,
+}
+
 new_key_type! {
+    /// SPIR-V module identifier.
     pub struct ModuleId;
 }
 
 pub type ModuleMap = SlotMap<ModuleId, Module>;
+pub type DeviceAddressRangeSet = RangeSet<[RangeInclusive<VkDeviceAddress>; 4]>;
 
 /// Information about a swapchain.
-struct SwapchainInfo {
+pub struct SwapchainInfo {
     surface: VkSurfaceKHR,
     device: VkDevice,
     format: VkFormat,
@@ -155,198 +244,32 @@ pub struct TrackedObjects {
     swapchains: Vec<SwapchainInfo>,
 }
 
-static DEVICE_STATE: LazyLock<DashMap<DispatchKey, Device>> = LazyLock::new(DashMap::new);
+//--------------------------------------------------------------------------------------------------
+// copy_indirect_1d shader params
 
-/// Returns the [`Device`] for the given `VkDevice`.
-fn device_state<T: DeviceDispatchableHandle>(handle: T) -> dashmap::mapref::one::Ref<'static, DispatchKey, Device> {
-    DEVICE_STATE.get(&unsafe { handle.key() }).expect("unknown device")
+const COPY_1D_MAX_INDIRECTIONS: usize = 8;
+const COPY_1D_WORKGROUP_SIZE: u32 = 32;
+
+/// Push constants passed to copy_indirect_1d
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Default)]
+struct CopyIndirect1DParams {
+    base: VkDeviceAddress,
+    dst: VkDeviceAddress,
+    byte_size: u32,
+    count: u32,
+    offset: [u32; COPY_1D_MAX_INDIRECTIONS],
 }
 
 // ---------------------------------------------------------------------------
 // Global state
 // ---------------------------------------------------------------------------
 
+static DEVICE_STATE: LazyLock<DashMap<DispatchKey, Device>> = LazyLock::new(DashMap::new);
 static INSTANCE_MAP: LazyLock<DashMap<VkInstance, InstanceDispatch>> = LazyLock::new(DashMap::new);
 static PHY_TO_INSTANCE: LazyLock<DashMap<VkPhysicalDevice, VkInstance>> = LazyLock::new(DashMap::new);
 
-thread_local! {
-    // Static bump allocator for long-lived things, like reflection data for pipelines (we never free those).
-    // The arena themselves are thread-local, but the 'static references they produce are shareable
-    // across threads.
-    static THREAD_LOCAL_BUMP_ALLOC: &'static Bump = Box::leak(Box::new(Bump::new()));
-}
-
-pub fn thread_local_bump_alloc() -> &'static Bump {
-    THREAD_LOCAL_BUMP_ALLOC.with(|a| *a)
-}
-
-// ---------------------------------------------------------------------------
-// Layer entry points
-// ---------------------------------------------------------------------------
-
-#[unsafe(no_mangle)]
-pub(crate) unsafe extern "system" fn layer_vkGetInstanceProcAddr(
-    instance: VkInstance,
-    p_name: *const c_char,
-) -> PFN_vkVoidFunction {
-    let name = CStr::from_ptr(p_name);
-    let pfn: *const () = match name.to_bytes() {
-        b"vkGetInstanceProcAddr" => layer_vkGetInstanceProcAddr as _,
-        b"vkCreateInstance" => layer_vkCreateInstance as _,
-        b"vkDestroyInstance" => layer_vkDestroyInstance as _,
-        b"vkGetDeviceProcAddr" => layer_vkGetDeviceProcAddr as _,
-        b"vkCreateDevice" => layer_vkCreateDevice as _,
-        b"vkDestroyDevice" => layer_vkDestroyDevice as _,
-        b"vkCreateWin32SurfaceKHR" => layer_vkCreateWin32SurfaceKHR as _,
-        b"vk_layerGetPhysicalDeviceProcAddr" => layer_vk_layerGetPhysicalDeviceProcAddr as _,
-        _ => {
-            // It's possible to call getInstanceProcAddr with a device function,
-            // so query our hook table for that.
-            return match get_device_proc_addr_hook(p_name) {
-                Some(ptr) => ptr,
-                None => {
-                    // Otherwise, fallback to next getInstanceProcAddr in chain
-                    let inst = INSTANCE_MAP.get(&instance).expect("unknown instance");
-                    (inst.next_get_instance_proc_addr)(instance, p_name)
-                }
-            };
-        }
-    };
-    mem::transmute(pfn)
-}
-const _: PFN_vkGetInstanceProcAddr = layer_vkGetInstanceProcAddr;
-
-#[unsafe(no_mangle)]
-unsafe extern "system" fn layer_vkGetDeviceProcAddr(device: VkDevice, p_name: *const c_char) -> PFN_vkVoidFunction {
-    match get_device_proc_addr_hook(p_name) {
-        Some(ptr) => ptr,
-        None => {
-            // Unhooked functions
-            let d = DEVICE_STATE.get(&device.key()).expect("unknown device");
-            (d.next_get_device_proc_addr)(device, p_name)
-        }
-    }
-}
-const _: PFN_vkGetDeviceProcAddr = layer_vkGetDeviceProcAddr;
-
-#[unsafe(no_mangle)]
-pub(crate) unsafe extern "system" fn layer_vk_layerGetPhysicalDeviceProcAddr(
-    instance: VkInstance,
-    p_name: *const c_char,
-) -> PFN_vkVoidFunction {
-    let name = CStr::from_ptr(p_name);
-    let pfn = match name.to_bytes() {
-        b"vkCreateDevice" => layer_vkCreateDevice as *const (),
-        _ => {
-            let inst = INSTANCE_MAP.get(&instance).expect("unknown instance");
-            return (inst.next_get_physical_device_proc_addr)(instance, p_name);
-        }
-    };
-    mem::transmute(pfn)
-}
-const _: vk_layer::PFN_GetPhysicalDeviceProcAddr = layer_vk_layerGetPhysicalDeviceProcAddr;
-
-#[unsafe(no_mangle)]
-unsafe extern "system" fn vkNegotiateLoaderLayerInterfaceVersion(
-    p_version_struct: *mut vk_layer::VkNegotiateLayerInterface,
-) -> VkResult {
-    (*p_version_struct).loaderLayerInterfaceVersion = 2;
-    (*p_version_struct).pfnGetInstanceProcAddr = layer_vkGetInstanceProcAddr;
-    (*p_version_struct).pfnGetDeviceProcAddr = layer_vkGetDeviceProcAddr;
-    (*p_version_struct).pfnGetPhysicalDeviceProcAddr = layer_vk_layerGetPhysicalDeviceProcAddr;
-    VK_SUCCESS
-}
-const _: vk_layer::PFN_vkNegotiateLoaderLayerInterfaceVersion = vkNegotiateLoaderLayerInterfaceVersion;
-
-// ---------------------------------------------------------------------------
-// Device hook table
-// ---------------------------------------------------------------------------
-
-macro_rules! device_hooks {
-    ($(
-        [$($ep_name:literal),*; $pfn:path] fn $name:ident ($dispatch_arg:ident : $dispatch_ty:ty $(, $arg:ident : $argty:ty)*) $(-> $rt:ty)? = $method:ident;
-    )*) => {
-        $(
-        #[unsafe(no_mangle)]
-        pub(crate) unsafe extern "system" fn $name(
-            $dispatch_arg: $dispatch_ty
-            $(, $arg: $argty)*
-        ) $(-> $rt)? {
-            device_state($dispatch_arg).$method($dispatch_arg $(, $arg)*)
-        }
-        const _: $pfn = $name;
-        )*
-
-        unsafe fn get_device_proc_addr_hook(
-            p_name: *const c_char,
-        ) -> Option<PFN_vkVoidFunction> {
-            let name = unsafe { CStr::from_ptr(p_name) };
-            let pfn = match name.to_bytes() {
-                // Those functions are implemented manually
-                b"vkGetDeviceProcAddr" => layer_vkGetDeviceProcAddr as *const (),
-                b"vkCreateDevice" => layer_vkCreateDevice as *const (),
-                b"vkDestroyDevice" => layer_vkDestroyDevice as *const (),
-                // Device hooks
-                $(
-                    $(| $ep_name)* => $name as *const (),
-                )*
-                _ => return None,
-            };
-            Some(mem::transmute(pfn))
-        }
-    };
-}
-
-device_hooks! {
-    [b"vkGetDeviceQueue"; PFN_vkGetDeviceQueue] fn layer_vkGetDeviceQueue(device: VkDevice, queue_family_index: u32, queue_index: u32, p_queue: *mut VkQueue) = hook_get_device_queue;
-
-    [b"vkCmdPushDataEXT"; PFN_vkCmdPushDataEXT] fn layer_vkCmdPushDataEXT(commandBuffer: VkCommandBuffer, pPushDataInfo: *const VkPushDataInfoEXT) = hook_cmd_push_data_ext;
-    [b"vkCmdBindResourceHeapEXT"; PFN_vkCmdBindResourceHeapEXT] fn layer_vkCmdBindResourceHeapEXT(commandBuffer: VkCommandBuffer, pBindInfo: *const VkBindHeapInfoEXT) = hook_cmd_bind_resource_heap_ext;
-    [b"vkCmdBindSamplerHeapEXT"; PFN_vkCmdBindSamplerHeapEXT] fn layer_vkCmdBindSamplerHeapEXT(commandBuffer: VkCommandBuffer, pBindInfo: *const VkBindHeapInfoEXT) = hook_cmd_bind_sampler_heap_ext;
-    [b"vkWriteResourceDescriptorsEXT"; PFN_vkWriteResourceDescriptorsEXT] fn layer_vkWriteResourceDescriptorsEXT(device: VkDevice, resourceCount: u32, pResources: *const VkResourceDescriptorInfoEXT, pDescriptors: *const VkHostAddressRangeEXT) -> VkResult = hook_write_resource_descriptors_ext;
-    [b"vkWriteSamplerDescriptorsEXT"; PFN_vkWriteSamplerDescriptorsEXT] fn layer_vkWriteSamplerDescriptorsEXT(device: VkDevice, samplerCount: u32, pSamplers: *const VkSamplerCreateInfo, pDescriptors: *const VkHostAddressRangeEXT) -> VkResult = hook_write_sampler_descriptors_ext;
-
-    [b"vkAllocateCommandBuffers"; PFN_vkAllocateCommandBuffers] fn layer_vkAllocateCommandBuffers(device: VkDevice, pAllocateInfo: *const VkCommandBufferAllocateInfo, pCommandBuffers: *mut VkCommandBuffer) -> VkResult = hook_allocate_command_buffers;
-    [b"vkFreeCommandBuffers"; PFN_vkFreeCommandBuffers] fn layer_vkFreeCommandBuffers(device: VkDevice, commandPool: VkCommandPool, commandBufferCount: u32, pCommandBuffers: *const VkCommandBuffer) = hook_free_command_buffers;
-    [b"vkBeginCommandBuffer"; PFN_vkBeginCommandBuffer] fn layer_vkBeginCommandBuffer(commandBuffer: VkCommandBuffer, pBeginInfo: *const VkCommandBufferBeginInfo) -> VkResult = hook_begin_command_buffer;
-    [b"vkEndCommandBuffer"; PFN_vkEndCommandBuffer] fn layer_vkEndCommandBuffer(commandBuffer: VkCommandBuffer) -> VkResult = hook_end_command_buffer;
-
-    [b"vkCreateGraphicsPipelines"; PFN_vkCreateGraphicsPipelines] fn layer_vkCreateGraphicsPipelines(device: VkDevice, pipelineCache: VkPipelineCache, createInfoCount: u32, pCreateInfos: *const VkGraphicsPipelineCreateInfo, pAllocator: *const VkAllocationCallbacks, pPipelines: *mut VkPipeline) -> VkResult = hook_create_graphics_pipelines;
-    [b"vkCreateComputePipelines"; PFN_vkCreateComputePipelines] fn layer_vkCreateComputePipelines(device: VkDevice, pipelineCache: VkPipelineCache, createInfoCount: u32, pCreateInfos: *const VkComputePipelineCreateInfo, pAllocator: *const VkAllocationCallbacks, pPipelines: *mut VkPipeline) -> VkResult = hook_create_compute_pipelines;
-    [b"vkDestroyPipeline"; PFN_vkDestroyPipeline] fn layer_vkDestroyPipeline(device: VkDevice, pipeline: VkPipeline, pAllocator: *const VkAllocationCallbacks) = hook_destroy_pipeline;
-
-    [b"vkCmdBindPipeline"; PFN_vkCmdBindPipeline] fn layer_vkCmdBindPipeline(command_buffer: VkCommandBuffer, pipeline_bind_point: VkPipelineBindPoint, pipeline: VkPipeline) = hook_cmd_bind_pipeline;
-    [b"vkCmdDraw"; PFN_vkCmdDraw] fn layer_vkCmdDraw(commandBuffer: VkCommandBuffer, vertexCount: u32, instanceCount: u32, firstVertex: u32, firstInstance: u32) = hook_cmd_draw;
-    [b"vkCmdDrawIndexed"; PFN_vkCmdDrawIndexed] fn layer_vkCmdDrawIndexed(commandBuffer: VkCommandBuffer, indexCount: u32, instanceCount: u32, firstIndex: u32, vertexOffset: i32, firstInstance: u32) = hook_cmd_draw_indexed;
-    [b"vkCmdDrawIndirect"; PFN_vkCmdDrawIndirect] fn layer_vkCmdDrawIndirect(commandBuffer: VkCommandBuffer, buffer: VkBuffer, offset: VkDeviceSize, drawCount: u32, stride: u32) = hook_cmd_draw_indirect;
-    [b"vkCmdDispatch"; PFN_vkCmdDispatch] fn layer_vkCmdDispatch(commandBuffer: VkCommandBuffer, groupCountX: u32, groupCountY: u32, groupCountZ: u32) = hook_cmd_dispatch;
-    [b"vkCmdBeginDebugUtilsLabelEXT"; PFN_vkCmdBeginDebugUtilsLabelEXT] fn layer_vkCmdBeginDebugUtilsLabelEXT(commandBuffer: VkCommandBuffer, pLabelInfo: *const VkDebugUtilsLabelEXT) = hook_cmd_begin_debug_utils_label;
-    [b"vkCmdBeginRenderPass"; PFN_vkCmdBeginRenderPass] fn layer_vkCmdBeginRenderPass(commandBuffer: VkCommandBuffer, pRenderPassBegin: *const VkRenderPassBeginInfo, contents: VkSubpassContents) = hook_cmd_begin_render_pass;
-    [b"vkCmdEndRenderPass"; PFN_vkCmdEndRenderPass] fn layer_vkCmdEndRenderPass(commandBuffer: VkCommandBuffer) = hook_cmd_end_render_pass;
-    [b"vkCmdBeginRenderPass2"; PFN_vkCmdBeginRenderPass2] fn layer_vkCmdBeginRenderPass2(command_buffer: VkCommandBuffer, p_render_pass_begin: *const VkRenderPassBeginInfo, p_subpass_begin_info: *const VkSubpassBeginInfo) = hook_cmd_begin_render_pass2;
-    [b"vkCmdEndRenderPass2"; PFN_vkCmdEndRenderPass2] fn layer_vkCmdEndRenderPass2(command_buffer: VkCommandBuffer, p_subpass_end_info: *const VkSubpassEndInfo) = hook_cmd_end_render_pass2;
-    [b"vkCmdBeginRendering", b"vkCmdBeginRenderingKHR"; PFN_vkCmdBeginRendering] fn layer_vkCmdBeginRendering(commandBuffer: VkCommandBuffer, pRenderingInfo: *const VkRenderingInfo) = hook_cmd_begin_rendering;
-    [b"vkCmdEndRendering", b"vkCmdEndRenderingKHR"; PFN_vkCmdEndRendering] fn layer_vkCmdEndRendering(commandBuffer: VkCommandBuffer) = hook_cmd_end_rendering;
-
-    [b"vkCreateSwapchainKHR"; PFN_vkCreateSwapchainKHR] fn layer_vkCreateSwapchainKHR(device: VkDevice, pCreateInfo: *const VkSwapchainCreateInfoKHR, pAllocator: *const VkAllocationCallbacks, pSwapchain: *mut VkSwapchainKHR) -> VkResult = hook_create_swapchain_khr;
-    [b"vkDestroySwapchainKHR"; PFN_vkDestroySwapchainKHR] fn layer_vkDestroySwapchainKHR(device: VkDevice, swapchain: VkSwapchainKHR, pAllocator: *const VkAllocationCallbacks) = hook_destroy_swapchain_khr;
-
-    [b"vkQueueSubmit"; PFN_vkQueueSubmit] fn layer_vkQueueSubmit(queue: VkQueue, submit_count: u32, p_submits: *const VkSubmitInfo, fence: VkFence) -> VkResult = hook_queue_submit;
-    [b"vkQueuePresentKHR"; PFN_vkQueuePresentKHR] fn layer_vkQueuePresentKHR(queue: VkQueue, p_present_info: *const VkPresentInfoKHR) -> VkResult = hook_queue_present_khr;
-
-    [b"vkCreateBuffer"; PFN_vkCreateBuffer] fn layer_vkCreateBuffer(device: VkDevice, pCreateInfo: *const VkBufferCreateInfo, pAllocator: *const VkAllocationCallbacks, pBuffer: *mut VkBuffer) -> VkResult = hook_create_buffer;
-    [b"vkDestroyBuffer"; PFN_vkDestroyBuffer] fn layer_vkDestroyBuffer(device: VkDevice, buffer: VkBuffer, pAllocator: *const VkAllocationCallbacks) = hook_destroy_buffer;
-    [b"vkBindBufferMemory"; PFN_vkBindBufferMemory] fn layer_vkBindBufferMemory(device: VkDevice, buffer: VkBuffer, memory: VkDeviceMemory, memoryOffset: VkDeviceSize) -> VkResult = hook_bind_buffer_memory;
-    [b"vkBindBufferMemory2"; PFN_vkBindBufferMemory2] fn layer_vkBindBufferMemory2(device: VkDevice, bind_info_count: u32, p_bind_infos: *const VkBindBufferMemoryInfo) -> VkResult = hook_bind_buffer_memory_2;
-
-    [b"vkCmdEndDebugUtilsLabelEXT"; PFN_vkCmdEndDebugUtilsLabelEXT] fn layer_vkCmdEndDebugUtilsLabelEXT(commandBuffer: VkCommandBuffer) = hook_cmd_end_debug_utils_label;
-    [b"vkSetDebugUtilsObjectNameEXT"; PFN_vkSetDebugUtilsObjectNameEXT] fn layer_vkSetDebugUtilsObjectNameEXT(device: VkDevice, p_name_info: *const VkDebugUtilsObjectNameInfoEXT) -> VkResult = hook_set_debug_utils_object_name;
-
-    [b"vkCreateImageView"; PFN_vkCreateImageView] fn layer_vkCreateImageView(device: VkDevice, pCreateInfo: *const VkImageViewCreateInfo, pAllocator: *const VkAllocationCallbacks, pView: *mut VkImageView) -> VkResult = hook_create_image_view;
-    [b"vkDestroyImageView"; PFN_vkDestroyImageView] fn layer_vkDestroyImageView(device: VkDevice, imageView: VkImageView, pAllocator: *const VkAllocationCallbacks) = hook_destroy_image_view;
-
-    [b"vkCreateImage"; PFN_vkCreateImage] fn layer_vkCreateImage(device: VkDevice, pCreateInfo: *const VkImageCreateInfo, pAllocator: *const VkAllocationCallbacks, pImage: *mut VkImage) -> VkResult = hook_create_image;
-    [b"vkDestroyImage"; PFN_vkDestroyImage] fn layer_vkDestroyImage(device: VkDevice, image: VkImage, pAllocator: *const VkAllocationCallbacks) = hook_destroy_image;
-    [b"vkBindImageMemory"; PFN_vkBindImageMemory] fn layer_vkBindImageMemory(device: VkDevice, image: VkImage, memory: VkDeviceMemory, memoryOffset: VkDeviceSize) -> VkResult = hook_bind_image_memory;
-    [b"vkBindImageMemory2"; PFN_vkBindImageMemory2] fn layer_vkBindImageMemory2(device: VkDevice, bind_info_count: u32, p_bind_infos: *const VkBindImageMemoryInfo) -> VkResult = hook_bind_image_memory_2;
+/// Returns the [`Device`] for the given `VkDevice`.
+fn device_state<T: DeviceDispatchableHandle>(handle: T) -> dashmap::mapref::one::Ref<'static, DispatchKey, Device> {
+    DEVICE_STATE.get(&unsafe { handle.key() }).expect("unknown device")
 }

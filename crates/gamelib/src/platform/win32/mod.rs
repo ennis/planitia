@@ -224,7 +224,7 @@ impl Win32Platform {
 
     /// Requests to quit the application.
     ///
-    /// This causes `Platform::run` to return to the caller.
+    /// This causes [`run`](Self::run) to return to the caller.
     pub(crate) fn quit(&self) {
         self.quit_requested.set(true);
     }
@@ -234,7 +234,7 @@ impl Win32Platform {
     pub(crate) fn new(options: &AppOptions) -> Win32Platform {
         unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).unwrap() };
 
-        // intialize graphics context
+        // initialize graphics context
         let _ = GraphicsContext::current();
         let vsync_clock = CompositorClock::new();
 

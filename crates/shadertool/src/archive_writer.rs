@@ -218,8 +218,8 @@ pub(crate) fn build_and_write_archive(
         // Emit cargo dependency information.
         let absolute_file_path = file.canonicalize()?;
         println!("cargo:rerun-if-changed={}", absolute_file_path.display());
-        if !manifest.manifest_path.as_os_str().is_empty() {
-            println!("cargo:rerun-if-changed={}", manifest.manifest_path.display());
+        if !manifest.path.as_os_str().is_empty() {
+            println!("cargo:rerun-if-changed={}", manifest.path.display());
         }
     }
 
@@ -283,7 +283,7 @@ pub(crate) fn build_and_write_archive(
             cprintln!("<g,bold>Writing</> {}", output_file.display());
         }
 
-        let manifest_path = archive.write_str(&manifest.canonical_manifest_path.to_string_lossy());
+        let manifest_path = archive.write_str(&manifest.canonical_path.to_string_lossy());
         let modules = archive.write_slice(&modules);
         let _ = archive.write_root(&sharc::ShaderArchiveRoot {
             manifest: FileDependency { path: manifest_path, mtime: manifest.mtime },

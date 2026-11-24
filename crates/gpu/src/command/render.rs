@@ -155,8 +155,8 @@ impl<'a> RenderEncoder<'a> {
                     baseArrayLayer: 0,
                     layerCount: 1,
                     rect: VkRect2D {
-                        offset: VkOffset2D { x: rect.min.x, y: rect.min.y },
-                        extent: VkExtent2D { width: rect.width(), height: rect.height() },
+                        offset: VkOffset2D { x: rect.offset.x, y: rect.offset.y },
+                        extent: VkExtent2D { width: rect.size.width, height: rect.size.height },
                     },
                 },
             );
@@ -180,8 +180,8 @@ impl<'a> RenderEncoder<'a> {
                     baseArrayLayer: 0,
                     layerCount: 1,
                     rect: VkRect2D {
-                        offset: VkOffset2D { x: rect.min.x, y: rect.min.y },
-                        extent: VkExtent2D { width: rect.width(), height: rect.height() },
+                        offset: VkOffset2D { x: rect.offset.x, y: rect.offset.y },
+                        extent: VkExtent2D { width: rect.size.width, height: rect.size.height },
                     },
                 },
             );

@@ -1,13 +1,15 @@
 //! Command tracking.
-use crate::Device;
+use crate::{Device, DeviceAddressRangeSet};
 use crate::event::EId;
 use crate::helper::HasPrivateData;
 use std::ffi::{CStr, CString};
 use std::fmt::Formatter;
 use std::{fmt, ptr, slice};
+use std::ops::{Range, RangeInclusive};
+use range_set::RangeSet;
 use vulkan::*;
 
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum CmdKind {
     Draw { first_vertex: u32, vertex_count: u32, first_instance: u32, instance_count: u32 },
     DrawIndexed { index_count: u32, instance_count: u32, first_index: u32, vertex_offset: i32, first_instance: u32 },
@@ -52,13 +54,13 @@ pub struct Command {
     pub idx: CmdIdx,
     pub cmd_buf: VkCommandBuffer,
     pub key: CmdKey,
-    pub push: Vec<u8>,
+    pub push_data: Vec<u8>,
     // Current descriptor heap ranges
-    // NOTE: we don't care about the contents of the range, as they are driver-specific and not
-    //       interpretable by tools. We use those ranges as keys
-    pub resource_heap: VkDeviceAddressRangeEXT,
-    pub sampler_heap: VkDeviceAddressRangeEXT,
+    pub resource_heap: VkBindHeapInfoEXT,
+    pub sampler_heap: VkBindHeapInfoEXT,
+    pub kind: CmdKind
 }
+
 
 pub struct CommandBufferData {
     pub name: String,
@@ -74,8 +76,11 @@ pub struct CommandBufferData {
     pub depth_format: VkFormat,
     // Debug region markers
     pub regions: Vec<CString>,
-    pub resource_heap: VkDeviceAddressRangeEXT,
-    pub sampler_heap: VkDeviceAddressRangeEXT,
+    pub resource_heap: VkBindHeapInfoEXT,
+    pub sampler_heap: VkBindHeapInfoEXT,
+    // Union of all resource heap ranges bound with vkCmdBindResourceHeapEXT/vkCmdBindSamplerHeapEXT
+    pub resource_heap_ranges: DeviceAddressRangeSet,
+    pub sampler_heap_ranges: DeviceAddressRangeSet,
 }
 
 impl CommandBufferData {
@@ -90,8 +95,10 @@ impl CommandBufferData {
             color_formats: vec![],
             depth_format: Default::default(),
             regions: vec![],
-            resource_heap: VkDeviceAddressRangeKHR {..},
-            sampler_heap: VkDeviceAddressRangeKHR {..},
+            resource_heap: VkBindHeapInfoEXT {..},
+            sampler_heap: VkBindHeapInfoEXT {..},
+            resource_heap_ranges: DeviceAddressRangeSet::new(),
+            sampler_heap_ranges: DeviceAddressRangeSet::new(),
         }
     }
 
@@ -209,7 +216,8 @@ impl Device {
         pBindInfo: *const VkBindHeapInfoEXT,
     ) {
         let d = self.get_private_data_mut(commandBuffer).unwrap();
-        d.resource_heap = (*pBindInfo).heapRange;
+        d.resource_heap = *pBindInfo;
+        d.resource_heap_ranges.insert_range(d.resource_heap.heapRange.address..=(d.resource_heap.heapRange.address + d.resource_heap.heapRange.size - 1));
         self.CmdBindResourceHeapEXT(commandBuffer, pBindInfo);
     }
 
@@ -219,7 +227,8 @@ impl Device {
         pBindInfo: *const VkBindHeapInfoEXT,
     ) {
         let d = self.get_private_data_mut(commandBuffer).unwrap();
-        d.sampler_heap = (*pBindInfo).heapRange;
+        d.sampler_heap = *pBindInfo;
+        d.sampler_heap_ranges.insert_range(d.sampler_heap.heapRange.address..=(d.sampler_heap.heapRange.address + d.sampler_heap.heapRange.size - 1));
         self.CmdBindSamplerHeapEXT(commandBuffer, pBindInfo);
     }
 
@@ -232,7 +241,7 @@ impl Device {
     ) -> VkResult {
         let result = self.WriteResourceDescriptorsEXT(device, resourceCount, pResources, pDescriptors);
         if result >= 0 {
-            self.debugger.lock().write_resource_descriptors(self, resourceCount, pResources, pDescriptors);
+            self.record_resource_descriptors(resourceCount, pResources, pDescriptors);
         }
         result
     }
@@ -246,7 +255,7 @@ impl Device {
     ) -> VkResult {
         let result = self.WriteSamplerDescriptorsEXT(device, samplerCount, pSamplers, pDescriptors);
         if result >= 0 {
-            self.debugger.lock().write_sampler_descriptors(self, samplerCount, pSamplers, pDescriptors);
+            self.record_sampler_descriptors(samplerCount, pSamplers, pDescriptors);
         }
         result
     }
@@ -264,9 +273,10 @@ impl Device {
             idx: CmdIdx::default(),
             cmd_buf,
             key: cmd_key,
-            push: d.push.clone(),
+            push_data: d.push.clone(),
             resource_heap: d.resource_heap,
             sampler_heap: d.sampler_heap,
+            kind
         });
         r
     }
@@ -410,8 +420,8 @@ impl Device {
     }
 
     pub unsafe fn hook_cmd_end_render_pass(&self, command_buffer: VkCommandBuffer) {
-        self.end_rendering_common(command_buffer);
         self.CmdEndRenderPass(command_buffer);
+        self.end_rendering_common(command_buffer);
     }
 
     pub unsafe fn hook_cmd_end_render_pass2(
@@ -419,12 +429,12 @@ impl Device {
         command_buffer: VkCommandBuffer,
         p_subpass_end_info: *const VkSubpassEndInfo,
     ) {
-        self.end_rendering_common(command_buffer);
         self.CmdEndRenderPass2(command_buffer, p_subpass_end_info);
+        self.end_rendering_common(command_buffer);
     }
 
     pub unsafe fn hook_cmd_end_rendering(&self, command_buffer: VkCommandBuffer) {
-        self.end_rendering_common(command_buffer);
         self.CmdEndRendering(command_buffer);
+        self.end_rendering_common(command_buffer);
     }
 }

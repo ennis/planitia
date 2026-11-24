@@ -3,7 +3,7 @@ use crate::manifest::ManifestError::{InvalidType, MissingField};
 use anyhow::{Context, anyhow};
 use log::error;
 use sharc::gpu_types::vulkan::*;
-use sharc::gpu_types::{ColorBlendEquation, ColorTargetState, DepthStencilState, RasterizationState};
+use sharc::gpu_types::{BlendState, ColorTargetState, DepthStencilState, RasterizationState};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use toml::Value as TomlValue;
@@ -54,85 +54,6 @@ fn validate_keys(toml_value: &TomlValue, mandatory: &[&str], optional: &[&str]) 
         Err(ManifestError::Other("expected a table").into())
     }
 }
-
-/*
-fn get_image_usage(usage_str: &str) -> Result<gpu::ImageUsage, Error> {
-    match usage_str {
-        "color_attachment" => Ok(gpu::ImageUsage::COLOR_ATTACHMENT),
-        "depth_stencil_attachment" => Ok(gpu::ImageUsage::DEPTH_STENCIL_ATTACHMENT),
-        "sampled" => Ok(gpu::ImageUsage::SAMPLED),
-        "storage" => Ok(gpu::ImageUsage::STORAGE),
-        "transfer_src" => Ok(gpu::ImageUsage::TRANSFER_SRC),
-        "transfer_dst" => Ok(gpu::ImageUsage::TRANSFER_DST),
-        _ => {
-            error!("Unknown image usage: {}", usage_str);
-            Err(InvalidType("usage"))
-        }
-    }
-}
-
-fn get_image_usages(usages: &TomlValue) -> Result<gpu::ImageUsage, Error> {
-    if let Some(array) = usages.as_array() {
-        let mut usage_flags = gpu::ImageUsage::empty();
-        for item in array {
-            let usage_str = item.as_str().ok_or(InvalidType("usages array element"))?;
-            let usage = get_image_usage(usage_str)?;
-            usage_flags |= usage;
-        }
-        Ok(usage_flags)
-    } else if let Some(usage_str) = usages.as_str() {
-        get_image_usage(usage_str)
-    } else {
-        Err(InvalidType("usage").into())
-    }
-}*/
-
-/*
-#[derive(Clone, Default)]
-pub struct Resource {
-    pub format: VkFormat,
-    pub length: Option<u32>,
-    pub width: Option<u32>,
-    pub height: Option<u32>,
-    pub usage: Option<gpu::ImageUsage>,
-}
-
-impl Resource {
-    fn from_toml(toml: &TomlValue) -> anyhow::Result<Self> {
-        let mut resource = Resource::default();
-        if let Some(format_str) = toml.get_optional_str("format")? {
-            resource.format = get_format(format_str)?;
-        }
-
-        if let Some(length) = toml.get("length") {
-            if let Some(value) = length.as_integer() {
-                resource.length = Some(value.try_into()?);
-            } else if let Some(str) = length.as_str() {
-                // parse special strings like "dynamic"
-                match str {
-                    "dynamic" => resource.length = None,
-                    _ => return Err(InvalidType("length").into()),
-                }
-            } else {
-                return Err(InvalidType("length").into());
-            }
-        }
-
-        if let Some(usage_toml) = toml.get("usage") {
-            resource.usage = Some(get_image_usages(usage_toml)?);
-        }
-
-        if let Some(width) = toml.get_optional_integer("width")? {
-            resource.width = Some(width.try_into()?);
-        }
-
-        if let Some(height) = toml.get_optional_integer("height")? {
-            resource.height = Some(height.try_into()?);
-        }
-
-        Ok(resource)
-    }
-}*/
 
 #[derive(Clone)]
 pub struct ColorAttachment {
@@ -208,8 +129,8 @@ impl Pass {
 #[derive(Clone)]
 pub struct BuildManifest {
     //pub input_files: Vec<String>,
-    pub manifest_path: PathBuf,
-    pub canonical_manifest_path: PathBuf,
+    pub path: PathBuf,
+    pub canonical_path: PathBuf,
     pub mtime: u64,
     pub include_paths: Vec<String>,
     pub default: GraphicsState,
@@ -222,8 +143,8 @@ pub struct BuildManifest {
 impl Default for BuildManifest {
     fn default() -> Self {
         Self {
-            manifest_path: Default::default(),
-            canonical_manifest_path: Default::default(),
+            path: Default::default(),
+            canonical_path: Default::default(),
             mtime: 0,
             include_paths: vec![],
             //output_directory: None,
@@ -247,8 +168,8 @@ impl BuildManifest {
     pub fn load_from_toml(&mut self, toml: &TomlValue, manifest_path: PathBuf) -> anyhow::Result<()> {
         let (canonical_manifest_path, mtime) = get_file_mtime(&manifest_path)?;
 
-        self.manifest_path = manifest_path.clone();
-        self.canonical_manifest_path = canonical_manifest_path;
+        self.path = manifest_path.clone();
+        self.canonical_path = canonical_manifest_path;
         self.mtime = mtime;
 
         // Load inherited manifests.
@@ -263,23 +184,6 @@ impl BuildManifest {
                     .with_context(|| format!("failed to load inherited manifest `{}`", inherit_path.display()))?;
             }
         }
-
-        /*
-        // input_files = ["file1.slang", "file2.slang", "..slang", ...]
-        let input_files = {
-            let input_files_toml = toml.get("input_files").ok_or(MissingField("input_files"))?;
-            if let Some(array) = input_files_toml.as_array() {
-                array
-                    .iter()
-                    .map(|v| v.as_str().ok_or(InvalidType("input_files array element")).map(|s| s.to_string()))
-                    .collect::<Result<Vec<String>, Error>>()?
-            } else if let Some(s) = input_files_toml.as_str() {
-                vec![s.to_string()]
-            } else {
-                return Err(InvalidType("input_files").into());
-            }
-        };
-        */
 
         // Slang include paths.
         // include_paths = ["path1", "path2", ...] (optional)
@@ -502,6 +406,7 @@ static CULL_MODES: &[(&str, VkCullModeFlags)] = &[
 
 static FORMATS: &[(&str, VkFormat)] = &[
     ("RGBA8", VK_FORMAT_R8G8B8A8_UNORM),
+    ("RGBA8_SRGB", VK_FORMAT_R8G8B8A8_SRGB),
     ("RGBA8UI", VK_FORMAT_R8G8B8A8_UINT),
     ("RGBA16UI", VK_FORMAT_R16G16B16A16_UINT),
     ("RGB10_A2", VK_FORMAT_A2B10G10R10_UNORM_PACK32),
@@ -683,11 +588,11 @@ fn read_depth_stencil_state(toml: &TomlValue, out: &mut Option<DepthStencilState
     Ok(())
 }
 
-fn read_blend(toml: &TomlValue) -> anyhow::Result<Option<ColorBlendEquation>> {
+fn read_blend(toml: &TomlValue) -> anyhow::Result<Option<BlendState>> {
     if let Some(str) = toml.as_str() {
         match str {
             "disabled" => Ok(None),
-            "over" => Ok(Some(ColorBlendEquation {
+            "over" => Ok(Some(BlendState {
                 src_color_blend_factor: VK_BLEND_FACTOR_SRC_ALPHA,
                 dst_color_blend_factor: VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
                 color_blend_op: VK_BLEND_OP_ADD,
@@ -695,7 +600,7 @@ fn read_blend(toml: &TomlValue) -> anyhow::Result<Option<ColorBlendEquation>> {
                 dst_alpha_blend_factor: VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
                 alpha_blend_op: VK_BLEND_OP_ADD,
             })),
-            "over_premultiplied" => Ok(Some(ColorBlendEquation {
+            "over_premultiplied" => Ok(Some(BlendState {
                 src_color_blend_factor: VK_BLEND_FACTOR_ONE,
                 dst_color_blend_factor: VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
                 color_blend_op: VK_BLEND_OP_ADD,
@@ -709,7 +614,7 @@ fn read_blend(toml: &TomlValue) -> anyhow::Result<Option<ColorBlendEquation>> {
         validate_keys(toml, &[], &["src_color", "dst_color", "color_op", "src_alpha", "dst_alpha", "alpha_op"])
             .context("in blend")?;
 
-        let mut blend = ColorBlendEquation::default();
+        let mut blend = BlendState::default();
         if let Some(src_color_blend_factor) = toml.get_optional_enum("src_color", BLEND_FACTORS, "<blend factor>")? {
             blend.src_color_blend_factor = src_color_blend_factor;
         }
@@ -738,7 +643,7 @@ fn read_color_target(toml: &TomlValue, out: &mut ColorTargetState) -> anyhow::Re
         out.format = format;
     }
     if let Some(blend_toml) = toml.get("blend") {
-        out.blend_equation = read_blend(blend_toml)?;
+        out.blend = read_blend(blend_toml)?;
     }
     Ok(())
 }

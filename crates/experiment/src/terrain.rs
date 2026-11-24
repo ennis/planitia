@@ -32,15 +32,15 @@ impl MatVec {
 
     /// Packs the vector to 8x8-bit components.
     pub fn pack(self) -> MatVecU8 {
-        let [a, b, c, d] = self.a.as_u8vec4().to_array();
-        let [e, f, g, h] = self.b.as_u8vec4().to_array();
+        let [a, b, c, d] = (255.0 * self.a).as_u8vec4().to_array();
+        let [e, f, g, h] = (255.0 * self.b).as_u8vec4().to_array();
         [a, b, c, d, e, f, g, h]
     }
 
     pub fn unpack(packed: MatVecU8) -> Self {
         Self {
-            a: U8Vec4::from_array([packed[0], packed[1], packed[2], packed[3]]).as_vec4(),
-            b: U8Vec4::from_array([packed[4], packed[5], packed[6], packed[7]]).as_vec4(),
+            a: U8Vec4::from_array([packed[0], packed[1], packed[2], packed[3]]).as_vec4() / 255.0,
+            b: U8Vec4::from_array([packed[4], packed[5], packed[6], packed[7]]).as_vec4() / 255.0,
         }
     }
 }
@@ -83,11 +83,11 @@ impl Div<f32> for MatVec {
 //--------------------------------------------------------------------------------------------------
 
 const TERRAIN_TILE_SIZE: u32 = 16;
+const TERRAIN_MAX_LODS: usize = 16;
 // Terrain data should be the same in-memory and on the GPU.
 //
 // Issue: the number of terrain slices vary between columns, and thus between tiles.
 
-#[derive(Default)]
 pub struct Terrain {
     world_bounds: Rect,
     width: u32,
@@ -96,15 +96,37 @@ pub struct Terrain {
     height_tile: u32,
     layers: gpu::Buffer<MatLayer>,
     tiles: gpu::Buffer<Tile>,
-    lods: gpu::Buffer<Lod>,
+    lod_count: usize,
+    lods: [TerrainLevelOfDetail; TERRAIN_MAX_LODS],
     render_target: RenderTarget,
+}
+
+impl Default for Terrain {
+    fn default() -> Self {
+        Terrain {
+            world_bounds: Default::default(),
+            width: 0,
+            height: 0,
+            width_tile: 0,
+            height_tile: 0,
+            layers: Default::default(),
+            tiles: Default::default(),
+            lod_count: 0,
+            lods: [Default::default(); TERRAIN_MAX_LODS],
+            render_target: RenderTarget::new(
+                VK_FORMAT_R8G8B8A8_UNORM,
+                ImageUsage::STORAGE | ImageUsage::SAMPLED | ImageUsage::COLOR_ATTACHMENT,
+            )
+        }
+    }
 }
 
 
 // shader-interface
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-struct Lod {
+#[derive(Default)]
+struct TerrainLevelOfDetail {
     /// Dimensions in tiles.
     dim: UVec2,
     /// Offset into the tile buffer.
@@ -156,18 +178,18 @@ fn write_std_terrain_stack(height: u16, out: &mut Vec<MatLayer>) -> Range<u32> {
     let column = &[
         MatLayer {
             low: 0,
+            high: height.saturating_sub(200),
+            value: MatVec { a: Vec4::new(0.68, 0.66, 0.68, 1.0), b: Vec4::ZERO }.pack(),
+        },
+        MatLayer {
+            low: height.saturating_sub(100),
             high: height.saturating_sub(10),
-            value: MatVec { a: Vec4::new(0.5, 0.5, 0.5, 1.0), b: Vec4::ZERO }.pack(),
+            value: MatVec { a: Vec4::new(0.27, 0.27, 0.2, 1.0), b: Vec4::ZERO }.pack(),
         },
         MatLayer {
             low: height.saturating_sub(10),
-            high: height.saturating_sub(1),
-            value: MatVec { a: Vec4::new(0.3, 0.2, 0.1, 1.0), b: Vec4::ZERO }.pack(),
-        },
-        MatLayer {
-            low: height.saturating_sub(1),
             high: height,
-            value: MatVec { a: Vec4::new(0.1, 0.8, 0.1, 1.0), b: Vec4::ZERO }.pack(),
+            value: MatVec { a: Vec4::new(0.27, 0.33, 0.27, 1.0), b: Vec4::ZERO }.pack(),
         },
         MatLayer { low: height, high: u16::MAX, value: MatVec { a: Vec4::ZERO, b: Vec4::ZERO }.pack() },
     ];
@@ -237,38 +259,25 @@ pub fn load_terrain_from_heightmap<P: AsRef<Path>>(
     }
 
     // compute lods (TODO)
-    let lods = {
+    let mut lods = [TerrainLevelOfDetail::default(); TERRAIN_MAX_LODS];
+    let mut lod_count = 0;
+    {
         let mut offset = 0;
         let mut w = tile_x_count;
         let mut h = tile_y_count;
-        let mut lods = vec![];
-        loop {
-            lods.push(Lod { base_tile: offset, dim: uvec2(w, h) });
+        while lod_count < TERRAIN_MAX_LODS {
+            lods[lod_count].base_tile = offset;
+            lods[lod_count].dim = uvec2(w, h);
             if w == 1 && h == 1 {
                 break;
             }
             offset += w * h;
             w = w.div_ceil(2);
             h = h.div_ceil(2);
+            lod_count += 1;
         }
-        lods
-    };
-
-    //for lod in lods.iter() {
-    //eprintln!("LOD: offset={}, width={}, height={}", lod.offset, lod.width, lod.height);
-    //}
-
-    // LOD structure:
-    // - we may not be able to hold the whole terrain in memory
-    // - must decide the granularity of transferred blocks
-    // - the blocks should roughly represent the same screen-space area after projection
-    //
-    // Divide the terrain into separate textures for LOD 0, 1, etc.
-    // Blocks are 16x16 tiles into these textures.
-
-    // upload layers & lods
+    }
     let layers = gpu::Buffer::from_slice(&layers);
-    let lods = gpu::Buffer::from_slice(&lods);
     let scaled_width = width as f32 * units_per_pixel;
     let scaled_height = height as f32 * units_per_pixel;
     let origin = vec2(-origin_alignment.x * scaled_width, -origin_alignment.y * scaled_height);
@@ -281,6 +290,7 @@ pub fn load_terrain_from_heightmap<P: AsRef<Path>>(
         height_tile: tile_y_count,
         layers,
         tiles,
+        lod_count,
         lods,
         render_target: RenderTarget::new(
             VK_FORMAT_R8G8B8A8_UNORM,
@@ -297,8 +307,8 @@ struct TerrainDesc {
     lod_count: u32,
     tile_count: u32,
     tiles: gpu::Ptr<Tile>,
-    lods: gpu::Ptr<Lod>,
     layers: gpu::Ptr<MatLayer>,
+    lods: [TerrainLevelOfDetail; TERRAIN_MAX_LODS],
 }
 
 // shader-interface
@@ -312,7 +322,6 @@ struct TerrainParams {
     int screen_height;
     float4x4 view_matrix;
     float4x4 inv_proj_matrix;*/
-    terrain: TerrainDesc,
     output: gpu::StorageImageHandle,
     screen_width: u32,
     screen_height: u32,
@@ -321,6 +330,7 @@ struct TerrainParams {
     proj_matrix: Mat4,
     inv_proj_matrix: Mat4,
     eye_pos: Vec3,
+    terrain: TerrainDesc,
 }
 
 
@@ -340,8 +350,8 @@ impl Terrain {
                 world_bounds,
                 tile_count: self.tiles.len() as u32,
                 tiles: self.tiles.ptr(),
-                lod_count: self.lods.len() as u32,
-                lods: self.lods.ptr(),
+                lod_count: self.lod_count as u32,
+                lods: self.lods,
                 layers: self.layers.ptr(),
             },
             output: self.render_target.storage_handle(),
@@ -358,7 +368,6 @@ impl Terrain {
         gpu::dispatch(&terrain_shader::main, tile_x_cnt, tile_y_cnt, 1, &params);
         gpu::barrier(BARRIER_TEXTURE);
         gpu::blit_full_image_top_mip_level(self.render_target.image(), image);
-        gpu::wait_idle();
     }
 }
 

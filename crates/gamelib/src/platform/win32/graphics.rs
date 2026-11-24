@@ -17,6 +17,10 @@ use windows::Win32::Graphics::Dxgi::{
 use windows::Win32::System::Threading::{CreateEventW, WaitForSingleObject};
 use windows::core::{IUnknown, Interface, Owned};
 
+// Win32 graphics-related global objects.
+//
+// This is mainly used for Vulkan/DXGI swapchain interop, and is mostly useless when using
+// Vulkan WSI swapchains.
 pub(super) struct GraphicsContext {
     pub(super) adapter: IDXGIAdapter1,
     pub(super) d3d_device: D3D12Device,      // thread safe
@@ -29,18 +33,19 @@ pub(super) struct GraphicsContext {
 
 impl GraphicsContext {
     pub(super) fn new() -> Self {
-        // XXX: create the vulkan device first so that it is picked up as the main API by
-        //      renderdoc (otherwise it picks D3D12 which is not what we want)
+        // NOTE: Create the vulkan device first so that it is picked up as the main API by
+        //       renderdoc (otherwise it picks D3D12 which is not what we want).
+        //       I'm not sure that this is the actual logic of renderdoc, but adding this
+        //       seemed to make it work at the time.
         let _vk_device = gpu::Device::instance();
 
         //=========================================================
         // DXGI Factory and adapter enumeration
 
-        // SAFETY: the paramters are valid
         let dxgi_factory =
             unsafe { DXGIFactory4(CreateDXGIFactory2::<IDXGIFactory4>(DXGI_CREATE_FACTORY_FLAGS::default()).unwrap()) };
 
-        // --- Enumerate adapters
+        // Enumerate adapters
         let mut adapters = Vec::new();
         unsafe {
             let mut i = 0;
@@ -110,7 +115,7 @@ impl GraphicsContext {
         info!("using DXGI adapter: {}", chosen_adapter_name);
 
         //=========================================================
-        // D3D12 stuff
+        // D3D12 initialization
 
         //let debug = unsafe { DXGIGetDebugInterface1(0).unwrap() };
 
@@ -163,7 +168,6 @@ impl GraphicsContext {
         let fence = unsafe {
             let fence = d3d_device.CreateFence::<ID3D12Fence>(0, D3D12_FENCE_FLAG_NONE).expect("CreateFence failed");
             let event = Owned::new(CreateEventW(None, false, false, None).unwrap());
-
             GpuFenceData { fence, event, value: Cell::new(0) }
         };
 

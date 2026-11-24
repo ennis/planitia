@@ -13,10 +13,14 @@ use gamelib::input::{InputEvent, PointerButton};
 use gamelib::paint::{DrawGlyphRunOptions, PaintScene, Painter, TextFormat, TextLayout};
 use gamelib::platform::RenderTargetImage;
 use gamelib::render::pipeline_cache::get_graphics_pipeline;
-use gamelib::{App, AppHandler, PluginHost, UserEvent, WindowCreateInfo, WindowHandle};
+use gamelib::{App, AppHandler, PluginHost, UserEvent, WindowCreateInfo, WindowHandle, imgui};
 use std::ops::Deref;
 use std::path::Path;
 //use egui_demo_lib::{View, WidgetGallery};
+use crate::project::Project;
+use crate::scene::{SceneInfo, SceneInfoUniforms};
+use gamelib::imgui::Condition::Always;
+use gamelib::imgui::StyleVar;
 use gpu::PrimitiveTopology::TriangleList;
 use gpu::vulkan::*;
 use gpu::{Image, Ptr, PushDataSource, root_params};
@@ -24,57 +28,22 @@ use log::debug;
 use math::{Camera, Mat4, Vec2, Vec3, rect_xywh, vec2};
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
+use crate::gui::Gui;
 
+mod error;
 mod experiments;
+mod gui;
+mod project;
+mod scene;
+mod shader;
 
 /// Global application singleton.
-static APP: App<Game> = App::new();
+pub(crate) static APP: App<Game> = App::new();
 
 const WIDTH: u32 = 1280;
 const HEIGHT: u32 = 720;
 
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct SceneInfoUniforms {
-    view_matrix: Mat4,
-    proj_matrix: Mat4,
-    view_proj_matrix: Mat4,
-    screen_size: Vec2,
-    time: f32,
-    frame: u32,
-    eye: Vec3,
-}
-
-/// Scene info and GPU buffer containing it.
-pub struct SceneInfo {
-    pub info: SceneInfoUniforms,
-    pub gpu: Ptr<SceneInfoUniforms>,
-}
-
-impl SceneInfo {
-    pub fn new(camera: &Camera, time: f32, frame: u32) -> Self {
-        let uniforms = SceneInfoUniforms {
-            view_matrix: camera.view,
-            proj_matrix: camera.projection,
-            view_proj_matrix: camera.view_projection(),
-            screen_size: camera.screen_size.as_vec2(),
-            time,
-            frame,
-            eye: camera.eye().as_vec3(),
-        };
-        let gpu_ptr = gpu::alloc_temp(&uniforms);
-        Self { info: uniforms, gpu: gpu_ptr }
-    }
-}
-
-impl Deref for SceneInfo {
-    type Target = SceneInfoUniforms;
-
-    fn deref(&self) -> &Self::Target {
-        &self.info
-    }
-}
-
+/// Application configuration.
 #[derive(Clone, Serialize, Deserialize)]
 struct Config {
     show_grid: bool,
@@ -105,42 +74,28 @@ impl Config {
 }
 
 struct Game {
+    slang_global_session: slang::GlobalSession,
     width: u32,
     height: u32,
     cfg: Config,
-    //color: Color32,
-    //bg_top_color: Color32,
-    //bg_bottom_color: Color32,
+    gui: Gui,
+    project: Project,
     camera_control: CameraControl,
     depth_stencil_buffer: gpu::Image,
     grid_shader: Handle<gpu::GraphicsPipeline>,
     background_shader: Handle<gpu::GraphicsPipeline>,
     frame_count: u32,
     start_time: std::time::Instant,
-    //coat_experiment: experiments::coat::CoatExperiment,
-    //outline_experiment: experiments::outlines::OutlineExperiment,
-    //automaton_experiment: experiments::automaton::AutomatonExperiment,
-    //svg_experiment: experiments::svg::SvgExperiment,
-    plugin: PluginHost,
+    /// Current message in the status bar.
+    status: String,
 }
 
-fn create_depth_buffer(width: u32, height: u32) -> Image {
-    Image::new(gpu::ImageCreateInfo {
-        width,
-        height,
-        format: VK_FORMAT_D32_SFLOAT_S8_UINT,
-        usage: gpu::ImageUsage::DEPTH_STENCIL_ATTACHMENT | gpu::ImageUsage::TRANSFER_DST | gpu::ImageUsage::SAMPLED,
-        ..
-    })
-}
+//--------------------------------------------------------------------------------------------------
 
 impl Default for Game {
     fn default() -> Self {
         Self {
-            //demo: WidgetGallery::default(),
-            //color: Default::default(),
-            //bg_top_color: Color32::from_rgb(100, 149, 238),
-            //bg_bottom_color: Color32::from_rgb(25, 25, 112),
+            slang_global_session: slang::GlobalSession::new().unwrap(),
             depth_stencil_buffer: create_depth_buffer(WIDTH, HEIGHT),
             camera_control: CameraControl::default(),
             grid_shader: get_graphics_pipeline("/shaders/grid.sharc"),
@@ -149,12 +104,10 @@ impl Default for Game {
             width: WIDTH,
             height: HEIGHT,
             start_time: std::time::Instant::now(),
-            //coat_experiment: experiments::coat::CoatExperiment::new(),
-            //outline_experiment: experiments::outlines::OutlineExperiment::new(),
-            //automaton_experiment: experiments::automaton::AutomatonExperiment::new(),
-            //svg_experiment: experiments::svg::SvgExperiment::new(),
-            plugin: PluginHost::new("experiment.dll"),
             cfg: Config::load(),
+            status: String::new(),
+            project: Default::default(),
+            gui: Default::default(),
         }
     }
 }
@@ -235,7 +188,7 @@ impl AppHandler for Game {
         let _ = gamelib::create_window(&WindowCreateInfo { width: WIDTH, height: HEIGHT, title: "Planitia", .. });
     }
 
-    fn input(&mut self, window: WindowHandle, input_event: &InputEvent) {
+    fn input(&mut self, _window: WindowHandle, input_event: &InputEvent) {
         // --- SHORTCUTS ---
 
         // App exit
@@ -262,130 +215,61 @@ impl AppHandler for Game {
         if input_event.is_shortcut("I") {
             self.cfg.show_imgui = !self.cfg.show_imgui;
         }
-        if input_event.is_shortcut("Ctrl+Shift+G") {
-            self.plugin.reload();
-        }
-
-        self.plugin.input(window, input_event);
 
         // --- CAMERA ---
         if self.camera_control.handle_input(&input_event) {
             return;
         }
-
-        // --- experiments ---
-        //self.coat_experiment.input(&input_event);
-        //self.outline_experiment.input(&input_event);
-        //self.automaton_experiment.input(&input_event);
     }
 
-    fn event(&mut self, event: UserEvent) {
-        /*if let Ok(FileSystemEvent { .. }) = event.downcast::<FileSystemEvent>() {
-            self.
-        }*/
-        self.plugin.event(event);
-    }
+    fn event(&mut self, event: UserEvent) {}
 
     fn resized(&mut self, window: WindowHandle, width: u32, height: u32) {
         self.width = width;
         self.height = height;
-        // TODO painter.resize() method
         self.camera_control.resize(width, height);
         self.depth_stencil_buffer = create_depth_buffer(width, height);
-        //self.outline_experiment.resize(width, height);
-        //self.automaton_experiment.resize(width, height);
-        self.plugin.resized(window, width, height);
+    }
+
+    fn imgui(&mut self, ui: &mut imgui::Ui) {
+        self.main_gui(ui);
     }
 
     fn vsync(&mut self) {}
 
-    fn render(&mut self, window: WindowHandle, target: RenderTargetImage) {
-        // TODO: that's not the right time to reload assets.
-        //       Ideally this should be done asynchronously, on another thread, so as not
-        //       to block the GUI and rendering.
-        #[cfg(feature = "hot_reload")]
-        AssetCache::instance().do_reload();
-        //let mut cmd = gpu::CommandBuffer::new();
+    fn render(&mut self, _window: WindowHandle, target: RenderTargetImage) {
         let time = self.start_time.elapsed().as_secs_f32();
         let frame = self.frame_count;
         self.frame_count += 1;
-        // Render 3D scene
         let scene_info = SceneInfo::new(&self.camera_control.camera(), time, frame);
         self.render_scene(target.image, &scene_info);
-        //self.coat_experiment.render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
-        //let _ = self.outline_experiment.render(&target.image, &self.depth_stencil_buffer, &scene_info);
-        //let _ = self.automaton_experiment.render(&mut cmd, &target.image, &self.depth_stencil_buffer, &scene_info);
-        self.plugin.render(window, target);
-        // Render 2D overlays
-        self.render_overlay(&target.image);
-        // Render GUI
-        //if self.cfg.show_imgui {
-        //let _span = gamelib::span!("render_imgui");
-        //gpu::with_cmdbuf(|mut cmd| {
-        //    gamelib::render_imgui(&mut cmd, &target.image);
-        //});
-        //}
-
         gpu::flush();
     }
 
-    fn file_changed(&mut self, path: &Path) {
-        self.plugin.reload();
-    }
+    fn file_changed(&mut self, _path: &Path) {}
 
-    fn close_requested(&mut self, window: WindowHandle) {
-        self.plugin.close_requested(window);
+    fn close_requested(&mut self, _window: WindowHandle) {
         gamelib::quit();
     }
 
-    //fn imgui(&mut self, ctx: &egui::Context) {
-    //    egui::Window::new("imgui").show(ctx, |ui| {
-    //        egui::Grid::new("params").num_columns(2).spacing([40.0, 4.0]).striped(true).show(ui, |ui| {
-    //            ui.label("Show grid");
-    //            ui.checkbox(&mut self.cfg.show_grid, "");
-    //            ui.end_row();
-    //
-    //            ui.label("Show background");
-    //            ui.checkbox(&mut self.cfg.show_background, "");
-    //            ui.end_row();
-    //
-    //            ui.label("Show painting demo");
-    //            ui.checkbox(&mut self.cfg.show_painting_demo, "");
-    //            ui.end_row();
-    //
-    //            ui.label("Show imgui");
-    //            ui.checkbox(&mut self.cfg.show_imgui, "");
-    //            ui.end_row();
-    //
-    //            ui.label("Painting demo color");
-    //            ui.color_edit_button_srgba(&mut self.color);
-    //            ui.end_row();
-    //
-    //            ui.label("BG top color");
-    //            ui.color_edit_button_srgba(&mut self.bg_top_color);
-    //            ui.end_row();
-    //
-    //            ui.label("BG bottom color");
-    //            ui.color_edit_button_srgba(&mut self.bg_bottom_color);
-    //            ui.end_row();
-    //        });
-    //    });
-    //
-    //    //self.automaton_experiment.ui(ctx);
-    //    self.outline_experiment.gui(ctx);
-    //    self.plugin.imgui(ctx);
-    //}
-
     fn exiting(&mut self) {
         self.cfg.save();
-        self.plugin.exiting();
     }
 }
 
-fn main() {
-    // register asset directories
-    AssetCache::register_directory(concat!(env!("CARGO_MANIFEST_DIR"), "/assets"));
-    gamelib::register_asset_directory();
+//--------------------------------------------------------------------------------------------------
 
+fn create_depth_buffer(width: u32, height: u32) -> Image {
+    Image::new(gpu::ImageCreateInfo {
+        width,
+        height,
+        format: VK_FORMAT_D32_SFLOAT_S8_UINT,
+        usage: gpu::ImageUsage::DEPTH_STENCIL_ATTACHMENT | gpu::ImageUsage::SAMPLED,
+        ..
+    })
+}
+
+//--------------------------------------------------------------------------------------------------
+fn main() {
     APP.run(&Default::default());
 }

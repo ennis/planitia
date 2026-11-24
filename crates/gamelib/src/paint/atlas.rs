@@ -42,7 +42,7 @@ impl Atlas {
                 height,
                 depth: 1,
                 format: VK_FORMAT_R8G8B8A8_UNORM,
-                usage: gpu::ImageUsage::SAMPLED | gpu::ImageUsage::TRANSFER_DST,
+                usage: gpu::ImageUsage::SAMPLED,
                 mip_levels: 1,
                 array_layers: 1,
                 samples: 1,
@@ -134,7 +134,7 @@ impl Atlas {
         unsafe fn slice_to_u8<T: Copy>(slice: &[T]) -> &[u8] {
             unsafe {
                 use std::mem::size_of;
-                let len = size_of::<Srgba8>() * slice.len();
+                let len = size_of::<T>() * slice.len();
                 slice::from_raw_parts_mut(slice.as_ptr() as *mut u8, len)
             }
         }

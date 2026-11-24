@@ -141,8 +141,6 @@ pub enum InputEvent {
     MouseWheel(MouseScrollDelta),
     /// A keyboard key was pressed, held (key-repeat), or released.
     KeyboardEvent(KeyboardEvent),
-    /// The window client area was resized to the given dimensions in physical pixels.
-    Resized { width: u32, height: u32 },
 }
 
 impl InputEvent {

@@ -50,7 +50,7 @@ impl Device {
             allocation: ResourceAllocation::External,
             swapchain_image: true,
             descriptors: ImageDescriptors::default(),
-            usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::TRANSFER_DST,
+            usage: ImageUsage::COLOR_ATTACHMENT,
             type_: ImageType::Image2D,
             format,
             mip_levels: 1,

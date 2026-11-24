@@ -1,9 +1,12 @@
+//! SPIR-V reflection: parses SPIR-V modules and exposes their types, variables and entry points.
 use ::spirv as spv;
 use std::fmt;
 use std::fmt::Debug;
 use std::ops::{Index, IndexMut};
 
 mod parser;
+
+pub use spv::StorageClass;
 
 /// Error parsing a SPIR-V module.
 #[derive(Debug, thiserror::Error)]
@@ -21,142 +24,17 @@ pub struct ParseError;
 /// ergonomic impact.
 pub struct Module {
     r: Vec<InstResult>,
-    // This is only used during building
-    //ty_map: HashMap<TypeInfo, TypeId>,
     /// The list of all entry points.
     pub entry_points: Vec<EntryPointId>,
 }
 
 impl Module {
-    pub fn new() -> Module {
-        Module { r: vec![], entry_points: vec![] }
-    }
-
-    fn reserve(&mut self, result_id: u32) {
-        if result_id as usize >= self.r.len() {
-            self.r.resize_with((result_id + 1) as usize, || InstResult::None);
-        }
-    }
-
-    /// Inserts a new type and returns its type id.
-    pub fn insert_type(&mut self, result_id: u32, ty: TypeInfo) -> TypeId {
-        self.reserve(result_id);
-        self.r[result_id as usize] = InstResult::Type(ty.clone());
-        TypeId(result_id)
-    }
-
-    /// Inserts a new entry point.
-    pub fn insert_entry_point(&mut self, result_id: u32, entry_point: EntryPointInfo) -> EntryPointId {
-        self.reserve(result_id);
-        self.r[result_id as usize] = InstResult::EntryPoint(entry_point.clone());
-        let ep_id = EntryPointId(result_id);
-        self.entry_points.push(ep_id);
-        ep_id
-    }
-
-    /// Inserts a new variable.
-    pub fn insert_variable(&mut self, result_id: u32, var: VariableInfo) -> VariableId {
-        self.reserve(result_id);
-        self.r[result_id as usize] = InstResult::Variable(var.clone());
-        VariableId(result_id)
-    }
-
-    pub fn insert_constant(&mut self, result_id: u32, c: ConstantInfo) -> ConstantId {
-        self.reserve(result_id);
-        self.r[result_id as usize] = InstResult::Constant(c.clone());
-        ConstantId(result_id)
-    }
-
-    pub fn insert_string(&mut self, result_id: u32, name: String) -> StringId {
-        self.reserve(result_id);
-        self.r[result_id as usize] = InstResult::None; // Strings are not stored in the result vector
-        StringId(result_id)
+    pub fn parse(spirv: &[u32]) -> Result<Module, ParseError> {
+        parser::parse_spirv(spirv)
     }
 
     pub fn find_entry_point(&self, name: &str) -> Option<EntryPointId> {
         self.entry_points.iter().find(|&&ep_id| self[ep_id].name == name).copied()
-    }
-}
-
-impl Index<TypeId> for Module {
-    type Output = TypeInfo;
-
-    fn index(&self, index: TypeId) -> &Self::Output {
-        let InstResult::Type(info) = &self.r[index.0 as usize] else {
-            panic!("invalid TypeId {}", index.0);
-        };
-        info
-    }
-}
-
-impl IndexMut<TypeId> for Module {
-    fn index_mut(&mut self, index: TypeId) -> &mut Self::Output {
-        let InstResult::Type(info) = &mut self.r[index.0 as usize] else {
-            panic!("invalid TypeId {}", index.0);
-        };
-        info
-    }
-}
-
-impl Index<EntryPointId> for Module {
-    type Output = EntryPointInfo;
-
-    fn index(&self, index: EntryPointId) -> &Self::Output {
-        let InstResult::EntryPoint(info) = &self.r[index.0 as usize] else {
-            panic!("invalid EntryPointId {}", index.0);
-        };
-        info
-    }
-}
-
-impl IndexMut<EntryPointId> for Module {
-    fn index_mut(&mut self, index: EntryPointId) -> &mut Self::Output {
-        let InstResult::EntryPoint(info) = &mut self.r[index.0 as usize] else {
-            panic!("invalid EntryPointId {}", index.0);
-        };
-        info
-    }
-}
-
-impl Index<VariableId> for Module {
-    type Output = VariableInfo;
-
-    fn index(&self, index: VariableId) -> &Self::Output {
-        let InstResult::Variable(info) = &self.r[index.0 as usize] else {
-            panic!("invalid VariableId {}", index.0);
-        };
-        info
-    }
-}
-
-impl IndexMut<VariableId> for Module {
-    fn index_mut(&mut self, index: VariableId) -> &mut Self::Output {
-        self.reserve(index.0);
-        let InstResult::Variable(info) = &mut self.r[index.0 as usize] else {
-            panic!("invalid VariableId {}", index.0);
-        };
-        info
-    }
-}
-
-impl Index<ConstantId> for Module {
-    type Output = ConstantInfo;
-
-    fn index(&self, index: ConstantId) -> &Self::Output {
-        let InstResult::Constant(info) = &self.r[index.0 as usize] else {
-            panic!("invalid ConstantId {}", index.0);
-        };
-        info
-    }
-}
-
-impl IndexMut<ConstantId> for Module {
-    fn index_mut(&mut self, index: ConstantId) -> &mut Self::Output {
-        self.reserve(index.0);
-        let InstResult::Constant(info) = &mut self.r[index.0 as usize] else {
-            panic!("invalid ConstantId {}", index.0);
-        };
-        info
     }
 }
 
@@ -206,11 +84,10 @@ pub enum AccessKind {
 #[repr(transparent)]
 pub struct StringId(pub u32 /* result_id */);
 
-
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum IntegerConstant {
     SpecConstant(u32),
-    Constant(u64)
+    Constant(u64),
 }
 
 /// Type identifier.
@@ -494,12 +371,14 @@ impl<'a> fmt::Display for PrettyType<'a> {
             TypeInfo::Array { element, len, .. } => {
                 let len = m[len].as_usize().unwrap_or(0);
                 write!(f, "{}[{}]", pretty_print_type(m, &m[element]), len)
-            },
+            }
             TypeInfo::RuntimeArray { element, .. } => write!(f, "{}[]", pretty_print_type(m, &m[element])),
             TypeInfo::Struct(ref s) => write!(f, "{}", s.name),
             TypeInfo::ImageHandle(_) => write!(f, "image_handle"),
             TypeInfo::Pointer(p) => match p.pointee {
-                Some(pointee) => write!(f, "*{} {}", pretty_storage_class(p.storage_class), pretty_print_type(m, &m[pointee])),
+                Some(pointee) => {
+                    write!(f, "*{} {}", pretty_storage_class(p.storage_class), pretty_print_type(m, &m[pointee]))
+                }
                 None => write!(f, "*{} <unknown>", pretty_storage_class(p.storage_class)),
             },
             TypeInfo::Image => write!(f, "image"),
@@ -557,6 +436,8 @@ impl ConstantInfo {
     }
 }
 
+//--------------------------------------------------------------------------------------------------
+
 #[derive(Clone)]
 enum InstResult {
     None,
@@ -566,18 +447,127 @@ enum InstResult {
     EntryPoint(EntryPointInfo),
 }
 
-/*
-#[repr(C)]
-#[derive(Copy, Clone, Debug)]
-pub struct VectorType {
-    pub scalar: ScalarType,
-    pub len: u8,
+impl Module {
+    pub(crate) fn new() -> Module {
+        Module { r: vec![], entry_points: vec![] }
+    }
+
+    pub(crate) fn reserve(&mut self, result_id: u32) {
+        if result_id as usize >= self.r.len() {
+            self.r.resize_with((result_id + 1) as usize, || InstResult::None);
+        }
+    }
+
+    /// Inserts a new type and returns its type id.
+    pub(crate) fn insert_type(&mut self, result_id: u32, ty: TypeInfo) -> TypeId {
+        self.reserve(result_id);
+        self.r[result_id as usize] = InstResult::Type(ty.clone());
+        TypeId(result_id)
+    }
+
+    /// Inserts a new entry point.
+    pub(crate) fn insert_entry_point(&mut self, result_id: u32, entry_point: EntryPointInfo) -> EntryPointId {
+        self.reserve(result_id);
+        self.r[result_id as usize] = InstResult::EntryPoint(entry_point.clone());
+        let ep_id = EntryPointId(result_id);
+        self.entry_points.push(ep_id);
+        ep_id
+    }
+
+    /// Inserts a new variable.
+    pub(crate) fn insert_variable(&mut self, result_id: u32, var: VariableInfo) -> VariableId {
+        self.reserve(result_id);
+        self.r[result_id as usize] = InstResult::Variable(var.clone());
+        VariableId(result_id)
+    }
+
+    pub(crate) fn insert_constant(&mut self, result_id: u32, c: ConstantInfo) -> ConstantId {
+        self.reserve(result_id);
+        self.r[result_id as usize] = InstResult::Constant(c.clone());
+        ConstantId(result_id)
+    }
+
+    pub(crate) fn insert_string(&mut self, result_id: u32, _name: String) -> StringId {
+        self.reserve(result_id);
+        self.r[result_id as usize] = InstResult::None; // Strings are not stored in the result vector
+        StringId(result_id)
+    }
 }
 
-#[repr(C)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct MatrixType {
-    pub scalar: ScalarType,
-    pub rows: u8,
-    pub cols: u8,
-}*/
+impl Index<TypeId> for Module {
+    type Output = TypeInfo;
+    fn index(&self, index: TypeId) -> &Self::Output {
+        let InstResult::Type(info) = &self.r[index.0 as usize] else {
+            panic!("invalid TypeId {}", index.0);
+        };
+        info
+    }
+}
+
+impl IndexMut<TypeId> for Module {
+    fn index_mut(&mut self, index: TypeId) -> &mut Self::Output {
+        let InstResult::Type(info) = &mut self.r[index.0 as usize] else {
+            panic!("invalid TypeId {}", index.0);
+        };
+        info
+    }
+}
+
+impl Index<EntryPointId> for Module {
+    type Output = EntryPointInfo;
+    fn index(&self, index: EntryPointId) -> &Self::Output {
+        let InstResult::EntryPoint(info) = &self.r[index.0 as usize] else {
+            panic!("invalid EntryPointId {}", index.0);
+        };
+        info
+    }
+}
+
+impl IndexMut<EntryPointId> for Module {
+    fn index_mut(&mut self, index: EntryPointId) -> &mut Self::Output {
+        let InstResult::EntryPoint(info) = &mut self.r[index.0 as usize] else {
+            panic!("invalid EntryPointId {}", index.0);
+        };
+        info
+    }
+}
+
+impl Index<VariableId> for Module {
+    type Output = VariableInfo;
+    fn index(&self, index: VariableId) -> &Self::Output {
+        let InstResult::Variable(info) = &self.r[index.0 as usize] else {
+            panic!("invalid VariableId {}", index.0);
+        };
+        info
+    }
+}
+
+impl IndexMut<VariableId> for Module {
+    fn index_mut(&mut self, index: VariableId) -> &mut Self::Output {
+        self.reserve(index.0);
+        let InstResult::Variable(info) = &mut self.r[index.0 as usize] else {
+            panic!("invalid VariableId {}", index.0);
+        };
+        info
+    }
+}
+
+impl Index<ConstantId> for Module {
+    type Output = ConstantInfo;
+    fn index(&self, index: ConstantId) -> &Self::Output {
+        let InstResult::Constant(info) = &self.r[index.0 as usize] else {
+            panic!("invalid ConstantId {}", index.0);
+        };
+        info
+    }
+}
+
+impl IndexMut<ConstantId> for Module {
+    fn index_mut(&mut self, index: ConstantId) -> &mut Self::Output {
+        self.reserve(index.0);
+        let InstResult::Constant(info) = &mut self.r[index.0 as usize] else {
+            panic!("invalid ConstantId {}", index.0);
+        };
+        info
+    }
+}

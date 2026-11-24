@@ -83,6 +83,9 @@ impl Drop for Image {
                 if descriptors.stencil_image != u32::MAX {
                     device.free_resource_descriptor(descriptors.stencil_image);
                 }
+                if !self.attachment_view.is_null() {
+                    device.fns.DestroyImageView(device.vkd, self.attachment_view, ptr::null());
+                }
                 device.fns.DestroyImage(device.vkd, handle, ptr::null());
                 device.free_memory(&mut allocation);
             });
@@ -119,7 +122,7 @@ impl Image {
     }
 
     /// Creates a new image suitable for sampling and storage uses with the specified properties, and initializes it with the provided data.
-    pub fn new_texture_with_data(width: u32, height: u32, format: Format, aspect: ImageAspect, data: &[u8]) -> Image {
+    pub fn new_texture_with_data<T: Copy>(width: u32, height: u32, format: Format, aspect: ImageAspect, data: &[T]) -> Image {
         let image = Self::new_texture(width, height, format);
         upload_image_data(
             ImageCopyView { image: &image, mip_level: 0, origin: Offset3D::ZERO, aspect },
@@ -219,13 +222,13 @@ impl Image {
     /// Returns the bindless texture handle of this image view.
     pub fn texture_handle(&self) -> TextureHandle {
         assert!(self.descriptors.texture != u32::MAX, "image does not have a texture descriptor");
-        TextureHandle::new(self.descriptors.texture)
+        TextureHandle::from_usize(self.descriptors.texture as usize)
     }
 
     /// Returns the bindless storage image handle of this image view.
     pub fn storage_handle(&self) -> StorageImageHandle {
         assert!(self.descriptors.image != u32::MAX, "image does not have a storage image descriptor");
-        StorageImageHandle::new(self.descriptors.image)
+        StorageImageHandle::from_usize(self.descriptors.image as usize)
     }
 
     /// Discards the contents of the image and resizes this image to the new dimensions.
@@ -379,6 +382,7 @@ impl Device {
     }
 
     /// Creates a new image resource.
+    #[inline(never)]
     pub(crate) fn create_image(&self, image_info: &ImageCreateInfo) -> Image {
         const DEFAULT_USAGES: VkImageUsageFlags = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         unsafe {

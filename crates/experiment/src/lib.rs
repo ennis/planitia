@@ -1,6 +1,7 @@
 #![feature(default_field_values)]
 
 mod terrain;
+mod terrain2;
 
 use crate::terrain::{Terrain, load_terrain_from_heightmap};
 use chrono::{DateTime, Local};
@@ -22,11 +23,10 @@ struct ExperimentApp {
     load_time: DateTime<Local>,
     frames_rendered: usize,
     camera_control: CameraControl,
-    geometry_file: PathBuf,
-    #[serde(skip)]
-    geometry: hgeo::Geo,
     #[serde(skip)]
     terrain: Terrain,
+    #[serde(skip)]
+    terrain2: Option<terrain2::Terrain>,
 }
 
 impl Default for ExperimentApp {
@@ -43,9 +43,8 @@ impl ExperimentApp {
             load_time: Local::now(),
             camera_control: Default::default(),
             frames_rendered: 0,
-            geometry: Default::default(),
-            geometry_file: Default::default(),
             terrain: Default::default(),
+            terrain2: Default::default(),
         }
     }
 
@@ -55,16 +54,34 @@ impl ExperimentApp {
 impl AppHandler for ExperimentApp {
     fn input(&mut self, _window: WindowHandle, input_event: &InputEvent) {
         self.camera_control.handle_input(input_event);
-        if input_event.is_shortcut("Ctrl+O") {
-            if let Some(geometry_file) = gamelib::pick_file("Houdini Geometry File", &["bgeo", "geo"]) {
-                eprintln!("Picked file: {}", geometry_file.display());
-                self.geometry_file = geometry_file;
-            }
-        }
         if input_event.is_shortcut("Home") {
             let size = self.camera_control.screen_size;
             eprintln!("Reset camera");
             self.camera_control = CameraControl::new(size.x as u32, size.y as u32);
+        }
+        if input_event.is_shortcut(")") {
+            self.camera_control.fov_y_radians *= 0.9;
+            self.camera_control.last_cam.set(None);
+        }
+        if input_event.is_shortcut("=") {
+            self.camera_control.fov_y_radians *= 1.1;
+            self.camera_control.last_cam.set(None);
+        }
+        if input_event.is_shortcut("-") {
+            self.camera_control.z_far *= 0.9;
+            self.camera_control.last_cam.set(None);
+        }
+        if input_event.is_shortcut("+") {
+            self.camera_control.z_far *= 1.1;
+            self.camera_control.last_cam.set(None);
+        }
+        if input_event.is_shortcut("Shift++") {
+            self.camera_control.z_near *= 1.1;
+            self.camera_control.last_cam.set(None);
+        }
+        if input_event.is_shortcut("Shift+-") {
+            self.camera_control.z_near *= 0.9;
+            self.camera_control.last_cam.set(None);
         }
     }
 
@@ -72,18 +89,7 @@ impl AppHandler for ExperimentApp {
 
     fn loaded(&mut self) {
         self.load_time = Local::now();
-        if !self.geometry_file.as_os_str().is_empty() {
-            match hgeo::Geo::load(&self.geometry_file) {
-                Ok(geometry) => {
-                    self.geometry = geometry;
-                    eprintln!("Loaded geometry file: {}", self.geometry_file.display());
-                }
-                Err(err) => {
-                    eprintln!("Failed to load geometry file: {}: {}", self.geometry_file.display(), err);
-                }
-            }
-        }
-        load_terrain_from_heightmap("data/heightmap2.png", 1.0, vec2(0.5, 0.5))
+        load_terrain_from_heightmap("data/heightmap2.png", 2.5, vec2(0.5, 0.5))
             .map(|terrain| {
                 self.terrain = terrain;
                 eprintln!("Loaded terrain from heightmap");
@@ -91,6 +97,8 @@ impl AppHandler for ExperimentApp {
             .unwrap_or_else(|err| {
                 eprintln!("Failed to load terrain from heightmap: {}", err);
             });
+
+        self.terrain2 = terrain2::Terrain::new("data/heightmap2.png").ok();
     }
 
 
@@ -107,6 +115,7 @@ impl AppHandler for ExperimentApp {
         format_message!("GPU   : {}\n", gpu_device_name);
         format_message!("DT    : {delta:?}\nFPS   : {fps:.1}\n");
         format_message!("FRAME : {}\n", self.frames_rendered);
+        format_message!("NEAR  : {}    FAR : {}\n", camera.frustum.near_plane, camera.frustum.far_plane);
         let time_since_reload = Local::now().signed_duration_since(self.load_time);
         format_message!(
             "Last reload  : {} ({}m {}s ago)\n",
@@ -116,6 +125,9 @@ impl AppHandler for ExperimentApp {
         );
         format_message!("EYE : {:.2},{:.2},{:.2}", camera.eye().x, camera.eye().y, camera.eye().z);
         self.terrain.render(&camera, image.image);
+        //if let Some(terrain2) = self.terrain2.as_mut() {
+        //    terrain2.render(&camera, image.image);
+        //}
     }
 
     fn resized(&mut self, window: WindowHandle, width: u32, height: u32) {

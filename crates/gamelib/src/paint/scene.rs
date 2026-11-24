@@ -11,7 +11,7 @@ use crate::paint::{
 };
 use color::{Srgba8, srgba8};
 use gpu::PrimitiveTopology::TriangleList;
-use gpu::vulkan::VK_FORMAT_R8G8B8A8_UNORM;
+use gpu::vulkan::{VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_R8G8B8A8_UNORM};
 use gpu::{CommandBuffer, Format, Ptr, PushDataSource};
 use log::{error, warn};
 use math::{Mat3, Rect, Vec2, Vec3, Vec4, rect_transform, vec2, vec3};
@@ -133,7 +133,7 @@ impl PaintScene {
         let fill_index = self.rscene.register_fill(&fill.into(), &self.transform);
         self.rscene.draw_commands.push(DrawCommand::FillPath {
             verb_range: base_verb..self.rscene.path_verbs.len(),
-            base_vertex,
+            base_point: base_vertex,
             fill: fill_index,
         });
     }

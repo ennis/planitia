@@ -169,6 +169,7 @@ fn allocate_descriptor_heap_memory(
                 alignment = descriptor_heap_properties.samplerDescriptorAlignment as usize;
             }
         }
+        // FIXME: this should be rounded up?
         let index_offset = (start_offset / stride) as u32;
         DescriptorHeapInfo {
             alloc,

@@ -1,6 +1,6 @@
 //! Device events
 use crate::Device;
-use crate::state_tracker::command::CmdKind;
+use crate::wrappers::command::CmdKind;
 use vulkan::*;
 use rustc_hash::FxHasher;
 use std::ffi::CString;

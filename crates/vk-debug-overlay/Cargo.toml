@@ -12,8 +12,11 @@ dashmap = "6"
 vulkan = { workspace = true, features = ["format_info"] }
 bumpalo = "3.20.3"
 spirv = "0.4.0"
+spirv-reflect = { workspace = true }
 thiserror = "2.0.20"
-num-traits = "0.2.19"
+range-set = "0.1.1"
+num-traits = "0.2"
+num-derive = "0.5.1"
 slotmap = "1.1.1"
 color-print = "0.3.7"
 parking_lot = "0.12.5"

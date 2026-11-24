@@ -20,8 +20,10 @@ members = [
     "crates/vk-debug-overlay",
     "planitia-workspace-hack",
     "crates/sgpu",
+    "crates/draft",
     "crates/vulkan-generator",
-    "crates/vulkan"]
+    "crates/vulkan",
+    "crates/spirv-reflect"]
 resolver = "1"
 
 [workspace.dependencies]
@@ -39,8 +41,10 @@ geomtool = { path = "crates/geomtool" }
 terrain-file = { path = "crates/terrain-file" }
 geom = { path = "crates/geom" }
 hgeo = { path = "crates/hgeo" }
+draft = { path = "crates/draft" }
 vulkan = { path = "crates/vulkan" }
 experiment = { path = "crates/experiment" }
+spirv-reflect = { path = "crates/spirv-reflect" }
 image = { version = "0.25.9", features = ["png"], default-features = false }
 
 [profile.release]
